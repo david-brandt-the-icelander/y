@@ -1,4 +1,4 @@
-# Documentation-Driven Development
+# Knowledge-Driven Development (KDD)
 
 The backlog for this system is written into the documentation that describes it, not kept beside it.
 Every requirement, defect and unbuilt capability appears as an annotated line in the document a reader
@@ -32,7 +32,7 @@ do. → [`02-annotation-convention.md`](02-annotation-convention.md#graduation)
 
 | # | Document | What it is for |
 | --- | --- | --- |
-| 01 | [Methodology](01-methodology.md) | What documentation-driven development is here, what it costs, what it buys, and how it compares with a ticket tracker, README-driven development, spec-driven development, ADRs and literate programming |
+| 01 | [Methodology](01-methodology.md) | What knowledge-driven development is here, what it costs, what it buys, and how it compares with a ticket tracker, README-driven development, spec-driven development, ADRs and literate programming |
 | 02 | [Annotation convention](02-annotation-convention.md) | The canonical rules for ✅ ⚠️ ❌ in prose. Placement, granularity, ownership, graduation |
 | 03 | [Code annotation convention](03-code-annotation-convention.md) | The same marks plus 🙈 🙉 🙊 in C# XML docs and inline comments; the branch-coverage meaning of ✅; the test-locatability rule |
 | 04 | [API contract annotation](04-api-contract-annotation.md) | What a consumer of the OpenAPI document sees, and why ✅ never appears there |

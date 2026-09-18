@@ -37,7 +37,7 @@ sized from.*
 
 - ⚠️ **Route to the convention from the agent instructions.** One routing-table row in
   [`AGENTS.md`](../../../AGENTS.md) — *Documenting a capability, journey, class or endpoint →
-  `documentation/Development/documentation-driven-development/`* — and, per the repository's own rule,
+  `documentation/Development/knowledge-driven-development/`* — and, per the repository's own rule,
   a line deleted to pay for it. Without this row no agent applies the convention and every later wave
   is manual.
 - ✅ **The mark collision is resolved** (2026-08-28) in favour of this vocabulary, and every

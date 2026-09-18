@@ -12,7 +12,7 @@ tool, and updated by a different act than the one that changes the code. It ther
 is not a discipline problem — it is structural, and every team that has ever run a ticket tracker has
 paid for it.
 
-Documentation-driven development removes the second description. There is one artefact per audience —
+Knowledge-driven development (KDD) removes the second description. There is one artefact per audience —
 the operator's manual, the integrator's contract, the maintainer's class summary — written **in the
 present tense as the system ought to be**, with each statement marked for whether it is true yet.
 
@@ -74,15 +74,15 @@ Honestly stated, because a methodology document that lists only benefits is mark
 | Approach | Where the intent lives | Drifts because | Why not that, here |
 | --- | --- | --- | --- |
 | **Ticket tracker** (Jira, Asana, GitHub Issues) | Outside the repository | Closing a ticket and changing the code are two acts, and only one is enforced | Invisible to an agent editing the file. Retained for scheduling and human coordination, which it is genuinely good at |
-| **`TODO:` comments** | In the code, unstructured | No taxonomy, no audience, no lifecycle; nothing distinguishes "not built" from "built wrong" | This is DDD's degenerate ancestor. The convention here is essentially `TODO:` with a type system and a reader in mind |
-| **README-driven development** (Preston-Werner) | One README, written before the code | Only covers the front door; says nothing about internals, and has no vocabulary for partial truth | Adopted wholesale, then generalised: DDD is RDD applied to every audience at once, with marks so the document survives past version 0.1 |
+| **`TODO:` comments** | In the code, unstructured | No taxonomy, no audience, no lifecycle; nothing distinguishes "not built" from "built wrong" | This is KDD's degenerate ancestor. The convention here is essentially `TODO:` with a type system and a reader in mind |
+| **README-driven development** (Preston-Werner) | One README, written before the code | Only covers the front door; says nothing about internals, and has no vocabulary for partial truth | Adopted wholesale, then generalised: KDD is RDD applied to every audience at once, with marks so the document survives past version 0.1 |
 | **Spec-driven development** (a spec file per feature, then generate) | A separate spec artefact | The spec is written once and abandoned after implementation; nobody reads it again | The spec here is not separate. It *is* the manual, so it keeps being read, which is the only thing that keeps it current |
-| **ADRs** | `decisions/NNNN-*.md`, immutable | Does not drift — by design it records a decision at a point in time | Complementary, not competing. ADRs answer *why we chose this*; DDD documents answer *what is true now*. Both are kept |
-| **Literate programming** (Knuth) | Prose and code interleaved in one source | Requires a tangling toolchain and a whole-file rewrite; nobody maintains the prose half | Too heavy. DDD keeps prose and code in separate files with a shared vocabulary, which is 80% of the benefit at 5% of the cost |
-| **Doc tests / executable specs** (Gherkin, doctest) | Executable prose | Does not drift at all — it is a test | Strictly better *where it applies*. DDD's job is precisely the residue: things not yet executable, things broken, things about people rather than code. Where a statement can be a test, [make it a test](07-enforcement.md) and drop the mark |
+| **ADRs** | `decisions/NNNN-*.md`, immutable | Does not drift — by design it records a decision at a point in time | Complementary, not competing. ADRs answer *why we chose this*; KDD documents answer *what is true now*. Both are kept |
+| **Literate programming** (Knuth) | Prose and code interleaved in one source | Requires a tangling toolchain and a whole-file rewrite; nobody maintains the prose half | Too heavy. KDD keeps prose and code in separate files with a shared vocabulary, which is 80% of the benefit at 5% of the cost |
+| **Doc tests / executable specs** (Gherkin, doctest) | Executable prose | Does not drift at all — it is a test | Strictly better *where it applies*. KDD's job is precisely the residue: things not yet executable, things broken, things about people rather than code. Where a statement can be a test, [make it a test](07-enforcement.md) and drop the mark |
 | **Coverage reports** | Generated, outside the source | Accurate but anonymous — tells you a percentage, not which behaviour nobody checked | 🙈 🙉 🙊 exist to say the thing a percentage cannot: *this branch, deliberately, is unverified, and here is what would break* |
 
-The honest summary: **DDD is not better than an executable specification, and does not try to be.** It
+The honest summary: **KDD is not better than an executable specification, and does not try to be.** It
 is better than a tracker at the things a tracker is bad at, and it degrades gracefully — a document
 that nobody maintains is still a document, whereas a spec that nobody maintains is a lie with a
 schema.

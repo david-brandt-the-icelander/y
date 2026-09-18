@@ -11,7 +11,7 @@
 **A page links to this convention; it never restates it.** One line, at the top:
 
 ```markdown
-> Status marks: [`<relative path to>/Development/documentation-driven-development/README.md`](<relative path to>/Development/documentation-driven-development/README.md)
+> Status marks: [`<relative path to>/Development/knowledge-driven-development/README.md`](<relative path to>/Development/knowledge-driven-development/README.md)
 ```
 
 The reason is the grep, and it is the whole point of having a fixed vocabulary:
