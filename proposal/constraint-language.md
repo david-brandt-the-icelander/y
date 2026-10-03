@@ -1702,8 +1702,8 @@ expr          = (* literals, paths, T[key], T where p, calls of named pure funct
     module moves to the bare form when its file is complete.
 14. **Locals that need types.** How often a woven host needs a `local` that it cannot infer decides whether bodies stay
     bare in practice. Leaning: measure it per host on the existing code by stripping and weaving it, and teach `weave`
-    the inference that removes the common cases. TypeScript is measured first
-    ([`bare-typescript.md`](bare-typescript.md), experiment E2).
+    the inference that removes the common cases. Rust is measured first
+    ([`bare-rust.md`](bare-rust.md), experiment E2).
 15. **Macros and generated code.** Types produced by macros, derives and code generators stay where they are generated.
     Leaning: treat a generator's input as its subject, so its constraints are stated once for everything it generates.
 
