@@ -36,7 +36,8 @@ and a constraint file, which says what must hold, and that `strip` and `weave` m
   than the signatures say (§ 7).
 - **It is small.** The core of the bare grammar is already written: 21 lines extending tree-sitter-rust 0.24, which
   generate a parser that parses language § 14.9's bare body and rejects its woven form (§ 3.1). The whole trial is a
-  Rust crate of about 2,500 lines.
+  Rust crate of about 2,500 lines, and costs about 1.07 billion tokens, or $1,500 at API rates on Claude Opus 5.5 at
+  effort `high`; the decision itself, after stage 3, about $1,200 (§ 14).
 - **It ends in a decision.** The experiments (§ 10) say whether bare bodies stay bare, whether a file can always fill
   the holes, whether library constraints are good enough to rely on, and whether an agent does better with bare Rust
   and JSON than with Rust. Their results decide whether to build a second host, change the design, or stop.
@@ -495,3 +496,55 @@ closing.
    local cache for the trial; publishing is a question for after it.
 5. **After the trial.** If the results are good, TypeScript is the cheapest second host (its compiler already defines
    what erases), and Python with LibCST the one closest to the game code the language exists for.
+
+---
+
+## 14. Tokens and cost
+
+A guess, made before anything is built, with every assumption stated so that it can be corrected. It prices the trial
+as if all of it, both building the tools and the agents in the experiments, runs on Claude Opus 5.5 at effort `high`,
+at API rates: $4 per million input tokens, $20 per million output tokens (thinking is billed as output), $0.20 per
+million cache reads, and $5 per million cache writes for the five-minute cache.
+
+### 14.1 Two units of work
+
+Everything the model does is counted in two units:
+
+| Unit | Turns | Average context | Tokens processed | Cache reads | Cache writes | Uncached input | Output | Cost |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| A build session: an agent writing and debugging part of the tool, about half a day of agent work | 150 | 100K | 15.0M | 13.7M | 1.2M | 0.1M | 375K (2.5K a turn) | $16.64 |
+| An experiment run: an agent doing one task from a corpus's history (E4 to E6) | 30 | 60K | 1.8M | 1.53M | 0.25M | 0.02M | 60K (2K a turn) | $2.84 |
+
+Output and cache writes are most of the cost of both units; cache reads are most of their tokens. A session's cost
+moves almost in proportion to its number of turns and to the output each turn produces, which effort `high` raises
+over Opus 5.5's default of `medium`.
+
+### 14.2 By stage
+
+Everything mechanical costs no tokens: `strip`, `weave`, the checks, the library translator and constraint-only strip,
+and experiments E0 to E3 and E5's counts are programs, run as often as needed for the price of the machine.
+
+| Stage | Build sessions | Experiment runs | Tokens processed | Output | Cost |
+| --- | --- | --- | --- | --- | --- |
+| 0, language § 14.9 | 3 | — | 45M | 1.1M | $50 |
+| 1, the whole signature | 8 | — | 120M | 3.0M | $133 |
+| 2, libraries | 5 | — | 75M | 1.9M | $83 |
+| 3, edits and agents: E4 at 40 tasks × 2 arms × 3 trials, and E5's 20 tasks × 3 trials without library files | 4 | 300 | 600M | 19.5M | $917 |
+| 4, the holes left closed (only if stage 3 says go on) | 4 | — | 60M | 1.5M | $67 |
+| 5, disguised constraints | 3 | — | 45M | 1.1M | $50 |
+| 6, the text form, with E6 at 20 tasks × 3 trials | 1 | 60 | 123M | 4.0M | $187 |
+| **The whole trial** | **28** | **360** | **about 1.07B** | **about 32M** | **about $1,500** |
+
+### 14.3 What the figure means
+
+- **The decision costs about $1,200.** Stages 0 to 3 produce the recommendation to build a second host, change the
+  design, or stop. Stages 4 to 6 are spent only if it says go on.
+- **Stage 0 costs about $50,** and is the cheapest test of the whole idea: if language § 14.9 does not weave and strip
+  back, nothing after it is worth paying for.
+- **The agent experiment is most of the cost.** E4 alone is 240 runs, about $680; its trials, not the tool, dominate.
+  Two trials instead of three save about $230, at the price of a noisier comparison.
+- **The range is wide.** Each unit could be off by a factor of two in either direction, from the number of turns a
+  session takes and from how well the cache holds, so the whole trial lies between about $750 and $3,000. The
+  measured cost of stage 0 is the first correction to the rest.
+- **Not counted:** people's time, the machines that run the mechanical stages, and any work on the engine's procedure
+  kit as a later corpus.
