@@ -82,7 +82,7 @@ defined in three parts:
 ### 2.2 A construct that is both behaviour and constraint is split in two
 
 The behaviour stays in the bare body; the constraint moves to the file. This replaces the sentence in language § 11.2
-that keeps such a construct ("C#'s `ref`, Rust's trait objects") whole in the body, which is to be revised.
+that kept such a construct ("C#'s `ref`, Rust's trait objects") whole in the body; § 11.2 now states the split.
 
 | Construct | Behaviour, which stays | Constraint, which moves |
 | --- | --- | --- |
@@ -90,14 +90,14 @@ that keeps such a construct ("C#'s `ref`, Rust's trait objects") whole in the bo
 | `iter.collect::<Vec<u8>>()` | The collection chosen: `collect::<Vec<_>>()` | The element type |
 | `s.parse::<u32>()` | The parse: `s.parse::<_>()` | The result type, which selects the parser |
 | `1u8`, `a + b` | The literal and the arithmetic | The width, which decides overflow, from the declared types |
-| `x.unwrap()` on an input | Extracting the value | That the value is present: a `require … else` |
+| `x.unwrap()` on an input | `.unwrap()` itself, kept as written for now | That the value is present: a `require … else` |
 | `&self`, `&mut self`, `let mut` | The receiver; the binding | Access and mutability: `access`, and the writes the body makes |
 | `Rc` or `Arc`, `Box` | Sharing; owning | Which one, from `shares` and `sendable`; `Box` where an owned recursive type needs it |
 | `Box<dyn T>` or a generic `T` | Dispatch through the interface | The set of implementations allowed |
 
 `_` in casts and type arguments is already valid Rust, so the bare form of an expression keeps the target's syntax and
 only its types are erased. The trial leaves `Rc`, `Arc`, `Box` and trait objects in the body as written and counts them,
-and splits `unwrap` only in stage 5 (§ 11).
+and keeps every `.unwrap()` and `.expect()` in the body, as decided (§ 3.2).
 
 ### 2.3 The file is authoritative, and the weaver does no type inference
 
@@ -186,8 +186,11 @@ type aliases, which move whole; visibility on every item.
 
 The bare language's lint reports, by position:
 
-- at the head of a function, before any effect: `if … { return Err(…) }`, `assert!`, and `.unwrap()` or `.expect()` on
-  a parameter, `self` or a value read from the world. These belong in the file as `require … else`;
+- at the head of a function, before any effect: `if … { return Err(…) }` and `assert!` on a parameter, `self` or a
+  value read from the world. These belong in the file as `require … else`;
+- `.unwrap()` and `.expect()` on a parameter, `self` or a value read from the world. These stay in the body, as
+  decided; the presence they assert is stated in the file as a `require`, and the lint marks the call as covered by it,
+  or reports it when no `require` covers it;
 - anywhere: concrete types in expression position (`as u32`, `::<u32>`, `1u8`), which bare Rust writes as `_`;
 - elsewhere: `.unwrap()`, `.expect()`, `panic!` and `unreachable!` on intermediate values, which may stay (principle 5),
   and are counted.
@@ -289,9 +292,9 @@ The constraint file of language § 14.9, in the form the trial uses:
 }
 ```
 
-`weave` turns it and the bare body into the Rust of language § 14.9, with one difference: it elides the lifetime of
-`get`, because Rust's elision rules give the same meaning (`pub fn get(&self, key: &Key) -> Option<&Entry>`). Lifetimes
-are written out only where elision cannot express them. § 14.9 is to be updated to match when § 11.2 is revised.
+`weave` turns it and the bare body into the Rust of language § 14.9. It elides the lifetime of `get`, because Rust's
+elision rules give the same meaning (`pub fn get(&self, key: &Key) -> Option<&Entry>`); lifetimes are written out only
+where elision cannot express them, and § 14.9 now shows the elided form.
 
 ---
 
@@ -412,7 +415,7 @@ All run in the tool's CI over every corpus.
 
 ## 10. Experiments
 
-- **E0, language § 14.9.** Bare body and JSON weave into § 14.9's Rust (with the elided lifetime), which compiles, and
+- **E0, language § 14.9.** Bare body and JSON weave into § 14.9's Rust, which compiles, and
   strip back into the same two files.
 - **E1, coverage.** Files accepted and refused, by reason; slots filled, by production; the share of types that map to
   the language and the share carried as host text, by form. The output is § 12 with numbers.
@@ -464,8 +467,8 @@ Each stage says when it is done; none has a date.
 These gaps are visible before anything is built; the trial counts how often each occurs, and so says which are worth
 closing.
 
-- **Language § 11.2 needs the split rule, holes, and libraries.** The rule of § 2.2 replaces "stays in the body"; the
-  two rules of § 2.4 belong in its meaning of a bare form; § 7 is new.
+- **Language § 11.2 now has the split rule, the two rules on holes, and libraries.** The trial tests whether they hold
+  as written there.
 - **Generic host subjects.** `for T where …` exists (language § 9), but the grammar's `subject_head` has no place for
   it on a host type, function or `impl`.
 - **Associated types, `impl Trait` and trait objects** have no counterpart in the type language.
@@ -480,9 +483,9 @@ closing.
 
 ## 13. Open questions
 
-1. **The bare form of a split `unwrap`.** At a function's head, presence moves as a `require` and the body keeps an
-   extraction; what does the extraction look like in bare Rust? Leaning: keep `.unwrap()` in the bare body, marked by
-   the lint as covered by a `require`, so the bare language needs no new syntax; `weave` keeps it as written.
+1. **A bare form of extraction.** Decided for now: `.unwrap()` and `.expect()` stay in the bare body as written, and
+   the presence they assert on an input is stated in the file as a `require` (§ 3.2). Whether bare Rust later needs an
+   extraction that asserts nothing, so that the presence is said only once, waits on E4.
 2. **Body hints.** Keep them as positional records outside the language, part of the Rust profile, or require bodies to
    be rewritten so that every needed type belongs to a named local? Leaning: records, until E2 says how many there are.
 3. **How far to look into library bodies.** A syntactic call graph is cheap and approximate; MIR is exact and costly.

@@ -26,10 +26,11 @@ code.
   C#, Java, Kotlin, Swift, C++, Go, PHP and TypeScript.
 - **Every host gets a bare form.** Everything in a host language that only restricts which programs it accepts (its
   types, nullability, lifetimes, mutability and access markers, visibility, generic bounds, declared exceptions) can
-  move into the constraint file. What is left is a bare form of the language that says only what the program does.
-  `strip` turns ordinary source into bare source and a constraint file; `weave` turns them back into ordinary source of
-  the same host, which its own toolchain compiles (§ 11.2). The constraint language does not replace a host's type
-  system, and yet every host gets a derived language whose type system is the constraint file.
+  move into the constraint file, and a construct that both restricts and acts is split, its act staying and its
+  restriction moving. What is left is a bare form of the language that says what the program does, together with the
+  choices its file makes. `strip` turns ordinary source into bare source and a constraint file; `weave` turns them back
+  into ordinary source of the same host, which its own toolchain compiles (§ 11.2). The constraint language does not
+  replace a host's type system, and yet every host gets a derived language whose type system is the constraint file.
 - **One expression language, defined once.** Two-valued logic with explicit absence, exact integer and decimal
   arithmetic, floats as every host compares them, explicit collation, total evaluation and a read set known before
   evaluation. Each constraint is compiled into every place that enforces it, and the generated checks are compared on
@@ -1143,25 +1144,58 @@ woven into ordinary source of the host, which the host's own toolchain compiles;
 source and a constraint file. The two directions are inverses, so any codebase can move into the bare form and back
 without loss, and a host's type system becomes the checker of the part of the constraint file it can express.
 
+The bare form is the image of erasure, `bare = strip(host)`, and is neither a subset nor a superset of the host: `rustc`
+rejects `fn get(self, key)`, and bare Rust rejects `&'a self`. `weave` maps a bare body and a constraint file to host
+source, with `strip(weave(b, c)) = b`, so each bare body stands for a family of host programs, one for each file that
+completes it. A bare form is defined in three parts:
+
+- **A grammar delta.** The host's grammar with every constraint production made empty: the types of parameters,
+  results, fields and locals, lifetimes, access markers, visibility, generic parameters and bounds, `where` clauses.
+  Structure stays: a struct keeps its field names and a tuple variant its arity (`A(_)`). Every emptied production is a
+  slot that the file fills and a place where `weave` prints. Written as an extension of the host's grammar (for Rust, of
+  tree-sitter-rust), the delta gives the bare form's parser, the file's slots and the weaver's insertion points at once.
+- **A ban on disguised constraints.** Some constraints are ordinary calls and statements, which no grammar can remove:
+  `assert!`, `.unwrap()` and `.expect()`, a leading `if cond { return Err(NotYours) }`. A lint, part of the bare form's
+  definition, finds them by position. A check at the head of a subject, on its inputs or the world, belongs in the file
+  as a `require … else`, and is woven back as a generated check. A check on an intermediate value may stay in the body
+  (principle 5). For now `.unwrap()` and `.expect()` stay in the body wherever they are; where one covers an input, the
+  lint marks it as covered by the `require` that states the same presence.
+- **A list of mixed constructs**, each split as below, in each host's profile.
+
 **What moves and what stays.** The rule is one sentence: a mechanism that only restricts or checks moves to the file;
 anything that decides what the program does stays in the body. Types of parameters, results and fields move; so do
 nullability, lifetimes, `mut` and `const` and `final` and `readonly`, `&` and `&mut`, visibility modifiers, generic
 bounds, declared exceptions, and attributes such as `#[must_use]` and `#[non_exhaustive]`. Control flow, calls,
 constructors, conversions, pattern matching, implementations of traits and interfaces, macros and `unsafe` blocks stay.
-Where a type also selects behaviour, `weave` chooses it from the constraints: an integer's width from its declared type,
-`Rc` or `Arc` from `shares` and `sendable`, `&` or `&mut` from `access`, a `Box` where an owned recursive type needs
-one, a lifetime parameter from `borrows from`, `let mut` from the writes the body makes. Where a body must choose a type
-to say what it does (which collection a `collect` builds), that choice is behaviour, and the body says it with a call or
-a type argument, as the host already allows.
+
+A construct that is both behaviour and constraint is split in two: the behaviour stays in the body, and the constraint
+moves to the file. A Rust cast `x as u32` keeps the conversion, `x as _`, and moves the target type;
+`collect::<Vec<u8>>()` keeps the choice of `Vec`, and moves the element type; `&self` keeps the receiver, and moves its
+access; a trait object keeps dispatch through the interface, and moves the set of implementations allowed; C#'s `ref`
+keeps passing by reference, and moves the access it grants.
+
+**Holes.** Where the constraint chooses the behaviour, splitting leaves a hole in the body that only the file can fill:
+an integer's width, which decides overflow, from its declared type; the target of `as _`; `Rc` or `Arc` from `shares`
+and `sendable`; `&` or `&mut` from `access`; a `Box` where an owned recursive type needs one; a lifetime parameter from
+`borrows from`; `let mut` from the writes the body makes. So a bare body says what the program does only together with
+its file, and two rules hold:
+
+- **`weave` fails if a hole is left undetermined.** A hole is determined when the file states it, or when the host's
+  compiler infers it from what the file states; one that is neither is reported at its place in the body, with the
+  clause that would fill it.
+- **Whoever writes a bare body reads its file,** not only the body, to know what the body does.
+
+`weave` therefore prints and never infers: the file is authoritative, and where it says `access self : write
+exclusive`, `weave` writes `&mut self`. Each profile lists its holes, and how each is filled.
 
 | Host | Moves to the constraint file | Stays in the bare body | Woven into |
 | --- | --- | --- | --- |
-| Rust | Types of parameters, results and fields; lifetimes; `mut`, `&` and `&mut`; `pub`; generic bounds and `where` clauses; `Send` and `Sync` bounds; `Option` around a value; error types, as failures; `#[must_use]`, `#[non_exhaustive]` | Expressions, control flow, `?`, `match`, `impl` blocks, macros, `unsafe` blocks, constructors and conversions | Rust with types, lifetimes, `mut` and visibility written, and wrappers for the rest |
+| Rust | Types of parameters, results and fields; lifetimes; `mut`, `&` and `&mut`; `pub`; generic bounds and `where` clauses; `Send` and `Sync` bounds; `Option` around a value; error types, as failures; `#[must_use]`, `#[non_exhaustive]`; the types of casts and type arguments | Expressions, control flow, `?`, `match`, `impl` blocks, macros, `unsafe` blocks, constructors and conversions (`as _`), the collection a `collect` builds | Rust with types, lifetimes, `mut` and visibility written, and wrappers for the rest |
 | T-SQL | Parameter and column types; `NULL` and `NOT NULL`; `CHECK`, `UNIQUE` and `FOREIGN KEY` | Statements; defaults; triggers' bodies | DDL and procedures, with generated checks at procedures' heads |
-| C# | Types of members and parameters; nullable annotations; `readonly`, `init` and `in`; access modifiers; `sealed`; generic constraints | Bodies, `ref` and `out` (which change behaviour), `using`, LINQ, lambdas | C# with types and modifiers written, and analyser rules |
+| C# | Types of members and parameters; nullable annotations; `readonly`, `init` and `in`; access modifiers; `sealed`; generic constraints; the access `ref` and `out` grant | Bodies, passing by `ref` and `out`, `using`, LINQ, lambdas | C# with types and modifiers written, and analyser rules |
 | Java, Kotlin | Types; `final` and `val`; nullability; access modifiers; `throws`; generic bounds | Bodies, `try`-with-resources, lambdas | Java or Kotlin with types and modifiers written |
 | Python | Type hints; `Final`; `frozen=True`; `@final` | Everything else | Python with hints written and decorators that check at run time |
-| TypeScript | Types; `readonly`; optional markers; access modifiers | JavaScript | TypeScript |
+| TypeScript | Types; `readonly`; optional markers; access modifiers; `as`, `satisfies` and `!` | JavaScript | TypeScript |
 
 **Inside bodies.** Hosts infer most local types, so a bare body rarely needs one. Where a woven host needs the type of a
 local and cannot infer it, the file gives it: `local total : decimal(19, 2)` under the function's subject, binding the
@@ -1170,9 +1204,25 @@ type, never a condition on a value (principle 5).
 
 **The round trip is a law.** `weave(strip(source)) == source`, up to the formatter's canonical form, and
 `strip(weave(bare, file)) == (bare, file)` for every constraint the host can express; what it cannot express is woven as
-generated checks, which carry a marker that `strip` recognises and removes again. Both directions are checked in CI over
-the whole codebase, so neither the bare form nor the ordinary form can drift. Diagnostics from the host's compiler are
-mapped back, through a map that `weave` writes, to the line of the bare body or the clause of the file they concern.
+generated checks, which carry a marker that `strip` recognises and removes again. The canonical form writes what the
+host lets it leave out only where leaving it out would change the meaning: Rust lifetimes are elided wherever the
+elision rules give the same meaning (§ 14.9). Both directions are checked in CI over the whole codebase, so neither the
+bare form nor the ordinary form can drift. Diagnostics from the host's compiler are mapped back, through a map that
+`weave` writes, to the line of the bare body or the clause of the file they concern.
+
+**Libraries.** Code that is not woven, such as a host's standard library and a codebase's dependencies, needs a
+constraint file but no bare body: an agent writing bare code calls a library by name and must know what it promises,
+while the host's compiler checks the calls after weaving. A partial strip writes the file and discards the body. It
+starts from what the host already produces for separate compilation (rustdoc's JSON for Rust, `.d.ts` files for
+TypeScript, stubs for Python, reference assemblies for C#), and, where the source is available, looks into bodies for
+more than the signatures say: guards at a function's head, the failures and panics a body can reach, and the effects of
+the calls it makes. Each clause carries the status of its source: signatures are `proven`, since the library's compiler
+checked them; guards found in its code are `lifted`, for the version the build locks; what its documentation says is
+`assumed … because "documentation"`; what an analysis of its bodies suggests is `observed`. Generated code relies only
+on `proven` and `lifted` clauses and on assumptions a person has accepted, as when a generated check is left out because
+a library's postcondition already guarantees it (§ 11.1). A bare module's own file is its public interface in the same
+way: callers depend on the file and never on the body, so at the boundary the codebase's own modules and its libraries
+are alike.
 
 **What it buys.**
 
@@ -1185,14 +1235,15 @@ mapped back, through a map that `weave` writes, to the line of the bare body or 
 - **Hosts without a mechanism gain it.** Python gets lifetimes and mutability as generated checks; C# gets borrows as
   analyser rules; T-SQL gets state machines as checks at procedures' heads.
 - **Agents write what the code does.** An agent writes a bare body; the file, much of it harvested or stripped from
-  existing code, says what must hold, and the host's compiler checks the body against it after weaving.
+  existing code, says what must hold, and the host's compiler checks the body against it after weaving. The files of
+  its dependencies tell it what they promise, in the same language.
 - **Existing code moves in mechanically.** `strip` lifts a host's own annotations into the file with status `lifted`, so
   a codebase enters the bare form without anyone writing a constraint by hand.
 
 **Limits.** What `strip` cannot see it cannot move: types produced by macros or code generators stay where they are
-generated; reflection and runtime patching (Python's monkeypatching) are constrained only at the boundaries the profile
-can wrap; and a host feature that is both a restriction and a behaviour (C#'s `ref`, Rust's trait objects) stays in the
-body. Each profile lists what it moves, what it leaves and why.
+generated; and reflection and runtime patching (Python's monkeypatching) are constrained only at the boundaries the
+profile can wrap. Each profile lists what it moves, what it splits, what it leaves and why. The first bare form, Rust,
+is planned in [`bare-rust.md`](bare-rust.md).
 
 ---
 
@@ -1506,10 +1557,13 @@ function rust 'eve_cache::Cache::insert'(self: ref<Cache>, key: Key, entry: Entr
 pub(crate) struct Cache { entries: std::collections::HashMap<Key, Entry> }
 
 impl Cache {
-    pub fn get<'a>(&'a self, key: &Key) -> Option<&'a Entry> { self.entries.get(key) }
+    pub fn get(&self, key: &Key) -> Option<&Entry> { self.entries.get(key) }
     pub fn insert(&mut self, key: Key, entry: Entry) { self.entries.insert(key, entry); }
 }
 ```
+
+`hold result : borrows from self` is woven without a named lifetime, because Rust's elision rules give `get` exactly
+that meaning; `weave` writes `<'a>` only where elision would say something else.
 
 ---
 
