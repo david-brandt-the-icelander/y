@@ -36,8 +36,10 @@ and a constraint file, which says what must hold, and that `strip` and `weave` m
   than the signatures say (§ 7).
 - **It is small.** The core of the bare grammar is already written: 21 lines extending tree-sitter-rust 0.24, which
   generate a parser that parses language § 14.9's bare body and rejects its woven form (§ 3.1). The whole trial is a
-  Rust crate of about 2,500 lines, and costs about 1.07 billion tokens, or $1,500 at API rates on Claude Opus 5.5 at
-  effort `high`; the decision itself, after stage 3, about $1,200 (§ 14).
+  Rust crate of about 2,500 lines. Stage 0 is built: it used about 9 million tokens and $3, mostly to orchestrate,
+  against an estimate of $50. With agents on Claude Sonnet 5.5, the whole trial is estimated at about 0.57 billion
+  tokens and $345 at API rates, about two thirds of a Claude Max 5x week; the decision, after stage 3, costs about $275
+  (§ 14).
 - **It ends in a decision.** The experiments (§ 10) say whether bare bodies stay bare, whether a file can always fill
   the holes, whether library constraints are good enough to rely on, and whether an agent does better with bare Rust
   and JSON than with Rust. Their results decide whether to build a second host, change the design, or stop.
@@ -444,7 +446,8 @@ All run in the tool's CI over every corpus.
 Each stage says when it is done; none has a date.
 
 - **Stage 0, language § 14.9.** The grammar delta for structs, functions, parameters, `self` and `let`, with `impl`
-  blocks as they come; `strip` and `weave` for exactly the slots § 14.9 uses. Done when E0 passes.
+  blocks as they come; `strip` and `weave` for exactly the slots § 14.9 uses. Done when E0 passes. Done: built in
+  `tools/bare-rust`, where E0's golden tests pass (§ 14.1).
 - **Stage 1, the whole signature.** Every emptied production of § 4.3, the type mapping of § 4.4 with its host-text
   fallback, `mut` derived through `rustc`, holes reported, the JSON Schema, and checks 1 to 4 over the corpora. Done
   when the checks pass and E1 is written up.
@@ -501,50 +504,97 @@ closing.
 
 ## 14. Tokens and cost
 
-A guess, made before anything is built, with every assumption stated so that it can be corrected. It prices the trial
-as if all of it, both building the tools and the agents in the experiments, runs on Claude Opus 5.5 at effort `high`,
-at API rates: $4 per million input tokens, $20 per million output tokens (thinking is billed as output), $0.20 per
-million cache reads, and $5 per million cache writes for the five-minute cache.
+Prices are API rates per million tokens, as of October 2026. Thinking is billed as output.
 
-### 14.1 Two units of work
-
-Everything the model does is counted in two units:
-
-| Unit | Turns | Average context | Tokens processed | Cache reads | Cache writes | Uncached input | Output | Cost |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| A build session: an agent writing and debugging part of the tool, about half a day of agent work | 150 | 100K | 15.0M | 13.7M | 1.2M | 0.1M | 375K (2.5K a turn) | $16.64 |
-| An experiment run: an agent doing one task from a corpus's history (E4 to E6) | 30 | 60K | 1.8M | 1.53M | 0.25M | 0.02M | 60K (2K a turn) | $2.84 |
-
-Output and cache writes are most of the cost of both units; cache reads are most of their tokens. A session's cost
-moves almost in proportion to its number of turns and to the output each turn produces, which effort `high` raises
-over Opus 5.5's default of `medium`.
-
-### 14.2 By stage
-
-Everything mechanical costs no tokens: `strip`, `weave`, the checks, the library translator and constraint-only strip,
-and experiments E0 to E3 and E5's counts are programs, run as often as needed for the price of the machine.
-
-| Stage | Build sessions | Experiment runs | Tokens processed | Output | Cost |
+| Model | Input | Output | Cache reads | Cache writes, 5 minutes | Cache writes, 1 hour |
 | --- | --- | --- | --- | --- | --- |
-| 0, language § 14.9 | 3 | — | 45M | 1.1M | $50 |
-| 1, the whole signature | 8 | — | 120M | 3.0M | $133 |
-| 2, libraries | 5 | — | 75M | 1.9M | $83 |
-| 3, edits and agents: E4 at 40 tasks × 2 arms × 3 trials, and E5's 20 tasks × 3 trials without library files | 4 | 300 | 600M | 19.5M | $917 |
-| 4, the holes left closed (only if stage 3 says go on) | 4 | — | 60M | 1.5M | $67 |
-| 5, disguised constraints | 3 | — | 45M | 1.1M | $50 |
-| 6, the text form, with E6 at 20 tasks × 3 trials | 1 | 60 | 123M | 4.0M | $187 |
-| **The whole trial** | **28** | **360** | **about 1.07B** | **about 32M** | **about $1,500** |
+| Claude Sonnet 5.5 | $2 | $10 | $0.20 | $2.50 | $4 |
+| Claude Opus 5.5 | $4 | $20 | $0.20 | $5 | $8 |
 
-### 14.3 What the figure means
+### 14.1 Stage 0, measured
 
-- **The decision costs about $1,200.** Stages 0 to 3 produce the recommendation to build a second host, change the
-  design, or stop. Stages 4 to 6 are spent only if it says go on.
-- **Stage 0 costs about $50,** and is the cheapest test of the whole idea: if language § 14.9 does not weave and strip
-  back, nothing after it is worth paying for.
-- **The agent experiment is most of the cost.** E4 alone is 240 runs, about $680; its trials, not the tool, dominate.
-  Two trials instead of three save about $230, at the price of a noisier comparison.
-- **The range is wide.** Each unit could be off by a factor of two in either direction, from the number of turns a
-  session takes and from how well the cache holds, so the whole trial lies between about $750 and $3,000. The
-  measured cost of stage 0 is the first correction to the rest.
-- **Not counted:** people's time, the machines that run the mechanical stages, and any work on the engine's procedure
-  kit as a later corpus.
+Stage 0 was built by a workflow: one implementer, then an independent checker that ran the golden tests, the CLI and a
+round-trip probe with odd spacing and comments. Both agents ran on Claude Sonnet 5.5 at effort `low`. That is the
+cheapest model and effort that are still plainly more than the job needs: about 500 lines of well-specified Rust,
+starting from a grammar already shown to work, with golden files to test against. Claude Haiku 4.5 is cheaper, but
+debugging tree-sitter conflicts and Rust build errors is where it is likely to struggle. The checker passed the first
+build, so no repair round ran. An Opus 5.5 session orchestrated: it checked the toolchain, wrote the workflow, verified
+the result independently, and tallied the cost.
+
+| Part | Calls | Cache writes | Cache reads | Output | Cost |
+| --- | --- | --- | --- | --- | --- |
+| Implementer, Sonnet 5.5 `low` | 6 | 74K | 293K | about 8.5K visible | $0.33 to $0.40 |
+| Checker, Sonnet 5.5 `low` | 5 | 57K | 204K | about 1K visible | $0.19 to $0.22 |
+| Orchestration, Opus 5.5 | 22 | 43K, 1-hour | 8.25M | about 7K visible | $2.15 to $2.75 |
+| **Stage 0** | **33** | **174K** | **8.75M** | **about 16K visible** | **about $3, or 9M tokens** |
+
+The input-side figures come from each call's recorded usage. Output is not recorded per call, and the thinking text is
+omitted, so output is the visible text of each call, about 3.5 characters a token, plus a bound on the unseen
+thinking. The ranges in the cost column come from that bound.
+
+Against the first estimate:
+
+- **$3 against $50, and 9M tokens against 45M.** The workflow alone used 0.6M tokens and about $0.6, about 1% of the
+  stage's estimate. The implementer wrote the whole crate in one command and passed its own tests at once. The estimate
+  had assumed 3 sessions of 150 turns each.
+- **Orchestration cost more than the build.** Each orchestrating call re-read about 375K tokens of this long
+  conversation. A fresh, short session per stage would cut that to a fraction.
+- **Stage 0 was the easiest stage.** It had a spike to start from, golden files written in advance, and nothing to
+  debug against real code. Later stages have none of these, so the units below are larger than stage 0's, not scaled
+  down from it.
+
+### 14.2 The rest, priced on Sonnet
+
+Build and experiment agents run on Claude Sonnet 5.5 at effort `low`, and an Opus 5.5 session orchestrates, as in stage
+0. Three units:
+
+| Unit | Calls | Average context | Tokens | Cache writes | Output | Cost |
+| --- | --- | --- | --- | --- | --- | --- |
+| A build run: an implementer or repair agent on one part of a stage | 40 | 80K | 3.2M | 0.16M | 60K | $1.61 |
+| A check run: an independent checker | 10 | 60K | 0.6M | 0.07M | 8K | $0.36 |
+| An experiment run: an agent doing one task from a corpus's history (E4 to E6) | 20 | 65K | 1.3M | 0.10M | 25K | $0.74 |
+
+These units are larger than stage 0's measured runs (6 and 5 calls) to allow for debugging against real crates.
+Orchestration is $3 a stage, as measured, or $6 for stages 1 and 3. The Max 5x column is explained in § 14.3.
+
+| Stage | Build and check runs | Experiment runs | Tokens | Cost | Max 5x week | Same units on Opus 5.5 `high` | First estimate |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 0, language § 14.9 (measured) | 1 and 1 | — | 9M | $3 | 0.6% | — | $50 |
+| 1, the whole signature | 8 and 8 | — | 30M | $22 | 4% | $37 | $133 |
+| 2, libraries | 5 and 5 | — | 19M | $13 | 2% | $23 | $83 |
+| 3, edits and agents: E4 at 40 tasks × 2 arms × 3 trials, E5 at 20 × 3 | 4 and 4 | 300 | 405M | $236 | 45% | $469 | $917 |
+| 4, the holes left closed (only if stage 3 says go on) | 4 and 4 | — | 15M | $11 | 2% | $19 | $67 |
+| 5, disguised constraints | 3 and 3 | — | 11M | $9 | 2% | $15 | $50 |
+| 6, the text form, with E6 at 20 × 3 | 1 and 1 | 60 | 82M | $49 | 9% | $96 | $187 |
+| **Stages 0 to 3: the decision** | | **300** | **463M** | **about $275** | **about 52%** | **about $530** | **about $1,200** |
+| **The whole trial** | | **360** | **about 0.57B** | **about $345** | **about 66%** | **about $660** | **about $1,500** |
+
+The "same units on Opus 5.5 `high`" column prices the same runs at Opus rates, with half again as much output for the
+higher effort.
+
+- **The experiments are now most of the cost.** E4's 240 runs cost about $180. Running E4's agents on Opus 5.5 instead
+  would double that, and would answer a different question: whether bare Rust helps the strongest agent rather than
+  the cheaper one.
+- **The range is still wide.** Each unit could be off by a factor of two either way, so the whole trial lies between
+  about $175 and $700. Each stage's measured cost corrects the next stage's estimate.
+- **Not counted:** people's time, and the machines that run the mechanical work. `strip`, `weave`, the checks, the
+  library translator, and experiments E0 to E3 and E5's counts are programs and cost no tokens.
+
+### 14.3 As a share of a Claude Max 5x week
+
+Anthropic does not publish the Max 5x weekly limit as a number: the plan has a weekly limit across all models, and the
+current state is visible only in each account's usage settings. As a proxy, this plan uses one third-party
+measurement, which put a full Max 5x week at about $523 of usage at API rates. That figure could not be checked from
+here: its date, the models it measured, and how Anthropic weighs token types against the limit are unknown. Weekly
+limits were also raised in September 2026, which would make the share smaller than shown. Read the column as an order
+of magnitude.
+
+On that proxy:
+
+- **Stage 0 used about 0.6% of a week,** and its workflow alone about 0.1%.
+- **The decision needs about half a week.**
+- **The whole trial needs about two thirds of a week on Sonnet,** or about one and a quarter weeks on Opus 5.5 `high`.
+  The first estimate would have needed nearly three weeks.
+- **Opus is likely to draw on the limit faster than its API price suggests.** One third-party report counts an Opus
+  hour as about 2.5 Sonnet hours against the shared weekly limit. That is another reason to run the agents on Sonnet
+  and keep Opus to orchestration.
