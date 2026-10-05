@@ -38,9 +38,10 @@ and a constraint file, which says what must hold, and that `strip` and `weave` m
   rustdoc's JSON and looks into bodies where the source is available, is for later releases (§ 7).
 - **It is small.** The core of the bare grammar is already written: 21 lines extending tree-sitter-rust 0.24, which
   generate a parser that parses language § 14.9's bare body and rejects its woven form (§ 3.1). The proof of concept
-  was estimated at 1,500 lines of Rust; after stage 1 the tool is 4,600, and still cheap to build. Stages 0 and 1 are
-  built, for about $3 and $11 at API rates against estimates of $50 and $13. With agents on Claude Sonnet 5.5, the
-  proof of concept is estimated at about 0.2 billion tokens and $110, about a fifth of a Claude Max 5x week (§ 14).
+  was estimated at 1,500 lines of Rust; after stage 1 the tool is 4,600, and still cheap to build. Stages 0 to 2 are
+  built, for about $3, $11 and $22 at API rates against estimates of $50, $13 and $9. With agents on Claude Sonnet 5.5,
+  the proof of concept is estimated at about 0.27 billion tokens and $125, about a quarter of a Claude Max 5x week
+  (§ 14).
 - **It ends in a decision.** The experiments (§ 10) say whether bare bodies stay bare, whether a file can always fill
   the holes, whether library constraints help an agent, and whether an agent does better with bare Rust and JSON than
   with Rust. Their results decide whether to complete the tool and build a second host, change the design, or stop.
@@ -483,7 +484,10 @@ experiments need.
   all four corpora, 18 files with none refused, and E1 is in `tools/bare-rust/results/e1.md` (§ 14.1).
 - **Stage 2, library files, by hand.** Agents write the constraint file entries for the limited set of external code
   the corpora call, with the status of § 7.3, and a second agent checks them (check 5). Done when every external item
-  the corpora call has a checked entry.
+  the corpora call has a checked entry. Done: `tools/bare-rust/libraries/std-1.97.0.constraints.json` covers the 105
+  `std` items that strsim, fnv and the golden crate use, `bare-rust check` requires that coverage, and an independent
+  review passed it after one repair round. The summary is `tools/bare-rust/results/libraries.md` (§ 14.1). The tool's
+  own source stays a corpus for checks 1 to 4 only, so its dependencies have no library files.
 - **Stage 3, edits and agents.** Errors mapped back to the bare body and the JSON, E2, E3, E4 and E5. Done when the
   results are written up with a recommendation: complete the tool and build a second host, change the design of
   language § 11.2, or stop.
@@ -510,6 +514,14 @@ Later releases, only if stage 3 recommends going on, and in an order its results
 These gaps are visible before anything is built; the trial counts how often each occurs, and so says which are worth
 closing. E1's counts for stage 1 are in `tools/bare-rust/results/e1.md`: 93% of type slots map to the type language,
 and the rest are mostly slices, lifetime arguments and arrays.
+
+Stage 2 adds the library side. Of the 303 promises written by hand for 106 `std` subjects, 104 are stated in the
+language and 199 are not, each with a labelled reason (`tools/bare-rust/results/libraries.md`). The largest groups:
+types, traits and impls (101: no impl or associated type 38, promises that hold unless an impl overrides a default body
+22, must-use on a type 14); host state and effects (40); text, numbers and const-ness (29); sequences and collections
+(22, mostly no sequence value). Two findings concern the file rather than the language: the externals lists name a
+trait method but never the impl a call resolves to, and the file has no clause kinds for `budget` and `layout`, which
+language § 5 has.
 
 - **Language § 11.2 now has the split rule, the two rules on holes, and libraries.** The trial tests whether they hold
   as written there.
@@ -551,7 +563,7 @@ Prices are API rates per million tokens, as of October 2026. Thinking is billed 
 | Claude Sonnet 5.5 | $2 | $10 | $0.20 | $2.50 | $4 |
 | Claude Opus 5.5 | $4 | $20 | $0.20 | $5 | $8 |
 
-### 14.1 Stages 0 and 1, measured
+### 14.1 Stages 0 to 2, measured
 
 #### Stage 0
 
@@ -619,6 +631,35 @@ all):
 - **Orchestration was cheaper than in stage 0:** $1.47 against $2.75 at most. The conversation had been compacted, so
   each orchestrating call re-read about 140K tokens instead of 375K.
 
+#### Stage 2
+
+Stage 2 was run like stage 1, with Sonnet 5.5 agents at the default effort. Part A built `bare-rust externals` (the
+`std` items each corpus uses, read from rustc's MIR), the library file format and the mechanical half of check 5
+(`bare-rust libcheck`: coverage, schema, and each function's signature compiled against the real item). Part B wrote
+the entries for all 105 items, from the 1.97.0 source on GitHub. An independent reviewer found nothing the corpora rely
+on to be false, but found overclaims from overridable default bodies, ill-formed clauses and weak citations; one repair
+agent fixed them all and added a clause lint.
+
+| Part | Calls | Cache writes | Cache reads | Output | Cost |
+| --- | --- | --- | --- | --- | --- |
+| Build, part A: tooling and format | 59 | 286K | 11.07M | about 42K visible | $3.4 to $3.8 |
+| Build, part B: 105 entries | 130 | 435K | 38.30M | about 63K visible | $9.4 to $10.0 |
+| Independent review | 34 | 149K | 4.06M | about 5K visible | $1.2 to $1.3 |
+| Repair | 87 | 300K | 18.91M | about 29K visible | $4.8 to $5.1 |
+| Orchestration, Opus 5.5 | 30 | 57K, 1-hour | 6.10M | 22K | $2.11 |
+| **Stage 2** | **340** | **1.23M** | **78.4M** | **about 0.16M** | **$21 to $22, or 80M tokens** |
+
+Against the estimate of § 14.2 (3 build runs and 3 check runs, 11M tokens and $6 for agents, $3 to orchestrate, $9 in
+all):
+
+- **About $22 against $9, and 80M tokens against 19M.** The estimate is the first one the trial has missed.
+- **Long agents cost the most.** Part B wrote all 105 entries in one agent of 130 calls, whose context grew to an
+  average of about 295K tokens, so its cache reads alone cost about $7.70. The repair agent averaged about 220K. The
+  work was the size expected; what it cost was set by how long each agent ran. Writing the entries in batches of about
+  20, each in a fresh agent, would have cost about half as much.
+- **The repair round was larger than in stage 1,** because the review checked meaning, not only mechanics: 119 stated
+  clauses against their sources. Writing claims about someone else's code is where a second agent earns its cost.
+
 ### 14.2 The rest, priced on Sonnet
 
 Build and experiment agents run on Claude Sonnet 5.5 at effort `low`, and an Opus 5.5 session orchestrates, as in stage
@@ -640,9 +681,9 @@ The proof of concept, stages 0 to 3 at the scope of § 11:
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 0, language § 14.9 (measured) | 1 and 1 | — | 9M | $3 | 0.6% | — | $3 |
 | 1, the signature, as far as the corpora need it (measured) | 3 and 1 | — | 36M | $11 | 2.2% | — | $22 |
-| 2, library files, by hand | 3 and 3 | — | 11M | $9 | 1.7% | $15 | $13, for the tooling |
+| 2, library files, by hand (measured) | 3 and 1 | — | 80M | $22 | 4.2% | — | $13, for the tooling |
 | 3, edits and agents: E4 at 20 tasks × 2 arms × 2 trials, E5 at 10 × 2 | 4 and 4 | 100 | 145M | $88 | 17% | $171 | $236 |
-| **The proof of concept** | | **100** | **about 0.2B** | **about $110** | **about 21%** | **about $200** | **about $275** |
+| **The proof of concept** | | **100** | **about 0.27B** | **about $125** | **about 24%** | **about $205** | **about $275** |
 
 The "same units on Opus 5.5 `high`" column prices the same runs at Opus rates, with half again as much output for the
 higher effort. "Before rescoping" is this plan's previous estimate, on Sonnet, for the stage as it was then (§ 11 had
@@ -662,10 +703,13 @@ Later releases, only if the proof of concept recommends going on, priced with th
 - **The experiments are most of the cost.** E4's 80 runs cost about $60, and E5's 20 about $15. Running E4's agents on
   Opus 5.5 instead would double that, and would answer a different question: whether bare Rust helps the strongest
   agent rather than the cheaper one.
-- **Hand-written library files are cheap.** Three build runs and three check runs cover the limited set of external
-  code, against five and five for the tooling, which also takes longer to get right.
+- **Hand-written library files cost more than estimated,** $22 against $9 (§ 14.1), but still about the price of the
+  tooling's first estimate, and they now say what that tooling must produce.
+- **Stage 3 keeps its agents short.** Its experiment runs are already one task per fresh agent. Its build work, the
+  error mapping and the harnesses for E2 to E5, is split into parts small enough that no agent's context grows past
+  about 150K tokens, which is what kept stage 1 on its estimate and what stage 2's part B lacked.
 - **The range is still wide.** Each unit could be off by a factor of two either way, so the proof of concept lies
-  between about $55 and $220. Each stage's measured cost corrects the next stage's estimate.
+  between about $80 and $210, since stages 0 to 2 are measured. Each stage's measured cost corrects the next stage's estimate.
 - **Not counted:** people's time, and the machines that run the mechanical work. `strip`, `weave`, the checks, and
   experiments E0 to E3 are programs and cost no tokens.
 
@@ -680,8 +724,9 @@ of magnitude.
 
 On that proxy:
 
-- **Stage 0 used about 0.6% of a week,** and its workflow alone about 0.1%. **Stage 1 used about 2.2%.**
-- **The proof of concept needs about a fifth of a week on Sonnet,** or about two fifths on Opus 5.5 `high`. Before
+- **Stage 0 used about 0.6% of a week,** and its workflow alone about 0.1%. **Stage 1 used about 2.2%, and stage 2
+  about 4.2%.**
+- **The proof of concept needs about a quarter of a week on Sonnet,** or about two fifths on Opus 5.5 `high`. Before
   rescoping it needed about half a week, and the first estimate more than two weeks.
 - **The later releases would need about another sixth of a week.**
 - **Opus is likely to draw on the limit faster than its API price suggests.** One third-party report counts an Opus
