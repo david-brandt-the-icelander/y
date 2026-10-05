@@ -709,7 +709,8 @@ Later releases, only if the proof of concept recommends going on, priced with th
   error mapping and the harnesses for E2 to E5, is split into parts small enough that no agent's context grows past
   about 150K tokens, which is what kept stage 1 on its estimate and what stage 2's part B lacked.
 - **The range is still wide.** Each unit could be off by a factor of two either way, so the proof of concept lies
-  between about $80 and $210, since stages 0 to 2 are measured. Each stage's measured cost corrects the next stage's estimate.
+  between about $80 and $210, since stages 0 to 2 are measured. Each stage's measured cost corrects the next stage's
+  estimate.
 - **Not counted:** people's time, and the machines that run the mechanical work. `strip`, `weave`, the checks, and
   experiments E0 to E3 are programs and cost no tokens.
 
