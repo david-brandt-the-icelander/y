@@ -543,7 +543,7 @@ types, traits and impls (101: no impl or associated type 38, promises that hold 
 22, must-use on a type 14); host state and effects (40); text, numbers and const-ness (29); sequences and collections
 (22, mostly no sequence value). Two findings concern the file rather than the language: the externals lists name a
 trait method but never the impl a call resolves to, and the file has no clause kinds for `budget` and `layout`, which
-language § 5 has.
+language § 5 has. How each gap is to be addressed is planned in [`language-gaps.md`](language-gaps.md).
 
 - **Language § 11.2 now has the split rule, the two rules on holes, and libraries.** The trial tests whether they hold
   as written there.
