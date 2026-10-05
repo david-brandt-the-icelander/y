@@ -1,0 +1,155 @@
+{
+  "format": "y-constraints/0",
+  "host": "rust",
+  "crate": "std 1.97.0",
+  "module": "std",
+  "status": { "assumed": "hand-written" },
+  "subjects": [
+    {
+      "kind": "function",
+      "name": "std::collections::HashMap::get",
+      "visible": "public",
+      "generics": [
+        { "name": "K", "bounds": ["std::cmp::Eq", "std::hash::Hash", "std::borrow::Borrow<Q>"] },
+        { "name": "V", "bounds": [] },
+        { "name": "S", "bounds": ["std::hash::BuildHasher"] },
+        { "name": "Q", "bounds": ["?Sized", "std::hash::Hash", "std::cmp::Eq"] }
+      ],
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<map<K, V, S> as 'std::collections::HashMap'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "k", "type": "ref<Q>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "ref<V>?", "hold": { "kind": "borrows", "from": "self" } },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure lookup : result == self[k]",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1017, doc: \"Returns a reference to the value corresponding to the key.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "effects",
+          "text": "effects none",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1040, body: self.base.get(k), a read of the table",
+          "status": { "observed": "body is one call into hashbrown's get, which writes nothing" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "The Hash and Eq of Q must agree with those of K, as Borrow requires: k.hash() equals the hash of the key it borrows from, and k == q.borrow() agrees with the keys' own equality.",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1019, doc: \"Hash and Eq on the borrowed form must match those for the key type.\"",
+          "reason": "a requirement on the implementations of a bound, not on values: a law can quantify over a type but cannot name what a bound's methods must satisfy"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Never panics and always returns, unless K's or Q's Hash or Eq panics or loops.",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1040, body: self.base.get(k) has no panic of its own",
+          "reason": "`never panics` and `terminates` are unconditional: no clause makes a promise depend on what a bound's implementation does"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Expected constant time under a hasher whose output is uniformly distributed; the worst case is linear in the table's capacity.",
+          "source": "hashbrown, the table behind std's HashMap (probe sequence); std's documentation states no cost",
+          "reason": "`budget work` bounds the worst case; no clause states an expected cost, or a condition on the distribution of a hasher's output"
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "std::str::Chars",
+      "visible": "public",
+      "generics": [{ "name": "'a", "bounds": [] }],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Chars<'a> implements Iterator<Item = char>, DoubleEndedIterator, Clone and Debug, and has as_str, which returns the rest of the string as a &'a str.",
+          "source": "1.97.0 core/src/str/iter.rs, impl Iterator for Chars<'a>",
+          "reason": "no slot lists the traits a type implements, or gives an associated type its value: an `impl` subject carries the trait and the type, and its `Item` stays host text"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::primitive::str::chars",
+      "visible": "public",
+      "params": [
+        { "name": "self", "type": "ref<text>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "std::str::Chars", "hold": { "kind": "borrows", "from": "self" } },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure scalar_count : count(result) == length(self)",
+          "source": "1.97.0 core/src/str/mod.rs:1013, doc: \"Returns an iterator over the chars of a string slice.\"; `length` counts scalar values (constraint language 4)",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "effects",
+          "text": "effects none",
+          "source": "1.97.0 core/src/str/mod.rs:1064, body: Chars { iter: self.as_bytes().iter() }",
+          "status": { "observed": "body builds an iterator over the bytes and calls nothing else" }
+        },
+        {
+          "kind": "never panics",
+          "text": "never panics",
+          "source": "1.97.0 core/src/str/mod.rs:1064, body has no panic and no arithmetic",
+          "status": { "observed": "body is a struct literal and two calls that cannot panic" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "result yields the scalar values of self in order, from the front, and from the back through DoubleEndedIterator.",
+          "source": "1.97.0 core/src/str/mod.rs:1013-1030, doc examples",
+          "reason": "the language has no sequence or iterator value: `count`, `size` and `in` state facts about a collection, never the order of its elements"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::cmp::max",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": ["std::cmp::Ord"] }],
+      "params": [{ "name": "v1", "type": "T" }, { "name": "v2", "type": "T" }],
+      "result": { "type": "T" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure ge_both : result >= v1 and result >= v2",
+          "source": "1.97.0 core/src/cmp.rs:1645, doc: \"Returns the maximum of two values with respect to the Ord implementation.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "ensure",
+          "text": "ensure an_argument : result == v1 or result == v2",
+          "source": "1.97.0 core/src/cmp.rs:1681, body: v1.max(v2), which returns one of its two arguments"
+        },
+        {
+          "kind": "effects",
+          "text": "calls only std::cmp::Ord::max",
+          "source": "1.97.0 core/src/cmp.rs:1682, body: v1.max(v2)",
+          "status": { "observed": "the body is one call of Ord::max" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "When v1 and v2 compare equal under Ord, the value returned is v2 and v1 is dropped.",
+          "source": "1.97.0 core/src/cmp.rs:1646, doc: \"Returns the second argument if the comparison determines them to be equal.\"",
+          "reason": "`==` is structural on values, so `result == v2` cannot tell which of two Ord-equal values came back, and `same` is identity of host references, which a moved value does not have"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Never panics and always returns, unless T's Ord::max, PartialOrd::lt or Ord::cmp panics or loops.",
+          "source": "1.97.0 core/src/cmp.rs:1681-1683, body has no panic of its own",
+          "reason": "`never panics` and `terminates` are unconditional: no clause makes a promise depend on what a bound's implementation does"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "const fn, with its const-ness on T's Ord an unstable feature (const_cmp, issue 143800).",
+          "source": "1.97.0 core/src/cmp.rs:1680-1681",
+          "reason": "const-ness has neither a slot nor a clause (proposal 12, `const fn` is host text only)"
+        }
+      ]
+    }
+  ]
+}

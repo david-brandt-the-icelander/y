@@ -115,7 +115,7 @@ fn mut_on_self_and_on_bindings_is_counted_the_same_on_both_sides() {
     let src = "pub struct S(pub u8);\nimpl S {\n    pub fn f(mut self, mut c: u8) -> u8 {\n        self.0 += c;\n        c += 1;\n        c + self.0\n    }\n}\n";
     let (dir, _bare, _out) = krate("wc_mutself", src);
     let work = root().join("target/bare-rust-test/wc_mutself/check");
-    let o = CheckOpts { work, target: bare_rust::cargo::target_dir(&root()), tests: true, full: false };
+    let o = CheckOpts { work, target: bare_rust::cargo::target_dir(&root()), tests: true, full: false, ..Default::default() };
     let r = check_crate(&dir, &o).unwrap();
     assert!(r.c2_ok(), "{:?}", r.c2.mut_differs);
     assert_eq!((r.c2.mut_original, r.c2.mut_derived, r.mut_added), (2, 2, 2));
@@ -145,7 +145,7 @@ fn report_prints_the_tables_from_check_output() {
     let src = "pub fn f(x: u8) -> u32 {\n    let y: u32 = x as u32;\n    y\n}\npub use std::fmt::Debug;\n";
     let (dir, _bare, _out) = krate("wc_report", src);
     let work = root().join("target/bare-rust-test/wc_report/check");
-    let o = CheckOpts { work: work.clone(), target: bare_rust::cargo::target_dir(&root()), tests: true, full: false };
+    let o = CheckOpts { work: work.clone(), target: bare_rust::cargo::target_dir(&root()), tests: true, full: false, ..Default::default() };
     let r = check_crate(&dir, &o).unwrap();
     assert!(r.ok());
     let md = bare_rust::report::report(&[&work.join("wc_report")], "provenance line").unwrap();

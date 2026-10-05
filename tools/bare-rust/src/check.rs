@@ -11,6 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+#[derive(Default)]
 pub struct CheckOpts {
     /// Where the stripped and woven copies go: `<work>/<name>/{bare,woven,holes}`.
     pub work: PathBuf,
@@ -19,6 +20,10 @@ pub struct CheckOpts {
     pub tests: bool,
     /// Run clippy and the tests too (otherwise `cargo check` only).
     pub full: bool,
+    /// Where the library files and externals lists are: check 5 runs for a crate that has an externals list there.
+    pub libraries: Option<PathBuf>,
+    /// Fail check 5 when external items have no entry yet (otherwise they are reported as incomplete).
+    pub strict_libraries: bool,
 }
 
 #[derive(Default)]
@@ -74,6 +79,9 @@ pub struct CheckReport {
     pub c2: Check2,
     pub c3: Check3,
     pub c4: Check4,
+    /// Check 5, mechanical half: `None` when the crate has no externals list among the libraries.
+    pub c5: Option<crate::libcheck::LibReport>,
+    pub strict_libraries: bool,
 }
 
 /// The number of tests that passed, from `cargo test`'s `test result:` lines.
@@ -296,7 +304,23 @@ pub fn check_crate(dir: &Path, o: &CheckOpts) -> R<CheckReport> {
     let c2 = check2(&cw, dir);
     let c3 = check3(&cw, dir, o)?;
     let c4 = check4(&bare, dir, o, &name, &cw)?;
-    let report = CheckReport { name, files: results.len(), refused, mut_added: cw.mut_added(), unbound: cw.unbound_counts(), c1, c2, c3, c4 };
+    let c5 = match &o.libraries {
+        Some(l) if l.join("externals").join(format!("{name}.json")).is_file() => Some(crate::libcheck::libcheck(dir, l, &o.work, &o.target)?),
+        _ => None,
+    };
+    let report = CheckReport {
+        name,
+        files: results.len(),
+        refused,
+        mut_added: cw.mut_added(),
+        unbound: cw.unbound_counts(),
+        c1,
+        c2,
+        c3,
+        c4,
+        c5,
+        strict_libraries: o.strict_libraries,
+    };
     let _ = fs::write(root.join("check.json"), crate::json::ordered(&report.to_json()));
     Ok(report)
 }
@@ -327,8 +351,11 @@ impl CheckReport {
         let c = &self.c4;
         c.silently_filled == 0 && c.other_errors.is_empty() && c.weave_errors.is_empty()
     }
+    pub fn c5_ok(&self) -> bool {
+        self.c5.as_ref().is_none_or(|c| c.ok(self.strict_libraries))
+    }
     pub fn ok(&self) -> bool {
-        self.c1_ok() && self.c2_ok() && self.c3_ok() && self.c4_ok()
+        self.c1_ok() && self.c2_ok() && self.c3_ok() && self.c4_ok() && self.c5_ok()
     }
 
     pub fn to_json(&self) -> Value {
@@ -359,6 +386,7 @@ impl CheckReport {
                 "undetermined_at_unfilled_sites_never_dropped": self.c4.undetermined_not_dropped,
                 "other_errors": self.c4.other_errors, "silently_filled": self.c4.silently_filled, "weave_errors": self.c4.weave_errors,
             },
+            "check5": self.c5.as_ref().map(crate::libcheck::LibReport::to_json),
         })
     }
 
@@ -412,6 +440,32 @@ impl CheckReport {
         );
         for e in d.other_errors.iter().chain(&d.weave_errors) {
             println!("             {}", e.replace('\n', "\n             "));
+        }
+        match &self.c5 {
+            None => println!("  check 5  n/a  no externals list for this crate among the libraries"),
+            Some(c) => {
+                let sigs = c.sigs.as_ref().map_or("not run".to_string(), |s| {
+                    format!("{} checked, {} path-resolved, {} unchecked, {} mismatched", s.checked.len(), s.resolved.len(), s.unchecked_total(), s.mismatches.len())
+                });
+                let cov = if c.coverage_ok() { "complete" } else { "incomplete" };
+                println!(
+                    "  check 5  {}  library coverage {cov}: {} of {} external items; schema problems {}; signatures: {sigs}",
+                    st(self.c5_ok()), c.covered(), c.items, c.invalid.len()
+                );
+                for e in &c.invalid {
+                    println!("             {e}");
+                }
+                if let Some(s) = &c.sigs {
+                    for (n, m) in &s.mismatches {
+                        println!("             mismatch {n}: {m}");
+                    }
+                }
+                if self.strict_libraries && !c.missing.is_empty() {
+                    for (k, p) in &c.missing {
+                        println!("             missing {} {p}", k.name());
+                    }
+                }
+            }
         }
     }
 }

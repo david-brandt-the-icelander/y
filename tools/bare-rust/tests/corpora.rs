@@ -173,7 +173,7 @@ use bare_rust::crate_weave::HoleReport;
 use bare_rust::weave::weave_traced;
 
 fn opts(full: bool, tests: bool) -> CheckOpts {
-    CheckOpts { work: root().join("target/bare-rust-check"), target: bare_rust::cargo::target_dir(&root()), tests, full }
+    CheckOpts { work: root().join("target/bare-rust-check"), target: bare_rust::cargo::target_dir(&root()), tests, full, ..Default::default() }
 }
 
 fn run_checks(dir: PathBuf, full: bool, tests: bool) -> CheckReport {

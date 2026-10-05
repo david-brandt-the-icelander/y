@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://y-lang.dev/schema/y-constraints-0.schema.json",
   "title": "y-constraints/0",
-  "description": "The constraint file of a bare module (proposal/bare-rust.md, 4.2 to 4.4). Types are strings in the constraint language's type syntax, or host text.",
+  "description": "The constraint file of a bare module, or of a library crate written by hand (proposal/bare-rust.md, 4.2 to 4.4, 7). Types are strings in the constraint language's type syntax, or host text.",
   "type": "object",
   "required": [
     "format",
@@ -22,20 +22,15 @@
     },
     "crate": {
       "type": "string",
-      "description": "The crate and its version, as `name version`."
+      "description": "The crate and its version, as `name version`: `eve_cache 0.1.0`, or `std 1.97.0` for a library file (named `<crate>-<version>.constraints.json`)."
     },
     "module": {
       "type": "string",
-      "description": "The module's file, relative to the crate root."
+      "description": "The module's file, relative to the crate root; for a library file, the library's root module path (`std`)."
     },
     "status": {
-      "enum": [
-        "lifted",
-        "proven",
-        "assumed",
-        "observed"
-      ],
-      "description": "The default status of the file's clauses."
+      "description": "The default status of the file's clauses: a status name, as `strip` writes it (`lifted`), or a status with its reason, `{ \"assumed\": \"hand-written\" }`, which is language 10.2's `assumed … because \"hand-written\"`.",
+      "$ref": "#/$defs/status"
     },
     "subjects": {
       "type": "array",
@@ -268,13 +263,14 @@
             "static",
             "alias",
             "module",
-            "use"
+            "use",
+            "macro"
           ]
         },
         "name": {
           "type": "string",
           "minLength": 1,
-          "description": "The subject's path. A `use` is named `<scope>::use <path as written>`, and is a subject only when it has a visibility (`pub use a::b;`)."
+          "description": "The subject's path. A `use` is named `<scope>::use <path as written>`, and is a subject only when it has a visibility (`pub use a::b;`). In a library file, the canonical public path (`std::collections::HashMap::get`, `std::primitive::str::chars`, `std::vec!`)."
         },
         "visible": {
           "enum": [
@@ -308,7 +304,7 @@
         },
         "trait": {
           "$ref": "#/$defs/type",
-          "description": "The implemented trait with its arguments, when the bare header has only its name."
+          "description": "The implemented trait with its arguments, when the bare header has only its name; for a trait method in a library file, the trait with its arguments, `std::convert::From<T>`."
         },
         "self": {
           "$ref": "#/$defs/type",
@@ -358,6 +354,21 @@
         },
         "result": {
           "$ref": "#/$defs/result"
+        },
+        "form": {
+          "enum": [
+            "bang",
+            "derive",
+            "attribute"
+          ],
+          "description": "For a macro: how it is invoked. A `derive` macro is named like its trait with a `!`, `std::fmt::Debug!`."
+        },
+        "clauses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/clause"
+          },
+          "description": "What the signature slots cannot say, in order."
         }
       },
       "additionalProperties": false,
@@ -440,6 +451,115 @@
               }
             }
           }
+        }
+      }
+    },
+    "status": {
+      "oneOf": [
+        {
+          "enum": [
+            "lifted",
+            "proven",
+            "assumed",
+            "observed"
+          ]
+        },
+        {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 1,
+          "additionalProperties": false,
+          "properties": {
+            "assumed": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Taken on trust, because: `hand-written`, `documentation`, a person's name."
+            },
+            "proven": {
+              "type": "string",
+              "minLength": 1,
+              "description": "What proved it: `rustc: signature compiled`, a Kani harness."
+            },
+            "lifted": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The code that enforces it: `std/src/vec/mod.rs: assert!(index <= len)`."
+            },
+            "observed": {
+              "type": "string",
+              "minLength": 1,
+              "description": "What it was seen in: an analysis of the body, a run."
+            }
+          }
+        }
+      ]
+    },
+    "clause": {
+      "type": "object",
+      "required": [
+        "kind",
+        "text",
+        "source"
+      ],
+      "additionalProperties": false,
+      "description": "A clause the signature slots cannot say. `kind` names the family and `text` is the clause in the syntax of language 15, keyword included (`ensure found : result == self[k]`); `panics` is `fails panic when p`, `panic` being the Rust host's runtime failure. `unexpressed` is a promise the language cannot state: `text` is free text and `reason` says why the language cannot say it. Those are the gaps that feed proposal 12.",
+      "properties": {
+        "kind": {
+          "enum": [
+            "require",
+            "ensure",
+            "on failure",
+            "fails",
+            "fails only",
+            "panics",
+            "never panics",
+            "result must be used",
+            "effects",
+            "law",
+            "callback",
+            "invariant",
+            "access",
+            "hold",
+            "compat",
+            "unexpressed"
+          ]
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where the clause comes from: a documentation section or a source location, with its version."
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "description": "For `unexpressed`: what the language lacks."
+        },
+        "status": {
+          "$ref": "#/$defs/status",
+          "description": "Overrides the file's status for this clause."
+        }
+      },
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "unexpressed"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "reason"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "reason"
+          ]
         }
       }
     }

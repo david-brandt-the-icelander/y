@@ -1,0 +1,163 @@
+{
+  "format": "y-externals/0",
+  "crate": "eve_cache 0.1.0",
+  "rustc": "1.97.0",
+  "all_targets": true,
+  "targets": [
+    "lib eve_cache (with unit tests)"
+  ],
+  "counts": {
+    "function": 2,
+    "type": 2,
+    "trait": 3,
+    "const": 0,
+    "macro": 3,
+    "total": 10
+  },
+  "skipped": {},
+  "items": [
+    {
+      "kind": "function",
+      "path": "std::collections::HashMap::get",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::collections::HashMap::insert",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::collections::HashMap",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "named"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::option::Option",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "named"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::cmp::Eq",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "derive"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::cmp::PartialEq",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "derive"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::hash::Hash",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "derive"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "macro",
+      "path": "std::cmp::Eq!",
+      "form": "derive",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "derive"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "macro",
+      "path": "std::cmp::PartialEq!",
+      "form": "derive",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "derive"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "macro",
+      "path": "std::hash::Hash!",
+      "form": "derive",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "derive"
+      ],
+      "via": [
+        "syntax"
+      ]
+    }
+  ]
+}

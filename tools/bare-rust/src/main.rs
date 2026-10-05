@@ -12,14 +12,30 @@ const USAGE: &str = "usage:
       <dir> holds the .brs and .constraints.json files (the crate directory, if stripped in place); the crate's
       Cargo.toml and other files come from --crate (default <dir>). Runs cargo check, derives `mut`, reports
       undetermined holes and errors; exits non-zero on any. --no-cargo only writes the files.
-  bare-rust check <crate-dir> [--check-only] [--src-only] [--work <dir>]
-      checks 1 to 4 of the plan for one crate; --check-only skips clippy and cargo test; results in <work>/<name>/check.json
+  bare-rust check <crate-dir> [--check-only] [--src-only] [--work <dir>] [--libraries <dir>] [--strict-libraries]
+      checks 1 to 5 of the plan for one crate; --check-only skips clippy and cargo test; results in <work>/<name>/check.json;
+      check 5 (library files) runs when <libraries>/externals/<crate>.json exists, and fails on missing entries only
+      with --strict-libraries
+  bare-rust externals <crate-dir> [--all-targets] [--out <file>] [--libraries <dir>]
+      every external item (std) the crate uses, as canonical paths with files and use counts, from rustc's MIR and
+      tree-sitter; written to <libraries>/externals/<crate>.json (default libraries/ beside Cargo.toml)
+  bare-rust libcheck <crate-dir> [--libraries <dir>] [--work <dir>] [--allow-missing]
+      check 5, mechanical half: coverage of the crate's externals by the library file, schema validity, and the
+      signature compile check; exits non-zero on a missing item (unless --allow-missing), an invalid file or a
+      mismatched signature
+  bare-rust libfmt <library-file>...
+      rewrite library files in canonical form
   bare-rust stats <out-dir>
   bare-rust report <check-dir>...
       the tables of results/e1.md, from the <work>/<name> directories that `check` wrote (check.json and bare/)";
 
 fn arg(args: &[String], flag: &str) -> Option<String> {
     args.iter().position(|a| a == flag).and_then(|i| args.get(i + 1).cloned())
+}
+
+/// Where the library files and the externals lists are kept: `--libraries`, else `libraries/` beside Cargo.toml.
+fn libraries_dir(args: &[String]) -> PathBuf {
+    arg(args, "--libraries").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("libraries"))
 }
 
 fn report(what: &str, results: &[FileResult]) -> Result<(), String> {
@@ -99,6 +115,8 @@ fn run(args: Vec<String>) -> Result<(), String> {
                 target: bare_rust::cargo::target_dir(&cwd),
                 tests: !args.iter().any(|a| a == "--src-only"),
                 full: !args.iter().any(|a| a == "--check-only"),
+                libraries: Some(libraries_dir(&args)),
+                strict_libraries: args.iter().any(|a| a == "--strict-libraries"),
             };
             let r = check_crate(&PathBuf::from(target), &o)?;
             r.print();
@@ -107,6 +125,40 @@ fn run(args: Vec<String>) -> Result<(), String> {
             } else {
                 Err(format!("check failed for {}", r.name))
             }
+        }
+        Some("externals") => {
+            let all = args.iter().any(|a| a == "--all-targets");
+            let dir = PathBuf::from(target);
+            let (krate, e) = bare_rust::externals::externals(&dir, all)?;
+            let out = arg(&args, "--out").map(PathBuf::from).unwrap_or_else(|| {
+                let name = bare_rust::corpus::crate_info(&dir).map(|i| i.name).unwrap_or_default();
+                libraries_dir(&args).join("externals").join(format!("{name}.json"))
+            });
+            if let Some(d) = out.parent() {
+                fs::create_dir_all(d).map_err(|e| format!("{}: {e}", d.display()))?;
+            }
+            fs::write(&out, bare_rust::json::ordered(&e.to_json(&krate, all))).map_err(|e| format!("{}: {e}", out.display()))?;
+            println!("{}", bare_rust::externals::summary(&krate, &e));
+            println!("written to {}", out.display());
+            Ok(())
+        }
+        Some("libcheck") => {
+            let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
+            let work = arg(&args, "--work").map(PathBuf::from).unwrap_or_else(|| cwd.join("target/bare-rust-check"));
+            let strict = !args.iter().any(|a| a == "--allow-missing");
+            let r = bare_rust::libcheck::libcheck(&PathBuf::from(target), &libraries_dir(&args), &work, &bare_rust::cargo::target_dir(&cwd))?;
+            r.print(strict);
+            if r.ok(strict) {
+                Ok(())
+            } else {
+                Err(format!("libcheck failed for {}", r.krate))
+            }
+        }
+        Some("libfmt") => {
+            let paths: Vec<PathBuf> = args[2..].iter().map(PathBuf::from).collect();
+            let n = bare_rust::libcheck::format_files(&paths)?;
+            println!("libfmt: {} of {} files rewritten", n, paths.len());
+            Ok(())
         }
         Some("report") => {
             let dirs: Vec<PathBuf> = args[2..].iter().map(PathBuf::from).collect();
