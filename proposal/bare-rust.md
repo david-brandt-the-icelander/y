@@ -1,7 +1,9 @@
 # Bare Rust: a stripper and a weaver
 
 **Status:** Plan
-**Date:** 2026-10-03
+**Date:** 2026-10-03, rescoped 2026-10-05
+**Scope:** A proof of concept, not a complete tool. Stages 0 to 3 (§ 11) are the proof of concept; the rest, including
+tooling that generates library constraint files, is for later releases.
 **Written for:** whoever builds the first derived language of the constraint language, and the team that owns the
 language, who will read its results.
 **Companion documents:** [`constraint-language.md`](constraint-language.md) defines derived languages (§ 11.2), the
@@ -31,18 +33,18 @@ and a constraint file, which says what must hold, and that `strip` and `weave` m
   `weave` prints `&mut self`. Where the body leaves a hole that only the file can fill, and the file does not fill it,
   weaving fails (§ 2.4).
 - **Libraries need constraint files, not bare bodies.** An agent writing bare code needs to know what the standard
-  library and its dependencies promise, so `strip` also runs in a partial mode that produces only a library's
-  constraint file. It starts from rustdoc's JSON and, where the source is available, looks into bodies to find more
-  than the signatures say (§ 7).
+  library and its dependencies promise. For the proof of concept, the corpora call only a limited set of external
+  code, and agents write its constraint files by hand. Tooling that generates them, a partial strip that starts from
+  rustdoc's JSON and looks into bodies where the source is available, is for later releases (§ 7).
 - **It is small.** The core of the bare grammar is already written: 21 lines extending tree-sitter-rust 0.24, which
-  generate a parser that parses language § 14.9's bare body and rejects its woven form (§ 3.1). The whole trial is a
-  Rust crate of about 2,500 lines. Stage 0 is built: it used about 9 million tokens and $3, mostly to orchestrate,
-  against an estimate of $50. With agents on Claude Sonnet 5.5, the whole trial is estimated at about 0.57 billion
-  tokens and $345 at API rates, about two thirds of a Claude Max 5x week; the decision, after stage 3, costs about $275
-  (§ 14).
+  generate a parser that parses language § 14.9's bare body and rejects its woven form (§ 3.1). The proof of concept
+  is a Rust crate of about 1,500 lines. Stage 0 is built: it used about 9 million tokens and $3, mostly to orchestrate,
+  against an estimate of $50. With agents on Claude Sonnet 5.5, the proof of concept is estimated at about 0.18 billion
+  tokens and $115 at API rates, about a fifth of a Claude Max 5x week (§ 14).
 - **It ends in a decision.** The experiments (§ 10) say whether bare bodies stay bare, whether a file can always fill
-  the holes, whether library constraints are good enough to rely on, and whether an agent does better with bare Rust
-  and JSON than with Rust. Their results decide whether to build a second host, change the design, or stop.
+  the holes, whether library constraints help an agent, and whether an agent does better with bare Rust and JSON than
+  with Rust. Their results decide whether to complete the tool and build a second host, change the design, or stop.
+  The proof of concept aims for a clear signal, not for full coverage of Rust or for precise measurements.
 
 ---
 
@@ -54,8 +56,9 @@ and a constraint file, which says what must hold, and that `strip` and `weave` m
    carried along unread. What does not map is a list of gaps in the language, with a count for each (§ 12).
 3. **Bare in practice.** Bodies need few types of their own. The trial measures how many holes a body leaves that only
    `local`, or something stronger, can fill (language § 17, question 14).
-4. **Libraries are visible.** The standard library and each dependency have a constraint file, in the same JSON, with
-   a status on every clause that says how far it can be trusted.
+4. **Libraries are visible.** Every external item the corpora call, from the standard library or a dependency, has a
+   constraint file entry in the same JSON, with a status on every clause that says how far it can be trusted. For the
+   proof of concept these entries are written by hand (§ 7.2).
 5. **Useful to agents.** An agent given a bare body, its constraint file and its dependencies' constraint files
    completes real changes at least as well as one given the Rust. This is the claim language § 11.2 rests on ("agents
    write what the code does"), and the only one that decides whether the rest is worth building.
@@ -99,8 +102,8 @@ that kept such a construct ("C#'s `ref`, Rust's trait objects") whole in the bod
 | `Box<dyn T>` or a generic `T` | Dispatch through the interface | The set of implementations allowed |
 
 `_` in casts and type arguments is already valid Rust, so the bare form of an expression keeps the target's syntax and
-only its types are erased. The trial leaves `Rc`, `Arc`, `Box` and trait objects in the body as written and counts them,
-and keeps every `.unwrap()` and `.expect()` in the body, as decided (§ 3.2).
+only its types are erased. The proof of concept leaves `Rc`, `Arc`, `Box` and trait objects in the body as written and
+counts them, and keeps every `.unwrap()` and `.expect()` in the body, as decided (§ 3.2).
 
 ### 2.3 The file is authoritative, and the weaver does no type inference
 
@@ -198,8 +201,8 @@ The bare language's lint reports, by position:
 - elsewhere: `.unwrap()`, `.expect()`, `panic!` and `unreachable!` on intermediate values, which may stay (principle 5),
   and are counted.
 
-The lint is a detector in the trial. Lifting head checks into the file, with `weave` putting them back as generated
-checks, is stage 5 (§ 11).
+The lint is a detector in the proof of concept. Lifting head checks into the file, with `weave` putting them back as
+generated checks, is for a later release (§ 11).
 
 ---
 
@@ -208,7 +211,7 @@ checks, is stage 5 (§ 11).
 ### 4.1 Beside each module
 
 `src/lib.rs` becomes `src/lib.brs`, the bare body, and `src/lib.constraints.json`. Dependencies' constraint files live
-in a cache keyed by crate and version, as `Cargo.lock` pins them (§ 7.4).
+by crate and version, as `Cargo.lock` pins them (§ 7.4).
 
 ### 4.2 The constraint data
 
@@ -331,9 +334,10 @@ The command line:
 bare-rust strip <crate>                  x.rs -> x.brs, x.constraints.json
 bare-rust weave <crate> [--out <dir>]    x.brs, x.constraints.json -> x.rs, then cargo check
 bare-rust check <crate>                  the checks of § 9 that apply to the stage reached
-bare-rust lib   <crate>@<version> | std  the dependency's constraint file (§ 7)
-bare-rust print <x.constraints.json>     the text form (§ 11, stage 6)
 ```
+
+Later releases add `bare-rust lib <crate>@<version> | std`, which generates a dependency's constraint file (§ 7.5), and
+`bare-rust print <x.constraints.json>`, which prints the text form (§ 11).
 
 ---
 
@@ -345,9 +349,49 @@ An agent writing bare code calls the standard library and its dependencies by na
 weaving, so weaving is correct without any library constraints: if the file is wrong, the code does not compile. But
 the agent cannot see what a library promises, and nothing can be optimised on it, without the library's constraints.
 It needs those in the same JSON, and never the library's bare body. A partial strip, which writes the constraint file
-and discards the body, is enough.
+and discards the body, is enough; for the proof of concept, writing the file by hand is enough.
 
-### 7.2 Three sources
+### 7.2 For the proof of concept: written by hand
+
+The corpora are chosen to call a limited set of external code: the parts of `std` they use (collections, `Option`,
+`Result`, `String`, the common iterator adapters) and the items they call from one or two small dependencies. An agent
+writes the constraint file entries for exactly those items, from their documentation and, where it helps, their
+source, in the format of § 4.2. A second agent checks each entry against the same documentation and source. The
+written files live beside the corpora, by crate and version (§ 7.4).
+
+Writing by hand covers what the experiments need and costs a few runs (§ 14.2). It also tells the later tooling what it
+must produce: the entries agents found worth writing, and the clauses they could not express, are the specification for
+§ 7.5.
+
+### 7.3 Status says what may be relied on
+
+A library is not woven from its file, so its clauses are claims about code the team does not control:
+
+| Source | Status |
+| --- | --- |
+| Written by hand, for the proof of concept | `assumed … because "hand-written"`, until the tooling of § 7.5 confirms the signatures |
+| Signatures, from rustdoc or from source | `proven`: the library's compiler checked them |
+| Guards found in bodies | `lifted`: the library's own code enforces them, in the locked version |
+| Contracts verified by Kani | `proven`, with the verification named |
+| Documentation | `assumed … because "documentation"` |
+| Panics, effects and call-graph bounds found in bodies | `observed`, until an analysis proves them or a person accepts them |
+
+Anything that changes generated code, such as dropping a generated check that a library's postcondition already
+guarantees (the discharge of language § 11.1, extended across calls), relies only on `proven` and `lifted` clauses and
+on assumptions a person has accepted. The proof of concept changes no generated code this way, so hand-written clauses
+are enough for it.
+
+### 7.4 Modules look like libraries from outside
+
+A bare module's constraint file is its public interface: callers depend on the file, never on the body. So the team's
+own modules and a library are the same at the boundary, and the agent's view of its dependencies and separate
+compilation are one mechanism. Library files are kept by crate and version from `Cargo.lock`, and rewritten when a
+version changes.
+
+### 7.5 Later releases: generated from three sources
+
+Tooling that writes library constraint files systematically, for `std` and any crate, comes after the proof of
+concept. It draws on three sources.
 
 - **The surface, from rustdoc.** rustdoc's JSON output gives every public item's signature, generics, bounds, lifetimes
   and visibility; for the standard library it ships as a rustup component (`rust-docs-json`, on nightly), and for any
@@ -364,38 +408,16 @@ and discards the body, is enough.
   preconditions; `#[must_use]` and `const fn` map directly; parts of `std` carry formal contracts from the Verify Rust
   std effort (Kani's `requires` and `ensures`).
 
-### 7.3 Status says what may be relied on
-
-A library is not woven from its file, so its clauses are claims about code the team does not control:
-
-| Source | Status |
-| --- | --- |
-| Signatures, from rustdoc or from source | `proven`: the library's compiler checked them |
-| Guards found in bodies | `lifted`: the library's own code enforces them, in the locked version |
-| Contracts verified by Kani | `proven`, with the verification named |
-| Documentation | `assumed … because "documentation"` |
-| Panics, effects and call-graph bounds found in bodies | `observed`, until an analysis proves them or a person accepts them |
-
-Anything that changes generated code, such as dropping a generated check that a library's postcondition already
-guarantees (the discharge of language § 11.1, extended across calls), relies only on `proven` and `lifted` clauses and
-on assumptions a person has accepted.
-
-### 7.4 Modules look like libraries from outside
-
-A bare module's constraint file is its public interface: callers depend on the file, never on the body. So the team's
-own modules and a library are the same at the boundary, and the agent's view of its dependencies and separate
-compilation are one mechanism. Library files are cached by crate and version from `Cargo.lock`, and regenerated when a
-version changes.
-
 ---
 
 ## 8. Corpora
 
 - **Language § 14.9**, the golden test, with `Key` and `Entry` stubbed.
 - **The tool's own source**, which strips and weaves itself.
-- **Two or three small crates with test suites**, chosen for few macros and procedural macros, stable Rust, and
-  explicit signatures.
-- **The standard library and the corpora's dependencies**, for `bare-rust lib` only.
+- **Two small crates with test suites and some history**, chosen for few macros and procedural macros, stable Rust,
+  explicit signatures, and few dependencies, so that the external code they call stays a limited set.
+- **The external items the corpora call**, from `std` and the crates' dependencies, for the hand-written library files
+  (§ 7.2).
 - **Later, the engine's Rust procedure kit** (database-engine track): the Rust that the constraint language exists to
   constrain.
 
@@ -409,10 +431,12 @@ version changes.
 3. **Compiles and behaves.** The woven crate passes `cargo check`, `cargo clippy` with the corpus's settings, and its
    tests.
 4. **Holes.** Every hole is either filled or reported (§ 2.4); none is filled silently by a guess.
-5. **Library files.** For each dependency, the translator's output from rustdoc and the constraint-only strip agree on
-   every public signature.
+5. **Library files.** Every external item the corpora call has a hand-written entry, and a second agent has checked it
+   against the item's documentation and source (§ 7.2).
 
-All run in the tool's CI over every corpus.
+Checks 1 to 4 run in the tool's CI over every corpus. When the tooling of § 7.5 exists, check 5 becomes mechanical: the
+translator's output from rustdoc and the constraint-only strip agree on every public signature, and both agree with the
+hand-written entries.
 
 ---
 
@@ -430,39 +454,53 @@ All run in the tool's CI over every corpus.
   weave it with the older file. Count slots that no longer bind, and holes that become undetermined. Slots attach to
   named items and parameters, so most body edits should leave them untouched; this measures how true that is.
 - **E4, agents.** Take tasks from the corpora's histories, some changing bodies only and some changing signatures. An
-  agent does each twice: in Rust, and in bare Rust with the JSON and its dependencies' constraint files. Compare
+  agent does each twice: in Rust, and in bare Rust with the JSON and the hand-written library files. Compare
   whether the tests pass, whether the woven code compiles, how many attempts and tokens it took, and how many JSON
   edits the signature changes needed.
-- **E5, libraries.** For `std` and the dependencies, count clauses by source and status (§ 7.3), and how many of the
-  corpora's lifted checks a library's `proven` or `lifted` clauses would discharge. Repeat part of E4 without the
-  library files, to measure what they are worth to an agent.
-- **E6, JSON or text, optional.** Repeat part of E4 with the constraints printed as text instead of JSON. This answers
-  question 10 of the language.
+- **E5, libraries.** Repeat part of E4 without the library files, to measure what they are worth to an agent. Later
+  releases, with the tooling of § 7.5, add counts for `std` and every dependency: clauses by source and status
+  (§ 7.3), and how many of the corpora's lifted checks a library's `proven` or `lifted` clauses would discharge.
+- **E6, JSON or text, later.** Repeat part of E4 with the constraints printed as text instead of JSON. This answers
+  question 10 of the language, and needs the printer of a later release.
+
+The proof of concept runs E0 to E5 at the sizes of § 14.2, which are large enough to show a clear difference and too
+small to measure a small one.
 
 ---
 
 ## 11. Stages
 
-Each stage says when it is done; none has a date.
+Each stage says when it is done; none has a date. Stages 0 to 3 are the proof of concept, and each does only what the
+experiments need.
 
 - **Stage 0, language § 14.9.** The grammar delta for structs, functions, parameters, `self` and `let`, with `impl`
   blocks as they come; `strip` and `weave` for exactly the slots § 14.9 uses. Done when E0 passes. Done: built in
   `tools/bare-rust`, where E0's golden tests pass (§ 14.1).
-- **Stage 1, the whole signature.** Every emptied production of § 4.3, the type mapping of § 4.4 with its host-text
-  fallback, `mut` derived through `rustc`, holes reported, the JSON Schema, and checks 1 to 4 over the corpora. Done
-  when the checks pass and E1 is written up.
-- **Stage 2, libraries.** The rustdoc translator for `std` and the dependencies, then the constraint-only strip with
-  its look into bodies, with statuses as in § 7.3, and check 5. Done when every dependency of the corpora has a file
-  and E5's counts are written up.
-- **Stage 3, edits and agents.** Errors mapped back to the bare body and the JSON, E2, E3 and E4. Done when the results
-  are written up with a recommendation: build a second host, change the design of language § 11.2, or stop.
-- **Stage 4, the holes the trial left closed.** `Rc` or `Arc`, `Box`, and trait objects, chosen by `weave` from
-  `shares`, `sendable` and the set of implementations (§ 2.2). Only if stage 3 recommends going on.
-- **Stage 5, disguised constraints.** The lint's head checks lifted into the file as `require … else`, and woven back as
+- **Stage 1, the signature, as far as the corpora need it.** The emptied productions of § 4.3 that the corpora use,
+  the type mapping of § 4.4 with its host-text fallback for the rest, `mut` derived through `rustc`, holes reported,
+  the JSON Schema, and checks 1 to 4 over the corpora. A file that uses a production not yet built is refused and
+  counted (§ 2.7). Done when the checks pass on the files accepted and E1 is written up.
+- **Stage 2, library files, by hand.** Agents write the constraint file entries for the limited set of external code
+  the corpora call, with the status of § 7.3, and a second agent checks them (check 5). Done when every external item
+  the corpora call has a checked entry.
+- **Stage 3, edits and agents.** Errors mapped back to the bare body and the JSON, E2, E3, E4 and E5. Done when the
+  results are written up with a recommendation: complete the tool and build a second host, change the design of
+  language § 11.2, or stop.
+
+Later releases, only if stage 3 recommends going on, and in an order its results decide:
+
+- **Library tooling.** The rustdoc translator for `std` and any crate, then the constraint-only strip with its look
+  into bodies (§ 7.5), the `bare-rust lib` command, mechanical check 5, and E5's counts. The hand-written files of
+  stage 2 are its first test.
+- **The whole signature.** Every emptied production of § 4.3 that stage 1 left out, so that no file is refused for a
+  production the tool does not know.
+- **The holes the trial left closed.** `Rc` or `Arc`, `Box`, and trait objects, chosen by `weave` from `shares`,
+  `sendable` and the set of implementations (§ 2.2).
+- **Disguised constraints.** The lint's head checks lifted into the file as `require … else`, and woven back as
   generated checks through a macro that `strip` recognises (`y::require!(found, …, Gone)`), so the round trip still
   holds.
-- **Stage 6, the text form.** A printer from the JSON to the syntax of language § 15. A parser for the text form only
-  if E6 shows agents or reviewers do better with it.
+- **The text form.** A printer from the JSON to the syntax of language § 15, and E6. A parser for the text form only if
+  E6 shows agents or reviewers do better with it.
 
 ---
 
@@ -492,11 +530,11 @@ closing.
    extraction that asserts nothing, so that the presence is said only once, waits on E4.
 2. **Body hints.** Keep them as positional records outside the language, part of the Rust profile, or require bodies to
    be rewritten so that every needed type belongs to a named local? Leaning: records, until E2 says how many there are.
-3. **How far to look into library bodies.** A syntactic call graph is cheap and approximate; MIR is exact and costly.
-   Leaning: syntactic for the trial, with everything it finds `observed`, and MIR only if E5 shows the clauses are
-   worth relying on.
-4. **Where library files live.** A shared cache keyed by crate and version, or published beside each crate? Leaning: a
-   local cache for the trial; publishing is a question for after it.
+3. **How far to look into library bodies,** once the tooling of § 7.5 is built. A syntactic call graph is cheap and
+   approximate; MIR is exact and costly. Leaning: syntactic first, with everything it finds `observed`, and MIR only if
+   E5's counts show the clauses are worth relying on.
+4. **Where library files live.** A shared cache keyed by crate and version, or published beside each crate? Decided
+   for the proof of concept: beside the corpora (§ 7.2); the rest is a question for after it.
 5. **After the trial.** If the results are good, TypeScript is the cheapest second host (its compiler already defines
    what erases), and Python with LibCST the one closest to the game code the language exists for.
 
@@ -555,30 +593,43 @@ Build and experiment agents run on Claude Sonnet 5.5 at effort `low`, and an Opu
 | An experiment run: an agent doing one task from a corpus's history (E4 to E6) | 20 | 65K | 1.3M | 0.10M | 25K | $0.74 |
 
 These units are larger than stage 0's measured runs (6 and 5 calls) to allow for debugging against real crates.
-Orchestration is $3 a stage, as measured, or $6 for stages 1 and 3. The Max 5x column is explained in § 14.3.
+Orchestration is $3 a stage, as measured, or $6 for stage 3; its tokens, about 8M a stage in a long session, are not in
+the Tokens column. The Max 5x column is explained in § 14.3.
 
-| Stage | Build and check runs | Experiment runs | Tokens | Cost | Max 5x week | Same units on Opus 5.5 `high` | First estimate |
+The proof of concept, stages 0 to 3 at the scope of § 11:
+
+| Stage | Build and check runs | Experiment runs | Tokens | Cost | Max 5x week | Same units on Opus 5.5 `high` | Before rescoping |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 0, language § 14.9 (measured) | 1 and 1 | — | 9M | $3 | 0.6% | — | $50 |
-| 1, the whole signature | 8 and 8 | — | 30M | $22 | 4% | $37 | $133 |
-| 2, libraries | 5 and 5 | — | 19M | $13 | 2% | $23 | $83 |
-| 3, edits and agents: E4 at 40 tasks × 2 arms × 3 trials, E5 at 20 × 3 | 4 and 4 | 300 | 405M | $236 | 45% | $469 | $917 |
-| 4, the holes left closed (only if stage 3 says go on) | 4 and 4 | — | 15M | $11 | 2% | $19 | $67 |
-| 5, disguised constraints | 3 and 3 | — | 11M | $9 | 2% | $15 | $50 |
-| 6, the text form, with E6 at 20 × 3 | 1 and 1 | 60 | 82M | $49 | 9% | $96 | $187 |
-| **Stages 0 to 3: the decision** | | **300** | **463M** | **about $275** | **about 52%** | **about $530** | **about $1,200** |
-| **The whole trial** | | **360** | **about 0.57B** | **about $345** | **about 66%** | **about $660** | **about $1,500** |
+| 0, language § 14.9 (measured) | 1 and 1 | — | 9M | $3 | 0.6% | — | $3 |
+| 1, the signature, as far as the corpora need it | 5 and 5 | — | 19M | $13 | 2.5% | $23 | $22 |
+| 2, library files, by hand | 3 and 3 | — | 11M | $9 | 1.7% | $15 | $13, for the tooling |
+| 3, edits and agents: E4 at 20 tasks × 2 arms × 2 trials, E5 at 10 × 2 | 4 and 4 | 100 | 145M | $88 | 17% | $171 | $236 |
+| **The proof of concept** | | **100** | **about 0.18B** | **about $115** | **about 22%** | **about $210** | **about $275** |
 
 The "same units on Opus 5.5 `high`" column prices the same runs at Opus rates, with half again as much output for the
-higher effort.
+higher effort. "Before rescoping" is this plan's previous estimate, on Sonnet, for the stage as it was then (§ 11 had
+the library tooling as stage 2, and E4 at 40 tasks × 2 arms × 3 trials); the first estimate, on Opus, was about $1,200.
 
-- **The experiments are now most of the cost.** E4's 240 runs cost about $180. Running E4's agents on Opus 5.5 instead
-  would double that, and would answer a different question: whether bare Rust helps the strongest agent rather than
-  the cheaper one.
-- **The range is still wide.** Each unit could be off by a factor of two either way, so the whole trial lies between
-  about $175 and $700. Each stage's measured cost corrects the next stage's estimate.
-- **Not counted:** people's time, and the machines that run the mechanical work. `strip`, `weave`, the checks, the
-  library translator, and experiments E0 to E3 and E5's counts are programs and cost no tokens.
+Later releases, only if the proof of concept recommends going on, priced with the same units:
+
+| Release | Build and check runs | Experiment runs | Tokens | Cost | Max 5x week |
+| --- | --- | --- | --- | --- | --- |
+| Library tooling, with E5's counts | 5 and 5 | — | 19M | $13 | 2.5% |
+| The whole signature | 3 and 3 | — | 11M | $9 | 1.7% |
+| The holes left closed | 4 and 4 | — | 15M | $11 | 2% |
+| Disguised constraints | 3 and 3 | — | 11M | $9 | 1.7% |
+| The text form, with E6 at 20 × 3 | 1 and 1 | 60 | 82M | $49 | 9% |
+| **Later releases** | | **60** | **about 0.14B** | **about $90** | **about 17%** |
+
+- **The experiments are most of the cost.** E4's 80 runs cost about $60, and E5's 20 about $15. Running E4's agents on
+  Opus 5.5 instead would double that, and would answer a different question: whether bare Rust helps the strongest
+  agent rather than the cheaper one.
+- **Hand-written library files are cheap.** Three build runs and three check runs cover the limited set of external
+  code, against five and five for the tooling, which also takes longer to get right.
+- **The range is still wide.** Each unit could be off by a factor of two either way, so the proof of concept lies
+  between about $55 and $230. Each stage's measured cost corrects the next stage's estimate.
+- **Not counted:** people's time, and the machines that run the mechanical work. `strip`, `weave`, the checks, and
+  experiments E0 to E3 are programs and cost no tokens.
 
 ### 14.3 As a share of a Claude Max 5x week
 
@@ -592,9 +643,9 @@ of magnitude.
 On that proxy:
 
 - **Stage 0 used about 0.6% of a week,** and its workflow alone about 0.1%.
-- **The decision needs about half a week.**
-- **The whole trial needs about two thirds of a week on Sonnet,** or about one and a quarter weeks on Opus 5.5 `high`.
-  The first estimate would have needed nearly three weeks.
+- **The proof of concept needs about a fifth of a week on Sonnet,** or about two fifths on Opus 5.5 `high`. Before
+  rescoping it needed about half a week, and the first estimate more than two weeks.
+- **The later releases would need about another sixth of a week.**
 - **Opus is likely to draw on the limit faster than its API price suggests.** One third-party report counts an Opus
   hour as about 2.5 Sonnet hours against the shared weekly limit. That is another reason to run the agents on Sonnet
   and keep Opus to orchestration.

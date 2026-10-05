@@ -1218,9 +1218,11 @@ TypeScript, stubs for Python, reference assemblies for C#), and, where the sourc
 more than the signatures say: guards at a function's head, the failures and panics a body can reach, and the effects of
 the calls it makes. Each clause carries the status of its source: signatures are `proven`, since the library's compiler
 checked them; guards found in its code are `lifted`, for the version the build locks; what its documentation says is
-`assumed … because "documentation"`; what an analysis of its bodies suggests is `observed`. Generated code relies only
-on `proven` and `lifted` clauses and on assumptions a person has accepted, as when a generated check is left out because
-a library's postcondition already guarantees it (§ 11.1). A bare module's own file is its public interface in the same
+`assumed … because "documentation"`; what an analysis of its bodies suggests is `observed`. A library file can also be
+written by hand, as the first trial does for the few libraries it calls; its clauses are then `assumed … because
+"hand-written"` until a generated file confirms them. Generated code relies only on `proven` and `lifted` clauses
+and on assumptions a person has accepted, as when a generated check is left out because a library's postcondition
+already guarantees it (§ 11.1). A bare module's own file is its public interface in the same
 way: callers depend on the file and never on the body, so at the boundary the codebase's own modules and its libraries
 are alike.
 
