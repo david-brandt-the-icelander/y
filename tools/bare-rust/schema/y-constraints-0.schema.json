@@ -32,6 +32,16 @@
       "description": "The default status of the file's clauses: a status name, as `strip` writes it (`lifted`), or a status with its reason, `{ \"assumed\": \"hand-written\" }`, which is language 10.2's `assumed … because \"hand-written\"`.",
       "$ref": "#/$defs/status"
     },
+    "failures": {
+      "type": "object",
+      "description": "The failures the file's clauses name, as language 15's `failure NAME : user | runtime`: the name and its class. A library file for Rust declares `panic`, the Rust host's runtime failure, which `fails panic when p` names.",
+      "additionalProperties": {
+        "enum": [
+          "user",
+          "runtime"
+        ]
+      }
+    },
     "subjects": {
       "type": "array",
       "items": {

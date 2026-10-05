@@ -15,6 +15,8 @@ pub enum Ty {
     Tuple(Vec<Ty>),
     Coll(String, Vec<Ty>),
     As(Box<Ty>, String),
+    /// A refinement beyond the one `Char` has: the predicate after `where` (or after `and`, on a `Char`), erased in Rust.
+    Refined(Box<Ty>, String),
 }
 
 const PRIMS: [&str; 14] =
@@ -44,13 +46,15 @@ impl Ty {
             Ty::Tuple(v) => format!("({})", join(v)),
             Ty::Coll(k, a) => format!("{k}<{}>", join(a)),
             Ty::As(t, w) => format!("{} as '{w}'", t.show()),
+            Ty::Refined(t, p) if matches!(**t, Ty::Char) => format!("{} and {p}", t.show()),
+            Ty::Refined(t, p) => format!("{} where {p}", t.show()),
         }
     }
 
     pub fn has_ref(&self) -> bool {
         match self {
             Ty::Ref(_) => true,
-            Ty::Opt(t) | Ty::As(t, _) => t.has_ref(),
+            Ty::Opt(t) | Ty::As(t, _) | Ty::Refined(t, _) => t.has_ref(),
             Ty::App(_, v) | Ty::Tuple(v) | Ty::Coll(_, v) => v.iter().any(Ty::has_ref),
             _ => false,
         }
@@ -92,9 +96,12 @@ impl Ty {
             Ty::Tuple(v) if v.len() == 1 => format!("({},)", list(v)?),
             Ty::Tuple(v) => format!("({})", list(v)?),
             Ty::Coll(k, _) => return Err(format!("slot missing: host type name of `{k}<..>` (`as`)")),
+            Ty::Refined(t, _) => t.rust_in(m, lt, under_ref)?,
             Ty::As(t, w) => match (&**t, w.as_str()) {
                 (_, "usize" | "isize" | "char") => w.clone(),
                 (Ty::Text, "String") => "String".into(),
+                // a slice is a `list` whose host form is the unsized `[T]`, which only a reference can name
+                (Ty::Coll(k, a), "std::primitive::slice") if k == "list" => format!("[{}]", list(a)?),
                 (Ty::Coll(_, a), _) => format!("{w}<{}>", list(a)?),
                 (t, _) => format!("{w}<{}>", t.rust_in(m, lt, false)?),
             },
@@ -148,6 +155,16 @@ impl P<'_> {
         }
         String::from_utf8_lossy(&self.s[st..self.i]).into_owned()
     }
+    /// The text of a refinement: up to the ` as '` that ends the type, or to the end.
+    fn pred(&mut self) -> R<String> {
+        let rest = String::from_utf8_lossy(&self.s[self.i..]).into_owned();
+        let end = rest.find(" as '").unwrap_or(rest.len());
+        self.i += end;
+        match rest[..end].trim() {
+            "" => Err(format!("bad type: empty refinement at {}", self.i)),
+            p => Ok(p.to_string()),
+        }
+    }
     fn args(&mut self) -> R<Vec<Ty>> {
         let mut v = vec![self.ty()?];
         while self.eat(",") {
@@ -170,7 +187,12 @@ impl P<'_> {
                 self.expect("'")?;
                 t = Ty::As(Box::new(t), w);
             } else {
-                return Ok(t);
+                let on = if matches!(t, Ty::Char) { "and " } else { "where " };
+                if !self.eat(on) {
+                    return Ok(t);
+                }
+                let p = self.pred()?;
+                t = Ty::Refined(Box::new(t), p);
             }
         }
     }
@@ -212,5 +234,33 @@ impl P<'_> {
             return Ok(Ty::Text);
         }
         Ok(if is_prim(&id) { Ty::Prim(id) } else { Ty::Name(id) })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_slice_is_a_list_whose_host_form_is_unsized() {
+        let t = Ty::parse("ref<list<T> as 'std::primitive::slice'>").unwrap();
+        assert_eq!(t.rust(false, Some("'p0")).unwrap(), "&'p0 [T]");
+        assert_eq!(t.rust(true, Some("'p0")).unwrap(), "&'p0 mut [T]");
+        assert_eq!(t.show(), "ref<list<T> as 'std::primitive::slice'>");
+        assert!(t.has_ref());
+        // a Vec is the same `list` with another host form
+        assert_eq!(Ty::parse("list<u8> as 'std::vec::Vec'").unwrap().rust(false, None).unwrap(), "std::vec::Vec<u8>");
+    }
+
+    #[test]
+    fn a_refinement_is_kept_in_the_string_and_erased_in_rust() {
+        let s = r"text where length(value) == 1 and value matches /^\x{10FFFF}$/ as 'char'";
+        let t = Ty::parse(s).unwrap();
+        assert_eq!(t.show(), s);
+        assert_eq!(t.rust(false, None).unwrap(), "char");
+        assert_eq!(Ty::parse("text where length(value) <= 8").unwrap().show(), "text where length(value) <= 8");
+        assert!(Ty::parse("text where ").is_err());
+        // the char form alone is still a char
+        assert_eq!(Ty::parse("text where length(value) == 1 as 'char'").unwrap(), Ty::As(Box::new(Ty::Char), "char".into()));
     }
 }

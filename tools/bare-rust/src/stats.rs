@@ -36,6 +36,7 @@ fn form(s: &str) -> String {
         Ok(Ty::Name(_)) => "name".into(),
         Ok(Ty::App(..)) => "generic".into(),
         Ok(Ty::Ref(_)) => "ref".into(),
+        Ok(Ty::Refined(t, _)) => form(&t.show()),
         Ok(Ty::Opt(_)) => "option".into(),
         Ok(Ty::Tuple(_)) => "tuple".into(),
         Ok(Ty::Coll(k, _)) => k,

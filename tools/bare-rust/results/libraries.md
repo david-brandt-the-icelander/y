@@ -1,69 +1,148 @@
 # Stage 2, part B: the library file for `std`, by hand
 
 `libraries/std-1.97.0.constraints.json` has a subject for each of the 105 external items of strsim, fnv and the golden
-crate (49 functions, 25 types, 19 traits, 11 macros, 1 const). `bare-rust libcheck` passes for all three: no item
-missing, schema ok, 0 signatures mismatched. Strict library coverage is now the default of `bare-rust check` (opt out with
+crate (49 functions, 25 types, 19 traits, 11 macros, 1 const), and one more, `std::cmp::Ordering`, that the laws need
+(106 subjects). `bare-rust libcheck` passes for all three: no item missing, schema ok, every clause's text well formed,
+0 signatures mismatched. Strict library coverage is the default of `bare-rust check` (opt out with
 `--allow-missing-libraries`) and is asserted in `tests/corpora.rs`. The counts below are the output of
 `bare-rust libstats libraries/std-1.97.0.constraints.json`, which reads the file and compiles its signatures.
 
 ## What the file holds
 
-| Entries | Count | | Clauses | Count |
-| --- | ---: | --- | --- | ---: |
-| function (22 are trait methods) | 49 | | `ensure` | 47 |
-| type | 25 | | `effects` | 26 |
-| trait | 19 | | `result must be used` | 18 |
-| macro | 11 | | `never panics` | 14 |
-| const | 1 | | `law` | 6 |
-| | | | `fails panic when` | 5 |
-| | | | `callback` | 3 |
-| | | | `unexpressed` | 184 |
+| Entries | Count | | Clauses | Stated | `unexpressed` |
+| --- | ---: | --- | --- | ---: | ---: |
+| function (22 are trait methods) | 49 | | `ensure` | 43 | |
+| type | 26 | | `effects` | 14 | |
+| trait | 19 | | `result must be used` | 18 | |
+| macro | 11 | | `never panics` | 13 | |
+| const | 1 | | `law` | 8 | |
+| | | | `fails panic when` | 5 | |
+| | | | `callback` | 3 | |
+| | | | `unexpressed` | | 199 |
 
-303 clauses in all: 119 stated and 184 `unexpressed`. No `require` or `fails … when` was needed, because `std` documents
-what panics, never a precondition. Stated clauses by status: documentation 51, observed in a body 45, `#[must_use]`
-lifted 22, hand-written 1 (a clause of part A). Every subject has at least one `unexpressed` clause.
+303 clauses in all: 104 stated and 199 `unexpressed`, on 105 of the 106 subjects (`char::MAX` has none: its value is
+now in its type). `std` documents what panics, never a precondition, so no `require` or `fails … when` is stated apart
+from the five `panic` ones. Stated clauses by status: documentation 49, observed in a body 33, `#[must_use]` lifted 22,
+hand-written none (part A's one hand-written clause, `cmp::max.an_argument`, now cites the documentation).
 
-**Signatures**, compiled against rustc 1.97.0: 96 checked, 5 path-resolved only (`PartialEq`, `From`, `TryFrom`, `Index`,
-`IndexMut`: a trait with generics), 4 unchecked (the bang macros `assert_eq!`, `panic!`, `vec!`, `write!`), 0 mismatched.
-By kind: functions 49, types 25 and consts 1 checked; traits 14 checked and 5 path-resolved; macros 7 derives checked.
-Of 137 type slots, 118 map to the type language (86%) and 19 are host text: lifetime argument 8, slice 5, associated type 5, never type 1.
+**Signatures**, compiled against rustc 1.97.0: 97 checked, 5 path-resolved only (`PartialEq`, `From`, `TryFrom`,
+`Index`, `IndexMut`: a trait with generics), 4 unchecked (the bang macros `assert_eq!`, `panic!`, `vec!`, `write!`),
+0 mismatched. Of 139 type slots, 126 map to the type language (91%) and 13 are host text: lifetime argument 7,
+associated type 5, never type 1. Slices are no longer host text (below).
 
-## What the language lacked: the `unexpressed` promises (184)
+## What the language lacked: the `unexpressed` promises (199)
 
 Each reason in the file starts with its label, so these are counts of labels.
 
-- **Types, traits and impls (84).** No impl or associated type 36; call resolves to an unnamed impl 9; must-use on a type 13;
-  no quantifier over fields (derives) 7; promise conditional on a bound's impl 11; requirement on bound implementations 8.
-- **Sequences and collections (24).** No sequence value 14; no identity of moved values 6; no frame condition on a
-  collection 3; no tuple parts 1.
-- **Hosts and effects (39).** No host state (capacity, hasher, formatter) 10; no order of calls 6; no value of a callback
-  result 6; callback clause has no condition 2; no positive effect 3; no drop 3; no resource exhaustion 3; no unwinding
-  behaviour 4; no build profile (overflow checks) 2.
-- **Text, numbers and constants (30).** No const-ness 18; no formatted text 9; no sign of zero or NaN payload 1; no
-  constant value 1; no expected or amortised cost 1.
+- **Types, traits and impls (101).** No impl or associated type 38; promise conditional on a bound or on a default
+  body an impl may override 22; must-use on a type 14; call resolves to an unnamed impl 11; no quantifier over fields
+  (derives) 7; requirement on bound implementations 6; no variants of a host enum 3.
+- **Sequences and collections (22).** No sequence value 14; no identity of moved values 6; no frame condition on a
+  collection 1; no tuple parts 1.
+- **Hosts and effects (40).** No host state (capacity, hasher, formatter) 10; no value of a callback result 7; no order
+  of calls 6; no drop 4; no unwinding behaviour 4; no positive effect 3; no resource exhaustion 2; callback clause has
+  no condition 2; no build profile (overflow checks) 2.
+- **Text, numbers and constants (29).** No const-ness 18; no formatted text 9; no sign of zero or NaN payload 1; no
+  expected or amortised cost 1.
 - **Macros and the file format (7).** No macro arguments (per-arm signature) 4; no `budget` or `layout` clause kind 3.
 
 Two findings reach beyond the language. The externals lists name a trait method, never the impl a call resolved to, so a
 promise that depends on the impl (`try_from` on integers, `into_iter` on a `Vec`) has no subject. And the file's clause
 kinds omit `budget` and `layout`, which language § 5 has.
 
+## The repair round: what an independent review found, and what became `unexpressed`
+
+Ten findings, each fixed in the file or in the tools; where the language cannot say a promise, it moved to an
+`unexpressed` clause with its reason rather than stay as an ill-formed clause. The new gaps are marked **gap**.
+
+1. **Overclaims from default bodies.** The `effects none` and `calls only` clauses of Iterator's `enumerate`, `skip`,
+   `take`, `chain`, `zip`, `map`, `filter`, `take_while`, `flat_map` and `copied`, of `Ord::max`, and of `HashMap::get`
+   (whose `Hash` and `Eq` run inside the call) are gone from the stated clauses: a provided method may be overridden,
+   and a bound's impl may do anything. **Gap:** no clause makes a promise conditional on "unless an implementation
+   overrides this method", so the 22 clauses of *promise conditional on a bound* now include these 11. `an_argument` of
+   `cmp::max`, `cmp::min` and `Ord::max` now cites the documented contract ("returns the maximum of two values"), which
+   binds every impl, with status `assumed … documentation`, where it had a body, or none.
+2. **The laws.** `Rhs` is explicit: a law calls `'<Self as std::cmp::PartialEq<Self>>::eq'`, a quoted host path
+   (language 15's `STABLE`), so each is stated for `Rhs = Self`, and the rest stays an `unexpressed` clause. Paths in
+   every clause are quoted. `std::cmp::Ordering` is a subject with its variants, so `is Less` has a type. `panic` is a
+   declared failure: the file has a top-level `failures` map (`failure panic : runtime` of language 15), and `fails panic
+   when` is checked against it.
+3. **`Ord`**'s law is now `duality`, citing PartialOrd's "Duality" (cmp.rs:1156-1157), its conditions 2 and 3
+   (1136-1137) and `partial_cmp(a, b) == Some(cmp(a, b))` (739), from which the `iff` follows.
+4. **Patterns and sizes on host text.** Slices are `list<T> as 'std::primitive::slice'` (printed `[T]`), so `size(self)`
+   on `slice::len`, `iter` and `split_at_mut` is well typed, as are `Hasher::write`'s bytes (`list<u8>`); `slice::iter`
+   returns `std::slice::Iter<T>`, with its lifetime elided as `Chars` does. `Entry<'a, K, V>` stays host text: the
+   type language has no lifetime argument, and the enum's variants hold host types. **Gap:** the three clauses with
+   `is Occupied(e)` / `is Vacant(e)` (`entry`, `or_insert`, `and_modify`) are `unexpressed`, label *no variants of a host
+   enum*.
+5. **`count`.** `count(it)` is the number of items an iterator would yield from its state at that point; for an iterator
+   moved into a call it is written `old(count(self))`, at entry, in every adapter clause and in `Iterator::count`.
+   **Gap:** `chain` and `zip` take `other: U` with `U: IntoIterator`, which is no iterator, so their `count(result)`
+   clauses are `unexpressed` (*call resolves to an unnamed impl*).
+6. **`write!`** has its result: `()` failing with `fmt::Error`, the `fmt::Result` of strsim's use. The `io::Result` of an
+   `io::Write` has no slot (a macro has no per-arm signature), and its clause says so.
+7. **`never panics`.** The 13 stated ones are all `observed`, each status beginning "from the body", and
+   `mem::replace`'s source is the comment in its body, no longer labelled documentation. `From::from` no longer states
+   it: the documentation asks every impl not to fail, and impls that allocate (`String::from`) can still panic or
+   abort, which is the same promise as `Deref::deref`'s, already `unexpressed`, and is now `unexpressed` the same way
+   (*promise conditional on a bound*, one reason worded for both).
+8. **Citations.** `HashMap::insert`'s `size` and the new `others_kept`, and `entry`'s `unchanged`, are `observed` with
+   the body of hashbrown 0.17.1 (the version in `library/Cargo.lock` at 1.97.0): `insert` at `src/map.rs:1814-1821`,
+   `rustc_entry` at `src/rustc_entry.rs:35-54`. The panics of `insert` and `entry` cite `reserve`'s doc (map.rs:904) as
+   that, with the growth in the body that makes it apply (`rustc_entry.rs:46`, `self.reserve(1)`). The `or_insert` panic
+   clause was wrong: `VacantEntry::insert` calls `insert_no_grow` (`rustc_entry.rs:574-578`), so the room was reserved by
+   `entry`. It now says that, and that an occupied entry drops `default` (*no drop*). Four part-B citations that named
+   a signature line (`as_ref`, `as_mut`, `map_or_else`, `and_modify`) now name the body.
+9. **Reasons that looked wrong, now stated.** `entry`: `ensure unchanged : self == old(self)`; `insert`: `ensure
+   others_kept : all k2 in old(self) : k2 != k implies self[k2] == old(self[k2])`; `Ord`: `law agrees_with_partial_ord`;
+   `Clone`: `law equal_clone`; `char::MAX`: the type `text where length(value) == 1 and value matches /^\x{10FFFF}$/ as
+   'char'` (a refinement, which `Ty` now parses and Rust erases). The `Eq` clause no longer contradicts its law: it says
+   what the law does not (f32 and f64 are not Eq; the compiler cannot check an `impl Eq`), and its reason is *no impl or
+   associated type*. **Gap:** `Clone`'s "for a `Copy` type `y.clone()` equals `*y`" and `PartialEq`'s laws across two
+   types need a law limited to the types that implement another trait; both are `unexpressed` (*requirement on bound
+   implementations*, which fell from 8 to 6). `max_by` and `min_by` in `Ord`'s contract take `cmp` as a callback, so
+   that clause is *no value of a callback result*.
+10. **`Chars`** carries the must-use of its type (iter.rs:28), like the other 11 iterator types.
+
+**The unstable allocator parameter** is left out of every generic list. `HashMap<K, V, S, A>`, `HashSet<T, S, A>`,
+`Entry<'a, K, V, A>`, `Vec<T, A>` and `vec::IntoIter<T, A>` all have `A: Allocator` under the unstable `allocator_api`
+(issue 32838); the file states the stable arity, which is what the corpora and `libcheck` compile against.
+
 ## How the entries were written
 
 By an agent, from the declarations and documentation in `core`, `alloc` and `std` at tag 1.97.0, fetched from
-`raw.githubusercontent.com`. Signatures follow § 4.4. Every `source` is a line of that tag with a verbatim doc quote, a
-code snippet, an attribute or a list of impls, and was checked against the fetched file as the entry was written (quotes
-by exact match, line numbers from the match). Documented promises are `assumed … documentation`; guards and effects
-found in a body are `observed` or `lifted`. Part A's four exemplars were re-cited the same way, their reasons relabelled,
-and `result must be used` added to `cmp::max`. The second agent's check against the documentation (check 5, human half)
-has not run.
+`raw.githubusercontent.com`, and, where `std` delegates, from `hashbrown` 0.17.1. Signatures follow § 4.4. Every
+`source` is a line of that tag with a verbatim doc quote, a code snippet, an attribute or a list of impls, and was
+checked against the fetched file (quotes by exact match, line numbers from the match); the repair round re-checked the
+doc quotes, body snippets and attributes of every source by a throwaway script, and all match but two `unexpressed`
+sources that are prose (a default body, a trait head). Documented promises are `assumed … documentation`; guards and
+effects found in a body are `observed` or `lifted`. Part A's four exemplars were re-cited the same way, their reasons
+relabelled, and `result must be used` added to `cmp::max`. The second agent's check against the documentation (check 5,
+human half) has not run.
 
-Conventions the clauses assume, which language 15 does not state: a `ref` parameter names its referent (`x == old(y)`);
-`count(it)` of an iterator is the number of items it yields from here; `self[k]` on a map is its optional lookup; laws on a
-trait call its methods by path (`std::cmp::PartialEq::eq(a, b)`); `Option` and `Result` are matched as variants.
+Conventions the clauses assume, which language 15 does not state:
 
-## Changes to part A's tooling
+- A `ref` parameter names its referent (`x == old(y)`); `Self` is in scope in a trait subject, as it is in Rust.
+- `count(it)` of an iterator is the number of items it would yield from where it is, without advancing it; `old(count(self))`
+  is that at entry. `size` is for a collection or a slice.
+- `k in m` on a map is key membership, `all k in m : p` ranges over its keys, and `self[k]` is its optional lookup.
+- `x == v` with `x` optional is true only when `x` is present and equal (§ 4), so `partial_cmp(a, b) == cmp(a, b)`
+  says `Some`. `Option` and `Result` are matched as variants (`Err(e)`), and `Ordering` as `Less`, `Equal`, `Greater`.
+- A law calls the methods of its trait by quoted qualified path, `'<Self as std::cmp::Ord>::cmp'(a, b)`, and applies
+  to the types for which every method it names is implemented.
+- A slice is `list<T> as 'std::primitive::slice'`, a name this file gives, the path of `std::primitive::slice::len`.
 
-Two small fixes were needed to meet "libcheck passes": `#[derive(Eq)]` and `#[derive(Copy)]` are generated beside
-`PartialEq` and `Clone`, which they need to compile (they were false mismatches); and each scratch crate now has a name of
-its own, because cargo's fingerprint ignores the directory and parallel tests saw another test's build as fresh (false
-clean). New: `bare-rust libstats`.
+## Tooling: what the repair changed
+
+- **`libcheck` checks the form of every clause's text** (`src/clause.rs`, about 125 lines, not a parser of language 15):
+  brackets balance and quotes close; the clause starts with a keyword of its kind; a host path is quoted and looks like
+  one (`'std::…'`, `'<Self as …>::…'`); a failure after `fails` is declared in the file's `failures`; and every other
+  name is a parameter, `result`, `self`, a generic, `Self` in a trait, a variant of a subject of the file, a name bound
+  by `all x` or `is V(x)` before it is used, or a word of language 4. It found 16 problems in the file as it stood.
+  **What it does not do:** type-check an expression, resolve a quoted path to an item (the paths of laws name methods
+  that are not subjects), check arity, or read the free text of an `unexpressed` clause.
+- Earlier in part B: `#[derive(Eq)]` and `#[derive(Copy)]` are generated beside `PartialEq` and `Clone`, which they need
+  to compile; each scratch crate has a name of its own, because cargo's fingerprint ignores the directory; and
+  `bare-rust libstats` is new.
+- `types.rs`: a slice's host form; a refinement after `where` (or `and`, after a char) is kept in the string and erased in
+  Rust. The schema has a `failures` map, and `libfmt` knows its place in the key order. `libstats` itself is unchanged.

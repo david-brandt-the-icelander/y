@@ -20,7 +20,8 @@ const USAGE: &str = "usage:
       every external item (std) the crate uses, as canonical paths with files and use counts, from rustc's MIR and
       tree-sitter; written to <libraries>/externals/<crate>.json (default libraries/ beside Cargo.toml)
   bare-rust libcheck <crate-dir> [--libraries <dir>] [--work <dir>] [--allow-missing]
-      check 5, mechanical half: coverage of the crate's externals by the library file, schema validity, and the
+      check 5, mechanical half: coverage of the crate's externals by the library file, schema validity, a syntactic
+      check of every clause's text (brackets, keyword, quoted host paths, declared failures, known names), and the
       signature compile check; exits non-zero on a missing item (unless --allow-missing), an invalid file or a
       mismatched signature
   bare-rust libfmt <library-file>...

@@ -2,6 +2,7 @@
 //! and its signatures are the real ones, by coercing the real `std` item to the function-pointer type printed from
 //! the entry's slots and compiling the lot in a scratch crate.
 use crate::cargo;
+use crate::clause::{lint, Scope};
 use crate::externals::{self, Kind};
 use crate::json::canonical;
 use crate::types::Ty;
@@ -22,7 +23,7 @@ pub fn library_path(libraries: &Path, krate: &str, version: &str) -> PathBuf {
 // Validity
 
 /// The words a clause of each kind may start with: a mechanical check of the head, not a parser of language 15.
-fn heads(kind: &str) -> &'static [&'static str] {
+pub fn heads(kind: &str) -> &'static [&'static str] {
     match kind {
         "require" => &["require"],
         "ensure" => &["ensure"],
@@ -91,6 +92,11 @@ fn type_strings(sub: &Value) -> Vec<(String, String)> {
     for f in sub["fields"].as_array().into_iter().flatten() {
         add(format!("field `{}`", f["name"].as_str().unwrap_or("?")), &f["type"]);
     }
+    for v in sub["variants"].as_array().into_iter().flatten() {
+        for f in v["fields"].as_array().into_iter().flatten() {
+            add(format!("variant `{}`", v["name"].as_str().unwrap_or("?")), &f["type"]);
+        }
+    }
     out
 }
 
@@ -104,6 +110,13 @@ pub fn validate(file: &Value, text: Option<&str>) -> Vec<String> {
         Err(e) => errs.push(format!("schema: {e}")),
     }
     let mut seen: BTreeSet<(String, String)> = BTreeSet::new();
+    let failures: BTreeSet<String> = file["failures"].as_object().into_iter().flat_map(|m| m.keys().cloned()).collect();
+    let variants: BTreeSet<String> = file["subjects"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .flat_map(|s| s["variants"].as_array().into_iter().flatten().filter_map(|v| v["name"].as_str().map(str::to_string)))
+        .collect();
     for (i, sub) in file["subjects"].as_array().into_iter().flatten().enumerate() {
         let (kind, name) = (sub["kind"].as_str().unwrap_or(""), sub["name"].as_str().unwrap_or(""));
         let at = format!("subject {i} ({kind} {name})");
@@ -134,14 +147,20 @@ pub fn validate(file: &Value, text: Option<&str>) -> Vec<String> {
                 errs.push(format!("{at}: generic `{}` is declared twice", g["name"].as_str().unwrap_or("")));
             }
         }
+        let mut scope = Scope { names: variants.clone(), failures: failures.clone() };
+        for n in sub["params"].as_array().into_iter().flatten().filter_map(|p| p["name"].as_str()) {
+            scope.names.insert(n.to_string());
+        }
+        for n in sub["generics"].as_array().into_iter().flatten().filter_map(|g| g["name"].as_str()) {
+            scope.names.insert(n.trim_start_matches('\'').to_string());
+        }
+        if kind == "trait" {
+            scope.names.insert("Self".into());
+        }
         for (j, c) in sub["clauses"].as_array().into_iter().flatten().enumerate() {
             let (k, t) = (c["kind"].as_str().unwrap_or(""), c["text"].as_str().unwrap_or(""));
-            let hs = heads(k);
-            if !hs.is_empty() && !hs.iter().any(|h| t == *h || t.starts_with(&format!("{h} ")) || t.starts_with(&format!("{h}:"))) {
-                errs.push(format!("{at}: clause {j}: a `{k}` clause starts with {} , not `{}`", hs.iter().map(|h| format!("`{h}`")).collect::<Vec<_>>().join(" or "), t.split_whitespace().next().unwrap_or("")));
-            }
-            if t.matches('(').count() != t.matches(')').count() {
-                errs.push(format!("{at}: clause {j}: unbalanced parentheses in `{t}`"));
+            if k != "unexpressed" {
+                errs.extend(lint(k, t, heads(k), &scope).into_iter().map(|e| format!("{at}: clause {j}: {e}")));
             }
         }
     }

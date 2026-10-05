@@ -166,7 +166,7 @@ fn the_library_file_is_valid_and_canonical() {
     for n in EXEMPLARS {
         assert!(names.contains(&n), "{n}");
     }
-    assert_eq!(names.len(), 105, "49 functions, 25 types, 19 traits, 11 macros and 1 const");
+    assert_eq!(names.len(), 106, "49 functions, 26 types, 19 traits, 11 macros and 1 const: the 105 external items, and Ordering for the laws");
 }
 
 #[test]
@@ -191,6 +191,35 @@ fn every_clause_cites_its_source_and_every_unexpressed_clause_its_reason() {
         }
     }
     assert!(labels.len() >= 20 && labels.len() <= 30, "the labels are a short list: {labels:?}");
+}
+
+#[test]
+fn clause_text_is_checked_for_form_and_names_not_only_for_its_head() {
+    let (file, _) = std_file();
+    let at = |name: &str, f: &mut Value, prefix: &str, text: &str| {
+        let s = subject_mut(f, name);
+        let c = s["clauses"].as_array_mut().unwrap().iter_mut().find(|c| c["text"].as_str().unwrap().starts_with(prefix)).unwrap();
+        c["text"] = json!(text);
+    };
+    // a host path is quoted, and balanced brackets and quotes are closed
+    let mut f = file.clone();
+    at("std::cmp::Eq", &mut f, "law reflexive", "law reflexive : all a : Self : std::cmp::PartialEq::eq(a, a)");
+    at("std::cmp::max", &mut f, "ensure ge_both", "ensure ge_both : (result >= v1 and result >= v2");
+    at("std::cmp::min", &mut f, "ensure le_both", "ensure le_both : result <= 'v1");
+    at("std::mem::swap", &mut f, "ensure x_gets_y", "ensure x_gets_y : x == old(zzz)");
+    at("std::cmp::Ord", &mut f, "law transitive", "law transitive : all a : Self : ('<Self as std::cmp::Ord>::cmp'(a, b) is Less)");
+    let e = validate(&f, None).join("\n");
+    for want in ["not quoted", "unclosed `(`", "unterminated `'`", "unknown name `zzz`", "unknown name `b`"] {
+        assert!(e.contains(want), "{want}: {e}");
+    }
+    // a failure a clause names is declared in the file, and a variant it matches is a variant of a subject
+    let mut f = file.clone();
+    f.as_object_mut().unwrap().remove("failures");
+    assert!(validate(&f, None).iter().any(|e| e.contains("failure `panic` is not declared")));
+    let mut f = file.clone();
+    subject_mut(&mut f, "std::cmp::Ordering").as_object_mut().unwrap().remove("variants");
+    assert!(validate(&f, None).iter().any(|e| e.contains("unknown name `Less`")));
+    assert_eq!(validate(&file, None), Vec::<String>::new());
 }
 
 #[test]
@@ -249,7 +278,7 @@ fn the_whole_file_compiles_against_the_real_std() {
     assert_eq!(r.unchecked.keys().collect::<Vec<_>>(), vec!["macro"]);
     assert_eq!(r.unchecked["macro"].len(), 4, "{:?}", r.unchecked);
     assert_eq!(r.resolved.len(), 5, "{:?}", r.resolved);
-    assert_eq!(r.checked.len() + r.resolved.len() + r.unchecked_total(), 105);
+    assert_eq!(r.checked.len() + r.resolved.len() + r.unchecked_total(), 106);
 }
 
 #[test]
@@ -391,7 +420,7 @@ fn libstats_counts_what_the_file_holds() {
     let (file, _) = std_file();
     let r = check_signatures(&file, &work("stats-sigs"), &target()).unwrap();
     let t = bare_rust::libstats::libstats(&file, Some(&r));
-    for want in ["library std 1.97.0 (105 subjects)", "function (22 are trait methods)", "unexpressed", "no sequence value", "path-resolved only: std::cmp::PartialEq", "type slots (137); 118 map to the type language and 19 are host text"] {
+    for want in ["library std 1.97.0 (106 subjects)", "function (22 are trait methods)", "unexpressed", "no sequence value", "path-resolved only: std::cmp::PartialEq", "type slots (139); 126 map to the type language and 13 are host text"] {
         assert!(t.contains(want), "{want}: {t}");
     }
     assert!(!t.contains("reasons carry no label"), "{t}");

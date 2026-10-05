@@ -3,6 +3,7 @@ use tree_sitter::{Language, Node, Parser, Tree};
 
 pub mod cargo;
 pub mod check;
+pub mod clause;
 pub mod corpus;
 pub mod crate_weave;
 pub mod externals;

@@ -2,8 +2,8 @@
 //! element fits on one line.
 use serde_json::Value;
 
-const ORDER: [&str; 35] = [
-    "format", "host", "crate", "module", "status", "subjects", "holes", "kind", "n", "name", "visible", "visible_path",
+const ORDER: [&str; 36] = [
+    "format", "host", "crate", "module", "status", "failures", "subjects", "holes", "kind", "n", "name", "visible", "visible_path",
     "generics", "for", "bounds", "where", "trait", "self", "type", "form", "fields", "variants", "params", "result",
     "fails", "clauses", "access", "hold", "rights", "guarantee", "from", "lifetime", "locals", "hints", "sep",
 ];
