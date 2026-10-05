@@ -1212,15 +1212,18 @@ bare form nor the ordinary form can drift. Diagnostics from the host's compiler 
 
 **Libraries.** Code that is not woven, such as a host's standard library and a codebase's dependencies, needs a
 constraint file but no bare body: an agent writing bare code calls a library by name and must know what it promises,
-while the host's compiler checks the calls after weaving. A partial strip writes the file and discards the body. It
-starts from what the host already produces for separate compilation (rustdoc's JSON for Rust, `.d.ts` files for
+while the host's compiler checks the calls after weaving. Such code is stable: a library is versioned, and its file is
+written once per version, for the items in use, and shared by everyone who uses that version. An agent writes it, and
+the host's compiler checks its signatures against the real items; that needs no stripper. Where a library changes too
+fast, or is too large, for that, a partial strip writes the file and discards the body. It starts from what the host
+already produces for separate compilation (rustdoc's JSON for Rust, `.d.ts` files for
 TypeScript, stubs for Python, reference assemblies for C#), and, where the source is available, looks into bodies for
 more than the signatures say: guards at a function's head, the failures and panics a body can reach, and the effects of
 the calls it makes. Each clause carries the status of its source: signatures are `proven`, since the library's compiler
 checked them; guards found in its code are `lifted`, for the version the build locks; what its documentation says is
-`assumed … because "documentation"`; what an analysis of its bodies suggests is `observed`. A library file can also be
-written by hand, as the first trial does for the few libraries it calls; its clauses are then `assumed … because
-"hand-written"` until a generated file confirms them. Generated code relies only on `proven` and `lifted` clauses
+`assumed … because "documentation"`; what an analysis of its bodies suggests is `observed`. In a file an agent writes,
+signatures the host's compiler has checked are `proven`, and the rest is `assumed … because "hand-written"` after a
+second agent's review. Generated code relies only on `proven` and `lifted` clauses
 and on assumptions a person has accepted, as when a generated check is left out because a library's postcondition
 already guarantees it (§ 11.1). A bare module's own file is its public interface in the same
 way: callers depend on the file and never on the body, so at the boundary the codebase's own modules and its libraries
