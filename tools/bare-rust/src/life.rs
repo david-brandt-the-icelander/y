@@ -213,6 +213,10 @@ pub fn pat_mut_edits(pat: Node, out: &mut Vec<Edit>) {
     }
 }
 
+fn text_starts_with_ref(n: Node) -> bool {
+    n.child(0).is_some_and(|c| c.kind() == "&")
+}
+
 /// Edits that remove `mut` from a `let`, a `parameter` or the parameters of a closure.
 pub fn mut_edits(n: Node, out: &mut Vec<Edit>) {
     match n.kind() {
@@ -222,6 +226,15 @@ pub fn mut_edits(n: Node, out: &mut Vec<Edit>) {
                 out.push((ms.start_byte(), pat.start_byte(), String::new()));
             }
             pat_mut_edits(pat, out);
+        }
+        // `mut self`, by value: a binding like any other. (`&mut self` is access, which the file carries.)
+        "self_parameter" if !text_starts_with_ref(n) => {
+            if let (Some(ms), Some(s)) = (
+                named_children(n).into_iter().find(|c| c.kind() == "mutable_specifier"),
+                named_children(n).into_iter().find(|c| c.kind() == "self"),
+            ) {
+                out.push((ms.start_byte(), s.start_byte(), String::new()));
+            }
         }
         "closure_parameters" => {
             for c in named_children(n) {
@@ -240,7 +253,7 @@ pub fn normalise_edits(n: Node, src: &str, out: &mut Vec<Edit>, strip_mut: bool)
     match n.kind() {
         "token_tree" => return,
         "function_item" | "function_signature_item" => out.extend(analyse(n, src).cuts),
-        "let_declaration" | "parameter" | "closure_parameters" if strip_mut => mut_edits(n, out),
+        "let_declaration" | "parameter" | "closure_parameters" | "self_parameter" if strip_mut => mut_edits(n, out),
         _ => {}
     }
     for c in named_children(n) {
@@ -254,7 +267,7 @@ pub fn count_mut(n: Node) -> usize {
         return 0;
     }
     let mut v = vec![];
-    if matches!(n.kind(), "let_declaration" | "parameter" | "closure_parameters") {
+    if matches!(n.kind(), "let_declaration" | "parameter" | "closure_parameters" | "self_parameter") {
         mut_edits(n, &mut v);
     }
     v.len() + named_children(n).into_iter().map(count_mut).sum::<usize>()

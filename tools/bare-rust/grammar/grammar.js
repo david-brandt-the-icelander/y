@@ -46,6 +46,8 @@ module.exports = grammar(rust, {
     closure_parameters: $ => seq('|', sepBy(',', $.parameter), '|'),
     closure_expression: $ => prec(-1, seq(optional('static'), optional('async'), optional('move'),
       field('parameters', $.closure_parameters), field('body', choice($._expression, '_')))),
+    // Visibility on a `use` is a constraint too: it moves to the file.
+    use_declaration: $ => seq('use', field('argument', $._use_clause), ';'),
     let_declaration: $ => seq('let', field('pattern', $._pattern),
       optional(seq('=', field('value', $._expression))), optional(seq('else', field('alternative', $.block))), ';'),
   },

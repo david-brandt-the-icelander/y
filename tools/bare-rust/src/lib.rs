@@ -7,6 +7,7 @@ pub mod corpus;
 pub mod crate_weave;
 pub mod json;
 pub mod life;
+pub mod report;
 pub mod stats;
 pub mod strip;
 pub mod trace;

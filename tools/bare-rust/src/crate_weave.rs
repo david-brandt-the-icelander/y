@@ -133,6 +133,17 @@ impl CrateWeave {
         self.weave_errors.is_empty() && self.holes.is_empty() && self.errors.is_empty()
     }
 
+    /// Entries of the constraint files that bind to nothing in their bare body, with the bare file.
+    pub fn unbound(&self) -> Vec<(String, &crate::weave::Unbound)> {
+        self.files.iter().flat_map(|f| f.woven.unbound.iter().map(|u| (f.bare_name(), u))).collect()
+    }
+
+    /// The counts of `unbound()`: (locals, hints, subjects).
+    pub fn unbound_counts(&self) -> (usize, usize, usize) {
+        let n = |w: &str| self.unbound().iter().filter(|(_, u)| u.what == w).count();
+        (n("unbound local"), n("unbound hint"), n("unbound subject"))
+    }
+
     pub fn mut_added(&self) -> usize {
         self.files.iter().map(|f| f.mut_added).sum()
     }
@@ -150,14 +161,19 @@ impl CrateWeave {
         for e in &self.follow_on {
             eprintln!("{}", e.show());
         }
+        for (f, u) in self.unbound() {
+            eprintln!("warning: {f}: {}", u.show());
+        }
         if !self.cargo_stderr.is_empty() {
             eprintln!("{}", self.cargo_stderr);
         }
+        let (ul, uh, us) = self.unbound_counts();
         println!(
-            "weave: {} files woven, {} not woven, {} weave errors{}",
+            "weave: {} files woven, {} not woven, {} weave errors; {} unbound entries (locals {ul}, hints {uh}, subjects {us}){}",
             self.files.len(),
             self.unwoven.len(),
             self.weave_errors.len(),
+            ul + uh + us,
             if self.cargo {
                 format!(
                     "; cargo check after {} runs: {} mut inserted, {} holes undetermined, {} other errors, {} warnings",
@@ -178,7 +194,7 @@ fn skip(rel: &Path, woven: &BTreeSet<PathBuf>) -> bool {
     let first = rel.components().next().and_then(|c| c.as_os_str().to_str()).unwrap_or("");
     let name = rel.file_name().and_then(|n| n.to_str()).unwrap_or("");
     matches!(first, "target" | ".git" | "node_modules")
-        || rel.starts_with("corpora/src")
+        || rel.starts_with("corpora/src") // linked in, not copied: see `link_corpora`
         || name == MARKER
         || (rel.parent().is_none_or(|p| p.as_os_str().is_empty()) && name == "refusals.json")
         || woven.contains(rel)
@@ -207,6 +223,23 @@ fn copy_tree(src: &Path, base: &Path, dst: &Path, woven: &BTreeSet<PathBuf>) -> 
         }
     }
     Ok(())
+}
+
+/// A crate whose tests read `corpora/src` (the tool's own) gets it in the woven copy, as a link to the original, so
+/// that its clippy and tests run there.
+fn link_corpora(crate_dir: &Path, out: &Path) -> R<()> {
+    let from = crate_dir.join("corpora/src");
+    if !from.is_dir() {
+        return Ok(());
+    }
+    let from = fs::canonicalize(&from).map_err(|e| format!("{}: {e}", from.display()))?;
+    let to = out.join("corpora/src");
+    fs::create_dir_all(out.join("corpora")).map_err(|e| format!("{}: {e}", to.display()))?;
+    #[cfg(unix)]
+    let linked = std::os::unix::fs::symlink(&from, &to);
+    #[cfg(not(unix))]
+    let linked = fs::create_dir_all(&to).map_err(|e| e.to_string()).and_then(|_| copy_tree(&from, &from, &to, &BTreeSet::new()));
+    linked.map_err(|e| format!("{}: {e}", to.display()))
 }
 
 fn prepare_out(out: &Path, dirs: &[&Path]) -> R<()> {
@@ -337,9 +370,11 @@ fn classify(files: &[WovenFile], diags: &[Diag], cw: &mut CrateWeave) {
 }
 
 /// Write the span map of every woven file to `<out>/.bare-rust-map.json`: each range of the woven text that is
-/// not a copy of the bare text, with the bare range it replaces and the slot, hole or `mut` it came from.
+/// not a copy of the bare text, with the bare range it replaces and the slot, hole or `mut` it came from; and,
+/// under `@unbound`, the entries of the constraint files that bind to nothing.
 fn write_map(out: &Path, files: &[WovenFile]) -> R<()> {
     let mut m = serde_json::Map::new();
+    let mut unbound = vec![];
     for f in files {
         let spans: Vec<Value> = f
             .woven
@@ -356,7 +391,11 @@ fn write_map(out: &Path, files: &[WovenFile]) -> R<()> {
             })
             .collect();
         m.insert(f.rel.display().to_string(), Value::Array(spans));
+        for u in &f.woven.unbound {
+            unbound.push(serde_json::json!({"file": f.bare_name(), "what": u.what, "subject": u.subject, "name": u.name}));
+        }
     }
+    m.insert("@unbound".into(), Value::Array(unbound));
     write(&out.join(".bare-rust-map.json"), &crate::json::ordered(&Value::Object(m)))
 }
 
@@ -421,6 +460,7 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
     cw.unwoven = corpus_files(&crate_dir, true).unwrap_or_default().into_iter().filter(|f| !woven_set.contains(f)).collect();
     prepare_out(out, &[from, &crate_dir])?;
     copy_tree(&crate_dir, &crate_dir, out, &woven_set)?;
+    link_corpora(&crate_dir, out)?;
     for f in &cw.files {
         write(&out.join(&f.rel), &f.woven.text)?;
     }

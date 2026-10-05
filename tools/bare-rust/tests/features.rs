@@ -242,3 +242,97 @@ fn golden_json_validates() {
     let j: Value = serde_json::from_str(include_str!("golden/cache.constraints.json")).unwrap();
     assert_eq!(schema_errors(&j), Vec::<String>::new());
 }
+
+#[test]
+fn a_comment_inside_an_erased_production_is_refused() {
+    // Each of these puts a comment inside a span that strip cuts; a comment elsewhere survives.
+    let cases = [
+        "struct S { a: Vec</* c */ u8> }",
+        "fn f(a: Vec</* c */ u8>) {}",
+        "fn f() -> // c4\n u8 { 1 }",
+        "fn f() /* c5 */ -> u8 { 1 }",
+        "fn f<T /* c6 */: Clone>(t: T) {}",
+        "fn f<T>(t: T) -> u8 // c8\nwhere T: Clone { 1 }",
+        "fn f<T>(t: T)\nwhere // c8\n T: Clone {}",
+        "fn f() { let x /* c */: u8 = 1; }",
+        "fn f() { let y = 1 as Option</* c */ u8>; }",
+    ];
+    for src in cases {
+        let e = strip(src, "demo 0.1.0", "src/lib.rs").unwrap_err();
+        assert!(e.starts_with("comment inside an erased production: at "), "{src}: {e}");
+    }
+    // Comments that are not inside a cut are kept in the bare body.
+    let (b, _) = strip("// a\nfn f(/* p */ x: u8) -> u8 { /* body */ x }\n", "demo 0.1.0", "src/lib.rs").unwrap();
+    for c in ["// a", "/* p */", "/* body */"] {
+        assert!(b.contains(c), "{c} lost: {b}");
+    }
+}
+
+#[test]
+fn use_visibility_moves_to_the_file() {
+    let src = "pub use a::b;\npub(crate) use c::{d, e};\nuse f::g;\nmod m {\n    pub(super) use super::x as y;\n}\n";
+    let (b, j) = roundtrip(src);
+    assert!(!b.contains("pub"), "{b}");
+    assert!(b.contains("use a::b;") && b.contains("use f::g;"), "{b}");
+    let s = subject(&j, "demo::use a::b");
+    assert_eq!((s["kind"].as_str(), s["visible"].as_str()), (Some("use"), Some("public")));
+    assert_eq!(subject(&j, "demo::use c::{d, e}")["visible"], "crate");
+    let m = subject(&j, "demo::m::use super::x as y");
+    assert_eq!((m["visible"].as_str(), m["visible_path"].as_str()), (Some("path"), Some("super")));
+    assert_eq!(j["subjects"].as_array().unwrap().len(), 3, "a plain `use` is not a subject");
+    // The bare grammar has no visibility on `use`; weave prints it from the file, and a missing entry means private.
+    assert!(parse_bare("pub use a::b;").root_node().has_error());
+    let mut j2 = j.clone();
+    j2["subjects"].as_array_mut().unwrap().remove(0);
+    let w = weave(&b, &j2).unwrap();
+    assert!(w.contains("\nuse a::b;") || w.starts_with("use a::b;"), "{w}");
+}
+
+#[test]
+fn stale_entries_are_reported_as_unbound() {
+    use bare_rust::weave::{weave_traced, Unbound};
+    let src = "fn f(a: u8) -> u8 {\n    let x: u16 = 1;\n    let y: u32 = 2;\n    (a as u32 + y) as u8\n}\nfn g() {}\n";
+    let (b, mut j) = strip(src, "demo 0.1.0", "src/lib.rs").unwrap();
+    // A renamed local, one hint too many, a duplicate of a hint, a subject with no item, holes of a function that is gone.
+    let h = &mut j["holes"]["demo::f"];
+    let ty = h["locals"]["x"].take();
+    h["locals"].as_object_mut().unwrap().remove("x");
+    h["locals"]["z"] = ty;
+    h["hints"].as_array_mut().unwrap().push(serde_json::json!({"kind": "cast", "n": 5, "type": "u64"}));
+    let dup = h["hints"][0].clone();
+    h["hints"].as_array_mut().unwrap().push(dup);
+    let g = subject(&j, "demo::g").clone();
+    let mut gone = g.clone();
+    gone["name"] = "demo::h".into();
+    j["subjects"].as_array_mut().unwrap().push(gone);
+    j["holes"]["demo::k"] = serde_json::json!({"locals": {"q": "u8"}});
+    let w = weave_traced(&b, &j).unwrap();
+    let u = |what, subject: &str, name: &str| Unbound { what, subject: subject.into(), name: name.into() };
+    assert_eq!(
+        w.unbound,
+        vec![
+            u("unbound local", "demo::f", "z"),
+            u("unbound hint", "demo::f", "cast #5"),
+            u("unbound hint", "demo::f", "cast #0"),
+            u("unbound subject", "demo::h", ""),
+            u("unbound subject", "demo::k", ""),
+        ]
+    );
+    assert_eq!(w.unbound[0].show(), "unbound local `z` of `demo::f`");
+    assert_eq!(w.unbound[3].show(), "unbound subject `demo::h`");
+    // Nothing stale: no warning.
+    let (b, j) = strip(src, "demo 0.1.0", "src/lib.rs").unwrap();
+    assert!(weave_traced(&b, &j).unwrap().unbound.is_empty());
+}
+
+#[test]
+fn mut_self_and_mut_bindings_count_alike() {
+    let src = "struct S(u8);\nimpl S {\n    fn f(mut self, mut c: u8) -> u8 { self.0 += c; c += 1; c }\n    fn g(&mut self) {}\n}\n";
+    assert_eq!(bare_rust::count_mut(src), 2, "`mut self` and `mut c`, not `&mut self`");
+    let n = normalise_nomut(src).unwrap();
+    assert_eq!(bare_rust::count_mut(&n), 0, "{n}");
+    assert!(n.contains("fn f(self, c: u8)") && n.contains("&mut self"), "{n}");
+    let (b, j) = strip(src, "demo 0.1.0", "src/lib.rs").unwrap();
+    assert!(b.contains("fn f(self, c)"), "{b}");
+    assert_eq!(subject(&j, "demo::S::g")["params"][0]["access"]["rights"], "write");
+}

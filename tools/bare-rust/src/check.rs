@@ -68,10 +68,17 @@ pub struct CheckReport {
     pub files: usize,
     pub refused: Vec<(String, String)>,
     pub mut_added: usize,
+    /// Entries of the constraint files that bind to nothing (locals, hints, subjects), from the weave of check 2.
+    pub unbound: (usize, usize, usize),
     pub c1: Check1,
     pub c2: Check2,
     pub c3: Check3,
     pub c4: Check4,
+}
+
+/// The number of tests that passed, from `cargo test`'s `test result:` lines.
+pub fn test_count(summary: &str) -> usize {
+    summary.lines().filter_map(|l| l.strip_prefix("test result: ok. ")?.split(' ').next()?.parse::<usize>().ok()).sum()
 }
 
 fn first_diff(a: &str, b: &str) -> String {
@@ -289,7 +296,7 @@ pub fn check_crate(dir: &Path, o: &CheckOpts) -> R<CheckReport> {
     let c2 = check2(&cw, dir);
     let c3 = check3(&cw, dir, o)?;
     let c4 = check4(&bare, dir, o, &name, &cw)?;
-    let report = CheckReport { name, files: results.len(), refused, mut_added: cw.mut_added(), c1, c2, c3, c4 };
+    let report = CheckReport { name, files: results.len(), refused, mut_added: cw.mut_added(), unbound: cw.unbound_counts(), c1, c2, c3, c4 };
     let _ = fs::write(root.join("check.json"), crate::json::ordered(&report.to_json()));
     Ok(report)
 }
@@ -333,6 +340,7 @@ impl CheckReport {
             "crate": self.name,
             "files": self.files,
             "refused": self.refused,
+            "unbound": {"locals": self.unbound.0, "hints": self.unbound.1, "subjects": self.unbound.2},
             "mut": {"original": self.c2.mut_original, "derived": self.c2.mut_derived, "inserted_by_rustc": self.mut_added,
                     "files_differing": self.c2.mut_differs.len()},
             "check1": {"files": self.c1.files, "failures": self.c1.failures},
@@ -361,6 +369,7 @@ impl CheckReport {
         for (f, e) in &self.refused {
             println!("             refused {f}: {e}");
         }
+        println!("  weave    {} unbound entries (locals {}, hints {}, subjects {})", self.unbound.0 + self.unbound.1 + self.unbound.2, self.unbound.0, self.unbound.1, self.unbound.2);
         println!("  check 1  {}  bare round trip, {} files", st(self.c1_ok()), self.c1.files);
         for f in &self.c1.failures {
             println!("             {f}");
@@ -377,7 +386,9 @@ impl CheckReport {
         }
         let c = &self.c3;
         let clippy = c.clippy.as_ref().map_or("not run".to_string(), |x| format!("{} warnings (original {}, {} new)", x.1, x.0, x.2.len()));
-        let test = c.test.as_ref().map_or("not run".to_string(), |t| if t.0 { "passed".into() } else { "FAILED".into() });
+        let test = c.test.as_ref().map_or("not run".to_string(), |t| {
+            if t.0 { format!("passed ({} tests)", test_count(&t.1)) } else { "FAILED".into() }
+        });
         println!(
             "  check 3  {}  cargo check {} ({} new warnings); clippy: {clippy}; cargo test: {test}",
             st(self.c3_ok()), if c.check_failures.is_empty() { "passes" } else { "FAILS" }, c.check_warnings_new.len()

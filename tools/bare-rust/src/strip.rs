@@ -486,8 +486,25 @@ impl<'a> Stripper<'a> {
             "const_item" | "static_item" => self.konst(n, sc),
             "type_item" | "associated_type" => self.alias(n, sc),
             "mod_item" => self.module(n, sc),
+            "use_declaration" => self.use_decl(n, sc),
             _ => Ok(()),
         }
+    }
+
+    /// A `use` is a subject only to carry its visibility: named `<scope>::use <path>`.
+    fn use_decl(&mut self, n: Node, sc: &Scope) -> R<()> {
+        let arg = n.child_by_field_name("argument").ok_or("parse-error: use without a path")?;
+        let sname = self.namer.unique(format!("{}::use {}", sc.path, collapse(text(arg, self.src))));
+        let mut sub = Obj::new();
+        self.vis(n, &mut sub)?;
+        if !sub.is_empty() {
+            let mut o = Obj::new();
+            o.insert("kind".into(), json!("use"));
+            o.insert("name".into(), json!(sname));
+            o.extend(sub);
+            self.subjects.push(Value::Object(o));
+        }
+        Ok(())
     }
 
     /// Items declared inside a function body are subjects too, named under the function.
@@ -892,6 +909,17 @@ impl<'a> Stripper<'a> {
 
 use tree_sitter::Node;
 
+/// The byte ranges of every comment below a node, in source order.
+fn collect_comments(n: Node, out: &mut Vec<(usize, usize)>) {
+    if is_comment(n) {
+        out.push((n.start_byte(), n.end_byte()));
+        return;
+    }
+    for c in all_children(n) {
+        collect_comments(c, out);
+    }
+}
+
 /// Strip Rust source into (bare body, constraint JSON). `krate` is "name version"; `module` the file's path.
 /// A refusal is an `Err` whose text starts with its category and a colon.
 pub fn strip(src: &str, krate: &str, module: &str) -> R<(String, Value)> {
@@ -911,6 +939,16 @@ pub fn strip(src: &str, krate: &str, module: &str) -> R<(String, Value)> {
     };
     let sc = Scope { path: path.join("::"), generics: vec![], self_ty: "Self".into() };
     st.items_in(tree.root_node(), &sc)?;
+    // A comment inside a span that strip cuts would be dropped: refuse the file (proposal 2.6, 2.7).
+    let mut comments = vec![];
+    collect_comments(tree.root_node(), &mut comments);
+    for &(s, e, _) in st.cuts.iter().filter(|c| c.0 < c.1) {
+        let at = comments.partition_point(|c| c.1 <= s);
+        if comments.get(at).is_some_and(|c| c.0 < e) {
+            let (l, c) = crate::trace::line_col(src, comments[at].0);
+            return refuse("comment inside an erased production", format!("at {l}:{c}"));
+        }
+    }
     let bare = apply(src, std::mem::take(&mut st.cuts));
     if let Some(e) = first_error(&parse_bare(&bare)) {
         return refuse("bare-parse", format!("stripped body does not parse as bare Rust, at {e}"));

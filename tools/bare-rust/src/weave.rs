@@ -4,7 +4,7 @@ use crate::types::Ty;
 use crate::trace::{line_col, Kind, Origin, Span, SpanMap};
 use crate::{all_children, collapse, module_path, named_children, parse_bare, text, Edit, Namer, R};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use tree_sitter::Node;
 
 #[derive(Clone)]
@@ -41,12 +41,34 @@ impl HoleSite {
     }
 }
 
+/// An entry of the constraint file that binds to nothing in the bare body: stale after a rename or an edit.
+/// Weave prints nothing for it and says so.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Unbound {
+    /// `unbound local`, `unbound hint` or `unbound subject`.
+    pub what: &'static str,
+    /// The subject the entry is under (for `unbound subject`, the subject itself).
+    pub subject: String,
+    /// The local's key, the hint's `kind #n`, or empty.
+    pub name: String,
+}
+
+impl Unbound {
+    pub fn show(&self) -> String {
+        match self.what {
+            "unbound subject" => format!("{} `{}`", self.what, self.subject),
+            _ => format!("{} `{}` of `{}`", self.what, self.name, self.subject),
+        }
+    }
+}
+
 /// A woven file with its span map and hole sites.
 pub struct Woven {
     pub text: String,
     pub map: SpanMap,
     pub sites: Vec<HoleSite>,
     pub bare: String,
+    pub unbound: Vec<Unbound>,
 }
 
 impl Woven {
@@ -64,6 +86,10 @@ struct Weaver<'a> {
     cur: Origin,
     sites: Vec<HoleSite>,
     namer: Namer,
+    /// Subjects that an item of the body consulted, and the subjects whose `holes` entry a body was scanned for.
+    used: HashSet<String>,
+    scanned: HashSet<String>,
+    unbound: Vec<Unbound>,
 }
 
 fn missing<T>(what: impl std::fmt::Display) -> R<T> {
@@ -165,9 +191,17 @@ impl<'a> Weaver<'a> {
         self.cur = Origin { kind: Kind::Hole, subject: subject.to_string(), slot: slot.into() };
     }
 
-    fn find(&self, name: &str) -> R<&'a Value> {
-        match self.subs.get(name) {
-            Some(s) => Ok(*s),
+    fn lookup(&mut self, name: &str) -> Option<&'a Value> {
+        let s = self.subs.get(name).copied();
+        if s.is_some() {
+            self.used.insert(name.to_string());
+        }
+        s
+    }
+
+    fn find(&mut self, name: &str) -> R<&'a Value> {
+        match self.lookup(name) {
+            Some(s) => Ok(s),
             None => missing(format!("no subject `{name}`")),
         }
     }
@@ -189,12 +223,24 @@ impl<'a> Weaver<'a> {
             "const_item" | "static_item" => self.konst(n, sc),
             "type_item" => self.alias(n, sc),
             "mod_item" => self.module(n, sc),
+            "use_declaration" => self.use_decl(n, sc),
             "foreign_mod_item" => match n.child_by_field_name("body") {
                 Some(b) => self.items_in(b, sc),
                 None => Ok(()),
             },
             _ => Ok(()),
         }
+    }
+
+    fn use_decl(&mut self, n: Node, sc: &Scope) -> R<()> {
+        let arg = n.child_by_field_name("argument").ok_or("parse-error: use without a path")?;
+        let sname = self.namer.unique(format!("{}::use {}", sc.path, collapse(text(arg, self.src))));
+        if let Some(sub) = self.lookup(&sname) {
+            let v = vis_text(sub)?;
+            self.at(&sname, "visible");
+            self.ins(n.start_byte(), v);
+        }
+        Ok(())
     }
 
     fn nested(&mut self, body: Node, name: &str) -> R<()> {
@@ -219,7 +265,7 @@ impl<'a> Weaver<'a> {
     fn module(&mut self, n: Node, sc: &Scope) -> R<()> {
         let name = text(n.child_by_field_name("name").unwrap(), self.src);
         let sname = self.namer.unique(format!("{}::{name}", sc.path));
-        if let Some(sub) = self.subs.get(&sname) {
+        if let Some(sub) = self.lookup(&sname) {
             let v = vis_text(sub)?;
             self.at(&sname, "visible");
             self.ins(n.start_byte(), v);
@@ -333,7 +379,7 @@ impl<'a> Weaver<'a> {
     fn alias(&mut self, n: Node, sc: &Scope) -> R<()> {
         let name = n.child_by_field_name("name").unwrap();
         let sname = self.namer.unique(format!("{}::{}", sc.path, text(name, self.src)));
-        let Some(sub) = self.subs.get(&sname).copied() else { return Ok(()) };
+        let Some(sub) = self.lookup(&sname) else { return Ok(()) };
         self.at(&sname, "visible");
         self.ins(n.start_byte(), vis_text(sub)?);
         let mut t = generics_text(sub);
@@ -377,7 +423,7 @@ impl<'a> Weaver<'a> {
             Some(t) => self.namer.unique(format!("{}::{ty_head} as {}", sc.path, collapse(text(t, src)))),
             None => self.namer.unique(format!("{}::{ty_head}::impl", sc.path)),
         };
-        if let Some(sub) = self.subs.get(&sname).copied() {
+        if let Some(sub) = self.lookup(&sname) {
             let kw = all_children(n).into_iter().find(|c| c.kind() == "impl").ok_or("parse-error: impl")?;
             self.at(&sname, "generics");
             self.ins(kw.end_byte(), generics_text(sub));
@@ -475,16 +521,27 @@ impl<'a> Weaver<'a> {
 
     fn body_holes(&mut self, body: Node, subject: &str) -> R<()> {
         let src = self.src;
+        self.scanned.insert(subject.to_string());
         let h = &self.holes[subject];
-        let mut hints: HashMap<(String, usize), &Value> = HashMap::new();
-        for x in h["hints"].as_array().map(|a| a.as_slice()).unwrap_or(&[]) {
-            hints.insert((x["kind"].as_str().unwrap_or("").to_string(), x["n"].as_u64().unwrap_or(0) as usize), x);
-        }
+        // Hints bind by kind and ordinal. An entry that no site takes (or a second one for the same site) is unbound.
+        let hints: Vec<(&str, usize, &Value)> = h["hints"]
+            .as_array()
+            .map(|a| a.as_slice())
+            .unwrap_or(&[])
+            .iter()
+            .map(|x| (x["kind"].as_str().unwrap_or(""), x["n"].as_u64().unwrap_or(0) as usize, x))
+            .collect();
+        let mut taken = vec![false; hints.len()];
+        let mut keys_taken: HashSet<String> = HashSet::new();
         let hold = |x: &Value| ty_text(&x["type"], &Value::Null, None, false, &format!("{subject} hint"));
         let mut seen: HashMap<String, usize> = HashMap::new();
         for s in life::sites(body) {
             let node = s.node;
-            let hint = |k: &str| hints.get(&(k.to_string(), s.n)).copied();
+            let mut hint = |k: &str| {
+                let i = (0..hints.len()).find(|i| !taken[*i] && hints[*i].0 == k && hints[*i].1 == s.n)?;
+                taken[i] = true;
+                Some(hints[i].2)
+            };
             let mut site = HoleSite {
                 subject: subject.to_string(),
                 kind: "",
@@ -506,6 +563,7 @@ impl<'a> Weaver<'a> {
                     site.range = (pat.start_byte(), pat.end_byte());
                     site.key = Some(key.clone());
                     if let Some(ty) = present(&h["locals"][&key]) {
+                        keys_taken.insert(key.clone());
                         let t = ty_text(ty, &Value::Null, None, false, &format!("{subject} local `{key}`"))?;
                         self.at_hole(subject, format!("locals[{key}]"));
                         self.ins(pat.end_byte(), format!(": {t}"));
@@ -557,6 +615,13 @@ impl<'a> Weaver<'a> {
             }
             self.sites.push(site);
         }
+        for k in h["locals"].as_object().into_iter().flatten().map(|(k, _)| k).filter(|k| !keys_taken.contains(*k)) {
+            self.unbound.push(Unbound { what: "unbound local", subject: subject.to_string(), name: k.clone() });
+        }
+        for (i, (k, n, _)) in hints.iter().enumerate().filter(|(i, _)| !taken[*i]) {
+            let _ = i;
+            self.unbound.push(Unbound { what: "unbound hint", subject: subject.to_string(), name: format!("{k} #{n}") });
+        }
         Ok(())
     }
 }
@@ -593,10 +658,30 @@ pub fn weave_traced(brs: &str, json: &Value) -> R<Woven> {
     let mut path = vec![name];
     path.extend(module_path(module));
     let cur = Origin { kind: Kind::Slot, subject: String::new(), slot: String::new() };
-    let mut w = Weaver { src: brs, subs, holes: &json["holes"], edits: vec![], cur, sites: vec![], namer: Namer::default() };
+    let mut w = Weaver {
+        src: brs,
+        subs,
+        holes: &json["holes"],
+        edits: vec![],
+        cur,
+        sites: vec![],
+        namer: Namer::default(),
+        used: HashSet::new(),
+        scanned: HashSet::new(),
+        unbound: vec![],
+    };
     w.items_in(tree.root_node(), &Scope { path: path.join("::") })?;
+    // Entries of the file that nothing in the body took: a subject with no item, a `holes` entry with no body.
+    let mut unbound = std::mem::take(&mut w.unbound);
+    let mut stale: Vec<&str> = subjects.iter().filter_map(|s| s["name"].as_str()).filter(|n| !w.used.contains(*n)).collect();
+    for k in json["holes"].as_object().into_iter().flatten().map(|(k, _)| k.as_str()) {
+        if !w.scanned.contains(k) && !stale.contains(&k) {
+            stale.push(k);
+        }
+    }
+    unbound.extend(stale.into_iter().map(|n| Unbound { what: "unbound subject", subject: n.to_string(), name: String::new() }));
     let (text, map) = apply_traced(brs, w.edits);
-    Ok(Woven { text, map, sites: w.sites, bare: brs.to_string() })
+    Ok(Woven { text, map, sites: w.sites, bare: brs.to_string(), unbound })
 }
 
 /// Weave a bare body and its constraint JSON into Rust.

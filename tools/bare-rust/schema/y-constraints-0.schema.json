@@ -267,12 +267,14 @@
             "const",
             "static",
             "alias",
-            "module"
+            "module",
+            "use"
           ]
         },
         "name": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "The subject's path. A `use` is named `<scope>::use <path as written>`, and is a subject only when it has a visibility (`pub use a::b;`)."
         },
         "visible": {
           "enum": [

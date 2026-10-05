@@ -108,3 +108,57 @@ fn a_file_that_does_not_weave_stops_before_cargo() {
     assert!(cw.weave_errors[0].1.contains("slot missing"), "{:?}", cw.weave_errors);
     assert_eq!(cw.iterations, 0);
 }
+
+#[test]
+fn mut_on_self_and_on_bindings_is_counted_the_same_on_both_sides() {
+    use bare_rust::check::{check_crate, CheckOpts};
+    let src = "pub struct S(pub u8);\nimpl S {\n    pub fn f(mut self, mut c: u8) -> u8 {\n        self.0 += c;\n        c += 1;\n        c + self.0\n    }\n}\n";
+    let (dir, _bare, _out) = krate("wc_mutself", src);
+    let work = root().join("target/bare-rust-test/wc_mutself/check");
+    let o = CheckOpts { work, target: bare_rust::cargo::target_dir(&root()), tests: true, full: false };
+    let r = check_crate(&dir, &o).unwrap();
+    assert!(r.c2_ok(), "{:?}", r.c2.mut_differs);
+    assert_eq!((r.c2.mut_original, r.c2.mut_derived, r.mut_added), (2, 2, 2));
+}
+
+#[test]
+fn unbound_entries_are_counted_in_the_weave_and_its_map() {
+    let (dir, bare, out) = krate("wc_unbound", "pub fn g(x: u32) -> u32 {\n    let y: u32 = x;\n    y\n}\n");
+    let cj = bare.join("src/lib.constraints.json");
+    let mut js: Value = serde_json::from_str(&fs::read_to_string(&cj).unwrap()).unwrap();
+    js["holes"]["wc_unbound::g"]["locals"]["w"] = Value::String("u8".into());
+    js["holes"]["wc_unbound::gone"] = serde_json::json!({"locals": {"q": "u8"}});
+    fs::write(&cj, bare_rust::json::canonical(&js)).unwrap();
+    let cw = weave(&dir, &bare, &out, false);
+    assert!(cw.ok(), "stale entries are warnings, not errors");
+    assert_eq!(cw.unbound_counts(), (1, 0, 1));
+    let map: Value = serde_json::from_str(&fs::read_to_string(out.join(".bare-rust-map.json")).unwrap()).unwrap();
+    let u = map["@unbound"].as_array().unwrap();
+    assert_eq!(u.len(), 2, "{u:?}");
+    assert_eq!((u[0]["what"].as_str(), u[0]["name"].as_str()), (Some("unbound local"), Some("w")));
+    assert_eq!((u[1]["what"].as_str(), u[1]["subject"].as_str()), (Some("unbound subject"), Some("wc_unbound::gone")));
+}
+
+#[test]
+fn report_prints_the_tables_from_check_output() {
+    use bare_rust::check::{check_crate, CheckOpts};
+    let src = "pub fn f(x: u8) -> u32 {\n    let y: u32 = x as u32;\n    y\n}\npub use std::fmt::Debug;\n";
+    let (dir, _bare, _out) = krate("wc_report", src);
+    let work = root().join("target/bare-rust-test/wc_report/check");
+    let o = CheckOpts { work: work.clone(), target: bare_rust::cargo::target_dir(&root()), tests: true, full: false };
+    let r = check_crate(&dir, &o).unwrap();
+    assert!(r.ok());
+    let md = bare_rust::report::report(&[&work.join("wc_report")], "provenance line").unwrap();
+    assert!(md.starts_with("provenance line\n"), "{md}");
+    for row in [
+        "| files accepted | 1 | 1 |",
+        "| function | 1 | 1 |",
+        "| use | 1 | 1 |",
+        "| locals | 1 | 1 |",
+        "| hints: cast | 1 | 1 |",
+        "| unbound entries: locals | 0 | 0 |",
+        "| wc_report | 1 files, 0 refused | ok, 1 files | ok: 1 of 1 exact, 0 differ only in `mut`, 0 other | ok: cargo check | ok |",
+    ] {
+        assert!(md.contains(row), "missing `{row}` in\n{md}");
+    }
+}
