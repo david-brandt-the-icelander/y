@@ -1,8 +1,10 @@
-//! Checks 1 and 2 of proposal 9 over the corpora: the golden file, the tool's own source, strsim and fnv.
+//! Checks of proposal 9 over the corpora: the golden file, the tool's own source, strsim and fnv.
+//! `corpora_checks_1_and_2_without_cargo` runs strip and weave in memory (check 2 ignores `mut`); the `cargo_*` tests
+//! run checks 1 to 4 with cargo and rustc, for each crate.
 //! Needs the pinned crates: run `corpora/fetch.sh` first.
 use bare_rust::corpus::{strip_crate, weave_crate};
 use bare_rust::json::canonical;
-use bare_rust::{normalise, rustfmt, strip};
+use bare_rust::{normalise_nomut, rustfmt, strip};
 use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -37,7 +39,7 @@ fn first_diff(a: &str, b: &str) -> String {
 }
 
 #[test]
-fn corpora_checks_1_and_2() {
+fn corpora_checks_1_and_2_without_cargo() {
     let fetched = root().join("corpora/src/strsim/Cargo.toml").exists() && root().join("corpora/src/fnv/Cargo.toml").exists();
     assert!(fetched, "the corpora are not fetched: run tools/bare-rust/corpora/fetch.sh");
     let out = root().join("target/corpora-out");
@@ -125,9 +127,10 @@ fn corpora_checks_1_and_2() {
                         }
                     }
                 };
-                // Check 2: weave(strip(s)) == s after rustfmt, lifetimes elided and `mut` on bindings removed.
+                // Check 2 without cargo: weave(strip(s)) == s after rustfmt, lifetimes elided and `mut` on bindings
+                // removed, because this weave derives none. The checks with cargo (below) do not remove it.
                 let original = fs::read_to_string(&u.original).unwrap();
-                let norm = |s: &str| normalise(s).and_then(|n| rustfmt(&n));
+                let norm = |s: &str| normalise_nomut(s).and_then(|n| rustfmt(&n));
                 row.check2 = match (norm(&woven), norm(&original)) {
                     (Ok(a), Ok(b)) if a == b => None,
                     (Ok(a), Ok(b)) => Some(first_diff(&a, &b)),
@@ -161,4 +164,78 @@ fn corpora_checks_1_and_2() {
     println!("{} files, {} refused, {} failed checks; stats in target/corpora-out/stats.json", rows.len(), refused, failures);
     assert_eq!(failures, 0, "some checks failed");
     assert!(Path::new(&out.join("stats.json")).exists());
+}
+
+// ---------- checks 1 to 4 with cargo ----------
+
+use bare_rust::check::{check_crate, CheckOpts, CheckReport};
+use bare_rust::crate_weave::HoleReport;
+use bare_rust::weave::weave_traced;
+
+fn opts(full: bool, tests: bool) -> CheckOpts {
+    CheckOpts { work: root().join("target/bare-rust-check"), target: bare_rust::cargo::target_dir(&root()), tests, full }
+}
+
+fn run_checks(dir: PathBuf, full: bool, tests: bool) -> CheckReport {
+    assert!(dir.join("Cargo.toml").exists(), "{} is not fetched: run tools/bare-rust/corpora/fetch.sh", dir.display());
+    let r = check_crate(&dir, &opts(full, tests)).unwrap();
+    r.print();
+    assert!(r.refused.is_empty(), "files refused: {:?}", r.refused);
+    assert!(r.c1_ok(), "check 1 failed");
+    assert!(r.c2_ok(), "check 2 failed (mut differs: {:?})", r.c2.mut_differs);
+    assert!(r.c3_ok(), "check 3 failed");
+    assert!(r.c4_ok(), "check 4 failed");
+    r
+}
+
+/// Check 4: every undetermined hole is at a real hole site of the bare file, and nothing was filled by weave.
+fn assert_holes_are_sites(r: &CheckReport) {
+    let bare = root().join("target/bare-rust-check").join(&r.name).join("bare");
+    assert_eq!(r.c4.silently_filled, 0, "weave printed hole entries although the file had none");
+    assert!(r.c4.other_errors.is_empty(), "failures that are not holes: {:?}", r.c4.other_errors);
+    let sites_of = |h: &HoleReport| {
+        let p = bare.join(&h.file);
+        let brs = fs::read_to_string(&p).unwrap();
+        let mut js: Value = serde_json::from_str(&fs::read_to_string(p.with_extension("constraints.json")).unwrap()).unwrap();
+        js["holes"] = json!({});
+        let w = weave_traced(&brs, &js).unwrap();
+        // The hole as weave sees it: the woven text has nothing at the site.
+        assert!(w.map.spans.iter().all(|s| s.origin.kind != bare_rust::trace::Kind::Hole));
+        w.sites.iter().filter(|s| s.subject == h.subject && s.kind == h.kind && s.n == h.n && s.key == h.key && !s.filled)
+            .map(|s| w.bare_at(s.range.0))
+            .collect::<Vec<_>>()
+    };
+    for h in &r.c4.undetermined {
+        assert!(sites_of(h).contains(&(h.line, h.col)), "not a hole site: {}", h.show());
+        assert!(h.clause.starts_with("local ") || h.clause.starts_with("hint "), "{}", h.clause);
+    }
+}
+
+#[test]
+fn cargo_strsim() {
+    let r = run_checks(root().join("corpora/src/strsim"), true, true);
+    assert_holes_are_sites(&r);
+}
+
+#[test]
+fn cargo_fnv() {
+    let r = run_checks(root().join("corpora/src/fnv"), true, true);
+    assert_holes_are_sites(&r);
+}
+
+#[test]
+fn cargo_golden() {
+    // The golden file with `Key` and `Entry` stubbed after it, as a small crate.
+    let dir = root().join("tests/golden/crate");
+    let lib = fs::read_to_string(dir.join("src/lib.rs")).unwrap();
+    assert!(lib.starts_with(&fs::read_to_string(root().join("tests/golden/cache.rs")).unwrap()));
+    let r = run_checks(dir, false, true);
+    assert_holes_are_sites(&r);
+}
+
+#[test]
+fn cargo_tool_own_source() {
+    // The tool's own `src`: `cargo check` of the woven crate is enough.
+    let r = run_checks(root(), false, false);
+    assert_holes_are_sites(&r);
 }

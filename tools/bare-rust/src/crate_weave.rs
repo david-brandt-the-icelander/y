@@ -1,0 +1,474 @@
+//! Weave a crate and run cargo on it: derive `mut` through rustc, report undetermined holes, and map every remaining
+//! error back to the bare file or the constraint slot (proposal 2.3, 2.4 and 6).
+use crate::cargo::{self, Diag};
+use crate::corpus::{corpus_files, find_brs};
+use crate::trace::Kind;
+use crate::weave::{weave_traced, HoleSite, Woven};
+use crate::R;
+use serde_json::Value;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::path::{Path, PathBuf};
+
+const MUT_CODES: [&str; 3] = ["E0384", "E0594", "E0596"];
+const INFER_CODES: [&str; 4] = ["E0282", "E0283", "E0284", "E0790"];
+const MARKER: &str = ".bare-rust-woven";
+
+#[derive(Clone)]
+pub struct WeaveOpts {
+    /// Run cargo (`--no-cargo` clears it).
+    pub cargo: bool,
+    /// The crate the stripped files came from, for the files that are not corpus files. Defaults to the input directory.
+    pub crate_dir: Option<PathBuf>,
+    /// Cargo's target directory.
+    pub target: PathBuf,
+    /// Weave with every `locals` and `hints` entry dropped (check 4).
+    pub drop_holes: bool,
+    /// With `drop_holes`: the holes (by `hole_id`) to keep all the same.
+    pub keep: BTreeSet<String>,
+}
+
+pub struct WovenFile {
+    /// The woven `.rs` file, relative to the crate.
+    pub rel: PathBuf,
+    pub woven: Woven,
+    pub json: Value,
+    pub mut_added: usize,
+    /// In a weave with holes dropped: the holes the file had (see `hole_id`).
+    pub dropped: BTreeSet<String>,
+}
+
+impl WovenFile {
+    pub fn bare_name(&self) -> String {
+        self.rel.with_extension("brs").display().to_string()
+    }
+}
+
+/// An undetermined hole: where it is in the bare body and the clause that would fill it.
+#[derive(Clone, Debug)]
+pub struct HoleReport {
+    pub file: String,
+    pub subject: String,
+    pub kind: &'static str,
+    pub n: usize,
+    pub key: Option<String>,
+    pub line: usize,
+    pub col: usize,
+    pub clause: String,
+    pub code: String,
+    pub message: String,
+    /// `uninferred`: rustc could not infer the type. `rejected`: it inferred one that the program does not accept
+    /// (only known in a weave with holes dropped, where the file once filled the hole).
+    pub how: &'static str,
+}
+
+impl HoleReport {
+    pub fn show(&self) -> String {
+        let what = match &self.key {
+            Some(k) => format!("local `{k}`"),
+            None => format!("{} #{}", self.kind, self.n),
+        };
+        let path = match &self.key {
+            Some(k) => format!("holes[\"{}\"].locals[\"{k}\"]", self.subject),
+            None => format!("holes[\"{}\"].hints += {{kind: {}, n: {}, type: T}}", self.subject, self.kind, self.n),
+        };
+        format!(
+            "hole undetermined: {what} of `{}`\n    at {}:{}:{}  [{} {}{}]\n    fill with: {}   ({path})",
+            self.subject,
+            self.file,
+            self.line,
+            self.col,
+            self.code,
+            self.message,
+            if self.how == "rejected" { "; the type rustc chose is rejected" } else { "" },
+            self.clause
+        )
+    }
+}
+
+/// A compiler error that is not an undetermined hole, with where it comes from.
+#[derive(Clone, Debug)]
+pub struct ErrReport {
+    pub code: String,
+    pub message: String,
+    pub woven_file: String,
+    pub woven_line: usize,
+    pub woven_col: usize,
+    /// "slot params[1].type of `a::f`" or "bare file.brs:12:5" or "a file of the crate that is not woven".
+    pub locus: String,
+    /// The offset in the bare file (0 when the file is not woven).
+    pub bare_start: usize,
+    pub rendered: String,
+}
+
+impl ErrReport {
+    pub fn show(&self) -> String {
+        format!(
+            "error[{}]: {}\n    at {}  (woven {}:{}:{})",
+            self.code, self.message, self.locus, self.woven_file, self.woven_line, self.woven_col
+        )
+    }
+}
+
+#[derive(Default)]
+pub struct CrateWeave {
+    pub files: Vec<WovenFile>,
+    pub weave_errors: Vec<(PathBuf, String)>,
+    /// Corpus files with no bare file (strip refused them): copied as they are.
+    pub unwoven: Vec<PathBuf>,
+    pub iterations: usize,
+    pub holes: Vec<HoleReport>,
+    pub errors: Vec<ErrReport>,
+    /// Errors in a function that has an undetermined hole, which restoring no single hole removes: taken to follow
+    /// from it (set by check 4).
+    pub follow_on: Vec<ErrReport>,
+    pub warnings: Vec<Diag>,
+    pub cargo: bool,
+    pub cargo_stderr: String,
+    pub out: PathBuf,
+}
+
+impl CrateWeave {
+    pub fn ok(&self) -> bool {
+        self.weave_errors.is_empty() && self.holes.is_empty() && self.errors.is_empty()
+    }
+
+    pub fn mut_added(&self) -> usize {
+        self.files.iter().map(|f| f.mut_added).sum()
+    }
+
+    pub fn print(&self) {
+        for (f, e) in &self.weave_errors {
+            eprintln!("weave refused {}: {e}", f.display());
+        }
+        for h in &self.holes {
+            eprintln!("{}", h.show());
+        }
+        for e in &self.errors {
+            eprintln!("{}", e.show());
+        }
+        for e in &self.follow_on {
+            eprintln!("{}", e.show());
+        }
+        if !self.cargo_stderr.is_empty() {
+            eprintln!("{}", self.cargo_stderr);
+        }
+        println!(
+            "weave: {} files woven, {} not woven, {} weave errors{}",
+            self.files.len(),
+            self.unwoven.len(),
+            self.weave_errors.len(),
+            if self.cargo {
+                format!(
+                    "; cargo check after {} runs: {} mut inserted, {} holes undetermined, {} other errors, {} warnings",
+                    self.iterations,
+                    self.mut_added(),
+                    self.holes.len(),
+                    self.errors.len(),
+                    self.warnings.len()
+                )
+            } else {
+                String::new()
+            }
+        );
+    }
+}
+
+fn skip(rel: &Path, woven: &BTreeSet<PathBuf>) -> bool {
+    let first = rel.components().next().and_then(|c| c.as_os_str().to_str()).unwrap_or("");
+    let name = rel.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    matches!(first, "target" | ".git" | "node_modules")
+        || rel.starts_with("corpora/src")
+        || name == MARKER
+        || (rel.parent().is_none_or(|p| p.as_os_str().is_empty()) && name == "refusals.json")
+        || woven.contains(rel)
+        || rel.to_str().is_some_and(|r| {
+            // The stripped files of a corpus file: x.brs and x.constraints.json beside x.rs.
+            let stem = r.strip_suffix(".brs").or_else(|| r.strip_suffix(".constraints.json"));
+            stem.is_some_and(|st| woven.contains(Path::new(&format!("{st}.rs"))))
+        })
+}
+
+fn copy_tree(src: &Path, base: &Path, dst: &Path, woven: &BTreeSet<PathBuf>) -> R<()> {
+    let out = fs::canonicalize(dst).unwrap_or_else(|_| dst.to_path_buf());
+    let rd = fs::read_dir(src).map_err(|e| format!("{}: {e}", src.display()))?;
+    for e in rd.filter_map(|e| e.ok()) {
+        let p = e.path();
+        let rel = p.strip_prefix(base).unwrap_or(&p).to_path_buf();
+        if skip(&rel, woven) || fs::canonicalize(&p).is_ok_and(|c| c.starts_with(&out)) {
+            continue; // not copied: an excluded file, or the output directory itself, if it is inside the crate
+        }
+        let to = dst.join(&rel);
+        if p.is_dir() {
+            fs::create_dir_all(&to).map_err(|e| format!("{}: {e}", to.display()))?;
+            copy_tree(&p, base, dst, woven)?;
+        } else {
+            fs::copy(&p, &to).map_err(|e| format!("{}: {e}", p.display()))?;
+        }
+    }
+    Ok(())
+}
+
+fn prepare_out(out: &Path, dirs: &[&Path]) -> R<()> {
+    let canon = |p: &Path| fs::canonicalize(p).unwrap_or(p.to_path_buf());
+    if out.exists() {
+        let o = canon(out);
+        if dirs.iter().any(|d| canon(d) == o) {
+            return Err(format!("--out {} is the input directory", out.display()));
+        }
+        let non_empty = fs::read_dir(out).map(|mut r| r.next().is_some()).unwrap_or(false);
+        if non_empty && !out.join(MARKER).exists() {
+            return Err(format!("--out {} is not empty and was not made by bare-rust weave", out.display()));
+        }
+        fs::remove_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
+    }
+    fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
+    fs::write(out.join(MARKER), "").map_err(|e| e.to_string())
+}
+
+fn write(p: &Path, s: &str) -> R<()> {
+    if let Some(d) = p.parent() {
+        fs::create_dir_all(d).map_err(|e| format!("{}: {e}", d.display()))?;
+    }
+    fs::write(p, s).map_err(|e| format!("{}: {e}", p.display()))
+}
+
+fn is_inference(d: &Diag) -> bool {
+    d.code.as_deref().is_some_and(|c| INFER_CODES.contains(&c))
+        || (d.code.is_none() && (d.message.contains("type annotations needed") || d.message.contains("cannot infer")))
+}
+
+/// The unfilled hole site an error at a bare range belongs to, if any. `ok` says which sites may be chosen.
+fn hole_of<'a>(sites: &'a [HoleSite], bare: &str, bs: usize, be: usize, ok: &dyn Fn(&HoleSite) -> bool, infer: bool) -> Option<&'a HoleSite> {
+    let pool: Vec<&HoleSite> = sites.iter().filter(|s| !s.filled && ok(s) && s.body.0 <= bs && be <= s.body.1).collect();
+    let cand = |f: &dyn Fn(&HoleSite) -> bool| pool.iter().copied().filter(|s| f(s)).collect::<Vec<_>>().into_iter();
+    let within = |r: (usize, usize)| r.0 <= bs && be <= r.1;
+    // 1. a site whose own range holds the error span: the smallest.
+    if let Some(s) = cand(&|s: &HoleSite| within(s.range)).min_by_key(|s| s.range.1 - s.range.0) {
+        return Some(s);
+    }
+    // 2. an error at a use of a local the file would have typed: the latest earlier `let` of that name.
+    let ident = bare.get(bs..be.min(bare.len())).unwrap_or("").trim();
+    let ident = ident.split(|c: char| !(c.is_alphanumeric() || c == '_')).next().unwrap_or("");
+    if !ident.is_empty() {
+        let found = cand(&|s: &HoleSite| s.kind == "local" && s.key.as_deref().is_some_and(|k| k == ident || k.split('#').next() == Some(ident)) && s.full.0 <= bs)
+            .max_by_key(|s| s.full.0);
+        if found.is_some() {
+            return found;
+        }
+    }
+    // 3. a cast, type argument or closure site inside the error span (only for inference errors, which name no site).
+    if infer {
+        if let Some(s) = cand(&|s: &HoleSite| matches!(s.kind, "cast" | "targ" | "closure_param") && bs <= s.range.0 && s.range.1 <= be).min_by_key(|s| s.range.0) {
+            return Some(s);
+        }
+    }
+    // 4. the innermost `let` that holds the error span (the type flows from its initialiser).
+    if let Some(s) = cand(&|s: &HoleSite| s.kind == "local" && within(s.full)).min_by_key(|s| s.full.1 - s.full.0) {
+        return Some(s);
+    }
+    // 5. the innermost closure that holds it.
+    cand(&|s: &HoleSite| matches!(s.kind, "closure_return") && within(s.full)).min_by_key(|s| s.full.1 - s.full.0)
+}
+
+/// Identifies a hole across weaves: its subject, kind and key or ordinal.
+pub fn hole_id(subject: &str, kind: &str, key: Option<&str>, n: usize) -> String {
+    format!("{subject}|{kind}|{}", key.map_or(n.to_string(), str::to_string))
+}
+
+pub fn hole_report(wf: &WovenFile, s: &HoleSite, code: &str, message: &str, how: &'static str) -> HoleReport {
+    let (line, col) = wf.woven.bare_at(s.range.0);
+    HoleReport {
+        file: wf.bare_name(),
+        subject: s.subject.clone(),
+        kind: s.kind,
+        n: s.n,
+        key: s.key.clone(),
+        line,
+        col,
+        clause: s.clause(),
+        code: code.to_string(),
+        message: message.to_string(),
+        how,
+    }
+}
+
+/// Report the diagnostics of a woven crate: holes, errors that follow from them, and other errors with their locus.
+fn classify(files: &[WovenFile], diags: &[Diag], cw: &mut CrateWeave) {
+    let errs: Vec<&Diag> = diags.iter().filter(|d| d.is_error()).collect();
+    let find = |d: &Diag| files.iter().find(|f| f.rel.to_string_lossy() == d.file);
+    // Pass 1: inference errors at hole sites.
+    let mut handled = vec![false; errs.len()];
+    for (i, d) in errs.iter().enumerate().filter(|(_, d)| is_inference(d)) {
+        let Some(wf) = find(d) else { continue };
+        let map = &wf.woven.map;
+        let (bs, be) = (map.to_bare(d.start, false), map.to_bare(d.end, true));
+        if let Some(s) = hole_of(&wf.woven.sites, &wf.woven.bare, bs, be.max(bs), &|_| true, true) {
+            handled[i] = true;
+            let r = hole_report(wf, s, d.code.as_deref().unwrap_or(""), &d.message, "uninferred");
+            if !cw.holes.iter().any(|h| h.file == r.file && h.subject == r.subject && h.kind == r.kind && h.n == r.n && h.key == r.key) {
+                cw.holes.push(r);
+            }
+        }
+    }
+    // Pass 2: the others.
+    for (_, d) in errs.iter().enumerate().filter(|(i, _)| !handled[*i]) {
+        let code = d.code.clone().unwrap_or_default();
+        let mk = |locus: String, bare_start: usize| ErrReport { code: code.clone(), message: d.message.clone(), woven_file: d.file.clone(), woven_line: d.line, woven_col: d.col, locus, bare_start, rendered: d.rendered.clone() };
+        let Some(wf) = find(d) else {
+            let locus = if d.file.is_empty() { "no source span".to_string() } else { format!("{} (not a woven file)", d.file) };
+            cw.errors.push(mk(locus, 0));
+            continue;
+        };
+        let map = &wf.woven.map;
+        let bs = map.to_bare(d.start, false);
+        let locus = match map.touching(d.start, d.end).first() {
+            Some(sp) => {
+                let (l, c) = wf.woven.bare_at(sp.bare_start);
+                format!("{} (bare {}:{l}:{c})", sp.origin.describe(), wf.bare_name())
+            }
+            None => {
+                let (l, c) = wf.woven.bare_at(bs);
+                format!("bare {}:{l}:{c}", wf.bare_name())
+            }
+        };
+        cw.errors.push(mk(locus, bs));
+    }
+}
+
+/// Write the span map of every woven file to `<out>/.bare-rust-map.json`: each range of the woven text that is
+/// not a copy of the bare text, with the bare range it replaces and the slot, hole or `mut` it came from.
+fn write_map(out: &Path, files: &[WovenFile]) -> R<()> {
+    let mut m = serde_json::Map::new();
+    for f in files {
+        let spans: Vec<Value> = f
+            .woven
+            .map
+            .spans
+            .iter()
+            .map(|s| {
+                let kind = match s.origin.kind {
+                    Kind::Slot => "slot",
+                    Kind::Hole => "hole",
+                    Kind::Mut => "mut",
+                };
+                serde_json::json!({"woven": [s.start, s.end], "bare": [s.bare_start, s.bare_end], "kind": kind, "subject": s.origin.subject, "slot": s.origin.slot})
+            })
+            .collect();
+        m.insert(f.rel.display().to_string(), Value::Array(spans));
+    }
+    write(&out.join(".bare-rust-map.json"), &crate::json::ordered(&Value::Object(m)))
+}
+
+/// Weave every `x.brs` below `from` and, with `cargo`, check the crate and derive `mut`.
+pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave> {
+    let crate_dir = o.crate_dir.clone().unwrap_or_else(|| from.to_path_buf());
+    let mut brs = vec![];
+    find_brs(from, &mut brs);
+    if brs.is_empty() {
+        return Err(format!("{}: no .brs files", from.display()));
+    }
+    let mut cw = CrateWeave { cargo: o.cargo, out: out.to_path_buf(), ..Default::default() };
+    for b in brs {
+        let rel = b.strip_prefix(from).unwrap_or(&b).with_extension("rs");
+        let r = (|| {
+            let bare = fs::read_to_string(&b).map_err(|e| format!("{}: {e}", b.display()))?;
+            let cj = b.with_extension("constraints.json");
+            let js = fs::read_to_string(&cj).map_err(|e| format!("{}: {e}", cj.display()))?;
+            let mut js: Value = serde_json::from_str(&js).map_err(|e| format!("{}: {e}", cj.display()))?;
+            let mut dropped = BTreeSet::new();
+            if o.drop_holes {
+                let mut kept = serde_json::Map::new();
+                for (sub, h) in js["holes"].as_object().into_iter().flatten() {
+                    let (mut locals, mut hints) = (serde_json::Map::new(), vec![]);
+                    for (k, v) in h["locals"].as_object().into_iter().flatten() {
+                        let id = hole_id(sub, "local", Some(k), 0);
+                        if o.keep.contains(&id) {
+                            locals.insert(k.clone(), v.clone());
+                        } else {
+                            dropped.insert(id);
+                        }
+                    }
+                    for x in h["hints"].as_array().into_iter().flatten() {
+                        let id = hole_id(sub, x["kind"].as_str().unwrap_or(""), None, x["n"].as_u64().unwrap_or(0) as usize);
+                        if o.keep.contains(&id) {
+                            hints.push(x.clone());
+                        } else {
+                            dropped.insert(id);
+                        }
+                    }
+                    let mut e = serde_json::Map::new();
+                    if !locals.is_empty() {
+                        e.insert("locals".into(), Value::Object(locals));
+                    }
+                    if !hints.is_empty() {
+                        e.insert("hints".into(), Value::Array(hints));
+                    }
+                    if !e.is_empty() {
+                        kept.insert(sub.clone(), Value::Object(e));
+                    }
+                }
+                js["holes"] = Value::Object(kept);
+            }
+            Ok::<_, String>((weave_traced(&bare, &js)?, js, dropped))
+        })();
+        match r {
+            Ok((woven, json, dropped)) => cw.files.push(WovenFile { rel, woven, json, mut_added: 0, dropped }),
+            Err(e) => cw.weave_errors.push((rel, e)),
+        }
+    }
+    let woven_set: BTreeSet<PathBuf> = cw.files.iter().map(|f| f.rel.clone()).collect();
+    cw.unwoven = corpus_files(&crate_dir, true).unwrap_or_default().into_iter().filter(|f| !woven_set.contains(f)).collect();
+    prepare_out(out, &[from, &crate_dir])?;
+    copy_tree(&crate_dir, &crate_dir, out, &woven_set)?;
+    for f in &cw.files {
+        write(&out.join(&f.rel), &f.woven.text)?;
+    }
+    if !o.cargo || !cw.weave_errors.is_empty() {
+        write_map(out, &cw.files)?;
+        return Ok(cw);
+    }
+    // Derive `mut`: apply rustc's suggestions for E0384, E0594 and E0596 that add `mut` to a binding, until none remain.
+    let diags = loop {
+        cw.iterations += 1;
+        if cw.iterations > 40 {
+            return Err("mut derivation did not converge after 40 cargo runs".into());
+        }
+        let run = cargo::diagnostics(out, &o.target, "check")?;
+        cw.cargo_stderr = run.stderr.clone();
+        let mut ins: BTreeMap<String, BTreeSet<usize>> = BTreeMap::new();
+        for d in run.diags.iter().filter(|d| d.is_error() && d.code.as_deref().is_some_and(|c| MUT_CODES.contains(&c))) {
+            for fx in &d.fixes {
+                let Some(wf) = cw.files.iter().find(|f| f.rel.to_string_lossy() == fx.file) else { continue };
+                // Either an insertion of `mut ` before the binding, or the binding replaced by `mut <binding>`.
+                let orig = wf.woven.text.get(fx.start..fx.end).unwrap_or("");
+                let adds_mut = if fx.start == fx.end {
+                    fx.replacement == "mut " && wf.woven.text.is_char_boundary(fx.start)
+                } else {
+                    !orig.is_empty() && fx.replacement == format!("mut {orig}")
+                };
+                if adds_mut {
+                    ins.entry(fx.file.clone()).or_default().insert(fx.start);
+                }
+            }
+        }
+        if ins.is_empty() {
+            break run.diags;
+        }
+        for (file, set) in ins {
+            let wf = cw.files.iter_mut().find(|f| f.rel.to_string_lossy() == file).unwrap();
+            for pos in set.into_iter().rev() {
+                wf.woven.text.insert_str(pos, "mut ");
+                wf.woven.map.insert_mut(pos, 4, "");
+                wf.mut_added += 1;
+            }
+            write(&out.join(&wf.rel), &wf.woven.text)?;
+        }
+    };
+    cw.warnings = diags.iter().filter(|d| d.level == "warning").cloned().collect();
+    let files = std::mem::take(&mut cw.files);
+    classify(&files, &diags, &mut cw);
+    cw.files = files;
+    write_map(out, &cw.files)?;
+    Ok(cw)
+}

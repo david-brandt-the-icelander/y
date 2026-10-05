@@ -1,11 +1,15 @@
 //! Bare Rust: strip Rust into a bare body plus constraint JSON, and weave them back (proposal/bare-rust.md).
 use tree_sitter::{Language, Node, Parser, Tree};
 
+pub mod cargo;
+pub mod check;
 pub mod corpus;
+pub mod crate_weave;
 pub mod json;
 pub mod life;
 pub mod stats;
 pub mod strip;
+pub mod trace;
 pub mod types;
 pub mod weave;
 
@@ -134,15 +138,30 @@ pub fn is_item_kind(k: &str) -> bool {
     )
 }
 
-/// Normalise Rust source for check 2: elide lifetimes where Rust allows, and remove `mut` on bindings.
+/// Normalise Rust source for check 2: elide lifetimes where Rust allows. `mut` is left alone, because the
+/// woven side derives it through rustc.
 pub fn normalise(src: &str) -> R<String> {
+    normalise_with(src, false)
+}
+
+/// As `normalise`, and also remove `mut` on bindings: for weaves that did not run rustc (`--no-cargo`).
+pub fn normalise_nomut(src: &str) -> R<String> {
+    normalise_with(src, true)
+}
+
+fn normalise_with(src: &str, strip_mut: bool) -> R<String> {
     let tree = parse_rust(src);
     if let Some(e) = first_error(&tree) {
         return Err(format!("parse-error: {e}"));
     }
     let mut edits = vec![];
-    life::normalise_edits(tree.root_node(), src, &mut edits);
+    life::normalise_edits(tree.root_node(), src, &mut edits, strip_mut);
     Ok(apply(src, edits))
+}
+
+/// How many bindings in a source text carry `mut`.
+pub fn count_mut(src: &str) -> usize {
+    life::count_mut(parse_rust(src).root_node())
 }
 
 /// Run `rustfmt` on a source text.

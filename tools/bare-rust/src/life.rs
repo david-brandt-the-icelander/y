@@ -82,7 +82,25 @@ pub fn analyse(f: Node, src: &str) -> Life {
             if let Some(p) = params {
                 count_positions(p, src, &mut pos);
             }
-            if pos.len() == 1 {
+            // A path type such as `Node` may carry a lifetime the source does not show; then the single visible
+            // lifetime is not the only input lifetime, and Rust would not give it to the result.
+            let tparams: Vec<&str> = tp
+                .map(|t| {
+                    named_children(t)
+                        .into_iter()
+                        .filter_map(|c| match c.kind() {
+                            "type_identifier" => Some(c),
+                            "type_parameter" => c.child_by_field_name("name"),
+                            "constrained_type_parameter" => c.child_by_field_name("left"),
+                            "optional_type_parameter" => c.child_by_field_name("name"),
+                            _ => None,
+                        })
+                        .map(|n| text(n, src))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let hides = params.is_some_and(|p| named_children(p).into_iter().filter(|c| c.kind() == "parameter").filter_map(|c| c.child_by_field_name("type")).any(|t| may_hide(t, src, &tparams)));
+            if pos.len() == 1 && !hides {
                 Some(pos.remove(0))
             } else {
                 None
@@ -143,6 +161,25 @@ fn count_positions(n: Node, src: &str, out: &mut Vec<Option<String>>) {
     }
 }
 
+/// Whether a type may contain a lifetime that its text does not show: a path type that is not a primitive, a
+/// type parameter of the function or a well-known type without lifetimes (the fully known ones are looked into).
+fn may_hide(n: Node, src: &str, tparams: &[&str]) -> bool {
+    const FREE: [&str; 17] = [
+        "String", "Vec", "Option", "Box", "Rc", "Arc", "HashMap", "HashSet", "BTreeMap", "BTreeSet", "Result", "VecDeque", "Cell", "RefCell",
+        "PathBuf", "Duration", "Ordering",
+    ];
+    match n.kind() {
+        "function_type" => false,
+        "type_identifier" => {
+            let t = text(n, src);
+            !(FREE.contains(&t) || tparams.contains(&t))
+        }
+        "scoped_type_identifier" => !FREE.contains(&text(n, src).rsplit("::").next().unwrap_or("")),
+        "abstract_type" | "dynamic_type" | "bounded_type" => true,
+        _ => all_children(n).into_iter().any(|c| may_hide(c, src, tparams)),
+    }
+}
+
 /// The lifetime positions of a parameter type, for deciding what a result borrows from.
 pub fn positions(n: Node, src: &str) -> Vec<Option<String>> {
     let mut v = vec![];
@@ -197,17 +234,30 @@ pub fn mut_edits(n: Node, out: &mut Vec<Edit>) {
     }
 }
 
-/// Edits for the check-2 normaliser, over a whole tree.
-pub fn normalise_edits(n: Node, src: &str, out: &mut Vec<Edit>) {
+/// Edits for the check-2 normaliser, over a whole tree: lifetimes elided where Rust allows, and, only if
+/// `strip_mut`, `mut` removed from bindings (for weaves that did not derive `mut` through rustc).
+pub fn normalise_edits(n: Node, src: &str, out: &mut Vec<Edit>, strip_mut: bool) {
     match n.kind() {
         "token_tree" => return,
         "function_item" | "function_signature_item" => out.extend(analyse(n, src).cuts),
-        "let_declaration" | "parameter" | "closure_parameters" => mut_edits(n, out),
+        "let_declaration" | "parameter" | "closure_parameters" if strip_mut => mut_edits(n, out),
         _ => {}
     }
     for c in named_children(n) {
-        normalise_edits(c, src, out);
+        normalise_edits(c, src, out, strip_mut);
     }
+}
+
+/// How many bindings carry `mut` in a tree (the ones `mut_edits` would cut).
+pub fn count_mut(n: Node) -> usize {
+    if n.kind() == "token_tree" {
+        return 0;
+    }
+    let mut v = vec![];
+    if matches!(n.kind(), "let_declaration" | "parameter" | "closure_parameters") {
+        mut_edits(n, &mut v);
+    }
+    v.len() + named_children(n).into_iter().map(count_mut).sum::<usize>()
 }
 
 // ---------- sites ----------
@@ -273,7 +323,8 @@ fn walk<'a>(n: Node<'a>, out: &mut Vec<Site<'a>>, cnt: &mut [usize; 6]) {
         "closure_expression" => {
             push(out, cnt, SK::ClRet, n);
             if let Some(p) = n.child_by_field_name("parameters") {
-                for c in named_children(p).into_iter().filter(|c| !is_comment(*c)) {
+                // `|_|`: the `_` is an anonymous node in tree-sitter-rust and a named one in the bare grammar.
+                for c in all_children(p).into_iter().filter(|c| !is_comment(*c) && !matches!(c.kind(), "|" | ",")) {
                     push(out, cnt, SK::ClParam, c);
                 }
             }

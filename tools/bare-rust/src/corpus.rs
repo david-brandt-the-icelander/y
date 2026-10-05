@@ -139,7 +139,7 @@ pub fn strip_crate(dir: &Path, out: &Path, include_tests: bool) -> R<Vec<FileRes
     Ok(results)
 }
 
-fn find_brs(dir: &Path, out: &mut Vec<PathBuf>) {
+pub fn find_brs(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(rd) = fs::read_dir(dir) else { return };
     let mut paths: Vec<PathBuf> = rd.filter_map(|e| e.ok()).map(|e| e.path()).collect();
     paths.sort();

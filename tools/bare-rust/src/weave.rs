@@ -1,7 +1,8 @@
 //! weave: a bare body and its constraint file into Rust. It prints what the file says and infers nothing (proposal 6).
 use crate::life::{self, SK};
 use crate::types::Ty;
-use crate::{all_children, apply, collapse, module_path, named_children, parse_bare, text, Edit, Namer, R};
+use crate::trace::{line_col, Kind, Origin, Span, SpanMap};
+use crate::{all_children, collapse, module_path, named_children, parse_bare, text, Edit, Namer, R};
 use serde_json::Value;
 use std::collections::HashMap;
 use tree_sitter::Node;
@@ -11,11 +12,57 @@ struct Scope {
     path: String,
 }
 
+/// A place in a bare body where a concrete type became a hole: a `let`, a cast, a type argument, a numeric literal
+/// or a closure's parameter or return type. `filled` says whether the constraint file filled it.
+#[derive(Clone, Debug)]
+pub struct HoleSite {
+    pub subject: String,
+    /// `local`, `cast`, `targ`, `literal`, `closure_param` or `closure_return`.
+    pub kind: &'static str,
+    /// The ordinal among the sites of the same kind in the body (for `local`, the key with its `#k` suffix).
+    pub n: usize,
+    pub key: Option<String>,
+    /// The bare range where the compiler reports an unresolved type for this site.
+    pub range: (usize, usize),
+    /// The bare range of the whole construct (a `let` with its initialiser, a closure with its body).
+    pub full: (usize, usize),
+    /// The bare range of the body (or initialiser) the site is in.
+    pub body: (usize, usize),
+    pub filled: bool,
+}
+
+impl HoleSite {
+    /// The clause of the constraint file that would fill this hole.
+    pub fn clause(&self) -> String {
+        match &self.key {
+            Some(k) => format!("local {k} : T"),
+            None => format!("hint {} #{} : T", self.kind, self.n),
+        }
+    }
+}
+
+/// A woven file with its span map and hole sites.
+pub struct Woven {
+    pub text: String,
+    pub map: SpanMap,
+    pub sites: Vec<HoleSite>,
+    pub bare: String,
+}
+
+impl Woven {
+    /// "line:col" of a bare offset.
+    pub fn bare_at(&self, offset: usize) -> (usize, usize) {
+        line_col(&self.bare, offset)
+    }
+}
+
 struct Weaver<'a> {
     src: &'a str,
     subs: HashMap<String, &'a Value>,
     holes: &'a Value,
-    edits: Vec<Edit>,
+    edits: Vec<(Edit, Origin)>,
+    cur: Origin,
+    sites: Vec<HoleSite>,
     namer: Namer,
 }
 
@@ -101,8 +148,21 @@ fn vis_text(sub: &Value) -> R<String> {
 impl<'a> Weaver<'a> {
     fn ins(&mut self, at: usize, t: String) {
         if !t.is_empty() {
-            self.edits.push((at, at, t));
+            self.edits.push(((at, at, t), self.cur.clone()));
         }
+    }
+
+    fn rep(&mut self, s: usize, e: usize, t: String) {
+        self.edits.push(((s, e, t), self.cur.clone()));
+    }
+
+    /// The slot the following edits print.
+    fn at(&mut self, subject: &str, slot: impl Into<String>) {
+        self.cur = Origin { kind: Kind::Slot, subject: subject.to_string(), slot: slot.into() };
+    }
+
+    fn at_hole(&mut self, subject: &str, slot: impl Into<String>) {
+        self.cur = Origin { kind: Kind::Hole, subject: subject.to_string(), slot: slot.into() };
     }
 
     fn find(&self, name: &str) -> R<&'a Value> {
@@ -161,6 +221,7 @@ impl<'a> Weaver<'a> {
         let sname = self.namer.unique(format!("{}::{name}", sc.path));
         if let Some(sub) = self.subs.get(&sname) {
             let v = vis_text(sub)?;
+            self.at(&sname, "visible");
             self.ins(n.start_byte(), v);
         }
         if let Some(b) = n.child_by_field_name("body") {
@@ -169,10 +230,9 @@ impl<'a> Weaver<'a> {
         Ok(())
     }
 
-    fn fields(&mut self, body: Node, sub: &Value, fields: &Value, owner: &str) -> R<()> {
+    fn fields(&mut self, body: Node, fields: &Value, owner: &str, subject: &str, prefix: &str) -> R<()> {
         let src = self.src;
         let list = fields.as_array().map(|a| a.as_slice()).unwrap_or(&[]);
-        let _ = sub;
         match body.kind() {
             "field_declaration_list" => {
                 let fds: Vec<Node> = named_children(body).into_iter().filter(|c| c.kind() == "field_declaration").collect();
@@ -182,8 +242,10 @@ impl<'a> Weaver<'a> {
                         return missing(format!("{owner} field `{fname}`"));
                     };
                     let v = vis_text(f)?;
+                    self.at(subject, format!("{prefix}fields[{i}].visible"));
                     self.ins(fd.start_byte(), v);
                     let t = ty_text(&f["type"], &f["access"], f["hold"]["lifetime"].as_str(), true, &format!("{owner} field `{fname}`"))?;
+                    self.at(subject, format!("{prefix}fields[{i}].type"));
                     self.ins(fd.end_byte(), format!(": {t}"));
                 }
             }
@@ -193,7 +255,8 @@ impl<'a> Weaver<'a> {
                     let Some(f) = list.get(i) else { return missing(format!("{owner} field {i}")) };
                     let v = vis_text(f)?;
                     let t = ty_text(&f["type"], &f["access"], f["hold"]["lifetime"].as_str(), true, &format!("{owner} field {i}"))?;
-                    self.edits.push((h.start_byte(), h.end_byte(), format!("{v}{t}")));
+                    self.at(subject, format!("{prefix}fields[{i}].type"));
+                    self.rep(h.start_byte(), h.end_byte(), format!("{v}{t}"));
                 }
             }
             _ => {}
@@ -205,16 +268,19 @@ impl<'a> Weaver<'a> {
         let name = n.child_by_field_name("name").unwrap();
         let sname = self.namer.unique(format!("{}::{}", sc.path, text(name, self.src)));
         let sub = self.find(&sname)?;
+        self.at(&sname, "visible");
         self.ins(n.start_byte(), vis_text(sub)?);
+        self.at(&sname, "generics");
         self.ins(name.end_byte(), generics_text(sub));
         let body = n.child_by_field_name("body");
         let w = where_text(sub);
+        self.at(&sname, "where");
         match body {
             Some(b) if b.kind() == "ordered_field_declaration_list" => self.ins(b.end_byte(), w),
             _ => self.ins(name.end_byte(), w),
         }
         if let Some(b) = body {
-            self.fields(b, sub, &sub["fields"], &sname)?;
+            self.fields(b, &sub["fields"], &sname, &sname, "")?;
         }
         Ok(())
     }
@@ -224,8 +290,11 @@ impl<'a> Weaver<'a> {
         let name = n.child_by_field_name("name").unwrap();
         let sname = self.namer.unique(format!("{}::{}", sc.path, text(name, src)));
         let sub = self.find(&sname)?;
+        self.at(&sname, "visible");
         self.ins(n.start_byte(), vis_text(sub)?);
+        self.at(&sname, "generics");
         self.ins(name.end_byte(), generics_text(sub));
+        self.at(&sname, "where");
         self.ins(name.end_byte(), where_text(sub));
         let list = sub["variants"].as_array().map(|a| a.as_slice()).unwrap_or(&[]);
         let vs: Vec<Node> = named_children(n.child_by_field_name("body").unwrap())
@@ -238,7 +307,7 @@ impl<'a> Weaver<'a> {
                 return missing(format!("{sname} variant `{vname}`"));
             };
             if let Some(b) = v.child_by_field_name("body") {
-                self.fields(b, sub, &vf["fields"], &format!("{sname}::{vname}"))?;
+                self.fields(b, &vf["fields"], &format!("{sname}::{vname}"), &sname, &format!("variants[{i}]."))?;
             }
         }
         Ok(())
@@ -248,9 +317,11 @@ impl<'a> Weaver<'a> {
         let name = n.child_by_field_name("name").unwrap();
         let sname = self.namer.unique(format!("{}::{}", sc.path, text(name, self.src)));
         let sub = self.find(&sname)?;
+        self.at(&sname, "visible");
         self.ins(n.start_byte(), vis_text(sub)?);
         let lt = sub["hold"]["lifetime"].as_str();
         let t = ty_text(&sub["type"], &sub["access"], lt, true, &format!("{sname} type"))?;
+        self.at(&sname, "type");
         self.ins(name.end_byte(), format!(": {t}"));
         if let Some(v) = n.child_by_field_name("value") {
             self.body_holes(v, &sname)?;
@@ -263,6 +334,7 @@ impl<'a> Weaver<'a> {
         let name = n.child_by_field_name("name").unwrap();
         let sname = self.namer.unique(format!("{}::{}", sc.path, text(name, self.src)));
         let Some(sub) = self.subs.get(&sname).copied() else { return Ok(()) };
+        self.at(&sname, "visible");
         self.ins(n.start_byte(), vis_text(sub)?);
         let mut t = generics_text(sub);
         let b = bounds_text(&sub["bounds"]);
@@ -274,6 +346,7 @@ impl<'a> Weaver<'a> {
             t += &format!(" = {}", ty_text(ty, &sub["access"], lt, true, &format!("{sname} type"))?);
         }
         t += &where_text(sub);
+        self.at(&sname, "type");
         self.ins(name.end_byte(), t);
         Ok(())
     }
@@ -282,6 +355,7 @@ impl<'a> Weaver<'a> {
         let name = n.child_by_field_name("name").unwrap();
         let sname = self.namer.unique(format!("{}::{}", sc.path, text(name, self.src)));
         let sub = self.find(&sname)?;
+        self.at(&sname, "visible");
         self.ins(n.start_byte(), vis_text(sub)?);
         let mut t = generics_text(sub);
         let b = bounds_text(&sub["bounds"]);
@@ -289,6 +363,7 @@ impl<'a> Weaver<'a> {
             t += &format!(": {b}");
         }
         t += &where_text(sub);
+        self.at(&sname, "generics");
         self.ins(name.end_byte(), t);
         self.items_in(n.child_by_field_name("body").unwrap(), &Scope { path: sname })
     }
@@ -304,15 +379,19 @@ impl<'a> Weaver<'a> {
         };
         if let Some(sub) = self.subs.get(&sname).copied() {
             let kw = all_children(n).into_iter().find(|c| c.kind() == "impl").ok_or("parse-error: impl")?;
+            self.at(&sname, "generics");
             self.ins(kw.end_byte(), generics_text(sub));
             if let Some(v) = present(&sub["self"]) {
                 let t = ty_text(v, &Value::Null, None, false, &format!("{sname} self"))?;
-                self.edits.push((ty_n.start_byte(), ty_n.end_byte(), t));
+                self.at(&sname, "self");
+                self.rep(ty_n.start_byte(), ty_n.end_byte(), t);
             }
             if let (Some(t), Some(v)) = (tr, present(&sub["trait"])) {
                 let tt = ty_text(v, &Value::Null, None, false, &format!("{sname} trait"))?;
-                self.edits.push((t.start_byte(), t.end_byte(), tt));
+                self.at(&sname, "trait");
+                self.rep(t.start_byte(), t.end_byte(), tt);
             }
+            self.at(&sname, "where");
             self.ins(ty_n.end_byte(), where_text(sub));
         }
         let path = if tr.is_some() { sname } else { format!("{}::{ty_head}", sc.path) };
@@ -327,7 +406,9 @@ impl<'a> Weaver<'a> {
         let name_n = f.child_by_field_name("name").unwrap();
         let sname = self.namer.unique(format!("{}::{}", sc.path, text(name_n, src)));
         let sub = self.find(&sname)?;
+        self.at(&sname, "visible");
         self.ins(f.start_byte(), vis_text(sub)?);
+        self.at(&sname, "generics");
         self.ins(name_n.end_byte(), generics_text(sub));
         let params_n = f.child_by_field_name("parameters").unwrap();
         let slots = sub["params"].as_array().map(|a| a.as_slice()).unwrap_or(&[]);
@@ -356,13 +437,15 @@ impl<'a> Weaver<'a> {
                 if slot["access"]["rights"] == "write" {
                     s += "mut ";
                 }
-                self.edits.push((p.start_byte(), p.end_byte(), s + "self"));
+                self.at(&sname, format!("params[{i}].access"));
+                self.rep(p.start_byte(), p.end_byte(), s + "self");
                 self_ref = true;
             } else {
                 let t = ty_text(&slot["type"], &slot["access"], lt, true, &format!("{sname} type of `{pname}`"))?;
                 if present(&slot["access"]).is_some() {
                     ref_params.push(pname.clone());
                 }
+                self.at(&sname, format!("params[{i}].type"));
                 self.ins(p.end_byte(), format!(": {t}"));
             }
         }
@@ -378,8 +461,10 @@ impl<'a> Weaver<'a> {
                     return Err(format!("{sname}: result hold from `{from}` needs an explicit lifetime"));
                 }
             }
+            self.at(&sname, "result.type");
             self.ins(params_n.end_byte(), format!(" -> {t}"));
         }
+        self.at(&sname, "where");
         self.ins(params_n.end_byte(), where_text(sub));
         if let Some(body) = f.child_by_field_name("body") {
             self.body_holes(body, &sname)?;
@@ -391,9 +476,6 @@ impl<'a> Weaver<'a> {
     fn body_holes(&mut self, body: Node, subject: &str) -> R<()> {
         let src = self.src;
         let h = &self.holes[subject];
-        if h.is_null() {
-            return Ok(());
-        }
         let mut hints: HashMap<(String, usize), &Value> = HashMap::new();
         for x in h["hints"].as_array().map(|a| a.as_slice()).unwrap_or(&[]) {
             hints.insert((x["kind"].as_str().unwrap_or("").to_string(), x["n"].as_u64().unwrap_or(0) as usize), x);
@@ -403,6 +485,16 @@ impl<'a> Weaver<'a> {
         for s in life::sites(body) {
             let node = s.node;
             let hint = |k: &str| hints.get(&(k.to_string(), s.n)).copied();
+            let mut site = HoleSite {
+                subject: subject.to_string(),
+                kind: "",
+                n: s.n,
+                key: None,
+                range: (node.start_byte(), node.end_byte()),
+                full: (node.start_byte(), node.end_byte()),
+                body: (body.start_byte(), body.end_byte()),
+                filled: false,
+            };
             match s.kind {
                 SK::Let => {
                     let Some(pat) = node.child_by_field_name("pattern") else { continue };
@@ -410,44 +502,85 @@ impl<'a> Weaver<'a> {
                     let c = seen.entry(key.clone()).or_insert(0);
                     *c += 1;
                     let key = if *c == 1 { key } else { format!("{key}#{c}") };
+                    site.kind = "local";
+                    site.range = (pat.start_byte(), pat.end_byte());
+                    site.key = Some(key.clone());
                     if let Some(ty) = present(&h["locals"][&key]) {
                         let t = ty_text(ty, &Value::Null, None, false, &format!("{subject} local `{key}`"))?;
+                        self.at_hole(subject, format!("locals[{key}]"));
                         self.ins(pat.end_byte(), format!(": {t}"));
+                        site.filled = true;
                     }
                 }
                 SK::Cast | SK::Targ => {
-                    if let Some(x) = hint(if s.kind == SK::Cast { "cast" } else { "targ" }) {
+                    let k = if s.kind == SK::Cast { "cast" } else { "targ" };
+                    site.kind = k;
+                    if let Some(x) = hint(k) {
                         let t = hold(x)?;
-                        self.edits.push((node.start_byte(), node.end_byte(), t));
+                        self.at_hole(subject, format!("hints[{k} #{}]", s.n));
+                        self.rep(node.start_byte(), node.end_byte(), t);
+                        site.filled = true;
                     }
                 }
                 SK::Lit => {
+                    site.kind = "literal";
                     if let Some(x) = hint("literal") {
                         let t = hold(x)?;
                         let sep = x["sep"].as_str().unwrap_or("");
+                        self.at_hole(subject, format!("hints[literal #{}]", s.n));
                         self.ins(node.end_byte(), format!("{sep}{t}"));
+                        site.filled = true;
                     }
                 }
                 SK::ClParam => {
+                    site.kind = "closure_param";
                     if let Some(x) = hint("closure_param") {
                         let t = hold(x)?;
+                        self.at_hole(subject, format!("hints[closure_param #{}]", s.n));
                         self.ins(node.end_byte(), format!(": {t}"));
+                        site.filled = true;
                     }
                 }
                 SK::ClRet => {
-                    if let (Some(x), Some(ps)) = (hint("closure_return"), node.child_by_field_name("parameters")) {
+                    site.kind = "closure_return";
+                    let ps = node.child_by_field_name("parameters");
+                    if let Some(p) = ps {
+                        site.range = (p.start_byte(), p.end_byte());
+                    }
+                    if let (Some(x), Some(ps)) = (hint("closure_return"), ps) {
                         let t = hold(x)?;
+                        self.at_hole(subject, format!("hints[closure_return #{}]", s.n));
                         self.ins(ps.end_byte(), format!(" -> {t}"));
+                        site.filled = true;
                     }
                 }
             }
+            self.sites.push(site);
         }
         Ok(())
     }
 }
 
-/// Weave a bare body and its constraint JSON into Rust.
-pub fn weave(brs: &str, json: &Value) -> R<String> {
+/// Apply the edits in order of position, recording where each landed in the woven text.
+fn apply_traced(src: &str, mut edits: Vec<(Edit, Origin)>) -> (String, SpanMap) {
+    edits.sort_by_key(|e| e.0 .0);
+    let (mut out, mut at, mut map) = (String::new(), 0, SpanMap::default());
+    for ((s, e, t), origin) in edits {
+        if s < at {
+            continue; // nested inside an earlier cut
+        }
+        out.push_str(&src[at..s]);
+        let start = out.len();
+        out.push_str(&t);
+        map.spans.push(Span { start, end: out.len(), bare_start: s, bare_end: e, origin });
+        at = e;
+    }
+    out.push_str(&src[at..]);
+    (out, map)
+}
+
+/// Weave a bare body and its constraint JSON into Rust, with the span map and the hole sites.
+pub fn weave_traced(brs: &str, json: &Value) -> R<Woven> {
     let tree = parse_bare(brs);
     if let Some(e) = crate::first_error(&tree) {
         return Err(format!("parse-error: bare body, at {e}"));
@@ -459,7 +592,14 @@ pub fn weave(brs: &str, json: &Value) -> R<String> {
     let module = json["module"].as_str().unwrap_or("");
     let mut path = vec![name];
     path.extend(module_path(module));
-    let mut w = Weaver { src: brs, subs, holes: &json["holes"], edits: vec![], namer: Namer::default() };
+    let cur = Origin { kind: Kind::Slot, subject: String::new(), slot: String::new() };
+    let mut w = Weaver { src: brs, subs, holes: &json["holes"], edits: vec![], cur, sites: vec![], namer: Namer::default() };
     w.items_in(tree.root_node(), &Scope { path: path.join("::") })?;
-    Ok(apply(brs, w.edits))
+    let (text, map) = apply_traced(brs, w.edits);
+    Ok(Woven { text, map, sites: w.sites, bare: brs.to_string() })
+}
+
+/// Weave a bare body and its constraint JSON into Rust.
+pub fn weave(brs: &str, json: &Value) -> R<String> {
+    weave_traced(brs, json).map(|w| w.text)
 }

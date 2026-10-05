@@ -1,6 +1,6 @@
 //! The constructs the corpora use, and a few they do not, each through strip and weave.
 use bare_rust::json::canonical;
-use bare_rust::{first_error, normalise, parse_bare, rustfmt, strip, weave};
+use bare_rust::{first_error, normalise_nomut, parse_bare, rustfmt, strip, weave};
 use serde_json::Value;
 
 fn schema_errors(j: &Value) -> Vec<String> {
@@ -18,7 +18,7 @@ fn roundtrip(src: &str) -> (String, Value) {
     let (b2, j2) = strip(&w, "demo 0.1.0", "src/lib.rs").unwrap_or_else(|e| panic!("strip(woven): {e}\n{w}"));
     assert_eq!(b2, b, "check 1 (bare)");
     assert_eq!(canonical(&j2), canonical(&j), "check 1 (json)");
-    let norm = |s: &str| rustfmt(&normalise(s).unwrap()).unwrap();
+    let norm = |s: &str| rustfmt(&normalise_nomut(s).unwrap()).unwrap();
     assert_eq!(norm(&w), norm(src), "check 2");
     (b, j)
 }
@@ -140,6 +140,45 @@ fn body_stuff(mut a: u8, (mut b, c): (u8, u8)) -> u32 {
     assert_eq!(h["hints"].as_array().unwrap().iter().filter(|x| x["kind"] == "literal").count(), 4);
     assert!(j["subjects"].as_array().unwrap().iter().any(|s| s["name"] == "demo::body_stuff::nested"));
     assert!(j["subjects"].as_array().unwrap().iter().any(|s| s["name"] == "demo::body_stuff::Local"));
+}
+
+#[test]
+fn a_path_type_may_hide_a_lifetime() {
+    // `Node` may carry a lifetime the text does not show, so `'a` here is not the only input lifetime and is not
+    // elided; `Plain` is a type parameter's neighbour: only `&'a str` is a lifetime, so `'a` can go.
+    let src = r#"
+struct Node<'t>(&'t str);
+fn text<'a>(n: Node, src: &'a str) -> &'a str {
+    src
+}
+fn plain<'a>(n: usize, src: &'a str) -> &'a str {
+    src
+}
+fn typed<'a, T>(n: Vec<T>, src: &'a str) -> &'a str {
+    src
+}
+"#;
+    let (_, j) = roundtrip(src);
+    assert_eq!(subject(&j, "demo::text")["generics"][0]["name"], "'a");
+    assert!(subject(&j, "demo::plain")["generics"].is_null());
+    assert!(subject(&j, "demo::typed")["generics"].as_array().is_some_and(|g| g.iter().all(|x| x["name"] != "'a")));
+}
+
+#[test]
+fn closure_sites_count_underscore_parameters() {
+    // `|_|` has a `_` that tree-sitter-rust leaves anonymous and the bare grammar names: both count it, so the
+    // ordinals of the hints after it agree on both sides.
+    let src = r#"
+fn f(v: Vec<u8>) -> usize {
+    let a = v.iter().filter(|_| true).count();
+    let g = |x: u8| x;
+    a + g(1) as usize
+}
+"#;
+    let (b, j) = roundtrip(src);
+    assert!(b.contains("|_| true") && b.contains("|x| x"), "{b}");
+    let hints = j["holes"]["demo::f"]["hints"].as_array().unwrap();
+    assert!(hints.iter().any(|h| h["kind"] == "closure_param" && h["n"] == 1), "{hints:?}");
 }
 
 #[test]
