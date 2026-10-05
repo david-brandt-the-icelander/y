@@ -38,9 +38,9 @@ and a constraint file, which says what must hold, and that `strip` and `weave` m
   rustdoc's JSON and looks into bodies where the source is available, is for later releases (§ 7).
 - **It is small.** The core of the bare grammar is already written: 21 lines extending tree-sitter-rust 0.24, which
   generate a parser that parses language § 14.9's bare body and rejects its woven form (§ 3.1). The proof of concept
-  is a Rust crate of about 1,500 lines. Stage 0 is built: it used about 9 million tokens and $3, mostly to orchestrate,
-  against an estimate of $50. With agents on Claude Sonnet 5.5, the proof of concept is estimated at about 0.18 billion
-  tokens and $115 at API rates, about a fifth of a Claude Max 5x week (§ 14).
+  was estimated at 1,500 lines of Rust; after stage 1 the tool is 4,600, and still cheap to build. Stages 0 and 1 are
+  built, for about $3 and $11 at API rates against estimates of $50 and $13. With agents on Claude Sonnet 5.5, the
+  proof of concept is estimated at about 0.2 billion tokens and $110, about a fifth of a Claude Max 5x week (§ 14).
 - **It ends in a decision.** The experiments (§ 10) say whether bare bodies stay bare, whether a file can always fill
   the holes, whether library constraints help an agent, and whether an agent does better with bare Rust and JSON than
   with Rust. Their results decide whether to complete the tool and build a second host, change the design, or stop.
@@ -479,7 +479,8 @@ experiments need.
 - **Stage 1, the signature, as far as the corpora need it.** The emptied productions of § 4.3 that the corpora use,
   the type mapping of § 4.4 with its host-text fallback for the rest, `mut` derived through `rustc`, holes reported,
   the JSON Schema, and checks 1 to 4 over the corpora. A file that uses a production not yet built is refused and
-  counted (§ 2.7). Done when the checks pass on the files accepted and E1 is written up.
+  counted (§ 2.7). Done when the checks pass on the files accepted and E1 is written up. Done: checks 1 to 4 pass on
+  all four corpora, 18 files with none refused, and E1 is in `tools/bare-rust/results/e1.md` (§ 14.1).
 - **Stage 2, library files, by hand.** Agents write the constraint file entries for the limited set of external code
   the corpora call, with the status of § 7.3, and a second agent checks them (check 5). Done when every external item
   the corpora call has a checked entry.
@@ -507,7 +508,8 @@ Later releases, only if stage 3 recommends going on, and in an order its results
 ## 12. What the trial will feed back to the language
 
 These gaps are visible before anything is built; the trial counts how often each occurs, and so says which are worth
-closing.
+closing. E1's counts for stage 1 are in `tools/bare-rust/results/e1.md`: 93% of type slots map to the type language,
+and the rest are mostly slices, lifetime arguments and arrays.
 
 - **Language § 11.2 now has the split rule, the two rules on holes, and libraries.** The trial tests whether they hold
   as written there.
@@ -549,7 +551,9 @@ Prices are API rates per million tokens, as of October 2026. Thinking is billed 
 | Claude Sonnet 5.5 | $2 | $10 | $0.20 | $2.50 | $4 |
 | Claude Opus 5.5 | $4 | $20 | $0.20 | $5 | $8 |
 
-### 14.1 Stage 0, measured
+### 14.1 Stages 0 and 1, measured
+
+#### Stage 0
 
 Stage 0 was built by a workflow: one implementer, then an independent checker that ran the golden tests, the CLI and a
 round-trip probe with odd spacing and comments. Both agents ran on Claude Sonnet 5.5 at effort `low`. That is the
@@ -581,6 +585,40 @@ Against the first estimate:
   debug against real code. Later stages have none of these, so the units below are larger than stage 0's, not scaled
   down from it.
 
+#### Stage 1
+
+Stage 1 was built by Claude Sonnet 5.5 agents run directly from the orchestrating session, not through a workflow, so
+their effort was the default rather than `low`. Two build agents ran in turn: part A built `strip` and `weave` for the
+corpora's signatures, with the schema and checks 1 and 2; part B added `cargo`, `mut` derivation, hole reports, checks 3
+and 4, and E1. An independent checker found no blocking defect and five minor ones (comments lost inside erased
+productions, a stale E1 table, check 3 not running the tool's own tests, stale file entries ignored silently, `pub use`
+keeping its `pub`), and one repair agent fixed them all. The orchestrating Opus 5.5 session verified each part, ran the
+checks itself, committed, and tallied the cost up to that point. The tool grew from 480 to 4,600 lines.
+
+| Part | Calls | Cache writes | Cache reads | Output | Cost |
+| --- | --- | --- | --- | --- | --- |
+| Build, part A | 48 | 311K | 9.81M | about 48K visible | $3.2 to $3.7 |
+| Build, part B | 69 | 209K | 11.42M | about 41K visible | $3.2 to $3.6 |
+| Independent check | 50 | 99K | 4.87M | about 8K visible | $1.3 to $1.4 |
+| Repair | 38 | 159K | 5.31M | about 15K visible | $1.6 to $1.8 |
+| Orchestration, Opus 5.5 | 25 | 45K, 1-hour | 3.49M | 21K | $1.47 |
+| **Stage 1** | **230** | **0.82M** | **34.9M** | **about 0.13M** | **$11 to $12, or 36M tokens** |
+
+Output is counted as for stage 0: visible text at about 3.5 characters a token, with the unseen thinking bounded at as
+much again for the agents; the orchestrating session's output is recorded.
+
+Against the estimate of § 14.2 (5 build runs and 5 check runs, 19M tokens and $10 for agents, $3 to orchestrate, $13 in
+all):
+
+- **About $11 against $13, and 36M tokens against 27M** (19M for agents and about 8M to orchestrate). Three build runs
+  and one check run did the work of five and five.
+- **Each run was larger than the unit, at the same price.** The build runs made 38 to 69 calls at an average context
+  of 140K to 205K tokens, against the unit's 40 calls at 80K, so they used two to three times the unit's tokens. Almost
+  all of that is cache reads, which cost a tenth of fresh input, so each build run cost about twice the unit and there
+  were fewer of them.
+- **Orchestration was cheaper than in stage 0:** $1.47 against $2.75 at most. The conversation had been compacted, so
+  each orchestrating call re-read about 140K tokens instead of 375K.
+
 ### 14.2 The rest, priced on Sonnet
 
 Build and experiment agents run on Claude Sonnet 5.5 at effort `low`, and an Opus 5.5 session orchestrates, as in stage
@@ -601,10 +639,10 @@ The proof of concept, stages 0 to 3 at the scope of § 11:
 | Stage | Build and check runs | Experiment runs | Tokens | Cost | Max 5x week | Same units on Opus 5.5 `high` | Before rescoping |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 0, language § 14.9 (measured) | 1 and 1 | — | 9M | $3 | 0.6% | — | $3 |
-| 1, the signature, as far as the corpora need it | 5 and 5 | — | 19M | $13 | 2.5% | $23 | $22 |
+| 1, the signature, as far as the corpora need it (measured) | 3 and 1 | — | 36M | $11 | 2.2% | — | $22 |
 | 2, library files, by hand | 3 and 3 | — | 11M | $9 | 1.7% | $15 | $13, for the tooling |
 | 3, edits and agents: E4 at 20 tasks × 2 arms × 2 trials, E5 at 10 × 2 | 4 and 4 | 100 | 145M | $88 | 17% | $171 | $236 |
-| **The proof of concept** | | **100** | **about 0.18B** | **about $115** | **about 22%** | **about $210** | **about $275** |
+| **The proof of concept** | | **100** | **about 0.2B** | **about $110** | **about 21%** | **about $200** | **about $275** |
 
 The "same units on Opus 5.5 `high`" column prices the same runs at Opus rates, with half again as much output for the
 higher effort. "Before rescoping" is this plan's previous estimate, on Sonnet, for the stage as it was then (§ 11 had
@@ -627,7 +665,7 @@ Later releases, only if the proof of concept recommends going on, priced with th
 - **Hand-written library files are cheap.** Three build runs and three check runs cover the limited set of external
   code, against five and five for the tooling, which also takes longer to get right.
 - **The range is still wide.** Each unit could be off by a factor of two either way, so the proof of concept lies
-  between about $55 and $230. Each stage's measured cost corrects the next stage's estimate.
+  between about $55 and $220. Each stage's measured cost corrects the next stage's estimate.
 - **Not counted:** people's time, and the machines that run the mechanical work. `strip`, `weave`, the checks, and
   experiments E0 to E3 are programs and cost no tokens.
 
@@ -642,7 +680,7 @@ of magnitude.
 
 On that proxy:
 
-- **Stage 0 used about 0.6% of a week,** and its workflow alone about 0.1%.
+- **Stage 0 used about 0.6% of a week,** and its workflow alone about 0.1%. **Stage 1 used about 2.2%.**
 - **The proof of concept needs about a fifth of a week on Sonnet,** or about two fifths on Opus 5.5 `high`. Before
   rescoping it needed about half a week, and the first estimate more than two weeks.
 - **The later releases would need about another sixth of a week.**
