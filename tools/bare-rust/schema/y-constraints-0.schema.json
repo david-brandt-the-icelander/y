@@ -1,0 +1,445 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://y-lang.dev/schema/y-constraints-0.schema.json",
+  "title": "y-constraints/0",
+  "description": "The constraint file of a bare module (proposal/bare-rust.md, 4.2 to 4.4). Types are strings in the constraint language's type syntax, or host text.",
+  "type": "object",
+  "required": [
+    "format",
+    "host",
+    "crate",
+    "module",
+    "status",
+    "subjects"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "format": {
+      "const": "y-constraints/0"
+    },
+    "host": {
+      "const": "rust"
+    },
+    "crate": {
+      "type": "string",
+      "description": "The crate and its version, as `name version`."
+    },
+    "module": {
+      "type": "string",
+      "description": "The module's file, relative to the crate root."
+    },
+    "status": {
+      "enum": [
+        "lifted",
+        "proven",
+        "assumed",
+        "observed"
+      ],
+      "description": "The default status of the file's clauses."
+    },
+    "subjects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/subject"
+      }
+    },
+    "holes": {
+      "type": "object",
+      "description": "Per function or constant (by subject name), the types that fill holes no slot covers.",
+      "additionalProperties": {
+        "$ref": "#/$defs/holes"
+      }
+    }
+  },
+  "$defs": {
+    "type": {
+      "description": "A type string (`u64 as 'usize'`, `ref<Entry>?`, `map<K, V> as 'std::collections::HashMap'`), or host text for a type the language has no form for.",
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "object",
+          "required": [
+            "host"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "host": {
+              "type": "string",
+              "minLength": 1
+            },
+            "form": {
+              "type": "string",
+              "description": "Why the type is host text: the form that has no counterpart."
+            }
+          }
+        }
+      ]
+    },
+    "access": {
+      "type": "object",
+      "required": [
+        "rights",
+        "guarantee"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "rights": {
+          "enum": [
+            "read",
+            "write"
+          ]
+        },
+        "guarantee": {
+          "enum": [
+            "readers",
+            "exclusive"
+          ]
+        }
+      }
+    },
+    "hold": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "owns",
+            "shares",
+            "borrows"
+          ]
+        },
+        "from": {
+          "type": "string",
+          "description": "The parameter a result borrows from."
+        },
+        "lifetime": {
+          "type": "string",
+          "description": "A lifetime that elision cannot express, as written."
+        }
+      }
+    },
+    "generic": {
+      "type": "object",
+      "required": [
+        "name",
+        "bounds"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "A type parameter, or a lifetime with its quote."
+        },
+        "bounds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Bounds written inline: `<T: A + B>`."
+        },
+        "where": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Bounds written in a where clause. The constraint is the conjunction of `bounds` and `where`."
+        }
+      }
+    },
+    "wherePredicate": {
+      "type": "object",
+      "required": [
+        "for",
+        "bounds"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "for": {
+          "type": "string",
+          "description": "The bounded type, when it is not a parameter of the subject."
+        },
+        "bounds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "field": {
+      "type": "object",
+      "required": [
+        "type",
+        "hold"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Absent on a tuple field."
+        },
+        "visible": {
+          "enum": [
+            "public",
+            "crate",
+            "module",
+            "path"
+          ]
+        },
+        "visible_path": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/type"
+        },
+        "access": {
+          "$ref": "#/$defs/access"
+        },
+        "hold": {
+          "$ref": "#/$defs/hold"
+        }
+      }
+    },
+    "param": {
+      "type": "object",
+      "required": [
+        "name",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/type"
+        },
+        "access": {
+          "$ref": "#/$defs/access"
+        },
+        "hold": {
+          "$ref": "#/$defs/hold"
+        }
+      }
+    },
+    "result": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/type"
+        },
+        "fails": {
+          "$ref": "#/$defs/type",
+          "description": "`Result<T, E>` gives type `T` and fails with `E`."
+        },
+        "access": {
+          "$ref": "#/$defs/access",
+          "description": "Absent means a shared reference."
+        },
+        "hold": {
+          "$ref": "#/$defs/hold"
+        }
+      }
+    },
+    "subject": {
+      "type": "object",
+      "required": [
+        "kind",
+        "name"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "type",
+            "function",
+            "trait",
+            "impl",
+            "const",
+            "static",
+            "alias",
+            "module"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "visible": {
+          "enum": [
+            "public",
+            "crate",
+            "module",
+            "path"
+          ]
+        },
+        "visible_path": {
+          "type": "string"
+        },
+        "generics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/generic"
+          }
+        },
+        "where": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/wherePredicate"
+          }
+        },
+        "bounds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Supertraits of a trait, or the bounds of an associated type."
+        },
+        "trait": {
+          "$ref": "#/$defs/type",
+          "description": "The implemented trait with its arguments, when the bare header has only its name."
+        },
+        "self": {
+          "$ref": "#/$defs/type",
+          "description": "The type an impl is for, when the bare header has only its name."
+        },
+        "type": {
+          "$ref": "#/$defs/type"
+        },
+        "access": {
+          "$ref": "#/$defs/access"
+        },
+        "hold": {
+          "$ref": "#/$defs/hold"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/field"
+          }
+        },
+        "variants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "fields": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/field"
+                }
+              }
+            }
+          }
+        },
+        "params": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/param"
+          }
+        },
+        "result": {
+          "$ref": "#/$defs/result"
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "function"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "params"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "const",
+                  "static"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "type"
+            ]
+          }
+        }
+      ]
+    },
+    "holes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "locals": {
+          "type": "object",
+          "description": "`local name : T`, keyed by the binding's bare pattern text; `#2` marks a second `let` of the same pattern.",
+          "additionalProperties": {
+            "$ref": "#/$defs/type"
+          }
+        },
+        "hints": {
+          "type": "array",
+          "description": "Body hints, by kind and the ordinal of the site among sites of that kind in the body.",
+          "items": {
+            "type": "object",
+            "required": [
+              "kind",
+              "n",
+              "type"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "cast",
+                  "targ",
+                  "literal",
+                  "closure_param",
+                  "closure_return"
+                ]
+              },
+              "n": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "type": {
+                "$ref": "#/$defs/type"
+              },
+              "sep": {
+                "const": "_",
+                "description": "A literal's suffix was written with an underscore: `1_u8`."
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

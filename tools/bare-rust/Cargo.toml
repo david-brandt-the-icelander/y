@@ -9,7 +9,10 @@ tree-sitter = "0.25"
 tree-sitter-rust = "0.24"
 serde = { version = "1", features = ["derive"] }
 tree-sitter-language = "0.1"
-serde_json = "1"
+serde_json = { version = "1", features = ["preserve_order"] }
 
 [build-dependencies]
 cc = "1"
+
+[dev-dependencies]
+jsonschema = { version = "0.58", default-features = false }
