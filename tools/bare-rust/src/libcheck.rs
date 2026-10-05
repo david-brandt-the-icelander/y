@@ -374,7 +374,18 @@ pub fn generate(sub: &Value) -> Gen {
             }
         }
         "macro" => match sub["form"].as_str() {
-            Some("derive") => Gen::Checked(format!("#[derive({})] struct {{id}};", name.trim_end_matches('!'))),
+            Some("derive") => {
+                // a derive of a trait with supertraits compiles only with those derived beside it
+                let tr = name.trim_end_matches('!');
+                let with = match tr.rsplit("::").next() {
+                    Some("Eq") => "std::cmp::PartialEq, ",
+                    Some("Copy") => "std::clone::Clone, ",
+                    Some("PartialOrd") => "std::cmp::PartialEq, ",
+                    Some("Ord") => "std::cmp::PartialEq, std::cmp::Eq, std::cmp::PartialOrd, ",
+                    _ => "",
+                };
+                Gen::Checked(format!("#[derive({with}{tr})] struct {{id}};"))
+            }
             _ => Gen::Unchecked("macro".into()),
         },
         k => Gen::Unchecked(format!("kind `{k}`")),
@@ -435,7 +446,12 @@ pub fn check_signatures(file: &Value, work: &Path, target: &Path) -> R<SigReport
     }
     let dir = work.join("libcheck");
     fs::create_dir_all(dir.join("src")).map_err(|e| format!("{}: {e}", dir.display()))?;
-    fs::write(dir.join("Cargo.toml"), "[package]\nname = \"libcheck_scratch\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[workspace]\n").map_err(|e| e.to_string())?;
+    // Cargo's fingerprint of a path package does not depend on where it is, so scratch crates of one name share it, and
+    // a crate that compiled in one directory would count as fresh in another: each directory gets a name of its own.
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    std::hash::Hash::hash(&dir.to_string_lossy(), &mut h);
+    let manifest = format!("[package]\nname = \"libcheck_scratch_{:x}\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[workspace]\n", std::hash::Hasher::finish(&h));
+    fs::write(dir.join("Cargo.toml"), manifest).map_err(|e| e.to_string())?;
     fs::write(dir.join("src/lib.rs"), &src).map_err(|e| e.to_string())?;
     let run = cargo::diagnostics(&dir, target, "check")?;
     let mut bad: BTreeMap<String, String> = BTreeMap::new();
@@ -668,6 +684,8 @@ mod tests {
         assert!(matches!(generate(&coll), Gen::Unchecked(m) if m.contains("host type name")));
         let derive = sub(r#"{"kind":"macro","name":"std::hash::Hash!","form":"derive"}"#);
         assert_eq!(generate(&derive), Gen::Checked("#[derive(std::hash::Hash)] struct {id};".into()));
+        let eq = sub(r#"{"kind":"macro","name":"std::cmp::Eq!","form":"derive"}"#);
+        assert_eq!(generate(&eq), Gen::Checked("#[derive(std::cmp::PartialEq, std::cmp::Eq)] struct {id};".into()));
     }
 
     #[test]

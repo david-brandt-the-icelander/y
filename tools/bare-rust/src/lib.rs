@@ -8,6 +8,7 @@ pub mod crate_weave;
 pub mod externals;
 pub mod json;
 pub mod libcheck;
+pub mod libstats;
 pub mod life;
 pub mod report;
 pub mod stats;

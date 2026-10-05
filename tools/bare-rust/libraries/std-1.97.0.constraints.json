@@ -40,20 +40,20 @@
         {
           "kind": "unexpressed",
           "text": "The Hash and Eq of Q must agree with those of K, as Borrow requires: k.hash() equals the hash of the key it borrows from, and k == q.borrow() agrees with the keys' own equality.",
-          "source": "1.97.0 std/src/collections/hash/map.rs:1019, doc: \"Hash and Eq on the borrowed form must match those for the key type.\"",
-          "reason": "a requirement on the implementations of a bound, not on values: a law can quantify over a type but cannot name what a bound's methods must satisfy"
+          "source": "1.97.0 std/src/collections/hash/map.rs:1019-1021, doc: \"The key may be any borrowed form of the map's key type, but [`Hash`] and [`Eq`] on the borrowed form *must* match those for the key type.\"",
+          "reason": "requirement on bound implementations: a requirement on the implementations of a bound, not on values: a clause cannot name what a bound's methods must satisfy at a call site. Here: the Hash and Eq of Q must agree with those of K, as Borrow requires"
         },
         {
           "kind": "unexpressed",
           "text": "Never panics and always returns, unless K's or Q's Hash or Eq panics or loops.",
-          "source": "1.97.0 std/src/collections/hash/map.rs:1040, body: self.base.get(k) has no panic of its own",
-          "reason": "`never panics` and `terminates` are unconditional: no clause makes a promise depend on what a bound's implementation does"
+          "source": "1.97.0 std/src/collections/hash/map.rs:1040, body: self.base.get(k)",
+          "reason": "promise conditional on a bound: no clause makes a promise depend on what a bound's implementation does: `never panics` and `terminates` are unconditional"
         },
         {
           "kind": "unexpressed",
           "text": "Expected constant time under a hasher whose output is uniformly distributed; the worst case is linear in the table's capacity.",
           "source": "hashbrown, the table behind std's HashMap (probe sequence); std's documentation states no cost",
-          "reason": "`budget work` bounds the worst case; no clause states an expected cost, or a condition on the distribution of a hasher's output"
+          "reason": "no expected or amortised cost: `budget work` bounds the worst case; no clause states an expected or amortised cost"
         }
       ]
     },
@@ -66,8 +66,8 @@
         {
           "kind": "unexpressed",
           "text": "Chars<'a> implements Iterator<Item = char>, DoubleEndedIterator, Clone and Debug, and has as_str, which returns the rest of the string as a &'a str.",
-          "source": "1.97.0 core/src/str/iter.rs, impl Iterator for Chars<'a>",
-          "reason": "no slot lists the traits a type implements, or gives an associated type its value: an `impl` subject carries the trait and the type, and its `Item` stays host text"
+          "source": "1.97.0 core/src/str/iter.rs:30, impls: struct 30, derive Clone 27, Iterator 35, Debug 113, DoubleEndedIterator 123",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
         }
       ]
     },
@@ -83,7 +83,7 @@
         {
           "kind": "ensure",
           "text": "ensure scalar_count : count(result) == length(self)",
-          "source": "1.97.0 core/src/str/mod.rs:1013, doc: \"Returns an iterator over the chars of a string slice.\"; `length` counts scalar values (constraint language 4)",
+          "source": "1.97.0 core/src/str/mod.rs:1013, doc: \"Returns an iterator over the [`char`]s of a string slice.\"; `length` counts scalar values (constraint language 4)",
           "status": { "assumed": "documentation" }
         },
         {
@@ -95,14 +95,14 @@
         {
           "kind": "never panics",
           "text": "never panics",
-          "source": "1.97.0 core/src/str/mod.rs:1064, body has no panic and no arithmetic",
+          "source": "1.97.0 core/src/str/mod.rs:1064, body: Chars { iter: self.as_bytes().iter() }",
           "status": { "observed": "body is a struct literal and two calls that cannot panic" }
         },
         {
           "kind": "unexpressed",
           "text": "result yields the scalar values of self in order, from the front, and from the back through DoubleEndedIterator.",
-          "source": "1.97.0 core/src/str/mod.rs:1013-1030, doc examples",
-          "reason": "the language has no sequence or iterator value: `count`, `size` and `in` state facts about a collection, never the order of its elements"
+          "source": "1.97.0 core/src/str/mod.rs:1015-1016, doc: \"As a string slice consists of valid UTF-8, we can iterate through a string slice by [`char`]. This method returns such an iterator.\"",
+          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
         }
       ]
     },
@@ -117,13 +117,19 @@
         {
           "kind": "ensure",
           "text": "ensure ge_both : result >= v1 and result >= v2",
-          "source": "1.97.0 core/src/cmp.rs:1645, doc: \"Returns the maximum of two values with respect to the Ord implementation.\"",
+          "source": "1.97.0 core/src/cmp.rs:1644, doc: \"Compares and returns the maximum of two values.\"",
           "status": { "assumed": "documentation" }
         },
         {
           "kind": "ensure",
           "text": "ensure an_argument : result == v1 or result == v2",
-          "source": "1.97.0 core/src/cmp.rs:1681, body: v1.max(v2), which returns one of its two arguments"
+          "source": "1.97.0 core/src/cmp.rs:1682, body: v1.max(v2)"
+        },
+        {
+          "kind": "result must be used",
+          "text": "result must be used",
+          "source": "1.97.0 core/src/cmp.rs:1677, attribute #[must_use]",
+          "status": { "lifted": "core/src/cmp.rs: #[must_use] on the item" }
         },
         {
           "kind": "effects",
@@ -135,19 +141,2902 @@
           "kind": "unexpressed",
           "text": "When v1 and v2 compare equal under Ord, the value returned is v2 and v1 is dropped.",
           "source": "1.97.0 core/src/cmp.rs:1646, doc: \"Returns the second argument if the comparison determines them to be equal.\"",
-          "reason": "`==` is structural on values, so `result == v2` cannot tell which of two Ord-equal values came back, and `same` is identity of host references, which a moved value does not have"
+          "reason": "no identity of moved values: `==` is structural on values and `same` is identity of host references, which a value moved into or out of a container does not have. Here: so `result == v2` cannot tell which of two Ord-equal values came back"
         },
         {
           "kind": "unexpressed",
           "text": "Never panics and always returns, unless T's Ord::max, PartialOrd::lt or Ord::cmp panics or loops.",
-          "source": "1.97.0 core/src/cmp.rs:1681-1683, body has no panic of its own",
-          "reason": "`never panics` and `terminates` are unconditional: no clause makes a promise depend on what a bound's implementation does"
+          "source": "1.97.0 core/src/cmp.rs:1682, body: v1.max(v2)",
+          "reason": "promise conditional on a bound: no clause makes a promise depend on what a bound's implementation does: `never panics` and `terminates` are unconditional"
         },
         {
           "kind": "unexpressed",
-          "text": "const fn, with its const-ness on T's Ord an unstable feature (const_cmp, issue 143800).",
-          "source": "1.97.0 core/src/cmp.rs:1680-1681",
-          "reason": "const-ness has neither a slot nor a clause (proposal 12, `const fn` is host text only)"
+          "text": "const fn, but its const-ness is unstable (feature const_cmp, issue 143800): no promise.",
+          "source": "1.97.0 core/src/cmp.rs:1680, attribute #[rustc_const_unstable(feature = \"const_cmp\", issue = \"143800\")]",
+          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::cmp::min",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": ["std::cmp::Ord"] }],
+      "params": [{ "name": "v1", "type": "T" }, { "name": "v2", "type": "T" }],
+      "result": { "type": "T" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure le_both : result <= v1 and result <= v2",
+          "source": "1.97.0 core/src/cmp.rs:1537, doc: \"Compares and returns the minimum of two values.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "ensure",
+          "text": "ensure an_argument : result == v1 or result == v2",
+          "source": "1.97.0 core/src/cmp.rs:1575, body: v1.min(v2)",
+          "status": {
+            "observed": "the body is one call of Ord::min, which returns one of its two arguments"
+          }
+        },
+        {
+          "kind": "result must be used",
+          "text": "result must be used",
+          "source": "1.97.0 core/src/cmp.rs:1570, attribute #[must_use]",
+          "status": { "lifted": "core/src/cmp.rs: #[must_use] on the item" }
+        },
+        {
+          "kind": "effects",
+          "text": "calls only std::cmp::Ord::min",
+          "source": "1.97.0 core/src/cmp.rs:1575, body: v1.min(v2)",
+          "status": { "observed": "the body is one call of Ord::min" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "When v1 and v2 compare equal under Ord, the value returned is v1 and v2 is dropped.",
+          "source": "1.97.0 core/src/cmp.rs:1539, doc: \"Returns the first argument if the comparison determines them to be equal.\"",
+          "reason": "no identity of moved values: `==` is structural on values and `same` is identity of host references, which a value moved into or out of a container does not have. Here: so `result == v1` cannot tell which of two Ord-equal values came back"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Never panics and always returns, unless T's Ord::min, PartialOrd::lt or Ord::cmp panics or loops.",
+          "source": "1.97.0 core/src/cmp.rs:1575, body: v1.min(v2)",
+          "reason": "promise conditional on a bound: no clause makes a promise depend on what a bound's implementation does: `never panics` and `terminates` are unconditional"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "const fn, but its const-ness is unstable (feature const_cmp, issue 143800): no promise.",
+          "source": "1.97.0 core/src/cmp.rs:1573, attribute #[rustc_const_unstable(feature = \"const_cmp\", issue = \"143800\")]",
+          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::mem::swap",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }],
+      "params": [
+        { "name": "x", "type": "ref<T>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        { "name": "y", "type": "ref<T>", "access": { "rights": "write", "guarantee": "exclusive" } }
+      ],
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure x_gets_y : x == old(y)",
+          "source": "1.97.0 core/src/mem/mod.rs:763, doc: \"Swaps the values at two mutable locations, without deinitializing either one.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "ensure",
+          "text": "ensure y_gets_x : y == old(x)",
+          "source": "1.97.0 core/src/mem/mod.rs:763, doc: \"Swaps the values at two mutable locations, without deinitializing either one.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "never panics",
+          "text": "never panics",
+          "source": "1.97.0 core/src/mem/mod.rs:788, body: unsafe { intrinsics::typed_swap_nonoverlapping(x, y) }",
+          "status": {
+            "observed": "the body is one intrinsic call; `&mut` makes the two locations readable, writable and disjoint"
+          }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Neither value is deinitialized or dropped: each moves, bit for bit, into the other's place.",
+          "source": "1.97.0 core/src/mem/mod.rs:763, doc: \"Swaps the values at two mutable locations, without deinitializing either one.\"",
+          "reason": "no drop: no clause says what a call does to a value's storage or whether a destructor runs"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "const fn: callable in a const context, stable since 1.85.0 (feature const_swap).",
+          "source": "1.97.0 core/src/mem/mod.rs:783, attribute #[rustc_const_stable(feature = \"const_swap\", since = \"1.85.0\")]",
+          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::mem::replace",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }],
+      "params": [
+        { "name": "dest", "type": "ref<T>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        { "name": "src", "type": "T" }
+      ],
+      "result": { "type": "T" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure returns_old : result == old(dest)",
+          "source": "1.97.0 core/src/mem/mod.rs:853, doc: \"Moves `src` into the referenced `dest`, returning the previous `dest` value.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "ensure",
+          "text": "ensure stores_src : dest == src",
+          "source": "1.97.0 core/src/mem/mod.rs:853, doc: \"Moves `src` into the referenced `dest`, returning the previous `dest` value.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "result must be used",
+          "text": "result must be used",
+          "source": "1.97.0 core/src/mem/mod.rs:913, attribute #[must_use = \"if you don't need the old value, you can just assign the new value directly\"]",
+          "status": { "lifted": "core/src/mem/mod.rs: #[must_use] on the item" }
+        },
+        {
+          "kind": "never panics",
+          "text": "never panics",
+          "source": "1.97.0 core/src/mem/mod.rs:922-923, doc: \"Nothing is dropped and nothing here can panic.\"",
+          "status": { "observed": "a comment in the body says nothing is dropped and nothing can panic" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Neither value is dropped.",
+          "source": "1.97.0 core/src/mem/mod.rs:855, doc: \"Neither value is dropped.\"",
+          "reason": "no drop: no clause says what a call does to a value's storage or whether a destructor runs"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "const fn: callable in a const context, stable since 1.83.0 (feature const_replace).",
+          "source": "1.97.0 core/src/mem/mod.rs:914, attribute #[rustc_const_stable(feature = \"const_replace\", since = \"1.83.0\")]",
+          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::option::Option::as_ref",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }],
+      "params": [
+        { "name": "self", "type": "ref<T?>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "ref<T>?", "hold": { "kind": "borrows", "from": "self" } },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure presence : exists result iff exists self",
+          "source": "1.97.0 core/src/option.rs:718, doc: \"Converts from `&Option<T>` to `Option<&T>`.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "ensure",
+          "text": "ensure same_value : exists self implies result == self",
+          "source": "1.97.0 core/src/option.rs:718, doc: \"Converts from `&Option<T>` to `Option<&T>`.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "effects",
+          "text": "effects none",
+          "source": "1.97.0 core/src/option.rs:741, body: match *self { Some(ref x) => Some(x), None => None, }",
+          "status": { "observed": "the body is a match that builds a reference" }
+        },
+        {
+          "kind": "never panics",
+          "text": "never panics",
+          "source": "1.97.0 core/src/option.rs:741, body: match *self { Some(ref x) => Some(x), None => None, }",
+          "status": { "observed": "the body is a match with no panic and no arithmetic" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "const fn: callable in a const context, stable since 1.48.0 (feature const_option_basics).",
+          "source": "1.97.0 core/src/option.rs:739, attribute #[rustc_const_stable(feature = \"const_option_basics\", since = \"1.48.0\")]",
+          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::option::Option::as_mut",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }],
+      "params": [
+        { "name": "self", "type": "ref<T?>", "access": { "rights": "write", "guarantee": "exclusive" } }
+      ],
+      "result": {
+        "type": "ref<T>?",
+        "access": { "rights": "write", "guarantee": "exclusive" },
+        "hold": { "kind": "borrows", "from": "self" }
+      },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure presence : exists result iff exists self",
+          "source": "1.97.0 core/src/option.rs:748, doc: \"Converts from `&mut Option<T>` to `Option<&mut T>`.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "ensure",
+          "text": "ensure same_value : exists self implies result == self",
+          "source": "1.97.0 core/src/option.rs:748, doc: \"Converts from `&mut Option<T>` to `Option<&mut T>`.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "effects",
+          "text": "effects none",
+          "source": "1.97.0 core/src/option.rs:763, body: match *self { Some(ref mut x) => Some(x), None => None, }",
+          "status": {
+            "observed": "the body is a match that builds a mutable reference; it writes nothing itself"
+          }
+        },
+        {
+          "kind": "never panics",
+          "text": "never panics",
+          "source": "1.97.0 core/src/option.rs:763, body: match *self { Some(ref mut x) => Some(x), None => None, }",
+          "status": { "observed": "the body is a match with no panic and no arithmetic" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "const fn: callable in a const context, stable since 1.83.0 (feature const_option).",
+          "source": "1.97.0 core/src/option.rs:762, attribute #[rustc_const_stable(feature = \"const_option\", since = \"1.83.0\")]",
+          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::option::Option::expect",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }],
+      "params": [
+        { "name": "self", "type": "T?" },
+        { "name": "msg", "type": "ref<text>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "T" },
+      "clauses": [
+        {
+          "kind": "panics",
+          "text": "fails panic when self is none",
+          "source": "1.97.0 core/src/option.rs:925-926, doc: \"Panics if the value is a [`None`] with a custom panic message provided by `msg`.\"",
+          "status": { "lifted": "core/src/option.rs: None => expect_failed(msg)" }
+        },
+        {
+          "kind": "ensure",
+          "text": "ensure contained : result == self",
+          "source": "1.97.0 core/src/option.rs:921, doc: \"Returns the contained [`Some`] value, consuming the `self` value.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "The panic message is `msg`.",
+          "source": "1.97.0 core/src/option.rs:925-926, doc: \"Panics if the value is a [`None`] with a custom panic message provided by `msg`.\"",
+          "reason": "no formatted text: the language cannot state what text a message, a format or a Debug or Display impl produces"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "The failure is a panic, which unwinds or aborts according to the panic strategy; the location reported is the caller's (#[track_caller]).",
+          "source": "1.97.0 core/src/option.rs:960, attribute #[track_caller]",
+          "reason": "no unwinding behaviour: `fails panic` does not say whether a panic unwinds or aborts, or what runs on the way"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "const fn: callable in a const context, stable since 1.83.0 (feature const_option).",
+          "source": "1.97.0 core/src/option.rs:964, attribute #[rustc_const_stable(feature = \"const_option\", since = \"1.83.0\")]",
+          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::option::Option::is_none",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }],
+      "params": [
+        { "name": "self", "type": "ref<T?>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "bool" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure none : result == (self is none)",
+          "source": "1.97.0 core/src/option.rs:665, doc: \"Returns `true` if the option is a [`None`] value.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "result must be used",
+          "text": "result must be used",
+          "source": "1.97.0 core/src/option.rs:676, attribute #[must_use = \"if you intended to assert that this doesn't have a value, consider \\",
+          "status": { "lifted": "core/src/option.rs: #[must_use] on the item" }
+        },
+        {
+          "kind": "effects",
+          "text": "effects none",
+          "source": "1.97.0 core/src/option.rs:682, body: !self.is_some()",
+          "status": { "observed": "the body is the negation of is_some, which reads the discriminant" }
+        },
+        {
+          "kind": "never panics",
+          "text": "never panics",
+          "source": "1.97.0 core/src/option.rs:682, body: !self.is_some()",
+          "status": { "observed": "the body is the negation of is_some, which reads the discriminant" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "const fn: callable in a const context, stable since 1.48.0 (feature const_option_basics).",
+          "source": "1.97.0 core/src/option.rs:680, attribute #[rustc_const_stable(feature = \"const_option_basics\", since = \"1.48.0\")]",
+          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::option::Option::map_or_else",
+      "visible": "public",
+      "generics": [
+        { "name": "T", "bounds": [] },
+        { "name": "U", "bounds": [] },
+        { "name": "D", "bounds": ["FnOnce() -> U"] },
+        { "name": "F", "bounds": ["FnOnce(T) -> U"] }
+      ],
+      "params": [
+        { "name": "self", "type": "T?" },
+        { "name": "default", "type": "D" },
+        { "name": "f", "type": "F" }
+      ],
+      "result": { "type": "U" },
+      "clauses": [
+        {
+          "kind": "callback",
+          "text": "callback default : called at most once before return",
+          "source": "1.97.0 core/src/option.rs:1268, body: match self { Some(t) => f(t), None => default(), }",
+          "status": { "observed": "the body calls default in the None arm only, once" }
+        },
+        {
+          "kind": "callback",
+          "text": "callback f : called at most once before return",
+          "source": "1.97.0 core/src/option.rs:1268, body: match self { Some(t) => f(t), None => default(), }",
+          "status": { "observed": "the body calls f in the Some arm only, once" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "default is called exactly when self is none, and f exactly when self is some; exactly one of the two is called.",
+          "source": "1.97.0 core/src/option.rs:1232-1233, doc: \"Computes a default function result (if none), or applies a different function to the contained value (if any).\"",
+          "reason": "callback clause has no condition: `callback` states how often an argument is called, with no `when`"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "result is default() when self is none, and f(v) when self is Some(v).",
+          "source": "1.97.0 core/src/option.rs:1232-1233, doc: \"Computes a default function result (if none), or applies a different function to the contained value (if any).\"",
+          "reason": "no value of a callback result: a clause cannot call a function argument, which need not be pure, so it cannot relate a result to what the callback returns"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "const fn, but its const-ness is unstable (feature const_option_ops, issue 143956): no promise.",
+          "source": "1.97.0 core/src/option.rs:1267, attribute #[rustc_const_unstable(feature = \"const_option_ops\", issue = \"143956\")]",
+          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::result::Result::expect",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }, { "name": "E", "bounds": ["std::fmt::Debug"] }],
+      "params": [
+        { "name": "self", "type": "std::result::Result<T, E>" },
+        { "name": "msg", "type": "ref<text>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "T" },
+      "clauses": [
+        {
+          "kind": "panics",
+          "text": "fails panic when self is Err(e)",
+          "source": "1.97.0 core/src/result.rs:1146-1147, doc: \"Panics if the value is an [`Err`], with a panic message including the passed message, and the content of the [`Err`].\"",
+          "status": { "lifted": "core/src/result.rs: Err(e) => unwrap_failed(msg, &e)" }
+        },
+        {
+          "kind": "ensure",
+          "text": "ensure contained : self is Ok(v) implies result == v",
+          "source": "1.97.0 core/src/result.rs:1133, doc: \"Returns the contained [`Ok`] value, consuming the `self` value.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "The panic message includes `msg` and the Debug rendering of the error.",
+          "source": "1.97.0 core/src/result.rs:1146-1147, doc: \"Panics if the value is an [`Err`], with a panic message including the passed message, and the content of the [`Err`].\"",
+          "reason": "no formatted text: the language cannot state what text a message, a format or a Debug or Display impl produces"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "The failure is a panic, which unwinds or aborts according to the panic strategy; the location reported is the caller's (#[track_caller]).",
+          "source": "1.97.0 core/src/result.rs:1177, attribute #[track_caller]",
+          "reason": "no unwinding behaviour: `fails panic` does not say whether a panic unwinds or aborts, or what runs on the way"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::primitive::slice::len",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }],
+      "params": [
+        {
+          "name": "self",
+          "type": { "host": "&[T]", "form": "slice" },
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "u64 as 'usize'" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure length : result == size(self)",
+          "source": "1.97.0 core/src/slice/mod.rs:102, doc: \"Returns the number of elements in the slice.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "result must be used",
+          "text": "result must be used",
+          "source": "1.97.0 core/src/slice/mod.rs:115, attribute #[must_use]",
+          "status": { "lifted": "core/src/slice/mod.rs: #[must_use] on the item" }
+        },
+        {
+          "kind": "effects",
+          "text": "effects none",
+          "source": "1.97.0 core/src/slice/mod.rs:117, body: ptr::metadata(self)",
+          "status": { "observed": "the body reads the length stored in the slice reference" }
+        },
+        {
+          "kind": "never panics",
+          "text": "never panics",
+          "source": "1.97.0 core/src/slice/mod.rs:117, body: ptr::metadata(self)",
+          "status": { "observed": "the body reads the length stored in the slice reference" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "const fn: callable in a const context, stable since 1.39.0 (feature const_slice_len).",
+          "source": "1.97.0 core/src/slice/mod.rs:112, attribute #[rustc_const_stable(feature = \"const_slice_len\", since = \"1.39.0\")]",
+          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::primitive::slice::iter",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }],
+      "params": [
+        {
+          "name": "self",
+          "type": { "host": "&[T]", "form": "slice" },
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": {
+        "type": { "host": "std::slice::Iter<'_, T>", "form": "lifetime argument" },
+        "hold": { "kind": "borrows", "from": "self" }
+      },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure length : count(result) == size(self)",
+          "source": "1.97.0 core/src/slice/mod.rs:1022, doc: \"Returns an iterator over the slice.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "result yields the elements of self by reference, in order from the first to the last (its Iterator impl is also a DoubleEndedIterator and an ExactSizeIterator).",
+          "source": "1.97.0 core/src/slice/mod.rs:1024, doc: \"The iterator yields all items from start to end.\"",
+          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
+        },
+        {
+          "kind": "effects",
+          "text": "effects none",
+          "source": "1.97.0 core/src/slice/mod.rs:1042, body: Iter::new(self)",
+          "status": { "observed": "the body is one call of Iter::new, which builds a pair of pointers" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "const fn, but its const-ness is unstable (feature const_slice_make_iter, issue 137737): no promise.",
+          "source": "1.97.0 core/src/slice/mod.rs:1038, attribute #[rustc_const_unstable(feature = \"const_slice_make_iter\", issue = \"137737\")]",
+          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::primitive::slice::split_at_mut",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }],
+      "params": [
+        {
+          "name": "self",
+          "type": { "host": "&mut [T]", "form": "slice" },
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        { "name": "mid", "type": "u64 as 'usize'" }
+      ],
+      "result": {
+        "type": { "host": "(&mut [T], &mut [T])", "form": "slice" },
+        "access": { "rights": "write", "guarantee": "exclusive" },
+        "hold": { "kind": "borrows", "from": "self" }
+      },
+      "clauses": [
+        {
+          "kind": "panics",
+          "text": "fails panic when mid > size(self)",
+          "source": "1.97.0 core/src/slice/mod.rs:1968, doc: \"Panics if `mid > len`.\"",
+          "status": { "lifted": "core/src/slice/mod.rs: None => panic!(\"mid > len\")" }
+        },
+        {
+          "kind": "result must be used",
+          "text": "result must be used",
+          "source": "1.97.0 core/src/slice/mod.rs:1985, attribute #[must_use]",
+          "status": { "lifted": "core/src/slice/mod.rs: #[must_use] on the item" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "result.0 holds the elements of self at indices 0 to mid - 1, and result.1 those at indices mid to len - 1, in order, as views into self and not copies.",
+          "source": "1.97.0 core/src/slice/mod.rs:1962-1964, doc: \"The first will contain all indices from `[0, mid)` (excluding the index `mid` itself) and the second will contain all indices from `[mid, len)` (excluding the index `len` itself).\"",
+          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "The two parts have mid and len - mid elements, and no element is in both: the parts are disjoint mutable views.",
+          "source": "1.97.0 core/src/slice/mod.rs:1962-1964, doc: \"The first will contain all indices from `[0, mid)` (excluding the index `mid` itself) and the second will contain all indices from `[mid, len)` (excluding the index `len` itself).\"",
+          "reason": "no tuple parts: no syntax projects a component of a tuple or names a pattern of it. Here: sizes and `disjoint` need a name for each part of the result tuple"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "const fn: callable in a const context, stable since 1.83.0 (feature const_slice_split_at_mut).",
+          "source": "1.97.0 core/src/slice/mod.rs:1986, attribute #[rustc_const_stable(feature = \"const_slice_split_at_mut\", since = \"1.83.0\")]",
+          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::primitive::str::is_empty",
+      "visible": "public",
+      "params": [
+        { "name": "self", "type": "ref<text>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "bool" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure empty : result == (byte_length(self, utf8) == 0)",
+          "source": "1.97.0 core/src/str/mod.rs:157, doc: \"Returns `true` if `self` has a length of zero bytes.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "result must be used",
+          "text": "result must be used",
+          "source": "1.97.0 core/src/str/mod.rs:171, attribute #[must_use]",
+          "status": { "lifted": "core/src/str/mod.rs: #[must_use] on the item" }
+        },
+        {
+          "kind": "effects",
+          "text": "effects none",
+          "source": "1.97.0 core/src/str/mod.rs:174, body: self.len() == 0",
+          "status": { "observed": "the body compares the byte length with zero" }
+        },
+        {
+          "kind": "never panics",
+          "text": "never panics",
+          "source": "1.97.0 core/src/str/mod.rs:174, body: self.len() == 0",
+          "status": { "observed": "the body compares the byte length with zero" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "const fn: callable in a const context, stable since 1.39.0 (feature const_str_is_empty).",
+          "source": "1.97.0 core/src/str/mod.rs:169, attribute #[rustc_const_stable(feature = \"const_str_is_empty\", since = \"1.39.0\")]",
+          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::string::String::len",
+      "visible": "public",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<text as 'String'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "u64 as 'usize'" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure bytes : result == byte_length(self, utf8)",
+          "source": "1.97.0 alloc/src/string.rs:1849-1850, doc: \"Returns the length of this `String`, in bytes, not [`char`]s or graphemes.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "result must be used",
+          "text": "result must be used",
+          "source": "1.97.0 alloc/src/string.rs:1864, attribute #[must_use]",
+          "status": { "lifted": "alloc/src/string.rs: #[must_use] on the item" }
+        },
+        {
+          "kind": "effects",
+          "text": "effects none",
+          "source": "1.97.0 alloc/src/string.rs:1870, body: self.vec.len()",
+          "status": { "observed": "the body reads the length of the backing Vec<u8>" }
+        },
+        {
+          "kind": "never panics",
+          "text": "never panics",
+          "source": "1.97.0 alloc/src/string.rs:1870, body: self.vec.len()",
+          "status": { "observed": "the body reads the length of the backing Vec<u8>" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "const fn: callable in a const context, stable since 1.87.0 (feature const_vec_string_slice).",
+          "source": "1.97.0 alloc/src/string.rs:1866, attribute #[rustc_const_stable(feature = \"const_vec_string_slice\", since = \"1.87.0\")]",
+          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::primitive::char::is_whitespace",
+      "visible": "public",
+      "params": [{ "name": "self", "type": "text where length(value) == 1 as 'char'" }],
+      "result": { "type": "bool" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure white_space : result == (self matches /\\p{White_Space}/)",
+          "source": "1.97.0 core/src/char/methods.rs:968, doc: \"Returns `true` if this `char` has the `White_Space` property.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "result must be used",
+          "text": "result must be used",
+          "source": "1.97.0 core/src/char/methods.rs:990, attribute #[must_use]",
+          "status": { "lifted": "core/src/char/methods.rs: #[must_use] on the item" }
+        },
+        {
+          "kind": "effects",
+          "text": "effects none",
+          "source": "1.97.0 core/src/char/methods.rs:994, body: match self { ' ' | '\\x09'..='\\x0d' => true, '\\0'..='\\u{84}' => false, _ => unicode::White_Space(self), }",
+          "status": { "observed": "the body is a match over ranges and a table lookup" }
+        },
+        {
+          "kind": "never panics",
+          "text": "never panics",
+          "source": "1.97.0 core/src/char/methods.rs:994, body: match self { ' ' | '\\x09'..='\\x0d' => true, '\\0'..='\\u{84}' => false, _ => unicode::White_Space(self), }",
+          "status": { "observed": "the body is a match over ranges and a table lookup" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "const fn: callable in a const context, stable since 1.87.0 (feature const_char_classify).",
+          "source": "1.97.0 core/src/char/methods.rs:992, attribute #[rustc_const_stable(feature = \"const_char_classify\", since = \"1.87.0\")]",
+          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+        }
+      ]
+    },
+    {
+      "kind": "const",
+      "name": "std::primitive::char::MAX",
+      "visible": "public",
+      "type": "text where length(value) == 1 as 'char'",
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "char::MAX is the highest valid code point a char can have, '\\u{10FFFF}'.",
+          "source": "1.97.0 core/src/char/methods.rs:43, doc: \"The highest valid code point a `char` can have, `'\\u{10FFFF}'`.\"",
+          "reason": "no constant value: the language has no const subject, so the value of a constant is not stated"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::primitive::f64::abs",
+      "visible": "public",
+      "params": [{ "name": "self", "type": "f64" }],
+      "result": { "type": "f64" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure magnitude : finite self implies result == (if self < 0.0 then -self else self)",
+          "source": "1.97.0 core/src/num/f64.rs:1591, doc: \"Computes the absolute value of `self`.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "result must be used",
+          "text": "result must be used",
+          "source": "1.97.0 core/src/num/f64.rs:1606, attribute #[must_use = \"method returns a new number and does not mutate the original value\"]",
+          "status": { "lifted": "core/src/num/f64.rs: #[must_use] on the item" }
+        },
+        {
+          "kind": "effects",
+          "text": "effects none",
+          "source": "1.97.0 core/src/num/f64.rs:1611, body: intrinsics::fabs(self)",
+          "status": { "observed": "the body is one intrinsic call" }
+        },
+        {
+          "kind": "never panics",
+          "text": "never panics",
+          "source": "1.97.0 core/src/num/f64.rs:1611, body: intrinsics::fabs(self)",
+          "status": { "observed": "the body is one intrinsic call" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "abs is exact (it always returns the precise result) and clears the sign bit, so abs(-0.0) is +0.0.",
+          "source": "1.97.0 core/src/num/f64.rs:1593, doc: \"This function always returns the precise result.\"",
+          "reason": "no sign of zero, no NaN payload: `==` and the orderings follow IEEE 754 comparison, which cannot see the sign of a zero or the payload of a NaN"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "const fn: callable in a const context, stable since 1.85.0 (feature const_float_methods).",
+          "source": "1.97.0 core/src/num/f64.rs:1608, attribute #[rustc_const_stable(feature = \"const_float_methods\", since = \"1.85.0\")]",
+          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::primitive::usize::saturating_sub",
+      "visible": "public",
+      "params": [{ "name": "self", "type": "u64 as 'usize'" }, { "name": "rhs", "type": "u64 as 'usize'" }],
+      "result": { "type": "u64 as 'usize'" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure saturates : result == (if self >= rhs then self - rhs else 0)",
+          "source": "1.97.0 core/src/num/uint_macros.rs:2457-2458, doc: \"Saturating integer subtraction. Computes `self - rhs`, saturating at the numeric bounds instead of overflowing.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "result must be used",
+          "text": "result must be used",
+          "source": "1.97.0 core/src/num/uint_macros.rs:2467, attribute #[must_use = \"this returns the result of the operation, \\",
+          "status": { "lifted": "core/src/num/uint_macros.rs: #[must_use] on the item" }
+        },
+        {
+          "kind": "effects",
+          "text": "effects none",
+          "source": "1.97.0 core/src/num/uint_macros.rs:2472, body: intrinsics::saturating_sub(self, rhs)",
+          "status": { "observed": "the body is one intrinsic call" }
+        },
+        {
+          "kind": "never panics",
+          "text": "never panics",
+          "source": "1.97.0 core/src/num/uint_macros.rs:2472, body: intrinsics::saturating_sub(self, rhs)",
+          "status": { "observed": "the body is one intrinsic call; it saturates and never overflows" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "const fn: callable in a const context, stable since 1.47.0 (feature const_saturating_int_methods).",
+          "source": "1.97.0 core/src/num/uint_macros.rs:2469, attribute #[rustc_const_stable(feature = \"const_saturating_int_methods\", since = \"1.47.0\")]",
+          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::primitive::u64::wrapping_mul",
+      "visible": "public",
+      "params": [{ "name": "self", "type": "u64" }, { "name": "rhs", "type": "u64" }],
+      "result": { "type": "u64" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure wraps : result == (self * rhs) % 18446744073709551616",
+          "source": "1.97.0 core/src/num/uint_macros.rs:2643-2644, doc: \"Wrapping (modular) multiplication. Computes `self * rhs`, wrapping around at the boundary of the type.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "result must be used",
+          "text": "result must be used",
+          "source": "1.97.0 core/src/num/uint_macros.rs:2656, attribute #[must_use = \"this returns the result of the operation, \\",
+          "status": { "lifted": "core/src/num/uint_macros.rs: #[must_use] on the item" }
+        },
+        {
+          "kind": "effects",
+          "text": "effects none",
+          "source": "1.97.0 core/src/num/uint_macros.rs:2660, body: intrinsics::wrapping_mul(self, rhs)",
+          "status": { "observed": "the body is one intrinsic call" }
+        },
+        {
+          "kind": "never panics",
+          "text": "never panics",
+          "source": "1.97.0 core/src/num/uint_macros.rs:2660, body: intrinsics::wrapping_mul(self, rhs)",
+          "status": { "observed": "the body is one intrinsic call; it wraps and never overflows" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "const fn: callable in a const context, stable since 1.32.0 (feature const_wrapping_math).",
+          "source": "1.97.0 core/src/num/uint_macros.rs:2655, attribute #[rustc_const_stable(feature = \"const_wrapping_math\", since = \"1.32.0\")]",
+          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::collections::HashMap::new",
+      "visible": "public",
+      "generics": [{ "name": "K", "bounds": [] }, { "name": "V", "bounds": [] }],
+      "params": [],
+      "result": { "type": "map<K, V> as 'std::collections::HashMap'" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure empty : size(result) == 0",
+          "source": "1.97.0 std/src/collections/hash/map.rs:256, doc: \"Creates an empty `HashMap`.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "result must be used",
+          "text": "result must be used",
+          "source": "1.97.0 std/src/collections/hash/map.rs:268, attribute #[must_use]",
+          "status": { "lifted": "std/src/collections/hash/map.rs: #[must_use] on the item" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "The map does not allocate until it is first inserted into: it allocates at most 0 bytes.",
+          "source": "1.97.0 std/src/collections/hash/map.rs:258-259, doc: \"The hash map is initially created with a capacity of 0, so it will not allocate until it is first inserted into.\"",
+          "reason": "no budget or layout kind: the library file's clause kinds have no `budget` or `layout`, which the language has. Here: `budget allocates at most 0 B per call`"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Each map has its own, randomly drawn seed for its default hasher (a RandomState), so the same key hashes differently in different maps and iteration order varies from map to map.",
+          "source": "1.97.0 std/src/collections/hash/map.rs:214-215, doc: \"As explained above, `HashMap` is randomly seeded: each `HashMap` instance uses a different seed, which means that `HashMap::new` normally cannot be used in a `const` or `static` initializer.\"",
+          "reason": "no positive effect: bounds say what a call must not do; no clause says what it does, such as drawing on a random seed"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::collections::HashMap::with_capacity",
+      "visible": "public",
+      "generics": [{ "name": "K", "bounds": [] }, { "name": "V", "bounds": [] }],
+      "params": [{ "name": "capacity", "type": "u64 as 'usize'" }],
+      "result": { "type": "map<K, V> as 'std::collections::HashMap'" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure empty : size(result) == 0",
+          "source": "1.97.0 std/src/collections/hash/map.rs:274, doc: \"Creates an empty `HashMap` with at least the specified capacity.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "result must be used",
+          "text": "result must be used",
+          "source": "1.97.0 std/src/collections/hash/map.rs:287, attribute #[must_use]",
+          "status": { "lifted": "std/src/collections/hash/map.rs: #[must_use] on the item" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "The map can hold at least `capacity` elements without reallocating, and may allocate for more.",
+          "source": "1.97.0 std/src/collections/hash/map.rs:276-277, doc: \"The hash map will be able to hold at least `capacity` elements without reallocating.\"",
+          "reason": "no host state: no slot or expression names state a host object holds beyond its value: a capacity, a hasher's or formatter's state, an entry's hidden map. Here: size counts elements and the language has no capacity of a collection"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "If `capacity` is zero the map does not allocate.",
+          "source": "1.97.0 std/src/collections/hash/map.rs:278, doc: \"If `capacity` is zero, the hash map will not allocate.\"",
+          "reason": "no budget or layout kind: the library file's clause kinds have no `budget` or `layout`, which the language has. Here: `budget allocates at most 0 B per call`, conditional on an argument"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "The map's hasher is a RandomState, randomly seeded.",
+          "source": "1.97.0 std/src/collections/hash/map.rs:18-21, doc: \"The algorithm is randomly seeded, and a reasonable best-effort is made to generate this seed from a high quality, secure source of randomness provided by the host without blocking the program.\"",
+          "reason": "no positive effect: bounds say what a call must not do; no clause says what it does, such as drawing on a random seed"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::collections::HashMap::insert",
+      "visible": "public",
+      "generics": [
+        { "name": "K", "bounds": ["std::cmp::Eq", "std::hash::Hash"] },
+        { "name": "V", "bounds": [] },
+        { "name": "S", "bounds": ["std::hash::BuildHasher"] }
+      ],
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<map<K, V, S> as 'std::collections::HashMap'>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        { "name": "k", "type": "K" },
+        { "name": "v", "type": "V" }
+      ],
+      "result": { "type": "V?" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure stored : self[k] == v",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1305, doc: \"Inserts a key-value pair into the map.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "ensure",
+          "text": "ensure was_present : exists result iff exists old(self[k])",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1307, doc: \"If the map did not have this key present, [`None`] is returned.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "ensure",
+          "text": "ensure old_value : exists old(self[k]) implies result == old(self[k])",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1309-1310, doc: \"If the map did have this key present, the value is updated, and the old value is returned.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "ensure",
+          "text": "ensure size : size(self) == old(size(self)) + (if exists old(self[k]) then 0 else 1)",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1305, doc: \"Inserts a key-value pair into the map.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Every key other than k keeps its value.",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1305, doc: \"Inserts a key-value pair into the map.\"",
+          "reason": "no frame condition on a collection: no clause says that every element other than the one touched is unchanged"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "The key is not updated: when the map already has a key equal to k, it keeps that key and drops k.",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1310-1311, doc: \"The key is not updated, though; this matters for types that can be `==` without being identical.\"",
+          "reason": "no identity of moved values: `==` is structural on values and `same` is identity of host references, which a value moved into or out of a container does not have"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Growing the table may panic when the new allocation size overflows usize; when the allocator fails, the process by default prints a message and aborts.",
+          "source": "1.97.0 std/src/collections/hash/map.rs:904, doc: \"Panics if the new allocation size overflows [`usize`].\"; 1.97.0 alloc/src/alloc.rs:526, doc: \"print a message to standard error and abort the process.\"",
+          "reason": "no resource exhaustion: allocation failure aborts or panics under a condition no clause can name, so `never panics` cannot be claimed"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Hash::hash, Eq::eq and BuildHasher::build_hasher run inside the call, so it never panics and always returns only if they do.",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1334, body: self.base.insert(k, v)",
+          "reason": "promise conditional on a bound: no clause makes a promise depend on what a bound's implementation does: `never panics` and `terminates` are unconditional"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::collections::HashMap::entry",
+      "visible": "public",
+      "generics": [
+        { "name": "K", "bounds": ["std::cmp::Eq", "std::hash::Hash"] },
+        { "name": "V", "bounds": [] },
+        { "name": "S", "bounds": ["std::hash::BuildHasher"] }
+      ],
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<map<K, V, S> as 'std::collections::HashMap'>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        { "name": "key", "type": "K" }
+      ],
+      "result": {
+        "type": { "host": "std::collections::hash_map::Entry<'_, K, V>", "form": "lifetime argument" },
+        "hold": { "kind": "borrows", "from": "self" }
+      },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure occupied_iff_present : (result is Occupied(e)) iff exists self[key]",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1943, doc: \"A view into a single entry in a map, which may either be vacant or occupied.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "ensure",
+          "text": "ensure size : size(self) == old(size(self))",
+          "source": "1.97.0 std/src/collections/hash/map.rs:993, doc: \"Gets the given key's corresponding entry in the map for in-place manipulation.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Every key keeps its value: entry only looks the key up.",
+          "source": "1.97.0 std/src/collections/hash/map.rs:993, doc: \"Gets the given key's corresponding entry in the map for in-place manipulation.\"",
+          "reason": "no frame condition on a collection: no clause says that every element other than the one touched is unchanged"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Looking the entry up may reserve room for one more element, which panics when the new allocation size overflows usize, and when the allocator fails the process by default prints a message and aborts.",
+          "source": "1.97.0 std/src/collections/hash/map.rs:904, doc: \"Panics if the new allocation size overflows [`usize`].\"; 1.97.0 alloc/src/alloc.rs:526, doc: \"print a message to standard error and abort the process.\"",
+          "reason": "no resource exhaustion: allocation failure aborts or panics under a condition no clause can name, so `never panics` cannot be claimed"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Hash::hash, Eq::eq and BuildHasher::build_hasher run inside the call, so it never panics and always returns only if they do.",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1014, body: map_entry(self.base.rustc_entry(key))",
+          "reason": "promise conditional on a bound: no clause makes a promise depend on what a bound's implementation does: `never panics` and `terminates` are unconditional"
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "std::collections::hash_map::Entry",
+      "visible": "public",
+      "generics": [
+        { "name": "'a", "bounds": [] },
+        { "name": "K", "bounds": ["'a"] },
+        { "name": "V", "bounds": ["'a"] }
+      ],
+      "variants": [
+        {
+          "name": "Occupied",
+          "fields": [
+            {
+              "type": {
+                "host": "std::collections::hash_map::OccupiedEntry<'a, K, V>",
+                "form": "lifetime argument"
+              },
+              "hold": { "kind": "owns" }
+            }
+          ]
+        },
+        {
+          "name": "Vacant",
+          "fields": [
+            {
+              "type": {
+                "host": "std::collections::hash_map::VacantEntry<'a, K, V>",
+                "form": "lifetime argument"
+              },
+              "hold": { "kind": "owns" }
+            }
+          ]
+        }
+      ],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Entry<'a, K, V> implements Debug when K and V do. It is built by HashMap::entry, and borrows the map until it is used.",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1966, impls: Debug 1966, enum 1950",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::collections::hash_map::Entry::or_insert",
+      "visible": "public",
+      "generics": [
+        { "name": "'a", "bounds": [] },
+        { "name": "K", "bounds": ["'a"] },
+        { "name": "V", "bounds": ["'a"] }
+      ],
+      "params": [
+        {
+          "name": "self",
+          "type": { "host": "std::collections::hash_map::Entry<'a, K, V>", "form": "lifetime argument" }
+        },
+        { "name": "default", "type": "V" }
+      ],
+      "result": {
+        "type": "ref<V>",
+        "access": { "rights": "write", "guarantee": "exclusive" },
+        "hold": { "kind": "borrows", "lifetime": "'a" }
+      },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure default_if_vacant : self is Vacant(e) implies result == default",
+          "source": "1.97.0 std/src/collections/hash/map.rs:2498-2499, doc: \"Ensures a value is in the entry by inserting the default if empty, and returns a mutable reference to the value in the entry.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "When the entry is occupied, result refers to the value already in the map, which is kept and not replaced; when vacant, default is inserted into the map first, so the map then holds it under the entry's key.",
+          "source": "1.97.0 std/src/collections/hash/map.rs:2498-2499, doc: \"Ensures a value is in the entry by inserting the default if empty, and returns a mutable reference to the value in the entry.\"",
+          "reason": "no host state: no slot or expression names state a host object holds beyond its value: a capacity, a hasher's or formatter's state, an entry's hidden map. Here: the entry stands for a slot of the map, which is not a parameter, so nothing names the existing value or the map afterwards"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Inserting into a vacant entry may panic when the new allocation size overflows usize; when the allocator fails, the process by default prints a message and aborts.",
+          "source": "1.97.0 std/src/collections/hash/map.rs:904, doc: \"Panics if the new allocation size overflows [`usize`].\"; 1.97.0 alloc/src/alloc.rs:526, doc: \"print a message to standard error and abort the process.\"",
+          "reason": "no resource exhaustion: allocation failure aborts or panics under a condition no clause can name, so `never panics` cannot be claimed"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "No other key of the map changes.",
+          "source": "1.97.0 std/src/collections/hash/map.rs:2498-2499, doc: \"Ensures a value is in the entry by inserting the default if empty, and returns a mutable reference to the value in the entry.\"",
+          "reason": "no frame condition on a collection: no clause says that every element other than the one touched is unchanged"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::collections::hash_map::Entry::and_modify",
+      "visible": "public",
+      "generics": [
+        { "name": "'a", "bounds": [] },
+        { "name": "K", "bounds": ["'a"] },
+        { "name": "V", "bounds": ["'a"] },
+        { "name": "F", "bounds": ["FnOnce(&mut V)"] }
+      ],
+      "params": [
+        {
+          "name": "self",
+          "type": { "host": "std::collections::hash_map::Entry<'a, K, V>", "form": "lifetime argument" }
+        },
+        { "name": "f", "type": "F" }
+      ],
+      "result": {
+        "type": { "host": "std::collections::hash_map::Entry<'a, K, V>", "form": "lifetime argument" }
+      },
+      "clauses": [
+        {
+          "kind": "callback",
+          "text": "callback f : called at most once before return",
+          "source": "1.97.0 std/src/collections/hash/map.rs:2618, body: match self { Occupied(mut entry) => { f(entry.get_mut()); Occupied(entry) } Vacant(entry) => Vacant(entry), }",
+          "status": {
+            "observed": "the body calls f in the Occupied arm only, once, with a mutable reference to the value"
+          }
+        },
+        {
+          "kind": "ensure",
+          "text": "ensure same_variant : (result is Occupied(e)) iff (self is Occupied(e))",
+          "source": "1.97.0 std/src/collections/hash/map.rs:2618, body: match self { Occupied(mut entry) => { f(entry.get_mut()); Occupied(entry) } Vacant(entry) => Vacant(entry), }",
+          "status": {
+            "observed": "the body returns an Occupied entry for an Occupied one and a Vacant entry for a Vacant one"
+          }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "f is called exactly when the entry is occupied, with a mutable reference to its value, and never when it is vacant.",
+          "source": "1.97.0 std/src/collections/hash/map.rs:2596-2597, doc: \"Provides in-place mutable access to an occupied entry before any potential inserts into the map.\"",
+          "reason": "callback clause has no condition: `callback` states how often an argument is called, with no `when`"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "The value of an occupied entry afterwards is whatever f made of it.",
+          "source": "1.97.0 std/src/collections/hash/map.rs:2596-2597, doc: \"Provides in-place mutable access to an occupied entry before any potential inserts into the map.\"",
+          "reason": "no value of a callback result: a clause cannot call a function argument, which need not be pure, so it cannot relate a result to what the callback returns"
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "std::collections::HashMap",
+      "visible": "public",
+      "generics": [
+        { "name": "K", "bounds": [] },
+        { "name": "V", "bounds": [] },
+        { "name": "S", "bounds": [] }
+      ],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "HashMap<K, V, S> implements Default when S: Default (an empty map), Clone, PartialEq, Eq, Debug, Index<&Q>, FromIterator<(K, V)>, Extend<(K, V)>, and IntoIterator for the map and for references to it.",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1489, impls: Default 1489, Clone 1430, PartialEq 1449, Eq 1466, Debug 1476, Index 1501, FromIterator 2939, Extend 2958, IntoIterator for & 2048, IntoIterator 2072, IntoIterator for &mut 2060",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: fnv builds its maps through Default, with S = BuildHasherDefault<FnvHasher>"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Keys must satisfy k1 == k2 implies hash(k1) == hash(k2), and a key must not change, while it is in the map, in a way that changes its hash or its equality; otherwise the behaviour is unspecified: panics, wrong results, aborts, leaks and non-termination, but never undefined behaviour.",
+          "source": "1.97.0 std/src/collections/hash/map.rs:54-57, doc: \"The behavior resulting from either logic error is not specified, but will be encapsulated to the `HashMap` that observed the logic error and not result in undefined behavior. This could include panics, incorrect results, aborts, memory leaks, and non-termination.\"",
+          "reason": "requirement on bound implementations: a requirement on the implementations of a bound, not on values: a clause cannot name what a bound's methods must satisfy at a call site. Here: a requirement on the Hash and Eq implementations of K, and an effect on a key by code outside the call"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Iteration visits the key-value pairs in arbitrary order, which may differ between maps and runs.",
+          "source": "1.97.0 std/src/collections/hash/map.rs:647, doc: \"An iterator visiting all key-value pairs in arbitrary order.\"",
+          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "The default hasher is randomly seeded, per map, from the host's source of randomness.",
+          "source": "1.97.0 std/src/collections/hash/map.rs:18-21, doc: \"The algorithm is randomly seeded, and a reasonable best-effort is made to generate this seed from a high quality, secure source of randomness provided by the host without blocking the program.\"",
+          "reason": "no positive effect: bounds say what a call must not do; no clause says what it does, such as drawing on a random seed"
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "std::collections::HashSet",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }, { "name": "S", "bounds": [] }],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "HashSet<T, S> implements Default when S: Default (an empty set), Clone, PartialEq, Eq, Debug, FromIterator<T>, Extend<T> and Extend<&T>, and IntoIterator for the set and for references to it.",
+          "source": "1.97.0 std/src/collections/hash/set.rs:1279, impls: Default 1279, Clone 1124, PartialEq 1146, Eq 1162, Debug 1171, FromIterator 1182, Extend<T> 1232, Extend<&T> 1255, IntoIterator for & 1660, IntoIterator 1672",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: fnv builds its sets through Default, with S = BuildHasherDefault<FnvHasher>"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Elements must satisfy k1 == k2 implies hash(k1) == hash(k2), and an element must not change, while it is in the set, in a way that changes its hash or its equality; otherwise the behaviour is unspecified: panics, wrong results, aborts, leaks and non-termination, but never undefined behaviour.",
+          "source": "1.97.0 std/src/collections/hash/set.rs:34-37, doc: \"The behavior resulting from either logic error is not specified, but will be encapsulated to the `HashSet` that observed the logic error and not result in undefined behavior. This could include panics, incorrect results, aborts, memory leaks, and non-termination.\"",
+          "reason": "requirement on bound implementations: a requirement on the implementations of a bound, not on values: a clause cannot name what a bound's methods must satisfy at a call site. Here: a requirement on the Hash and Eq implementations of T, and an effect on an element by code outside the call"
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "std::hash::BuildHasherDefault",
+      "visible": "public",
+      "generics": [{ "name": "H", "bounds": [] }],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "BuildHasherDefault<H> implements BuildHasher, with Hasher = H and build_hasher returning H::default(), when H: Default + Hasher; and Default, Clone, Debug, PartialEq and Eq for every H.",
+          "source": "1.97.0 core/src/hash/mod.rs:770, impls: BuildHasher 770, Debug 763, Clone 779, Default 787, PartialEq 794, Eq 801",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Any BuildHasherDefault is zero-sized.",
+          "source": "1.97.0 core/src/hash/mod.rs:712, doc: \"Any `BuildHasherDefault` is [zero-sized].\"",
+          "reason": "no budget or layout kind: the library file's clause kinds have no `budget` or `layout`, which the language has. Here: `size 0`"
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "std::iter::Chain",
+      "visible": "public",
+      "generics": [{ "name": "A", "bounds": [] }, { "name": "B", "bounds": [] }],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Chain<A, B> implements Iterator<Item = A::Item> when A: Iterator and B: Iterator<Item = A::Item>; DoubleEndedIterator when both are; FusedIterator when both are; Clone and Debug when A and B are (derived).",
+          "source": "1.97.0 core/src/iter/adapters/chain.rs:23, impls: struct 23, Iterator 73, DoubleEndedIterator 205, FusedIterator 292, derive 20",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
+          "source": "1.97.0 core/src/iter/adapters/chain.rs:21, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
+          "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by Iterator::chain"
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "std::iter::Enumerate",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": [] }],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Enumerate<I> implements Iterator<Item = (usize, I::Item)> when I: Iterator; DoubleEndedIterator when I is ExactSizeIterator and DoubleEndedIterator; ExactSizeIterator when I is; FusedIterator when I is; Clone and Debug when I is (derived).",
+          "source": "1.97.0 core/src/iter/adapters/enumerate.rs:18, impls: struct 18, Iterator 62, DoubleEndedIterator 175, ExactSizeIterator 250, FusedIterator 277",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
+          "source": "1.97.0 core/src/iter/adapters/enumerate.rs:15, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
+          "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by Iterator::enumerate"
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "std::iter::Filter",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": [] }, { "name": "P", "bounds": [] }],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Filter<I, P> implements Iterator<Item = I::Item> when I: Iterator and P: FnMut(&I::Item) -> bool; DoubleEndedIterator and FusedIterator when I is; Clone when I and P are (derived); Debug when I is Debug (P need not be).",
+          "source": "1.97.0 core/src/iter/adapters/filter.rs:21, impls: struct 21, Iterator 90, DoubleEndedIterator 170, FusedIterator 199, Debug 69",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
+          "source": "1.97.0 core/src/iter/adapters/filter.rs:18, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
+          "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by Iterator::filter"
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "std::iter::Map",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": [] }, { "name": "F", "bounds": [] }],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Map<I, F> implements Iterator<Item = B> when I: Iterator and F: FnMut(I::Item) -> B; DoubleEndedIterator, ExactSizeIterator and FusedIterator when I is; Clone when I and F are (derived); Debug when I is Debug (F need not be).",
+          "source": "1.97.0 core/src/iter/adapters/map.rs:61, impls: struct 61, Iterator 99, DoubleEndedIterator 143, ExactSizeIterator 170, FusedIterator 184, Debug 78",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
+          "source": "1.97.0 core/src/iter/adapters/map.rs:58, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
+          "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by Iterator::map"
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "std::iter::Skip",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": [] }],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Skip<I> implements Iterator<Item = I::Item> when I: Iterator; DoubleEndedIterator when I is DoubleEndedIterator and ExactSizeIterator; ExactSizeIterator and FusedIterator when I is; Clone and Debug when I is (derived).",
+          "source": "1.97.0 core/src/iter/adapters/skip.rs:21, impls: struct 21, Iterator 33, DoubleEndedIterator 191, ExactSizeIterator 188, FusedIterator 246",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
+          "source": "1.97.0 core/src/iter/adapters/skip.rs:19, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
+          "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by Iterator::skip"
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "std::iter::Take",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": [] }],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Take<I> implements Iterator<Item = I::Item> when I: Iterator; DoubleEndedIterator when I is DoubleEndedIterator and ExactSizeIterator; ExactSizeIterator and FusedIterator when I is; Clone and Debug when I is (derived).",
+          "source": "1.97.0 core/src/iter/adapters/take.rs:17, impls: struct 17, Iterator 29, DoubleEndedIterator 151, ExactSizeIterator 241, FusedIterator 244",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
+          "source": "1.97.0 core/src/iter/adapters/take.rs:15, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
+          "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by Iterator::take"
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "std::iter::TakeWhile",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": [] }, { "name": "P", "bounds": [] }],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "TakeWhile<I, P> implements Iterator<Item = I::Item> when I: Iterator and P: FnMut(&I::Item) -> bool; FusedIterator when I is; not DoubleEndedIterator or ExactSizeIterator; Clone when I and P are (derived); Debug when I is Debug (P need not be).",
+          "source": "1.97.0 core/src/iter/adapters/take_while.rs:17, impls: struct 17, Iterator 37, FusedIterator 103, Debug 30",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
+          "source": "1.97.0 core/src/iter/adapters/take_while.rs:14, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
+          "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by Iterator::take_while"
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "std::iter::Zip",
+      "visible": "public",
+      "generics": [{ "name": "A", "bounds": [] }, { "name": "B", "bounds": [] }],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Zip<A, B> implements Iterator<Item = (A::Item, B::Item)> when A: Iterator and B: Iterator; DoubleEndedIterator when both are DoubleEndedIterator and ExactSizeIterator; ExactSizeIterator and FusedIterator when both are; Clone when A and B are (derived); Debug when A and B are.",
+          "source": "1.97.0 core/src/iter/adapters/zip.rs:13, impls: struct 13, Debug 481, Iterator 74, DoubleEndedIterator 116, ExactSizeIterator 407, FusedIterator 434",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
+          "source": "1.97.0 core/src/iter/adapters/zip.rs:11, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
+          "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by Iterator::zip"
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "std::iter::Copied",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": [] }],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Copied<I> implements Iterator<Item = T> when I: Iterator<Item = &T> and T: Copy; DoubleEndedIterator, ExactSizeIterator and FusedIterator when I is; Clone and Debug when I is (derived).",
+          "source": "1.97.0 core/src/iter/adapters/copied.rs:19, impls: struct 19, Iterator 44, DoubleEndedIterator 112, ExactSizeIterator 144, FusedIterator 159",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
+          "source": "1.97.0 core/src/iter/adapters/copied.rs:17, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
+          "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by Iterator::copied"
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "std::iter::FlatMap",
+      "visible": "public",
+      "generics": [
+        { "name": "I", "bounds": [] },
+        { "name": "U", "bounds": ["std::iter::IntoIterator"] },
+        { "name": "F", "bounds": [] }
+      ],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "FlatMap<I, U, F> implements Iterator<Item = U::Item> when I: Iterator, U: IntoIterator and F: FnMut(I::Item) -> U; DoubleEndedIterator when I is and U::IntoIter is; FusedIterator when I is; Clone when I, U, U::IntoIter and F are; Debug when I and U::IntoIter are.",
+          "source": "1.97.0 core/src/iter/adapters/flatten.rs:17, impls: struct 17, Iterator 56, DoubleEndedIterator 107, FusedIterator 142, Clone 36, Debug 46",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
+          "source": "1.97.0 core/src/iter/adapters/flatten.rs:15, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
+          "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by Iterator::flat_map"
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "std::slice::Iter",
+      "visible": "public",
+      "generics": [{ "name": "'a", "bounds": [] }, { "name": "T", "bounds": ["'a"] }],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Iter<'a, T> implements Iterator<Item = &'a T>, DoubleEndedIterator, ExactSizeIterator and FusedIterator and Clone for every T; Debug when T: Debug; AsRef<[T]>; and it is Send and Sync when T is Sync.",
+          "source": "1.97.0 core/src/slice/iter.rs:67, impls: struct 67, Debug 81, Clone 151, AsRef 159, Send 90, and the iterator! macro of core/src/slice/iter/macros.rs for Iterator, DoubleEndedIterator, ExactSizeIterator, FusedIterator",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
+          "source": "1.97.0 core/src/slice/iter.rs:65, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
+          "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by the iter method on slices"
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "std::vec::IntoIter",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "IntoIter<T> implements Iterator<Item = T>, DoubleEndedIterator, ExactSizeIterator, FusedIterator, Default, AsRef<[T]>, Clone when T is Clone, and Debug when T is Debug; dropping it drops the elements it has not yielded.",
+          "source": "1.97.0 alloc/src/vec/into_iter.rs:248, impls: Iterator 248, DoubleEndedIterator 424, ExactSizeIterator 473, FusedIterator 484, Debug 69, AsRef 236, Default 494, Drop 541, Clone 534",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type, and what the destructor drops is not a clause"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "An IntoIter yields the elements of the vector it was made from, by value, in order from the first to the last.",
+          "source": "1.97.0 alloc/src/vec/into_iter.rs:32, doc: \"An iterator that moves out of a vector.\"",
+          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "std::ops::Range",
+      "visible": "public",
+      "generics": [{ "name": "Idx", "bounds": [] }],
+      "fields": [
+        { "name": "start", "visible": "public", "type": "Idx", "hold": { "kind": "owns" } },
+        { "name": "end", "visible": "public", "type": "Idx", "hold": { "kind": "owns" } }
+      ],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "start..end contains all values with start <= x < end, and is empty if start >= end; when Idx: Step it is an iterator that yields start, start + 1 and so on, up to but not including end, and is a DoubleEndedIterator.",
+          "source": "1.97.0 core/src/ops/range.rs:56-57, doc: \"The range `start..end` contains all values with `start <= x < end`. It is empty if `start >= end`.\"",
+          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`. Here: a range of integers is a refinement `T in a..b` in the language, but a value of this type is not"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Range<Idx> implements Iterator<Item = Idx>, DoubleEndedIterator and FusedIterator when Idx: Step; Clone, Default, PartialEq, Eq and Hash when Idx does (derived); Debug when Idx: Debug; and it is not Copy.",
+          "source": "1.97.0 core/src/iter/range.rs:980, impls: Iterator 980, DoubleEndedIterator 1113, FusedIterator 1153, derives at core/src/ops/range.rs:80 and 79",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "std::fmt::Error",
+      "visible": "public",
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "fmt::Error implements Copy, Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Display and std::error::Error.",
+          "source": "1.97.0 core/src/fmt/mod.rs:108, impls: derive 108, Display 2859",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "A value of this type only signals that formatting failed: it carries no detail, and fmt implementors should not return it unless they received it from their Formatter.",
+          "source": "1.97.0 core/src/fmt/mod.rs:76-77, doc: \"This type does not support transmission of an error other than that an error occurred.\"",
+          "reason": "no host state: no slot or expression names state a host object holds beyond its value: a capacity, a hasher's or formatter's state, an entry's hidden map. Here: the cause of a failure is state the language does not name"
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "std::fmt::Formatter",
+      "visible": "public",
+      "generics": [{ "name": "'a", "bounds": [] }],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Formatter<'a> implements fmt::Write, so that write! can write to it.",
+          "source": "1.97.0 core/src/fmt/mod.rs:561, impls: struct 561, Write 2839",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Users do not construct Formatters directly: a mutable reference to one, holding the formatting options and the destination, is passed to the fmt method of every formatting trait.",
+          "source": "1.97.0 core/src/fmt/mod.rs:551-553, doc: \"Users do not construct `Formatter`s directly; a mutable reference to one is passed to the `fmt` method of all formatting traits, like [`Debug`] and [`Display`].\"",
+          "reason": "no host state: no slot or expression names state a host object holds beyond its value: a capacity, a hasher's or formatter's state, an entry's hidden map. Here: the destination and the options are host state"
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "std::num::TryFromIntError",
+      "visible": "public",
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "TryFromIntError implements Debug, Copy, Clone, PartialEq, Eq, Display and std::error::Error; it is the Error of the integer TryFrom impls.",
+          "source": "1.97.0 core/src/num/error.rs:9, impls: derive 9, Display 22, Error 29",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "A value of this type only signals that a checked integer conversion failed: it carries no stable detail (its kind is unstable).",
+          "source": "1.97.0 core/src/num/error.rs:7, doc: \"The error type returned when a checked integral type conversion fails.\"",
+          "reason": "no host state: no slot or expression names state a host object holds beyond its value: a capacity, a hasher's or formatter's state, an entry's hidden map. Here: the cause of a failure is state the language does not name"
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "std::option::Option",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }],
+      "variants": [
+        { "name": "None" },
+        { "name": "Some", "fields": [{ "type": "T", "hold": { "kind": "owns" } }] }
+      ],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Option<T> implements Clone, Eq, PartialEq, PartialOrd and Ord when T does; Copy and Hash when T does (derived); Debug when T does; Default (None) for every T; IntoIterator, which yields the value if there is one; and From<T>.",
+          "source": "1.97.0 core/src/option.rs:591, impls: derive 591, Clone 2266, Default 2299, IntoIterator 2316, From 2361, PartialEq 2434, PartialOrd 2453, Ord 2467",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the language reads Option<T> as T?, whose none and value are not a type with impls"
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "std::result::Result",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }, { "name": "E", "bounds": [] }],
+      "variants": [
+        { "name": "Ok", "fields": [{ "type": "T", "hold": { "kind": "owns" } }] },
+        { "name": "Err", "fields": [{ "type": "E", "hold": { "kind": "owns" } }] }
+      ],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "A Result that is not used may be an Err that nobody handled: #[must_use] on the type makes every function that returns a Result must-use.",
+          "source": "1.97.0 core/src/result.rs:554, attribute #[must_use = \"this `Result` may be an `Err` variant, which should be handled\"]",
+          "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: as a result type the language gives T with `fails E`, and as a parameter it has no form but a host name"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Result<T, E> implements Clone, Eq, PartialEq, PartialOrd and Ord when T and E do; Copy and Hash when they do (derived); Debug when they do; IntoIterator, which yields the Ok value if there is one; and FromIterator<Result<A, E>> for Result<V, E>.",
+          "source": "1.97.0 core/src/result.rs:552, impls: derive 552, Clone 1887, IntoIterator 1919, FromIterator 2111",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value"
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "std::string::String",
+      "visible": "public",
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "String implements Deref<Target = str> and DerefMut, so every str method applies to it; Display, Debug, Hash, Default, Clone, From<&str> and From<char>; FromIterator<char>, FromIterator<&str> and FromIterator<String>; Extend of the same; Add<&str>; Index<I> for ranges of byte indices; and fmt::Write.",
+          "source": "1.97.0 alloc/src/string.rs:2831, impls: Deref 2831, Display 2722, Debug 2730, Hash 2738, Default 2713, Clone 2363, From<&str> 3121, From<char> 3606, FromIterator<char> 2379, Extend<char> 2480, Add 2784, Index 2807, fmt::Write 3355",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Slicing a String with byte indices that are not character boundaries panics; indexing with a single usize is not allowed.",
+          "source": "1.97.0 alloc/src/string.rs:189-190, doc: \"Note this will panic if the byte indices provided are not character boundaries - see [`is_char_boundary`] for more details.\"",
+          "reason": "call resolves to an unnamed impl: an entry names the trait method, not the impl a call resolved to, so a promise that depends on the impl has no subject. Here: the panic belongs to the Index<Range> impl, which no entry names"
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "std::vec::Vec",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Vec<T> implements Deref<Target = [T]> and DerefMut, so every slice method applies to it; IntoIterator by value, with IntoIter<T> as the iterator; Index<I> and IndexMut<I> for slice indices; FromIterator<T>; Extend<T>; Default; Clone, Hash, Eq and Ord when T does; and Debug when T does.",
+          "source": "1.97.0 alloc/src/vec/mod.rs:3782, impls: Deref 3782, IntoIterator 3931, Index 3859, FromIterator 3923, Extend 3991, Default 4293, Clone 3805, Hash 3850, Eq 4267, Ord 4271, Debug 4303",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Indexing a Vec with an index that is not in it panics; get and get_mut check instead.",
+          "source": "1.97.0 alloc/src/vec/mod.rs:252-253, doc: \"However be careful: if you try to access an index which isn't in the `Vec`, your software will panic!\"",
+          "reason": "call resolves to an unnamed impl: an entry names the trait method, not the impl a call resolved to, so a promise that depends on the impl has no subject. Here: the panic belongs to the Index impl, which no entry names"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "A Vec is and always will be a (pointer, capacity, length) triplet; when its length would exceed its capacity, the capacity is increased and its elements are reallocated.",
+          "source": "1.97.0 alloc/src/vec/mod.rs:312-313, doc: \"Most fundamentally, `Vec` is and always will be a (pointer, capacity, length) triplet.\"; 1.97.0 alloc/src/vec/mod.rs:292-294, doc: \"If a vector's length exceeds its capacity, its capacity will automatically be increased, but its elements will have to be reallocated.\"",
+          "reason": "no host state: no slot or expression names state a host object holds beyond its value: a capacity, a hasher's or formatter's state, an entry's hidden map. Here: size counts elements and the language has no capacity of a collection"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::iter::Iterator::next",
+      "visible": "public",
+      "generics": [{ "name": "Self", "bounds": ["std::iter::Iterator"] }],
+      "trait": "std::iter::Iterator",
+      "params": [
+        { "name": "self", "type": "ref<Self>", "access": { "rights": "write", "guarantee": "exclusive" } }
+      ],
+      "result": { "type": { "host": "Option<Self::Item>", "form": "associated type" } },
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Returns Some of the next item and advances the iterator, or None when iteration is finished; after a None an implementation may resume and return Some again.",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:50-53, doc: \"Returns [`None`] when iteration is finished. Individual iterator implementations may choose to resume iteration, and so calling `next()` again may or may not eventually start returning [`Some(Item)`] again at some point.\"",
+          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "What next does, including whether it panics or loops, is the implementation's.",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:48, doc: \"Advances the iterator and returns the next value.\"",
+          "reason": "promise conditional on a bound: no clause makes a promise depend on what a bound's implementation does: `never panics` and `terminates` are unconditional"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::iter::Iterator::count",
+      "visible": "public",
+      "generics": [{ "name": "Self", "bounds": ["std::iter::Iterator"] }],
+      "trait": "std::iter::Iterator",
+      "params": [{ "name": "self", "type": "Self" }],
+      "result": { "type": "u64 as 'usize'" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure counted : result == count(self)",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:195-196, doc: \"This method will call [`next`] repeatedly until [`None`] is encountered, returning the number of times it saw [`Some`].\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Counting more than usize::MAX elements either gives a wrong result or panics, and with overflow checks enabled a panic is guaranteed.",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:205-206, doc: \"If overflow checks are enabled, a panic is guaranteed.\"",
+          "reason": "no build profile: a promise that holds only when overflow checks or debug assertions are on has no clause. Here: `ensure counted` would then fail rather than the call panicking in a release build"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "next is called repeatedly, in order, until it returns None, and at least once even if the iterator has no elements, so its side effects all happen.",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:196-197, doc: \"Note that [`next`] has to be called at least once even if the iterator does not have any elements.\"",
+          "reason": "no order of calls: no clause states the order or the number of times a callback, a hasher or a formatter is called inside one call"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::iter::Iterator::enumerate",
+      "visible": "public",
+      "generics": [{ "name": "Self", "bounds": ["std::iter::Iterator"] }],
+      "trait": "std::iter::Iterator",
+      "params": [{ "name": "self", "type": "Self" }],
+      "result": { "type": "std::iter::Enumerate<Self>" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure same_count : count(result) == count(self)",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:1005-1006, doc: \"Creates an iterator which gives the current iteration count as well as the next value.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "effects",
+          "text": "effects none",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:1048, body: Enumerate::new(self)",
+          "status": { "observed": "creating the adapter calls nothing on the iterator: it is lazy" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "result yields the pairs (i, val), where i counts the items yielded so far from 0 and val is the item itself.",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:1008-1010, doc: \"The iterator returned yields pairs `(i, val)`, where `i` is the current index of iteration and `val` is the value returned by the iterator.\"",
+          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "The returned iterator might panic if the index would overflow a usize, and with overflow checks enabled a panic is guaranteed.",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:1024-1025, doc: \"The returned iterator might panic if the to-be-returned index would overflow a [`usize`].\"",
+          "reason": "no build profile: a promise that holds only when overflow checks or debug assertions are on has no clause"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::iter::Iterator::skip",
+      "visible": "public",
+      "generics": [{ "name": "Self", "bounds": ["std::iter::Iterator"] }],
+      "trait": "std::iter::Iterator",
+      "params": [{ "name": "self", "type": "Self" }, { "name": "n", "type": "u64 as 'usize'" }],
+      "result": { "type": "std::iter::Skip<Self>" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure drops_first_n : count(result) == (if count(self) > n then count(self) - n else 0)",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:1358-1359, doc: \"In particular, if the original iterator is too short, then the returned iterator is empty.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "effects",
+          "text": "effects none",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:1379, body: Skip::new(self, n)",
+          "status": { "observed": "creating the adapter calls nothing on the iterator: it is lazy" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "result yields the items of self after its first n, in order.",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:1354, doc: \"Creates an iterator that skips the first `n` elements.\"",
+          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::iter::Iterator::take",
+      "visible": "public",
+      "generics": [{ "name": "Self", "bounds": ["std::iter::Iterator"] }],
+      "trait": "std::iter::Iterator",
+      "params": [{ "name": "self", "type": "Self" }, { "name": "n", "type": "u64 as 'usize'" }],
+      "result": { "type": "std::iter::Take<Self>" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure first_n : count(result) == (if count(self) < n then count(self) else n)",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:1387-1389, doc: \"The returned iterator is a prefix of length `n` if the original iterator contains at least `n` elements, otherwise it contains all of the (fewer than `n`) elements of the original iterator.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "effects",
+          "text": "effects none",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:1451, body: Take::new(self, n)",
+          "status": { "observed": "creating the adapter calls nothing on the iterator: it is lazy" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "result yields the first n items of self, or all of them if it has fewer, in order.",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:1382-1383, doc: \"Creates an iterator that yields the first `n` elements, or fewer if the underlying iterator ends sooner.\"",
+          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::iter::Iterator::chain",
+      "visible": "public",
+      "generics": [
+        { "name": "Self", "bounds": ["std::iter::Iterator<Item = Item>"] },
+        { "name": "Item", "bounds": [] },
+        { "name": "U", "bounds": ["std::iter::IntoIterator<Item = Item>"] }
+      ],
+      "trait": "std::iter::Iterator",
+      "params": [{ "name": "self", "type": "Self" }, { "name": "other", "type": "U" }],
+      "result": { "type": { "host": "std::iter::Chain<Self, U::IntoIter>", "form": "associated type" } },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure sum_count : count(result) == count(self) + count(other)",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:446, doc: \"Takes two iterators and creates a new iterator over both in sequence.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "effects",
+          "text": "calls only std::iter::IntoIterator::into_iter",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:515, body: Chain::new(self, other.into_iter())",
+          "status": {
+            "observed": "the body turns other into an iterator and builds the adapter; it calls nothing on either iterator"
+          }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "result first yields the items of self and then those of other, in order.",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:448-450, doc: \"`chain()` will return a new iterator which will first iterate over values from the first iterator and then over values from the second iterator.\"",
+          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::iter::Iterator::zip",
+      "visible": "public",
+      "generics": [
+        { "name": "Self", "bounds": ["std::iter::Iterator"] },
+        { "name": "U", "bounds": ["std::iter::IntoIterator"] }
+      ],
+      "trait": "std::iter::Iterator",
+      "params": [{ "name": "self", "type": "Self" }, { "name": "other", "type": "U" }],
+      "result": { "type": { "host": "std::iter::Zip<Self, U::IntoIter>", "form": "associated type" } },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure shorter_count : count(result) == (if count(self) < count(other) then count(self) else count(other))",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:526-527, doc: \"If either iterator returns [`None`], [`next`] from the zipped iterator will return [`None`].\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "effects",
+          "text": "calls only std::iter::IntoIterator::into_iter",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:634, body: Zip::new(self, other.into_iter())",
+          "status": {
+            "observed": "the body turns other into an iterator and builds the adapter; it calls nothing on either iterator"
+          }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "result yields the pairs of the items of self and of other, taken in step and in order, and ends when either ends.",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:520-522, doc: \"`zip()` returns a new iterator that will iterate over two other iterators, returning a tuple where the first element comes from the first iterator, and the second element comes from the second iterator.\"",
+          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::iter::Iterator::map",
+      "visible": "public",
+      "generics": [
+        { "name": "Self", "bounds": ["std::iter::Iterator<Item = Item>"] },
+        { "name": "Item", "bounds": [] },
+        { "name": "B", "bounds": [] },
+        { "name": "F", "bounds": ["FnMut(Item) -> B"] }
+      ],
+      "trait": "std::iter::Iterator",
+      "params": [{ "name": "self", "type": "Self" }, { "name": "f", "type": "F" }],
+      "result": { "type": "std::iter::Map<Self, F>" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure same_count : count(result) == count(self)",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:784-785, doc: \"It produces a new iterator which calls this closure on each element of the original iterator.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "effects",
+          "text": "effects none",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:836, body: Map::new(self, f)",
+          "status": {
+            "observed": "creating the adapter calls nothing on the iterator: it is lazy; f is not called"
+          }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "result yields f(x) for each item x of self, in order.",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:780-781, doc: \"Takes a closure and creates an iterator which calls that closure on each element.\"",
+          "reason": "no value of a callback result: a clause cannot call a function argument, which need not be pure, so it cannot relate a result to what the callback returns"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "f is called once for each item, in order, and only when the result is advanced: map is lazy.",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:792-793, doc: \"However, as `map()` is lazy, it is best used when you're already working with other iterators.\"",
+          "reason": "no order of calls: no clause states the order or the number of times a callback, a hasher or a formatter is called inside one call"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::iter::Iterator::filter",
+      "visible": "public",
+      "generics": [
+        { "name": "Self", "bounds": ["std::iter::Iterator<Item = Item>"] },
+        { "name": "Item", "bounds": [] },
+        { "name": "P", "bounds": ["FnMut(&Item) -> bool"] }
+      ],
+      "trait": "std::iter::Iterator",
+      "params": [{ "name": "self", "type": "Self" }, { "name": "predicate", "type": "P" }],
+      "result": { "type": "std::iter::Filter<Self, P>" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure at_most_count : count(result) <= count(self)",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:893-895, doc: \"The returned iterator will yield only the elements for which the closure returns `true`.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "effects",
+          "text": "effects none",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:957, body: Filter::new(self, predicate)",
+          "status": {
+            "observed": "creating the adapter calls nothing on the iterator: it is lazy; predicate is not called"
+          }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "result yields exactly the items x of self for which predicate(&x) is true, in order.",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:893, doc: \"Given an element the closure must return `true` or `false`.\"",
+          "reason": "no value of a callback result: a clause cannot call a function argument, which need not be pure, so it cannot relate a result to what the callback returns"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "predicate is called once for each item, in order, and only when the result is advanced.",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:890-891, doc: \"Creates an iterator which uses a closure to determine if an element should be yielded.\"",
+          "reason": "no order of calls: no clause states the order or the number of times a callback, a hasher or a formatter is called inside one call"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::iter::Iterator::take_while",
+      "visible": "public",
+      "generics": [
+        { "name": "Self", "bounds": ["std::iter::Iterator<Item = Item>"] },
+        { "name": "Item", "bounds": [] },
+        { "name": "P", "bounds": ["FnMut(&Item) -> bool"] }
+      ],
+      "trait": "std::iter::Iterator",
+      "params": [{ "name": "self", "type": "Self" }, { "name": "predicate", "type": "P" }],
+      "result": { "type": "std::iter::TakeWhile<Self, P>" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure at_most_count : count(result) <= count(self)",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:1194-1195, doc: \"After `false` is returned, `take_while()`'s job is over, and the rest of the elements are ignored.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "effects",
+          "text": "effects none",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:1263, body: TakeWhile::new(self, predicate)",
+          "status": {
+            "observed": "creating the adapter calls nothing on the iterator: it is lazy; predicate is not called"
+          }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "result yields the items of self in order up to, and not including, the first one for which predicate returns false.",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:1190-1192, doc: \"It will call this closure on each element of the iterator, and yield elements while it returns `true`.\"",
+          "reason": "no value of a callback result: a clause cannot call a function argument, which need not be pure, so it cannot relate a result to what the callback returns"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "The first item for which predicate returns false is consumed from self and not yielded or put back, so a caller that keeps the underlying iterator does not see it.",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:1254-1255, doc: \"The `3` is no longer there, because it was consumed in order to see if the iteration should stop, but wasn't placed back into the iterator.\"",
+          "reason": "no order of calls: no clause states the order or the number of times a callback, a hasher or a formatter is called inside one call"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::iter::Iterator::flat_map",
+      "visible": "public",
+      "generics": [
+        { "name": "Self", "bounds": ["std::iter::Iterator<Item = Item>"] },
+        { "name": "Item", "bounds": [] },
+        { "name": "U", "bounds": ["std::iter::IntoIterator"] },
+        { "name": "F", "bounds": ["FnMut(Item) -> U"] }
+      ],
+      "trait": "std::iter::Iterator",
+      "params": [{ "name": "self", "type": "Self" }, { "name": "f", "type": "F" }],
+      "result": { "type": "std::iter::FlatMap<Self, U, F>" },
+      "clauses": [
+        {
+          "kind": "effects",
+          "text": "effects none",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:1539, body: FlatMap::new(self, f)",
+          "status": {
+            "observed": "creating the adapter calls nothing on the iterator: it is lazy; f is not called"
+          }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "result yields the items of f(x) for each item x of self, one x after another, in order: it is map(f) followed by flatten.",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:1509-1510, doc: \"You can think of `flat_map(f)` as the semantic equivalent of [`map`]ping, and then [`flatten`]ing as in `map(f).flatten()`.\"",
+          "reason": "no value of a callback result: a clause cannot call a function argument, which need not be pure, so it cannot relate a result to what the callback returns. Here: so no count of the result can be stated"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::iter::Iterator::copied",
+      "visible": "public",
+      "generics": [
+        { "name": "Self", "bounds": ["std::iter::Iterator<Item = &'a T>"] },
+        { "name": "'a", "bounds": [] },
+        { "name": "T", "bounds": ["std::marker::Copy", "'a"] }
+      ],
+      "trait": "std::iter::Iterator",
+      "params": [{ "name": "self", "type": "Self" }],
+      "result": { "type": "std::iter::Copied<Self>" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure same_count : count(result) == count(self)",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:3491, doc: \"Creates an iterator which copies all of its elements.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "effects",
+          "text": "effects none",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:3516, body: Copied::new(self)",
+          "status": { "observed": "creating the adapter calls nothing on the iterator: it is lazy" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "result yields a copy of each item of self, in order.",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:3493-3494, doc: \"This is useful when you have an iterator over `&T`, but you need an iterator over `T`.\"",
+          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::iter::Iterator::collect",
+      "visible": "public",
+      "generics": [
+        { "name": "Self", "bounds": ["std::iter::Iterator<Item = Item>"] },
+        { "name": "Item", "bounds": [] },
+        { "name": "B", "bounds": ["std::iter::FromIterator<Item>"] }
+      ],
+      "trait": "std::iter::Iterator",
+      "params": [{ "name": "self", "type": "Self" }],
+      "result": { "type": "B" },
+      "clauses": [
+        {
+          "kind": "result must be used",
+          "text": "result must be used",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:2074, attribute #[must_use = \"if you really need to exhaust the iterator, consider `.for_each(drop)` instead\"]",
+          "status": { "lifted": "core/src/iter/traits/iterator.rs: #[must_use] on the item" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "What the result holds is decided by B's FromIterator impl: a String collects chars, and a Result<V, E> collects an iterator of Result items into Result<V, E>, stopping at the first Err.",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:1974-1975, doc: \"`collect()` can also create instances of types that are not typical collections.\"",
+          "reason": "call resolves to an unnamed impl: an entry names the trait method, not the impl a call resolved to, so a promise that depends on the impl has no subject. Here: strsim and fnv collect into different B, and the call resolves to a different impl each time"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Whether it panics or loops depends on Self::next and on B's from_iter.",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:2090, body: FromIterator::from_iter(self)",
+          "reason": "promise conditional on a bound: no clause makes a promise depend on what a bound's implementation does: `never panics` and `terminates` are unconditional"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::iter::IntoIterator::into_iter",
+      "visible": "public",
+      "generics": [{ "name": "Self", "bounds": ["std::iter::IntoIterator"] }],
+      "trait": "std::iter::IntoIterator",
+      "params": [{ "name": "self", "type": "Self" }],
+      "result": { "type": { "host": "Self::IntoIter", "form": "associated type" } },
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Which items result yields, and in which order, depends on the impl the call resolves to: a Vec yields its elements, a Range its integers, an Option its value if it has one, and an Iterator is its own IntoIterator.",
+          "source": "1.97.0 core/src/iter/traits/collect.rs:293, doc: \"Creates an iterator from a value.\"",
+          "reason": "call resolves to an unnamed impl: an entry names the trait method, not the impl a call resolved to, so a promise that depends on the impl has no subject. Here: the corpora call into_iter on at least ranges, vectors and slices through different impls"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "result yields exactly the items of self, as Self::Item, in the order the impl defines.",
+          "source": "1.97.0 core/src/iter/traits/collect.rs:293, doc: \"Creates an iterator from a value.\"",
+          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::cmp::Ord::max",
+      "visible": "public",
+      "generics": [{ "name": "Self", "bounds": ["std::cmp::Ord"] }],
+      "trait": "std::cmp::Ord",
+      "params": [{ "name": "self", "type": "Self" }, { "name": "other", "type": "Self" }],
+      "result": { "type": "Self" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure ge_both : result >= self and result >= other",
+          "source": "1.97.0 core/src/cmp.rs:1002, doc: \"Compares and returns the maximum of two values.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "ensure",
+          "text": "ensure an_argument : result == self or result == other",
+          "source": "1.97.0 core/src/cmp.rs:1038, body: if other < self { self } else { other }",
+          "status": { "observed": "the default body returns one of its two arguments" }
+        },
+        {
+          "kind": "result must be used",
+          "text": "result must be used",
+          "source": "1.97.0 core/src/cmp.rs:1032, attribute #[must_use]",
+          "status": { "lifted": "core/src/cmp.rs: #[must_use] on the item" }
+        },
+        {
+          "kind": "effects",
+          "text": "calls only std::cmp::PartialOrd::lt",
+          "source": "1.97.0 core/src/cmp.rs:1038, body: if other < self { self } else { other }",
+          "status": { "observed": "the default body is one comparison" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "When self and other compare equal under Ord, the value returned is other and self is dropped.",
+          "source": "1.97.0 core/src/cmp.rs:1004, doc: \"Returns the second argument if the comparison determines them to be equal.\"",
+          "reason": "no identity of moved values: `==` is structural on values and `same` is identity of host references, which a value moved into or out of a container does not have. Here: so `result == other` cannot tell which of two Ord-equal values came back"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Never panics and always returns, unless Self's PartialOrd::lt or Ord::cmp panics or loops, or an implementation overrides max.",
+          "source": "1.97.0 core/src/cmp.rs:1038, body: if other < self { self } else { other }",
+          "reason": "promise conditional on a bound: no clause makes a promise depend on what a bound's implementation does: `never panics` and `terminates` are unconditional"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::clone::Clone::clone",
+      "visible": "public",
+      "generics": [{ "name": "Self", "bounds": ["std::clone::Clone"] }],
+      "trait": "std::clone::Clone",
+      "params": [
+        { "name": "self", "type": "ref<Self>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "Self" },
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Returns a duplicate of the value; what duplicate means varies by type: a deep, independent copy for most types, and another reference to the same data for references, Rc and Arc.",
+          "source": "1.97.0 core/src/clone.rs:195, doc: \"Returns a duplicate of the value.\"",
+          "reason": "no identity of moved values: `==` is structural on values and `same` is identity of host references, which a value moved into or out of a container does not have. Here: a clause cannot say whether result shares storage with self"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "When a type implements both Clone and PartialEq, a value that compares equal to itself has a clone that compares equal to it; and for Copy types y.clone() equals *y.",
+          "source": "1.97.0 core/src/clone.rs:148-149, doc: \"In other words, if an object compares equal to itself, its clone must also compare equal to the original.\"",
+          "reason": "requirement on bound implementations: a requirement on the implementations of a bound, not on values: a clause cannot name what a bound's methods must satisfy at a call site"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "A clone method may run arbitrary code, so whether it panics, loops or has effects is the type's.",
+          "source": "1.97.0 core/src/clone.rs:56-57, doc: \"the `clone` method you provide may run arbitrary code.\"",
+          "reason": "promise conditional on a bound: no clause makes a promise depend on what a bound's implementation does: `never panics` and `terminates` are unconditional"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::default::Default::default",
+      "visible": "public",
+      "generics": [{ "name": "Self", "bounds": ["std::default::Default"] }],
+      "trait": "std::default::Default",
+      "params": [],
+      "result": { "type": "Self" },
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Returns the default value for the type, which is often an initial or identity value; which value that is, is the impl's: 0 for numbers, empty for String, Vec and HashMap, and the fields' defaults when derived.",
+          "source": "1.97.0 core/src/default.rs:110-111, doc: \"Default values are often some kind of initial value, identity value, or anything else that may make sense as a default.\"",
+          "reason": "call resolves to an unnamed impl: an entry names the trait method, not the impl a call resolved to, so a promise that depends on the impl has no subject. Here: the corpora call default for many types"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::convert::From::from",
+      "visible": "public",
+      "generics": [{ "name": "Self", "bounds": ["std::convert::From<T>"] }, { "name": "T", "bounds": [] }],
+      "trait": "std::convert::From<T>",
+      "params": [{ "name": "value", "type": "T" }],
+      "result": { "type": "Self" },
+      "clauses": [
+        {
+          "kind": "never panics",
+          "text": "never panics",
+          "source": "1.97.0 core/src/convert/mod.rs:480, doc: \"**Note: This trait must not fail**. The `From` trait is intended for perfect conversions.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "result must be used",
+          "text": "result must be used",
+          "source": "1.97.0 core/src/convert/mod.rs:591, attribute #[must_use]",
+          "status": { "lifted": "core/src/convert/mod.rs: #[must_use] on the item" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Converts the input value into Self, consuming it; what the result is, is the impl's: String::from copies a &str, and an integer widening keeps the value.",
+          "source": "1.97.0 core/src/convert/mod.rs:589, doc: \"Converts to this type from the input type.\"",
+          "reason": "call resolves to an unnamed impl: an entry names the trait method, not the impl a call resolved to, so a promise that depends on the impl has no subject. Here: the corpora call from through several impls"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::convert::TryFrom::try_from",
+      "visible": "public",
+      "generics": [{ "name": "Self", "bounds": ["std::convert::TryFrom<T>"] }, { "name": "T", "bounds": [] }],
+      "trait": "std::convert::TryFrom<T>",
+      "params": [{ "name": "value", "type": "T" }],
+      "result": { "type": "Self", "fails": { "host": "Self::Error", "form": "associated type" } },
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Fails with the impl's Error when the value cannot be converted; for the integer impls, whose error is TryFromIntError, it fails exactly when the value is not representable in Self, which is `fails TryFromIntError when not (value fits Self)`.",
+          "source": "1.97.0 core/src/convert/mod.rs:626-627, doc: \"Simple and safe type conversions that may fail in a controlled way under some circumstances.\"",
+          "reason": "call resolves to an unnamed impl: an entry names the trait method, not the impl a call resolved to, so a promise that depends on the impl has no subject. Here: strsim calls try_from between integer types: the condition belongs to the impl, which no entry names"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "try_from is reflexive: TryFrom<T> for T is implemented and cannot fail, and its Error is Infallible.",
+          "source": "1.97.0 core/src/convert/mod.rs:643-644, doc: \"[`try_from`] is reflexive, which means that `TryFrom<T> for T` is implemented and cannot fail\"",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::fmt::Display::fmt",
+      "visible": "public",
+      "generics": [{ "name": "Self", "bounds": ["std::fmt::Display"] }],
+      "trait": "std::fmt::Display",
+      "params": [
+        { "name": "self", "type": "ref<Self>", "access": { "rights": "read", "guarantee": "readers" } },
+        {
+          "name": "f",
+          "type": { "host": "&mut std::fmt::Formatter<'_>", "form": "lifetime argument" },
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "result": { "type": "()", "fails": "std::fmt::Error" },
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Returns Err if, and only if, the Formatter returns Err: formatting itself is infallible, and the Result only carries a failure of the underlying stream back.",
+          "source": "1.97.0 core/src/fmt/fmt_trait_method_doc.md:5, doc: \"This function should return [`Err`] if, and only if, the provided [`Formatter`] returns [`Err`].\"",
+          "reason": "no host state: no slot or expression names state a host object holds beyond its value: a capacity, a hasher's or formatter's state, an entry's hidden map. Here: the failure of the formatter's destination is host state"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Writes the user-facing text of self to f.",
+          "source": "1.97.0 core/src/fmt/fmt_trait_method_doc.md:1, doc: \"Formats the value using the given formatter.\"",
+          "reason": "no formatted text: the language cannot state what text a message, a format or a Debug or Display impl produces"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::hash::Hasher::finish",
+      "visible": "public",
+      "generics": [{ "name": "Self", "bounds": ["std::hash::Hasher"] }],
+      "trait": "std::hash::Hasher",
+      "params": [
+        { "name": "self", "type": "ref<Self>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "u64" },
+      "clauses": [
+        {
+          "kind": "result must be used",
+          "text": "result must be used",
+          "source": "1.97.0 core/src/hash/mod.rs:333, attribute #[must_use]",
+          "status": { "lifted": "core/src/hash/mod.rs: #[must_use] on the item" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Returns the hash of the bytes written so far, and does not reset the hasher: further writes continue from the current state.",
+          "source": "1.97.0 core/src/hash/mod.rs:315-316, doc: \"Despite its name, the method does not reset the hasher’s internal state.\"",
+          "reason": "no host state: no slot or expression names state a host object holds beyond its value: a capacity, a hasher's or formatter's state, an entry's hidden map. Here: the bytes written so far are state of the hasher, not a value"
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::hash::Hasher::write",
+      "visible": "public",
+      "generics": [{ "name": "Self", "bounds": ["std::hash::Hasher"] }],
+      "trait": "std::hash::Hasher",
+      "params": [
+        { "name": "self", "type": "ref<Self>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        {
+          "name": "bytes",
+          "type": { "host": "&[u8]", "form": "slice" },
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Mixes bytes into the hasher's state, so that finish afterwards reflects them; the hash depends on the exact sequence of write calls, since adjacent writes need not be merged.",
+          "source": "1.97.0 core/src/hash/mod.rs:288-290, doc: \"Thus to produce the same hash value, [`Hash`] implementations must ensure for equivalent items that exactly the same sequence of calls is made -- the same methods with the same parameters in the same order.\"",
+          "reason": "no host state: no slot or expression names state a host object holds beyond its value: a capacity, a hasher's or formatter's state, an entry's hidden map. Here: the state is the hasher's and the sequence of calls is a trace"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "write need not behave as write_u8 repeated, or as calls merged or split at other places: no guarantee is given about how the write_* methods are defined.",
+          "source": "1.97.0 core/src/hash/mod.rs:268-270, doc: \"This trait provides no guarantees about how the various `write_*` methods are defined and implementations of [`Hash`] should not assume that they work one way or another.\"",
+          "reason": "no order of calls: no clause states the order or the number of times a callback, a hasher or a formatter is called inside one call"
+        }
+      ]
+    },
+    {
+      "kind": "trait",
+      "name": "std::cmp::PartialEq",
+      "visible": "public",
+      "generics": [{ "name": "Rhs", "bounds": ["?Sized"] }],
+      "clauses": [
+        {
+          "kind": "law",
+          "text": "law symmetric : all a : Self : all b : Self : std::cmp::PartialEq::eq(a, b) implies std::cmp::PartialEq::eq(b, a)",
+          "source": "1.97.0 core/src/cmp.rs:66-67, doc: \"**Symmetry**: if `A: PartialEq<B>` and `B: PartialEq<A>`, then **`a == b` implies `b == a`**\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "law",
+          "text": "law transitive : all a : Self : all b : Self : all c : Self : (std::cmp::PartialEq::eq(a, b) and std::cmp::PartialEq::eq(b, c)) implies std::cmp::PartialEq::eq(a, c)",
+          "source": "1.97.0 core/src/cmp.rs:69-70, doc: \"**Transitivity**: if `A: PartialEq<B>` and `B: PartialEq<C>` and `A: PartialEq<C>`, then **`a == b` and `b == c` implies `a == c`**.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "law",
+          "text": "law ne_is_not_eq : all a : Self : all b : Self : std::cmp::PartialEq::ne(a, b) iff not std::cmp::PartialEq::eq(a, b)",
+          "source": "1.97.0 core/src/cmp.rs:53, doc: \"`a != b` if and only if `!(a == b)`.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "The three laws above are stated for Rhs = Self; for two types A and B they apply only where the impls A: PartialEq<B>, B: PartialEq<A> and A: PartialEq<C> exist, and must also hold across longer chains of types. Implementations of PartialOrd and Ord must be consistent with PartialEq.",
+          "source": "1.97.0 core/src/cmp.rs:58-59, doc: \"If [`PartialOrd`] or [`Ord`] are also implemented for `Self` and `Rhs`, their methods must also be consistent with `PartialEq`\"",
+          "reason": "requirement on bound implementations: a requirement on the implementations of a bound, not on values: a clause cannot name what a bound's methods must satisfy at a call site. Here: a law quantifies over one type, and the relation among several types' impls is a property of the impls that exist"
+        }
+      ]
+    },
+    {
+      "kind": "trait",
+      "name": "std::cmp::Eq",
+      "visible": "public",
+      "bounds": ["std::cmp::PartialEq<Self>"],
+      "clauses": [
+        {
+          "kind": "law",
+          "text": "law reflexive : all a : Self : std::cmp::PartialEq::eq(a, a)",
+          "source": "1.97.0 core/src/cmp.rs:289, doc: \"reflexive: `a == a`\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Eq has no methods: whether a type's PartialEq is also reflexive is a promise the compiler cannot check, and floating point types are not Eq because NaN != NaN.",
+          "source": "1.97.0 core/src/cmp.rs:291, doc: \"This property cannot be checked by the compiler, and therefore `Eq` is a trait without methods.\"",
+          "reason": "requirement on bound implementations: a requirement on the implementations of a bound, not on values: a clause cannot name what a bound's methods must satisfy at a call site. Here: the promise is made by writing `impl Eq`, which no clause attaches to the implementing type"
+        }
+      ]
+    },
+    {
+      "kind": "trait",
+      "name": "std::cmp::Ord",
+      "visible": "public",
+      "bounds": ["std::cmp::Eq", "std::cmp::PartialOrd<Self>"],
+      "clauses": [
+        {
+          "kind": "law",
+          "text": "law antisymmetric : all a : Self : all b : Self : (std::cmp::Ord::cmp(a, b) is Less) iff (std::cmp::Ord::cmp(b, a) is Greater)",
+          "source": "1.97.0 core/src/cmp.rs:754, doc: \"exactly one of `a < b`, `a == b` or `a > b` is true; and\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "law",
+          "text": "law transitive : all a : Self : all b : Self : all c : Self : ((std::cmp::Ord::cmp(a, b) is Less) and (std::cmp::Ord::cmp(b, c) is Less)) implies (std::cmp::Ord::cmp(a, c) is Less)",
+          "source": "1.97.0 core/src/cmp.rs:755, doc: \"`<` is transitive: `a < b` and `b < c` implies `a < c`.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "cmp must agree with PartialOrd (partial_cmp(a, b) == Some(cmp(a, b))), and max and min with cmp (max(a, b) == max_by(a, b, cmp)); a violation is a logic error, which unsafe code must not rely on being absent.",
+          "source": "1.97.0 core/src/cmp.rs:736-737, doc: \"Implementations must be consistent with the [`PartialOrd`] implementation, and ensure `max`, `min`, and `clamp` are consistent with `cmp`:\"",
+          "reason": "requirement on bound implementations: a requirement on the implementations of a bound, not on values: a clause cannot name what a bound's methods must satisfy at a call site. Here: a requirement tying several methods of several traits together"
+        }
+      ]
+    },
+    {
+      "kind": "trait",
+      "name": "std::hash::Hash",
+      "visible": "public",
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "When a type implements both Hash and Eq, k1 == k2 implies hash(k1) == hash(k2): if two keys are equal, their hashes must be equal; HashMap and HashSet rely on it, and a violation is a logic error that unsafe code must not rely on being absent.",
+          "source": "1.97.0 core/src/hash/mod.rs:144, doc: \"In other words, if two keys are equal, their hashes must also be equal.\"",
+          "reason": "requirement on bound implementations: a requirement on the implementations of a bound, not on values: a clause cannot name what a bound's methods must satisfy at a call site. Here: the hash of a value is the state a Hasher reaches after hash feeds it, not a value a clause can name"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Values that are not equal should cause two different sequences of writes to the Hasher, neither a prefix of the other (the impl for &str writes an extra 0xFF byte); and the data fed to a Hasher is not portable across platforms or stable between compiler versions.",
+          "source": "1.97.0 core/src/hash/mod.rs:157-158, doc: \"Implementations of `hash` should ensure that the data they pass to the `Hasher` are prefix-free.\"",
+          "reason": "no host state: no slot or expression names state a host object holds beyond its value: a capacity, a hasher's or formatter's state, an entry's hidden map. Here: the sequence of writes is a trace on the hasher"
+        }
+      ]
+    },
+    {
+      "kind": "trait",
+      "name": "std::hash::Hasher",
+      "visible": "public",
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "An implementor gives finish and write; write_u8, write_u16, write_u32, write_u64, write_u128 and write_usize, and the signed forms, have default bodies in terms of write.",
+          "source": "1.97.0 core/src/hash/mod.rs:362, default body self.write(&[i]); the other write_* methods likewise",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: a trait's provided methods are not a slot"
+        }
+      ]
+    },
+    {
+      "kind": "trait",
+      "name": "std::iter::Iterator",
+      "visible": "public",
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Item is the associated type of the elements; next is the only required method, and all the others (map, filter, count, collect and the rest) have default bodies in terms of it.",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:42, trait head: type Item; and fn next(&mut self) -> Option<Self::Item>; with no body",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Iterators are lazy and do nothing unless consumed: #[must_use] on the trait makes a discarded iterator a warning wherever it is returned.",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:40, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
+          "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind"
+        }
+      ]
+    },
+    {
+      "kind": "trait",
+      "name": "std::iter::IntoIterator",
+      "visible": "public",
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Item and IntoIter are the associated types, with IntoIter: Iterator<Item = Self::Item>; every Iterator I is an IntoIterator with Item = I::Item and IntoIter = I, whose into_iter returns the iterator itself.",
+          "source": "1.97.0 core/src/iter/traits/collect.rs:283, impls: trait 283, blanket impl 317",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item and IntoIter types are associated types"
+        }
+      ]
+    },
+    {
+      "kind": "trait",
+      "name": "std::clone::Clone",
+      "visible": "public",
+      "bounds": ["Sized"],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Clone is a supertrait of Copy, so every Copy type is Clone, and a Copy type's clone only needs to return *self.",
+          "source": "1.97.0 core/src/clone.rs:59-60, doc: \"Since `Clone` is a supertrait of [`Copy`], any type that implements `Copy` must also implement `Clone`.\"",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: recorded on Copy as its supertrait; the consequence for clone is an impl's behaviour"
+        }
+      ]
+    },
+    {
+      "kind": "trait",
+      "name": "std::marker::Copy",
+      "visible": "public",
+      "bounds": ["std::clone::Clone"],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Copy has no methods: a copy is always a simple bit-wise copy, made implicitly on assignment, after which the source stays usable; a type can be Copy if all its components are, and cannot be Copy if it implements Drop.",
+          "source": "1.97.0 core/src/marker.rs:353-354, doc: \"The behavior of `Copy` is not overloadable; it is always a simple bit-wise copy.\"",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: what a copy leaves usable is not a clause"
+        }
+      ]
+    },
+    {
+      "kind": "trait",
+      "name": "std::default::Default",
+      "visible": "public",
+      "bounds": ["Sized"],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Rust implements Default for various primitive types, and a type's Default can be derived when all its fields implement Default, using each field's default.",
+          "source": "1.97.0 core/src/default.rs:36, doc: \"Rust implements `Default` for various primitive types.\"",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: which types implement the trait is not a slot"
+        }
+      ]
+    },
+    {
+      "kind": "trait",
+      "name": "std::convert::From",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }],
+      "bounds": ["Sized"],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Implementing From<T> for U gives Into<U> for T by a blanket impl, so From is the one to implement; and conversions are expected to be infallible and lossless.",
+          "source": "1.97.0 core/src/convert/mod.rs:461, doc: \"One should always prefer implementing `From` over [`Into`]\"",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the blanket impl and the expectation about impls are not a slot"
+        }
+      ]
+    },
+    {
+      "kind": "trait",
+      "name": "std::convert::TryFrom",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }],
+      "bounds": ["Sized"],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Error is the associated type of a failed conversion; TryFrom<T> for U implies TryInto<U> for T.",
+          "source": "1.97.0 core/src/convert/mod.rs:642, doc: \"`TryFrom<T> for U` implies [`TryInto`]`<U> for T`\"",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Error type is an associated type"
+        }
+      ]
+    },
+    {
+      "kind": "trait",
+      "name": "std::error::Error",
+      "visible": "public",
+      "bounds": ["std::fmt::Debug", "std::fmt::Display"],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "An implementor describes itself through Debug and Display; source returns the lower-level source of the error, and None by default.",
+          "source": "1.97.0 core/src/error.rs:10-11, doc: \"Errors must describe themselves through the [`Display`] and [`Debug`] traits.\"",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the default of a provided method is not a slot"
+        }
+      ]
+    },
+    {
+      "kind": "trait",
+      "name": "std::fmt::Debug",
+      "visible": "public",
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Debug formats a value for programmers and debugging, and a derived Debug format, like the format of every standard library type, is not stable and may change with a Rust version.",
+          "source": "1.97.0 core/src/fmt/mod.rs:942-943, doc: \"Derived `Debug` formats are not stable, and so may change with future Rust versions.\"",
+          "reason": "no formatted text: the language cannot state what text a message, a format or a Debug or Display impl produces"
+        }
+      ]
+    },
+    {
+      "kind": "trait",
+      "name": "std::fmt::Display",
+      "visible": "public",
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Display formats a value for the user, cannot be derived, and may omit internal state or precision: its output need not parse back into the same value.",
+          "source": "1.97.0 core/src/fmt/mod.rs:1108-1109, doc: \"`Display` is similar to [`Debug`], but `Display` is for user-facing output, and so cannot be derived.\"",
+          "reason": "no formatted text: the language cannot state what text a message, a format or a Debug or Display impl produces"
+        }
+      ]
+    },
+    {
+      "kind": "trait",
+      "name": "std::ops::Deref",
+      "visible": "public",
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "deref should never unexpectedly fail: deref coercion inserts calls to it implicitly, so it should be infallible, though it may panic when the type is misused through programmer error; unsafe code should not rely on infallibility.",
+          "source": "1.97.0 core/src/ops/deref.rs:87, doc: \"**This trait's method should never unexpectedly fail**.\"",
+          "reason": "promise conditional on a bound: no clause makes a promise depend on what a bound's implementation does: `never panics` and `terminates` are unconditional"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Target is the associated type; if T: Deref<Target = U>, then *v is *Deref::deref(&v), &T coerces to &U, and T implicitly has the &self methods of U.",
+          "source": "1.97.0 core/src/ops/deref.rs:31, doc: \"Values of type `&T` are coerced to values of type `&U`\"",
+          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Target type is an associated type"
+        }
+      ]
+    },
+    {
+      "kind": "trait",
+      "name": "std::ops::DerefMut",
+      "visible": "public",
+      "bounds": ["std::ops::Deref"],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "deref_mut should never unexpectedly fail, as for deref: it is inserted implicitly by mutable deref coercion.",
+          "source": "1.97.0 core/src/ops/deref.rs:214, doc: \"**This trait's method should never unexpectedly fail**.\"",
+          "reason": "promise conditional on a bound: no clause makes a promise depend on what a bound's implementation does: `never panics` and `terminates` are unconditional"
+        }
+      ]
+    },
+    {
+      "kind": "trait",
+      "name": "std::ops::Index",
+      "visible": "public",
+      "generics": [{ "name": "Idx", "bounds": ["?Sized"] }],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "container[index] is *container.index(index) in an immutable context, and may panic if the index is out of bounds; which impls panic, and for which indices, is the impl's.",
+          "source": "1.97.0 core/src/ops/index.rs:69, doc: \"May panic if the index is out of bounds.\"",
+          "reason": "call resolves to an unnamed impl: an entry names the trait method, not the impl a call resolved to, so a promise that depends on the impl has no subject. Here: a slice or Vec indexed by a usize not in it panics, and the call resolves to that impl"
+        }
+      ]
+    },
+    {
+      "kind": "trait",
+      "name": "std::ops::IndexMut",
+      "visible": "public",
+      "generics": [{ "name": "Idx", "bounds": ["?Sized"] }],
+      "bounds": ["std::ops::Index<Idx>"],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "container[index] is *container.index_mut(index) in a mutable context, and may panic if the index is out of bounds; which impls panic, and for which indices, is the impl's.",
+          "source": "1.97.0 core/src/ops/index.rs:175, doc: \"May panic if the index is out of bounds.\"",
+          "reason": "call resolves to an unnamed impl: an entry names the trait method, not the impl a call resolved to, so a promise that depends on the impl has no subject. Here: the call resolves to the impl of the container"
+        }
+      ]
+    },
+    {
+      "kind": "macro",
+      "name": "std::clone::Clone!",
+      "visible": "public",
+      "form": "derive",
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "The derived Clone clones each field, and for a generic type adds a Clone bound on each generic parameter.",
+          "source": "1.97.0 core/src/clone.rs:64-65, doc: \"The `derive`d implementation of [`Clone`] calls [`clone`] on each field.\"",
+          "reason": "no quantifier over fields: no clause ranges over the fields of a type, which what a derive generates needs"
+        }
+      ]
+    },
+    {
+      "kind": "macro",
+      "name": "std::cmp::PartialEq!",
+      "visible": "public",
+      "form": "derive",
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "On a struct two values are equal if all fields are equal and not equal if any field is not; on an enum they are equal if they are the same variant and all fields are equal.",
+          "source": "1.97.0 core/src/cmp.rs:104-106, doc: \"When `derive`d on structs, two instances are equal if all fields are equal, and not equal if any fields are not equal.\"",
+          "reason": "no quantifier over fields: no clause ranges over the fields of a type, which what a derive generates needs"
+        }
+      ]
+    },
+    {
+      "kind": "macro",
+      "name": "std::cmp::Eq!",
+      "visible": "public",
+      "form": "derive",
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "The derived Eq only tells the compiler that PartialEq is an equivalence relation, and requires every field to be Eq.",
+          "source": "1.97.0 core/src/cmp.rs:303-305, doc: \"When `derive`d, because `Eq` has no extra methods, it is only informing the compiler that this is an equivalence relation rather than a partial equivalence relation.\"",
+          "reason": "no quantifier over fields: no clause ranges over the fields of a type, which what a derive generates needs"
+        }
+      ]
+    },
+    {
+      "kind": "macro",
+      "name": "std::default::Default!",
+      "visible": "public",
+      "form": "derive",
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "The derived Default uses the default value of each field's type, and needs every field to be Default; on an enum it needs one unit variant marked #[default].",
+          "source": "1.97.0 core/src/default.rs:55, doc: \"When `derive`d, it will use the default value for each field's type.\"",
+          "reason": "no quantifier over fields: no clause ranges over the fields of a type, which what a derive generates needs"
+        }
+      ]
+    },
+    {
+      "kind": "macro",
+      "name": "std::fmt::Debug!",
+      "visible": "public",
+      "form": "derive",
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "The derived Debug writes the type's name and the Debug values of its fields.",
+          "source": "1.97.0 core/src/fmt/mod.rs:938, doc: \"`Debug` values of the fields, then `)`.\"",
+          "reason": "no quantifier over fields: no clause ranges over the fields of a type, which what a derive generates needs. Here: what text the derive writes is not stated"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "The derived format is not stable and may change with a Rust version.",
+          "source": "1.97.0 core/src/fmt/mod.rs:942-943, doc: \"Derived `Debug` formats are not stable, and so may change with future Rust versions.\"",
+          "reason": "no formatted text: the language cannot state what text a message, a format or a Debug or Display impl produces"
+        }
+      ]
+    },
+    {
+      "kind": "macro",
+      "name": "std::marker::Copy!",
+      "visible": "public",
+      "form": "derive",
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "The derived Copy requires every field to be Copy, and adds a Copy bound on each generic parameter, which a manual impl need not.",
+          "source": "1.97.0 core/src/marker.rs:337-338, doc: \"The `derive` strategy will also place a `Copy` bound on type parameters:\"",
+          "reason": "no quantifier over fields: no clause ranges over the fields of a type, which what a derive generates needs"
+        }
+      ]
+    },
+    {
+      "kind": "macro",
+      "name": "std::hash::Hash!",
+      "visible": "public",
+      "form": "derive",
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "The derived Hash combines the values of calling hash on each field, and needs every field to be Hash.",
+          "source": "1.97.0 core/src/hash/mod.rs:104-105, doc: \"The resulting hash will be the combination of the values from calling [`hash`] on each field.\"",
+          "reason": "no quantifier over fields: no clause ranges over the fields of a type, which what a derive generates needs"
+        }
+      ]
+    },
+    {
+      "kind": "macro",
+      "name": "std::assert_eq!",
+      "visible": "public",
+      "generics": [
+        { "name": "T", "bounds": ["?Sized", "std::cmp::PartialEq<U>", "std::fmt::Debug"] },
+        { "name": "U", "bounds": ["?Sized", "std::fmt::Debug"] }
+      ],
+      "form": "bang",
+      "params": [
+        { "name": "left", "type": "ref<T>", "access": { "rights": "read", "guarantee": "readers" } },
+        { "name": "right", "type": "ref<U>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "()" },
+      "clauses": [
+        {
+          "kind": "panics",
+          "text": "fails panic when not std::cmp::PartialEq::eq(left, right)",
+          "source": "1.97.0 core/src/macros/mod.rs:17-18, doc: \"Assertions are always checked in both debug and release builds, and cannot be disabled.\"",
+          "status": {
+            "lifted": "core/src/macros/mod.rs: if !(*left_val == *right_val) { ... assert_failed(...) }"
+          }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "On panic, the macro prints the two values with their debug representations, and the second form adds a custom message.",
+          "source": "1.97.0 core/src/macros/mod.rs:23-24, doc: \"On panic, this macro will print the values of the expressions with their debug representations.\"",
+          "reason": "no formatted text: the language cannot state what text a message, a format or a Debug or Display impl produces"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Each argument expression is evaluated exactly once, left then right, and borrowed: neither value is moved.",
+          "source": "1.97.0 core/src/macros/mod.rs:44, body: match (&$left, &$right) {",
+          "reason": "no order of calls: no clause states the order or the number of times a callback, a hasher or a formatter is called inside one call"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "The macro has a second form with a custom panic message after the two expressions, and takes expressions, not typed parameters.",
+          "source": "1.97.0 core/src/macros/mod.rs:26-27, doc: \"Like [`assert!`], this macro has a second form, where a custom panic message can be provided.\"",
+          "reason": "no macro arguments: a macro has no per-arm signature: its argument forms, repetitions and optional message are not parameters. Here: `left` and `right` above model the two expressions as parameters"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "The failure is a panic, which unwinds or aborts according to the panic strategy.",
+          "source": "1.97.0 core/src/macros/mod.rs:17-18, doc: \"Assertions are always checked in both debug and release builds, and cannot be disabled.\"",
+          "reason": "no unwinding behaviour: `fails panic` does not say whether a panic unwinds or aborts, or what runs on the way"
+        }
+      ]
+    },
+    {
+      "kind": "macro",
+      "name": "std::panic!",
+      "visible": "public",
+      "form": "bang",
+      "params": [],
+      "result": { "type": { "host": "!", "form": "never type" } },
+      "clauses": [
+        {
+          "kind": "panics",
+          "text": "fails panic when true",
+          "source": "1.97.0 core/src/macros/panic.md:1, doc: \"Panics the current thread.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "The default hook prints the message payload to stderr with the file, line and column of the call, and the panic then unwinds or aborts according to the panic strategy; a hook can be installed with set_hook.",
+          "source": "1.97.0 core/src/macros/panic.md:15-18, doc: \"The behavior of the default `std` hook, i.e. the code that runs directly after the panic is invoked, is to print the message payload to `stderr` along with the file/line/column information of the `panic!()` call.\"",
+          "reason": "no unwinding behaviour: `fails panic` does not say whether a panic unwinds or aborts, or what runs on the way"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "An optional format string and arguments build the message payload.",
+          "source": "1.97.0 core/src/macros/panic.md:11-12, doc: \"When using `panic!()` you can specify a string payload that is built using [formatting syntax].\"",
+          "reason": "no formatted text: the language cannot state what text a message, a format or a Debug or Display impl produces. Here: the macro takes tokens, not typed parameters"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "panic! never returns: its type is the never type, which has no counterpart in the type language, and a call has no result.",
+          "source": "1.97.0 core/src/macros/panic.md:1, doc: \"Panics the current thread.\"",
+          "reason": "no macro arguments: a macro has no per-arm signature: its argument forms, repetitions and optional message are not parameters"
+        }
+      ]
+    },
+    {
+      "kind": "macro",
+      "name": "std::vec!",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }],
+      "form": "bang",
+      "params": [],
+      "result": { "type": "list<T> as 'std::vec::Vec'" },
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "Three forms: vec![] is empty, vec![a, b, c] holds those elements in order, and vec![elem; n] holds n copies of elem, where n need not be a constant and T must be Clone.",
+          "source": "1.97.0 alloc/src/macros.rs:4, doc: \"There are two forms of this macro:\"",
+          "reason": "no macro arguments: a macro has no per-arm signature: its argument forms, repetitions and optional message are not parameters. Here: each form has a different parameter list, and the file has one signature per macro"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "vec![elem; n] uses clone to duplicate elem, so vec![Rc::new(1); 5] holds five references to the same value, not five independent values.",
+          "source": "1.97.0 alloc/src/macros.rs:26-27, doc: \"This will use `clone` to duplicate an expression, so one should be careful using this with types having a nonstandard `Clone` implementation.\"",
+          "reason": "no identity of moved values: `==` is structural on values and `same` is identity of host references, which a value moved into or out of a container does not have"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "vec![expr; 0] is allowed and gives an empty vector, but still evaluates expr and drops the value at once, so its side effects happen.",
+          "source": "1.97.0 alloc/src/macros.rs:33-34, doc: \"This will still evaluate `expr`, however, and immediately drop the resulting value, so be mindful of side effects.\"",
+          "reason": "no drop: no clause says what a call does to a value's storage or whether a destructor runs"
+        }
+      ]
+    },
+    {
+      "kind": "macro",
+      "name": "std::write!",
+      "visible": "public",
+      "form": "bang",
+      "params": [],
+      "clauses": [
+        {
+          "kind": "unexpressed",
+          "text": "write!(dst, args...) formats args by the format string and passes the result to dst.write_fmt, returning whatever write_fmt returns: a fmt::Result for a fmt::Write or a Formatter, an io::Result for an io::Write.",
+          "source": "1.97.0 core/src/macros/mod.rs:519-521, doc: \"The macro returns whatever the `write_fmt` method returns; commonly a [`fmt::Result`], or an [`io::Result`].\"",
+          "reason": "no macro arguments: a macro has no per-arm signature: its argument forms, repetitions and optional message are not parameters. Here: the result type and the failure depend on the type of dst, a macro argument"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "The arguments are formatted according to the format string, and the formatted text is what the writer receives.",
+          "source": "1.97.0 core/src/macros/mod.rs:516-517, doc: \"Arguments will be formatted according to the specified format string and the result will be passed to the writer.\"",
+          "reason": "no formatted text: the language cannot state what text a message, a format or a Debug or Display impl produces"
         }
       ]
     }

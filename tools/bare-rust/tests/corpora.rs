@@ -172,8 +172,16 @@ use bare_rust::check::{check_crate, CheckOpts, CheckReport};
 use bare_rust::crate_weave::HoleReport;
 use bare_rust::weave::weave_traced;
 
+/// Check 5 runs strict for a crate with an externals list: an external item without an entry fails the check.
 fn opts(full: bool, tests: bool) -> CheckOpts {
-    CheckOpts { work: root().join("target/bare-rust-check"), target: bare_rust::cargo::target_dir(&root()), tests, full, ..Default::default() }
+    CheckOpts {
+        work: root().join("target/bare-rust-check"),
+        target: bare_rust::cargo::target_dir(&root()),
+        tests,
+        full,
+        libraries: Some(root().join("libraries")),
+        strict_libraries: true,
+    }
 }
 
 fn run_checks(dir: PathBuf, full: bool, tests: bool) -> CheckReport {
@@ -185,7 +193,14 @@ fn run_checks(dir: PathBuf, full: bool, tests: bool) -> CheckReport {
     assert!(r.c2_ok(), "check 2 failed (mut differs: {:?})", r.c2.mut_differs);
     assert!(r.c3_ok(), "check 3 failed");
     assert!(r.c4_ok(), "check 4 failed");
+    assert!(r.c5_ok(), "check 5 failed: {:?}", r.c5.as_ref().map(|c| (&c.missing, &c.invalid, c.sigs.as_ref().map(|s| &s.mismatches))));
     r
+}
+
+/// The corpora with a committed externals list were checked against the library file, and every item had an entry.
+fn assert_library_complete(r: &CheckReport) {
+    let c5 = r.c5.as_ref().unwrap_or_else(|| panic!("check 5 did not run for {}", r.name));
+    assert!(c5.coverage_ok() && c5.missing.is_empty() && c5.valid_ok() && c5.sigs_ok(), "{}: {:?}", r.name, c5.missing);
 }
 
 /// Check 4: every undetermined hole is at a real hole site of the bare file, and nothing was filled by weave.
@@ -214,12 +229,14 @@ fn assert_holes_are_sites(r: &CheckReport) {
 #[test]
 fn cargo_strsim() {
     let r = run_checks(root().join("corpora/src/strsim"), true, true);
+    assert_library_complete(&r);
     assert_holes_are_sites(&r);
 }
 
 #[test]
 fn cargo_fnv() {
     let r = run_checks(root().join("corpora/src/fnv"), true, true);
+    assert_library_complete(&r);
     assert_holes_are_sites(&r);
 }
 
@@ -230,6 +247,7 @@ fn cargo_golden() {
     let lib = fs::read_to_string(dir.join("src/lib.rs")).unwrap();
     assert!(lib.starts_with(&fs::read_to_string(root().join("tests/golden/cache.rs")).unwrap()));
     let r = run_checks(dir, false, true);
+    assert_library_complete(&r);
     assert_holes_are_sites(&r);
 }
 

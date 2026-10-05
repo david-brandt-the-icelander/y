@@ -30,6 +30,28 @@ fn std_file() -> (Value, String) {
     (serde_json::from_str(&text).unwrap(), text)
 }
 
+const EXEMPLARS: [&str; 4] = ["std::collections::HashMap::get", "std::primitive::str::chars", "std::str::Chars", "std::cmp::max"];
+
+/// The library file with only part A's four exemplars: the synthetic subjects of a test go on top of them.
+fn exemplars_only() -> Value {
+    let (mut f, _) = std_file();
+    f["subjects"].as_array_mut().unwrap().retain(|s| EXEMPLARS.contains(&s["name"].as_str().unwrap()));
+    f
+}
+
+/// A library directory whose std file lacks the named subjects, with the externals lists copied: an incomplete library.
+fn incomplete_libraries(name: &str, without: &[&str]) -> PathBuf {
+    let dir = work(name);
+    fs::create_dir_all(dir.join("externals")).unwrap();
+    for c in ["strsim", "fnv", "eve_cache"] {
+        fs::copy(libraries().join("externals").join(format!("{c}.json")), dir.join("externals").join(format!("{c}.json"))).unwrap();
+    }
+    let (mut f, _) = std_file();
+    f["subjects"].as_array_mut().unwrap().retain(|s| !without.contains(&s["name"].as_str().unwrap()));
+    fs::write(dir.join("std-1.97.0.constraints.json"), canonical(&f)).unwrap();
+    dir
+}
+
 fn work(name: &str) -> PathBuf {
     let d = root().join("target/bare-rust-test").join(name);
     let _ = fs::remove_dir_all(&d);
@@ -139,11 +161,36 @@ fn the_library_file_is_valid_and_canonical() {
     assert_eq!(canonical(&file), text);
     assert_eq!(file["crate"], "std 1.97.0");
     assert_eq!(file["status"], json!({"assumed": "hand-written"}));
-    // the three exemplars, fully filled
+    // the exemplars, and every external item of the corpora after them
     let names: Vec<&str> = file["subjects"].as_array().unwrap().iter().map(|s| s["name"].as_str().unwrap()).collect();
-    for n in ["std::collections::HashMap::get", "std::primitive::str::chars", "std::str::Chars", "std::cmp::max"] {
+    for n in EXEMPLARS {
         assert!(names.contains(&n), "{n}");
     }
+    assert_eq!(names.len(), 105, "49 functions, 25 types, 19 traits, 11 macros and 1 const");
+}
+
+#[test]
+fn every_clause_cites_its_source_and_every_unexpressed_clause_its_reason() {
+    use bare_rust::libstats::{reason_label, source_kind};
+    let (file, _) = std_file();
+    let mut labels = std::collections::BTreeSet::new();
+    for s in file["subjects"].as_array().unwrap() {
+        for c in s["clauses"].as_array().unwrap() {
+            let at = format!("{} / {}", s["name"], c["text"]);
+            let src = c["source"].as_str().unwrap();
+            assert!(src.starts_with("1.97.0 ") || src.starts_with("hashbrown"), "{at}: source {src}");
+            if c["kind"] == "unexpressed" {
+                let r = c["reason"].as_str().unwrap();
+                assert!(r.contains(": "), "{at}: a reason starts with what the language lacks, then a colon: {r}");
+                labels.insert(reason_label(r).to_string());
+            } else {
+                // a stated clause says where it comes from, and a body or an attribute has a status of its own
+                assert!(source_kind(src) != "other", "{at}: {src}");
+                assert!(!c["status"].is_null() || src.contains(", body: "), "{at}: a documented clause has the status of its source");
+            }
+        }
+    }
+    assert!(labels.len() >= 20 && labels.len() <= 30, "the labels are a short list: {labels:?}");
 }
 
 #[test]
@@ -172,11 +219,13 @@ fn stage_one_files_still_validate() {
 
 #[test]
 fn coverage_names_the_missing_items_by_path() {
-    let (file, _) = std_file();
     let (_, e) = externals(&corpus("eve_cache"), true).unwrap();
     let items: Vec<(Kind, String)> = e.paths().map(|(k, p)| (k, p.to_string())).collect();
-    let m = missing(&items, &file);
-    // the exemplars cover HashMap::get; the rest of the golden crate's items have no entry yet
+    // every item of the golden crate has an entry
+    let (file, _) = std_file();
+    assert_eq!(missing(&items, &file), vec![]);
+    // with only the exemplars, HashMap::get is covered and the rest of the golden crate's items are not
+    let m = missing(&items, &exemplars_only());
     assert!(!m.contains(&(Kind::Function, "std::collections::HashMap::get".to_string())));
     assert!(m.contains(&(Kind::Function, "std::collections::HashMap::insert".to_string())));
     assert_eq!(m.len(), 9);
@@ -189,13 +238,30 @@ fn subject_mut<'a>(f: &'a mut Value, name: &str) -> &'a mut Value {
 }
 
 #[test]
-fn exemplars_compile_against_the_real_std() {
+fn the_whole_file_compiles_against_the_real_std() {
     let (file, _) = std_file();
-    let r = check_signatures(&file, &work("sig-exemplars"), &target()).unwrap();
+    let r = check_signatures(&file, &work("sig-all"), &target()).unwrap();
     assert_eq!(r.mismatches, vec![], "{:?}", r.mismatches);
-    for n in ["std::collections::HashMap::get", "std::primitive::str::chars", "std::cmp::max", "std::str::Chars"] {
+    for n in EXEMPLARS {
         assert!(r.checked.contains(&n.to_string()), "{n} was not checked: {:?}", r.unchecked);
     }
+    // what the checker cannot do is the bang macros, and a trait with generics is only found by its path
+    assert_eq!(r.unchecked.keys().collect::<Vec<_>>(), vec!["macro"]);
+    assert_eq!(r.unchecked["macro"].len(), 4, "{:?}", r.unchecked);
+    assert_eq!(r.resolved.len(), 5, "{:?}", r.resolved);
+    assert_eq!(r.checked.len() + r.resolved.len() + r.unchecked_total(), 105);
+}
+
+#[test]
+fn a_derive_of_a_trait_with_a_supertrait_is_checked_with_it() {
+    let mut f = exemplars_only();
+    let subjects = f["subjects"].as_array_mut().unwrap();
+    for n in ["std::cmp::Eq!", "std::marker::Copy!"] {
+        subjects.push(json!({ "kind": "macro", "name": n, "form": "derive" }));
+    }
+    let r = check_signatures(&f, &work("sig-derive"), &target()).unwrap();
+    assert_eq!(r.mismatches, vec![], "{:?}", r.mismatches);
+    assert!(r.checked.contains(&"std::cmp::Eq!".to_string()) && r.checked.contains(&"std::marker::Copy!".to_string()));
 }
 
 #[test]
@@ -225,8 +291,7 @@ fn a_wrong_signature_is_reported_against_its_subject() {
 
 #[test]
 fn trait_methods_derives_consts_and_unfixed_generics() {
-    let (file, _) = std_file();
-    let mut f = file.clone();
+    let mut f = exemplars_only();
     let subjects = f["subjects"].as_array_mut().unwrap();
     subjects.push(json!({
         "kind": "function", "name": "std::iter::Iterator::zip",
@@ -258,8 +323,7 @@ fn trait_methods_derives_consts_and_unfixed_generics() {
 
 #[test]
 fn a_type_with_the_wrong_arity_is_a_mismatch() {
-    let (file, _) = std_file();
-    let mut f = file.clone();
+    let mut f = exemplars_only();
     f["subjects"].as_array_mut().unwrap().push(json!({ "kind": "type", "name": "std::vec::Vec" }));
     let r = check_signatures(&f, &work("sig-arity"), &target()).unwrap();
     assert!(r.mismatches.iter().any(|(n, m)| n == "std::vec::Vec" && m.starts_with("E0107")), "{:?}", r.mismatches);
@@ -268,11 +332,24 @@ fn a_type_with_the_wrong_arity_is_a_mismatch() {
 // ---------- check 5 through the commands ----------
 
 #[test]
+fn libcheck_passes_for_all_three_corpora_with_no_item_missing() {
+    for (name, items) in [("eve_cache", 10), ("fnv", 32), ("strsim", 94)] {
+        let r = libcheck(&corpus(name), &libraries(), &work(&format!("libcheck-{name}")), &target()).unwrap();
+        assert_eq!(r.items, items, "{name}");
+        assert!(r.coverage_ok() && r.missing.is_empty(), "{name}: {:?}", r.missing);
+        assert!(r.valid_ok() && r.sigs_ok(), "{name}: {:?} {:?}", r.invalid, r.sigs.as_ref().map(|s| &s.mismatches));
+        assert!(r.ok(true), "{name}");
+    }
+}
+
+#[test]
 fn libcheck_reports_coverage_validity_and_signatures() {
-    let r = libcheck(&corpus("eve_cache"), &libraries(), &work("libcheck-golden"), &target()).unwrap();
+    let libs = incomplete_libraries("libraries-no-insert", &["std::collections::HashMap::insert", "std::hash::Hash", "std::hash::Hash!"]);
+    let r = libcheck(&corpus("eve_cache"), &libs, &work("libcheck-golden"), &target()).unwrap();
     assert_eq!(r.items, 10);
     assert!(r.valid_ok() && r.sigs_ok());
     assert!(!r.coverage_ok());
+    assert_eq!(r.missing.len(), 3);
     assert!(r.ok(false) && !r.ok(true));
     assert!(r.sigs.as_ref().unwrap().checked.len() >= 3);
 }
@@ -286,18 +363,36 @@ fn libcheck_without_a_library_file_says_so() {
     assert!(r.skipped.is_some() && r.missing.len() == 10 && r.sigs.is_none());
 }
 
+fn check_opts(libraries: PathBuf, strict: bool) -> CheckOpts {
+    CheckOpts { work: root().join("target/bare-rust-check"), target: target(), tests: true, full: false, libraries: Some(libraries), strict_libraries: strict }
+}
+
 #[test]
 fn check_runs_check_5_for_a_crate_with_an_externals_list() {
-    let o = CheckOpts { work: root().join("target/bare-rust-check"), target: target(), tests: true, full: false, libraries: Some(libraries()), strict_libraries: false };
-    let r = check_crate(&corpus("eve_cache"), &o).unwrap();
+    let r = check_crate(&corpus("eve_cache"), &check_opts(libraries(), true)).unwrap();
     let c5 = r.c5.as_ref().expect("check 5 ran");
-    assert!(r.c5_ok() && r.ok(), "check 5: {:?}", c5.invalid);
-    assert!(!c5.missing.is_empty());
-    // strict: the missing entries fail the check
-    let strict = CheckOpts { strict_libraries: true, ..o };
-    let r = check_crate(&corpus("eve_cache"), &strict).unwrap();
+    assert!(r.c5_ok() && r.ok(), "check 5: {:?} {:?}", c5.invalid, c5.missing);
+    assert!(c5.missing.is_empty());
+    // an incomplete library: reported, and a failure only when strict
+    let libs = incomplete_libraries("check-libraries-incomplete", &["std::collections::HashMap::insert"]);
+    let r = check_crate(&corpus("eve_cache"), &check_opts(libs.clone(), false)).unwrap();
+    assert!(r.c5_ok() && r.ok() && r.c5.as_ref().unwrap().missing.len() == 1);
+    let r = check_crate(&corpus("eve_cache"), &check_opts(libs, true)).unwrap();
     assert!(!r.c5_ok() && !r.ok());
     // and a crate without a list is not subject to it
-    let none = CheckOpts { libraries: Some(work("empty-libraries")), ..strict };
-    assert!(check_crate(&corpus("eve_cache"), &none).unwrap().c5.is_none());
+    let r = check_crate(&corpus("eve_cache"), &check_opts(work("empty-libraries"), true)).unwrap();
+    assert!(r.c5.is_none());
+}
+
+// ---------- the counts ----------
+
+#[test]
+fn libstats_counts_what_the_file_holds() {
+    let (file, _) = std_file();
+    let r = check_signatures(&file, &work("stats-sigs"), &target()).unwrap();
+    let t = bare_rust::libstats::libstats(&file, Some(&r));
+    for want in ["library std 1.97.0 (105 subjects)", "function (22 are trait methods)", "unexpressed", "no sequence value", "path-resolved only: std::cmp::PartialEq", "type slots (137); 118 map to the type language and 19 are host text"] {
+        assert!(t.contains(want), "{want}: {t}");
+    }
+    assert!(!t.contains("reasons carry no label"), "{t}");
 }

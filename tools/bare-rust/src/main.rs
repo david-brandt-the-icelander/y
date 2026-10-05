@@ -12,10 +12,10 @@ const USAGE: &str = "usage:
       <dir> holds the .brs and .constraints.json files (the crate directory, if stripped in place); the crate's
       Cargo.toml and other files come from --crate (default <dir>). Runs cargo check, derives `mut`, reports
       undetermined holes and errors; exits non-zero on any. --no-cargo only writes the files.
-  bare-rust check <crate-dir> [--check-only] [--src-only] [--work <dir>] [--libraries <dir>] [--strict-libraries]
+  bare-rust check <crate-dir> [--check-only] [--src-only] [--work <dir>] [--libraries <dir>] [--allow-missing-libraries]
       checks 1 to 5 of the plan for one crate; --check-only skips clippy and cargo test; results in <work>/<name>/check.json;
-      check 5 (library files) runs when <libraries>/externals/<crate>.json exists, and fails on missing entries only
-      with --strict-libraries
+      check 5 (library files) runs when <libraries>/externals/<crate>.json exists, and fails on an external item with no
+      entry unless --allow-missing-libraries
   bare-rust externals <crate-dir> [--all-targets] [--out <file>] [--libraries <dir>]
       every external item (std) the crate uses, as canonical paths with files and use counts, from rustc's MIR and
       tree-sitter; written to <libraries>/externals/<crate>.json (default libraries/ beside Cargo.toml)
@@ -25,6 +25,9 @@ const USAGE: &str = "usage:
       mismatched signature
   bare-rust libfmt <library-file>...
       rewrite library files in canonical form
+  bare-rust libstats <library-file> [--work <dir>] [--no-signatures]
+      the counts of a library file (entries and clauses by kind, status and source, the `unexpressed` promises by what
+      the language lacks) and, unless --no-signatures, how its signatures checked against the real std
   bare-rust stats <out-dir>
   bare-rust report <check-dir>...
       the tables of results/e1.md, from the <work>/<name> directories that `check` wrote (check.json and bare/)";
@@ -116,7 +119,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
                 tests: !args.iter().any(|a| a == "--src-only"),
                 full: !args.iter().any(|a| a == "--check-only"),
                 libraries: Some(libraries_dir(&args)),
-                strict_libraries: args.iter().any(|a| a == "--strict-libraries"),
+                strict_libraries: !args.iter().any(|a| a == "--allow-missing-libraries"),
             };
             let r = check_crate(&PathBuf::from(target), &o)?;
             r.print();
@@ -153,6 +156,18 @@ fn run(args: Vec<String>) -> Result<(), String> {
             } else {
                 Err(format!("libcheck failed for {}", r.krate))
             }
+        }
+        Some("libstats") => {
+            let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
+            let file: serde_json::Value = serde_json::from_str(&rd(target)?).map_err(|e| format!("{target}: {e}"))?;
+            let sigs = if args.iter().any(|a| a == "--no-signatures") {
+                None
+            } else {
+                let work = arg(&args, "--work").map(PathBuf::from).unwrap_or_else(|| cwd.join("target/bare-rust-check")).join("libstats");
+                Some(bare_rust::libcheck::check_signatures(&file, &work, &bare_rust::cargo::target_dir(&cwd))?)
+            };
+            print!("{}", bare_rust::libstats::libstats(&file, sigs.as_ref()));
+            Ok(())
         }
         Some("libfmt") => {
             let paths: Vec<PathBuf> = args[2..].iter().map(PathBuf::from).collect();
