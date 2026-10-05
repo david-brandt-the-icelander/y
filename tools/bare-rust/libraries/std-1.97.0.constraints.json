@@ -4,7 +4,15 @@
   "crate": "std 1.97.0",
   "module": "std",
   "status": { "assumed": "hand-written" },
-  "failures": { "panic": "runtime" },
+  "failures": { "panic": { "class": "runtime", "payload": { "location": "location", "message": "text" } } },
+  "views": [
+    {
+      "name": "capacity",
+      "of": "'std::collections::HashMap'",
+      "host": "'std::collections::HashMap::capacity'"
+    },
+    { "name": "capacity", "of": "'std::vec::Vec'", "host": "'std::vec::Vec::capacity'" }
+  ],
   "subjects": [
     {
       "kind": "function",
@@ -409,8 +417,8 @@
       "clauses": [
         {
           "kind": "panics",
-          "text": "fails panic when self is none",
-          "source": "1.97.0 core/src/option.rs:925-926, doc: \"Panics if the value is a [`None`] with a custom panic message provided by `msg`.\"",
+          "text": "fails panic { message: msg, location: caller } when self is none",
+          "source": "1.97.0 core/src/option.rs:925-926, doc: \"Panics if the value is a [`None`] with a custom panic message provided by `msg`.\"; 1.97.0 core/src/option.rs:960, attribute #[track_caller]",
           "status": { "lifted": "core/src/option.rs: None => expect_failed(msg)" }
         },
         {
@@ -418,18 +426,6 @@
           "text": "ensure contained : result == self",
           "source": "1.97.0 core/src/option.rs:921, doc: \"Returns the contained [`Some`] value, consuming the `self` value.\"",
           "status": { "assumed": "documentation" }
-        },
-        {
-          "kind": "unexpressed",
-          "text": "The panic message is `msg`.",
-          "source": "1.97.0 core/src/option.rs:925-926, doc: \"Panics if the value is a [`None`] with a custom panic message provided by `msg`.\"",
-          "reason": "no formatted text: the language cannot state what text a message, a format or a Debug or Display impl produces"
-        },
-        {
-          "kind": "unexpressed",
-          "text": "The failure is a panic, which unwinds or aborts according to the panic strategy; the location reported is the caller's (#[track_caller]).",
-          "source": "1.97.0 core/src/option.rs:960, attribute #[track_caller]",
-          "reason": "no unwinding behaviour: `fails panic` does not say whether a panic unwinds or aborts, or what runs on the way"
         },
         {
           "kind": "unexpressed",
@@ -543,8 +539,8 @@
       "clauses": [
         {
           "kind": "panics",
-          "text": "fails panic when self is Err(e)",
-          "source": "1.97.0 core/src/result.rs:1146-1147, doc: \"Panics if the value is an [`Err`], with a panic message including the passed message, and the content of the [`Err`].\"",
+          "text": "fails panic { location: caller } when self is Err(e)",
+          "source": "1.97.0 core/src/result.rs:1146-1147, doc: \"Panics if the value is an [`Err`], with a panic message including the passed message, and the content of the [`Err`].\"; 1.97.0 core/src/result.rs:1177, attribute #[track_caller]",
           "status": { "lifted": "core/src/result.rs: Err(e) => unwrap_failed(msg, &e)" }
         },
         {
@@ -554,16 +550,16 @@
           "status": { "assumed": "documentation" }
         },
         {
-          "kind": "unexpressed",
-          "text": "The panic message includes `msg` and the Debug rendering of the error.",
+          "kind": "on failure",
+          "text": "on failure : msg in payload.message",
           "source": "1.97.0 core/src/result.rs:1146-1147, doc: \"Panics if the value is an [`Err`], with a panic message including the passed message, and the content of the [`Err`].\"",
-          "reason": "no formatted text: the language cannot state what text a message, a format or a Debug or Display impl produces"
+          "status": { "assumed": "hand-written" }
         },
         {
           "kind": "unexpressed",
-          "text": "The failure is a panic, which unwinds or aborts according to the panic strategy; the location reported is the caller's (#[track_caller]).",
-          "source": "1.97.0 core/src/result.rs:1177, attribute #[track_caller]",
-          "reason": "no unwinding behaviour: `fails panic` does not say whether a panic unwinds or aborts, or what runs on the way"
+          "text": "The panic message also includes the Debug rendering of the error.",
+          "source": "1.97.0 core/src/result.rs:1146-1147, doc: \"Panics if the value is an [`Err`], with a panic message including the passed message, and the content of the [`Err`].\"",
+          "reason": "what a function computes: the text a Debug or Display impl or a format string produces is the output of a function, which the language keeps out (language 16)"
         }
       ]
     },
@@ -868,10 +864,10 @@
           "status": { "observed": "from the body: one intrinsic call" }
         },
         {
-          "kind": "unexpressed",
-          "text": "abs is exact (it always returns the precise result) and clears the sign bit, so abs(-0.0) is +0.0.",
+          "kind": "ensure",
+          "text": "ensure unsigned : not sign_bit(result)",
           "source": "1.97.0 core/src/num/f64.rs:1593, doc: \"This function always returns the precise result.\"",
-          "reason": "no sign of zero, no NaN payload: `==` and the orderings follow IEEE 754 comparison, which cannot see the sign of a zero or the payload of a NaN"
+          "status": { "assumed": "hand-written" }
         },
         {
           "kind": "unexpressed",
@@ -980,10 +976,10 @@
           "status": { "lifted": "std/src/collections/hash/map.rs: #[must_use] on the item" }
         },
         {
-          "kind": "unexpressed",
-          "text": "The map does not allocate until it is first inserted into: it allocates at most 0 bytes.",
+          "kind": "budget",
+          "text": "budget allocates at most 0 B per call",
           "source": "1.97.0 std/src/collections/hash/map.rs:258-259, doc: \"The hash map is initially created with a capacity of 0, so it will not allocate until it is first inserted into.\"",
-          "reason": "no budget or layout kind: the library file's clause kinds have no `budget` or `layout`, which the language has. Here: `budget allocates at most 0 B per call`"
+          "status": { "assumed": "hand-written" }
         },
         {
           "kind": "unexpressed",
@@ -1014,16 +1010,16 @@
           "status": { "lifted": "std/src/collections/hash/map.rs: #[must_use] on the item" }
         },
         {
-          "kind": "unexpressed",
-          "text": "The map can hold at least `capacity` elements without reallocating, and may allocate for more.",
+          "kind": "ensure",
+          "text": "ensure room : capacity(result) >= capacity",
           "source": "1.97.0 std/src/collections/hash/map.rs:276-277, doc: \"The hash map will be able to hold at least `capacity` elements without reallocating.\"",
-          "reason": "no host state: no slot or expression names state a host object holds beyond its value: a capacity, a hasher's or formatter's state, an entry's hidden map. Here: size counts elements and the language has no capacity of a collection"
+          "status": { "assumed": "hand-written" }
         },
         {
-          "kind": "unexpressed",
-          "text": "If `capacity` is zero the map does not allocate.",
+          "kind": "budget",
+          "text": "budget allocates at most 0 B per call when capacity == 0",
           "source": "1.97.0 std/src/collections/hash/map.rs:278, doc: \"If `capacity` is zero, the hash map will not allocate.\"",
-          "reason": "no budget or layout kind: the library file's clause kinds have no `budget` or `layout`, which the language has. Here: `budget allocates at most 0 B per call`, conditional on an argument"
+          "status": { "assumed": "hand-written" }
         },
         {
           "kind": "unexpressed",
@@ -1367,10 +1363,10 @@
           "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value"
         },
         {
-          "kind": "unexpressed",
-          "text": "Any BuildHasherDefault is zero-sized.",
+          "kind": "layout",
+          "text": "size 0",
           "source": "1.97.0 core/src/hash/mod.rs:712, doc: \"Any `BuildHasherDefault` is [zero-sized].\"",
-          "reason": "no budget or layout kind: the library file's clause kinds have no `budget` or `layout`, which the language has. Here: `size 0`"
+          "status": { "assumed": "hand-written" }
         }
       ]
     },
@@ -1654,10 +1650,10 @@
           "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value"
         },
         {
-          "kind": "unexpressed",
-          "text": "A value of this type only signals that formatting failed: it carries no detail, and fmt implementors should not return it unless they received it from their Formatter.",
+          "kind": "law",
+          "text": "law no_detail : all a : Self : all b : Self : a == b",
           "source": "1.97.0 core/src/fmt/mod.rs:76-77, doc: \"This type does not support transmission of an error other than that an error occurred.\"",
-          "reason": "no host state: no slot or expression names state a host object holds beyond its value: a capacity, a hasher's or formatter's state, an entry's hidden map. Here: the cause of a failure is state the language does not name"
+          "status": { "assumed": "hand-written" }
         }
       ]
     },
@@ -1794,10 +1790,10 @@
           "reason": "call resolves to an unnamed impl: an entry names the trait method, not the impl a call resolved to, so a promise that depends on the impl has no subject. Here: the panic belongs to the Index impl, which no entry names"
         },
         {
-          "kind": "unexpressed",
-          "text": "A Vec is and always will be a (pointer, capacity, length) triplet; when its length would exceed its capacity, the capacity is increased and its elements are reallocated.",
+          "kind": "invariant",
+          "text": "invariant fits : size(self) <= capacity(self)",
           "source": "1.97.0 alloc/src/vec/mod.rs:312-313, doc: \"Most fundamentally, `Vec` is and always will be a (pointer, capacity, length) triplet.\"; 1.97.0 alloc/src/vec/mod.rs:292-294, doc: \"If a vector's length exceeds its capacity, its capacity will automatically be increased, but its elements will have to be reallocated.\"",
-          "reason": "no host state: no slot or expression names state a host object holds beyond its value: a capacity, a hasher's or formatter's state, an entry's hidden map. Here: size counts elements and the language has no capacity of a collection"
+          "status": { "assumed": "hand-written" }
         }
       ]
     },
@@ -2421,7 +2417,7 @@
           "kind": "unexpressed",
           "text": "Writes the user-facing text of self to f.",
           "source": "1.97.0 core/src/fmt/fmt_trait_method_doc.md:1, doc: \"Formats the value using the given formatter.\"",
-          "reason": "no formatted text: the language cannot state what text a message, a format or a Debug or Display impl produces"
+          "reason": "what a function computes: the text a Debug or Display impl or a format string produces is the output of a function, which the language keeps out (language 16)"
         }
       ]
     },
@@ -2443,10 +2439,10 @@
           "status": { "lifted": "core/src/hash/mod.rs: #[must_use] on the item" }
         },
         {
-          "kind": "unexpressed",
-          "text": "Returns the hash of the bytes written so far, and does not reset the hasher: further writes continue from the current state.",
+          "kind": "ensure",
+          "text": "ensure current : result == hash(old(self)) and hash(self) == hash(old(self))",
           "source": "1.97.0 core/src/hash/mod.rs:315-316, doc: \"Despite its name, the method does not reset the hasher’s internal state.\"",
-          "reason": "no host state: no slot or expression names state a host object holds beyond its value: a capacity, a hasher's or formatter's state, an entry's hidden map. Here: the bytes written so far are state of the hasher, not a value"
+          "status": { "assumed": "hand-written" }
         }
       ]
     },
@@ -2583,6 +2579,7 @@
       ]
     },
     {
+      "views": [{ "name": "hash", "host": "'std::hash::Hasher::finish'" }],
       "kind": "trait",
       "name": "std::hash::Hasher",
       "visible": "public",
@@ -2722,7 +2719,7 @@
           "kind": "unexpressed",
           "text": "Debug formats a value for programmers and debugging, and a derived Debug format, like the format of every standard library type, is not stable and may change with a Rust version.",
           "source": "1.97.0 core/src/fmt/mod.rs:942-943, doc: \"Derived `Debug` formats are not stable, and so may change with future Rust versions.\"",
-          "reason": "no formatted text: the language cannot state what text a message, a format or a Debug or Display impl produces"
+          "reason": "what a function computes: the text a Debug or Display impl or a format string produces is the output of a function, which the language keeps out (language 16)"
         }
       ]
     },
@@ -2735,7 +2732,7 @@
           "kind": "unexpressed",
           "text": "Display formats a value for the user, cannot be derived, and may omit internal state or precision: its output need not parse back into the same value.",
           "source": "1.97.0 core/src/fmt/mod.rs:1108-1109, doc: \"`Display` is similar to [`Debug`], but `Display` is for user-facing output, and so cannot be derived.\"",
-          "reason": "no formatted text: the language cannot state what text a message, a format or a Debug or Display impl produces"
+          "reason": "what a function computes: the text a Debug or Display impl or a format string produces is the output of a function, which the language keeps out (language 16)"
         }
       ]
     },
@@ -2808,10 +2805,10 @@
       "form": "derive",
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "The derived Clone clones each field, and for a generic type adds a Clone bound on each generic parameter.",
+          "kind": "derive",
+          "text": "derive Clone",
           "source": "1.97.0 core/src/clone.rs:64-65, doc: \"The `derive`d implementation of [`Clone`] calls [`clone`] on each field.\"",
-          "reason": "no quantifier over fields: no clause ranges over the fields of a type, which what a derive generates needs"
+          "status": { "assumed": "hand-written" }
         }
       ]
     },
@@ -2822,10 +2819,10 @@
       "form": "derive",
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "On a struct two values are equal if all fields are equal and not equal if any field is not; on an enum they are equal if they are the same variant and all fields are equal.",
+          "kind": "derive",
+          "text": "derive PartialEq",
           "source": "1.97.0 core/src/cmp.rs:104-106, doc: \"When `derive`d on structs, two instances are equal if all fields are equal, and not equal if any fields are not equal.\"",
-          "reason": "no quantifier over fields: no clause ranges over the fields of a type, which what a derive generates needs"
+          "status": { "assumed": "hand-written" }
         }
       ]
     },
@@ -2836,10 +2833,10 @@
       "form": "derive",
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "The derived Eq only tells the compiler that PartialEq is an equivalence relation, and requires every field to be Eq.",
+          "kind": "derive",
+          "text": "derive Eq",
           "source": "1.97.0 core/src/cmp.rs:303-305, doc: \"When `derive`d, because `Eq` has no extra methods, it is only informing the compiler that this is an equivalence relation rather than a partial equivalence relation.\"",
-          "reason": "no quantifier over fields: no clause ranges over the fields of a type, which what a derive generates needs"
+          "status": { "assumed": "hand-written" }
         }
       ]
     },
@@ -2850,10 +2847,10 @@
       "form": "derive",
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "The derived Default uses the default value of each field's type, and needs every field to be Default; on an enum it needs one unit variant marked #[default].",
+          "kind": "derive",
+          "text": "derive Default",
           "source": "1.97.0 core/src/default.rs:55, doc: \"When `derive`d, it will use the default value for each field's type.\"",
-          "reason": "no quantifier over fields: no clause ranges over the fields of a type, which what a derive generates needs"
+          "status": { "assumed": "hand-written" }
         }
       ]
     },
@@ -2867,13 +2864,13 @@
           "kind": "unexpressed",
           "text": "The derived Debug writes the type's name and the Debug values of its fields.",
           "source": "1.97.0 core/src/fmt/mod.rs:938, doc: \"`Debug` values of the fields, then `)`.\"",
-          "reason": "no quantifier over fields: no clause ranges over the fields of a type, which what a derive generates needs. Here: what text the derive writes is not stated"
+          "reason": "what a function computes: the text a Debug or Display impl or a format string produces is the output of a function, which the language keeps out (language 16)"
         },
         {
           "kind": "unexpressed",
           "text": "The derived format is not stable and may change with a Rust version.",
           "source": "1.97.0 core/src/fmt/mod.rs:942-943, doc: \"Derived `Debug` formats are not stable, and so may change with future Rust versions.\"",
-          "reason": "no formatted text: the language cannot state what text a message, a format or a Debug or Display impl produces"
+          "reason": "what a function computes: the text a Debug or Display impl or a format string produces is the output of a function, which the language keeps out (language 16)"
         }
       ]
     },
@@ -2884,10 +2881,10 @@
       "form": "derive",
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "The derived Copy requires every field to be Copy, and adds a Copy bound on each generic parameter, which a manual impl need not.",
+          "kind": "derive",
+          "text": "derive Copy",
           "source": "1.97.0 core/src/marker.rs:337-338, doc: \"The `derive` strategy will also place a `Copy` bound on type parameters:\"",
-          "reason": "no quantifier over fields: no clause ranges over the fields of a type, which what a derive generates needs"
+          "status": { "assumed": "hand-written" }
         }
       ]
     },
@@ -2898,10 +2895,10 @@
       "form": "derive",
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "The derived Hash combines the values of calling hash on each field, and needs every field to be Hash.",
+          "kind": "derive",
+          "text": "derive Hash",
           "source": "1.97.0 core/src/hash/mod.rs:104-105, doc: \"The resulting hash will be the combination of the values from calling [`hash`] on each field.\"",
-          "reason": "no quantifier over fields: no clause ranges over the fields of a type, which what a derive generates needs"
+          "status": { "assumed": "hand-written" }
         }
       ]
     },
@@ -2922,7 +2919,7 @@
       "clauses": [
         {
           "kind": "panics",
-          "text": "fails panic when not '<T as std::cmp::PartialEq<U>>::eq'(left, right)",
+          "text": "fails panic { location: caller } when not '<T as std::cmp::PartialEq<U>>::eq'(left, right)",
           "source": "1.97.0 core/src/macros/mod.rs:17-18, doc: \"Assertions are always checked in both debug and release builds, and cannot be disabled.\"",
           "status": {
             "lifted": "core/src/macros/mod.rs: if !(*left_val == *right_val) { ... assert_failed(...) }"
@@ -2932,25 +2929,13 @@
           "kind": "unexpressed",
           "text": "On panic, the macro prints the two values with their debug representations, and the second form adds a custom message.",
           "source": "1.97.0 core/src/macros/mod.rs:23-24, doc: \"On panic, this macro will print the values of the expressions with their debug representations.\"",
-          "reason": "no formatted text: the language cannot state what text a message, a format or a Debug or Display impl produces"
+          "reason": "what a function computes: the text a Debug or Display impl or a format string produces is the output of a function, which the language keeps out (language 16)"
         },
         {
           "kind": "unexpressed",
           "text": "Each argument expression is evaluated exactly once, left then right, and borrowed: neither value is moved.",
           "source": "1.97.0 core/src/macros/mod.rs:44, body: match (&$left, &$right) {",
           "reason": "no order of calls: no clause states the order or the number of times a callback, a hasher or a formatter is called inside one call"
-        },
-        {
-          "kind": "unexpressed",
-          "text": "The macro has a second form with a custom panic message after the two expressions, and takes expressions, not typed parameters.",
-          "source": "1.97.0 core/src/macros/mod.rs:26-27, doc: \"Like [`assert!`], this macro has a second form, where a custom panic message can be provided.\"",
-          "reason": "no macro arguments: a macro has no per-arm signature: its argument forms, repetitions and optional message are not parameters. Here: `left` and `right` above model the two expressions as parameters"
-        },
-        {
-          "kind": "unexpressed",
-          "text": "The failure is a panic, which unwinds or aborts according to the panic strategy.",
-          "source": "1.97.0 core/src/macros/mod.rs:17-18, doc: \"Assertions are always checked in both debug and release builds, and cannot be disabled.\"",
-          "reason": "no unwinding behaviour: `fails panic` does not say whether a panic unwinds or aborts, or what runs on the way"
         }
       ]
     },
@@ -2964,27 +2949,9 @@
       "clauses": [
         {
           "kind": "panics",
-          "text": "fails panic when true",
-          "source": "1.97.0 core/src/macros/panic.md:1, doc: \"Panics the current thread.\"",
+          "text": "fails panic { location: caller } when true",
+          "source": "1.97.0 core/src/macros/panic.md:1, doc: \"Panics the current thread.\"; 1.97.0 core/src/macros/panic.md:15-18, doc: \"The behavior of the default `std` hook, i.e. the code that runs directly after the panic is invoked, is to print the message payload to `stderr` along with the file/line/column information of the `panic!()` call.\"",
           "status": { "assumed": "documentation" }
-        },
-        {
-          "kind": "unexpressed",
-          "text": "The default hook prints the message payload to stderr with the file, line and column of the call, and the panic then unwinds or aborts according to the panic strategy; a hook can be installed with set_hook.",
-          "source": "1.97.0 core/src/macros/panic.md:15-18, doc: \"The behavior of the default `std` hook, i.e. the code that runs directly after the panic is invoked, is to print the message payload to `stderr` along with the file/line/column information of the `panic!()` call.\"",
-          "reason": "no unwinding behaviour: `fails panic` does not say whether a panic unwinds or aborts, or what runs on the way"
-        },
-        {
-          "kind": "unexpressed",
-          "text": "An optional format string and arguments build the message payload.",
-          "source": "1.97.0 core/src/macros/panic.md:11-12, doc: \"When using `panic!()` you can specify a string payload that is built using [formatting syntax].\"",
-          "reason": "no formatted text: the language cannot state what text a message, a format or a Debug or Display impl produces. Here: the macro takes tokens, not typed parameters"
-        },
-        {
-          "kind": "unexpressed",
-          "text": "panic! never returns: its type is the never type, which has no counterpart in the type language, and a call has no result.",
-          "source": "1.97.0 core/src/macros/panic.md:1, doc: \"Panics the current thread.\"",
-          "reason": "no macro arguments: a macro has no per-arm signature: its argument forms, repetitions and optional message are not parameters"
         }
       ]
     },
@@ -2997,12 +2964,6 @@
       "params": [],
       "result": { "type": "list<T> as 'std::vec::Vec'" },
       "clauses": [
-        {
-          "kind": "unexpressed",
-          "text": "Three forms: vec![] is empty, vec![a, b, c] holds those elements in order, and vec![elem; n] holds n copies of elem, where n need not be a constant and T must be Clone.",
-          "source": "1.97.0 alloc/src/macros.rs:4, doc: \"There are two forms of this macro:\"",
-          "reason": "no macro arguments: a macro has no per-arm signature: its argument forms, repetitions and optional message are not parameters. Here: each form has a different parameter list, and the file has one signature per macro"
-        },
         {
           "kind": "unexpressed",
           "text": "vec![elem; n] uses clone to duplicate elem, so vec![Rc::new(1); 5] holds five references to the same value, not five independent values.",
@@ -3027,15 +2988,9 @@
       "clauses": [
         {
           "kind": "unexpressed",
-          "text": "write!(dst, args...) formats args by the format string and passes the result to dst.write_fmt, returning whatever write_fmt returns: a fmt::Result for a fmt::Write or a Formatter, which is the result this entry gives (`()` failing with fmt::Error, the use in strsim's Display impl), and an io::Result for an io::Write, which the one result slot cannot also state.",
-          "source": "1.97.0 core/src/macros/mod.rs:519-521, doc: \"The macro returns whatever the `write_fmt` method returns; commonly a [`fmt::Result`], or an [`io::Result`].\"",
-          "reason": "no macro arguments: a macro has no per-arm signature: its argument forms, repetitions and optional message are not parameters. Here: the result type and the failure depend on the type of dst, a macro argument, so the entry gives the fmt::Result arm and the io::Result arm has no slot"
-        },
-        {
-          "kind": "unexpressed",
           "text": "The arguments are formatted according to the format string, and the formatted text is what the writer receives.",
           "source": "1.97.0 core/src/macros/mod.rs:516-517, doc: \"Arguments will be formatted according to the specified format string and the result will be passed to the writer.\"",
-          "reason": "no formatted text: the language cannot state what text a message, a format or a Debug or Display impl produces"
+          "reason": "what a function computes: the text a Debug or Display impl or a format string produces is the output of a function, which the language keeps out (language 16)"
         }
       ]
     }

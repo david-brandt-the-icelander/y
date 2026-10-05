@@ -266,6 +266,142 @@ fn subject_mut<'a>(f: &'a mut Value, name: &str) -> &'a mut Value {
     f["subjects"].as_array_mut().unwrap().iter_mut().find(|s| s["name"] == name).unwrap()
 }
 
+// ---------- class A: views, payloads, budget and layout, derives, the host profile ----------
+
+fn errors(f: &Value) -> String {
+    validate(f, None).join("\n")
+}
+
+#[test]
+fn a_view_is_declared_bound_to_a_host_function_and_usable_in_clauses() {
+    let (file, _) = std_file();
+    assert_eq!(errors(&file), "");
+    // an undeclared view name is an unknown name
+    let mut f = file.clone();
+    f.as_object_mut().unwrap().remove("views");
+    assert!(errors(&f).contains("unknown name `capacity`"), "{}", errors(&f));
+    // the host path is quoted, under the subject the view reads, and the subject is in the file
+    let mut f = file.clone();
+    f["views"][0]["host"] = json!("'std::vec::Vec::capacity'");
+    f["views"][1]["of"] = json!("'std::nowhere::T'");
+    let e = errors(&f);
+    assert!(e.contains("not a host path under `std::collections::HashMap`") && e.contains("not a subject of the file"), "{e}");
+    f["views"][1] = f["views"][0].clone();
+    assert!(errors(&f).contains("declared twice"));
+    // the host path resolves in rustc: 3 views, none unchecked; a path that is not a method is a mismatch
+    let (file, _) = std_file();
+    let r = check_signatures(&file, &work("views-ok"), &target()).unwrap();
+    assert_eq!((r.views_checked, r.views_unchecked.len(), r.mismatches.len()), (3, 0, 0), "{:?}", r.mismatches);
+    let mut f = file.clone();
+    f["views"][1]["host"] = json!("'std::vec::Vec::capacitee'");
+    let r = check_signatures(&f, &work("views-bad"), &target()).unwrap();
+    assert!(r.mismatches.iter().any(|(n, _)| n == "view capacity of std::vec::Vec"), "{:?}", r.mismatches);
+}
+
+#[test]
+fn a_failure_carries_a_payload_that_a_clause_fills() {
+    let (file, _) = std_file();
+    let mut f = file.clone();
+    let c = subject_mut(&mut f, "std::option::Option::expect")["clauses"][0].clone();
+    assert_eq!(c["text"], "fails panic { message: msg, location: caller } when self is none");
+    // a field the failure does not declare, or a payload that is not declared at all
+    subject_mut(&mut f, "std::option::Option::expect")["clauses"][0]["text"] = json!("fails panic { detail: msg } when self is none");
+    assert!(errors(&f).contains("`detail` is not a payload field of failure `panic`"), "{}", errors(&f));
+    let mut f = file.clone();
+    f["failures"]["panic"] = json!("runtime");
+    assert!(errors(&f).contains("`message` is not a payload field"), "{}", errors(&f));
+    let mut f = file.clone();
+    f["failures"]["panic"]["payload"]["message"] = json!("list<");
+    assert!(errors(&f).contains("payload field `message`"), "{}", errors(&f));
+}
+
+fn set_text(f: &mut Value, name: &str, kind: &str, text: &str) -> String {
+    let c = subject_mut(f, name)["clauses"].as_array_mut().unwrap().iter_mut().find(|c| c["kind"] == kind || c["text"].as_str().is_some_and(|t| t.starts_with(kind))).unwrap();
+    std::mem::replace(&mut c["text"], json!(text)).as_str().unwrap().to_string()
+}
+
+#[test]
+fn budget_and_layout_are_clause_kinds() {
+    let (file, _) = std_file();
+    let mut f = file.clone();
+    let was = set_text(&mut f, "std::collections::HashMap::new", "budget", "allocates at most 0 B");
+    assert_eq!(was, "budget allocates at most 0 B per call");
+    assert!(errors(&f).contains("a `budget` clause starts with `budget`"), "{}", errors(&f));
+    set_text(&mut f, "std::collections::HashMap::new", "budget", "budget allocates at most 0 B per call and zzz");
+    assert!(errors(&f).contains("unknown name `zzz`"));
+    assert_eq!(set_text(&mut f, "std::hash::BuildHasherDefault", "layout", "layout round"), "size 0");
+    assert!(errors(&f).contains("unknown name `round`"), "{}", errors(&f));
+}
+
+#[test]
+fn named_functions_of_the_language_are_accepted_words() {
+    let (file, _) = std_file();
+    let mut f = file.clone();
+    let was = set_text(&mut f, "std::primitive::f64::abs", "ensure unsigned", "ensure u : not sign_bit(result) and not is_nan(result) and total_order(self, result)");
+    assert!(was.contains("sign_bit(result)"));
+    assert_eq!(errors(&f), "");
+    set_text(&mut f, "std::primitive::f64::abs", "ensure u ", "ensure u : not sign_bt(result)");
+    assert!(errors(&f).contains("unknown name `sign_bt`"));
+}
+
+#[test]
+fn a_derive_template_expands_per_field_into_clauses() {
+    let (file, _) = std_file();
+    // the derive macros name their template; a template that is not the macro's is refused
+    let mut f = file.clone();
+    assert_eq!(subject_mut(&mut f, "std::clone::Clone!")["clauses"][0]["text"], "derive Clone");
+    subject_mut(&mut f, "std::clone::Clone!")["clauses"][0]["text"] = json!("derive Hash");
+    assert!(errors(&f).contains("names a template that is not this derive's"), "{}", errors(&f));
+    // a type that derives has fields, and its derives are templates
+    let mut f = file.clone();
+    let cache = json!({"kind": "type", "name": "std::demo::Cache", "visible": "public", "derive": ["Clone", "PartialEq"], "fields": [{"name": "entries", "type": "u64", "hold": {"kind": "owns"}}, {"name": "hits", "type": "u64", "hold": {"kind": "owns"}}]});
+    f["subjects"].as_array_mut().unwrap().push(cache.clone());
+    assert_eq!(errors(&f), "");
+    let shown = bare_rust::derive::show(&f);
+    assert!(shown.contains("ensure clone_entries : result.entries == self.entries") && shown.contains("ensure eq_hits : self.hits != other.hits implies not result"), "{shown}");
+    // the expanded clauses are ordinary: they pass the clause lint
+    for c in bare_rust::derive::expand(&cache) {
+        let scope = bare_rust::clause::Scope { names: ["Self", "other"].iter().map(|s| s.to_string()).collect(), ..Default::default() };
+        let k = c["kind"].as_str().unwrap();
+        assert_eq!(bare_rust::clause::lint(k, c["text"].as_str().unwrap(), &[k], &scope), Vec::<String>::new());
+    }
+    f["subjects"][106]["derive"] = json!(["Serialize"]);
+    assert!(errors(&f).contains("not a derive template"));
+    f["subjects"][106]["derive"] = json!(["Clone"]);
+    f["subjects"][106].as_object_mut().unwrap().remove("fields");
+    assert!(errors(&f).contains("`derive` is for a type with `fields` or `variants`"));
+}
+
+#[test]
+fn the_host_profile_holds_macro_arms_and_the_panic_strategy() {
+    let lib = libraries();
+    let text = fs::read_to_string(bare_rust::host::host_path(&lib, "rust", "1.97.0")).unwrap();
+    let p: Value = serde_json::from_str(&text).unwrap();
+    let (file, _) = std_file();
+    assert_eq!(bare_rust::host::validate(&p, &file, Some(&text)), (10, vec![]));
+    assert_eq!(p["panic"]["strategy"], "unwind");
+    // the four macros whose clauses said "no macro arguments" have their arms here
+    for m in ["std::assert_eq!", "std::panic!", "std::vec!", "std::write!"] {
+        assert!(p["macros"][m]["arms"].as_array().is_some_and(|a| a.len() >= 2), "{m}");
+    }
+    let mut bad = p.clone();
+    bad["panic"]["strategy"] = json!("loud");
+    bad["macros"]["std::vec!"]["arms"][0]["pattern"] = json!("array![]");
+    bad["macros"]["std::vec!"]["arms"][1]["params"][0]["type"] = json!("list<");
+    let e = bare_rust::host::validate(&bad, &file, None).1.join("\n");
+    assert!(e.contains("strategy") && e.contains("pattern starts with `vec!`") && e.contains("arm 1"), "{e}");
+}
+
+#[test]
+fn what_a_function_computes_is_not_a_gap_of_the_language() {
+    let (file, _) = std_file();
+    let labels: Vec<&str> = file["subjects"].as_array().unwrap().iter().flat_map(|s| s["clauses"].as_array().into_iter().flatten()).filter(|c| c["kind"] == "unexpressed").map(|c| bare_rust::libstats::reason_label(c["reason"].as_str().unwrap())).collect();
+    for gone in ["no formatted text", "no quantifier over fields", "no macro arguments", "no unwinding behaviour", "no budget or layout kind", "no sign of zero, no NaN payload"] {
+        assert!(!labels.contains(&gone), "{gone}");
+    }
+    assert_eq!(labels.iter().filter(|l| **l == "what a function computes").count(), 8);
+}
+
 #[test]
 fn the_whole_file_compiles_against_the_real_std() {
     let (file, _) = std_file();

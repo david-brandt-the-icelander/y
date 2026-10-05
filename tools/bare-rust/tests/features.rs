@@ -336,3 +336,20 @@ fn mut_self_and_mut_bindings_count_alike() {
     assert!(b.contains("fn f(self, c)"), "{b}");
     assert_eq!(subject(&j, "demo::S::g")["params"][0]["access"]["rights"], "write");
 }
+
+#[test]
+fn slices_and_arrays_are_lists() {
+    let src = r#"
+const N: usize = 4;
+
+pub fn f(a: &[u8], b: &mut [Vec<u8>], c: [u32; 3], d: &[[u8; N]; 2]) -> [u8; 2] {
+    [a[0], c[0] as u8]
+}
+"#;
+    let (_, j) = roundtrip(src);
+    let s = j.to_string();
+    assert!(s.contains("ref<list<u8> as 'std::primitive::slice'>"), "{s}");
+    assert!(s.contains("list<u32> where size(value) == 3 as 'std::primitive::array'"), "{s}");
+    assert!(s.contains("size(value) == N"), "{s}");
+    assert!(!s.contains("\"form\":\"slice\"") && !s.contains("\"form\":\"array\""), "{s}");
+}

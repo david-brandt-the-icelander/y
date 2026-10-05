@@ -102,6 +102,12 @@ impl Ty {
                 (Ty::Text, "String") => "String".into(),
                 // a slice is a `list` whose host form is the unsized `[T]`, which only a reference can name
                 (Ty::Coll(k, a), "std::primitive::slice") if k == "list" => format!("[{}]", list(a)?),
+                (Ty::Refined(l, p), "std::primitive::array") if matches!(&**l, Ty::Coll(k, _) if k == "list") => {
+                    let (Ty::Coll(_, a), Some(n)) = (&**l, p.strip_prefix("size(value) == ")) else {
+                        return Err(format!("bad array refinement `{p}`"));
+                    };
+                    format!("[{}; {n}]", list(a)?)
+                }
                 (Ty::Coll(_, a), _) => format!("{w}<{}>", list(a)?),
                 (t, _) => format!("{w}<{}>", t.rust_in(m, lt, false)?),
             },

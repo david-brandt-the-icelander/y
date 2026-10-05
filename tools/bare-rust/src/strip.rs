@@ -142,7 +142,18 @@ impl<'a> Stripper<'a> {
                 Ok(Ty::Tuple(v?))
             }
             "unit_type" => Ok(Ty::Tuple(vec![])),
-            "array_type" => Err(if n.child_by_field_name("length").is_some() { "array" } else { "slice" }.into()),
+            "array_type" => {
+                let el = n.child_by_field_name("element").ok_or("other_array_type")?;
+                let el = self.to_ty(el, cx, refs)?;
+                let list = Ty::Coll("list".into(), vec![el]);
+                Ok(match n.child_by_field_name("length") {
+                    None => Ty::As(Box::new(list), "std::primitive::slice".into()),
+                    Some(len) => Ty::As(
+                        Box::new(Ty::Refined(Box::new(list), format!("size(value) == {}", collapse(text(len, src))))),
+                        "std::primitive::array".into(),
+                    ),
+                })
+            }
             "abstract_type" => Err("impl_trait".into()),
             "dynamic_type" => Err("dyn".into()),
             "function_type" => Err("fn_ptr".into()),

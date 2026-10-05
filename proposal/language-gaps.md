@@ -20,8 +20,9 @@ a few more.
 
 - **Sort before extending.** Each gap falls into one of three classes:
   - **A, no language change (38 promises).** The language can already say it, through a view, a failure's payload, a
-    refinement or a named function, or the gap is in the library file's format, the host profile or the tool. About 5
-    of the 38 turn out to be what a function computes, and stay out.
+    refinement or a named function, or the gap is in the library file's format, the host profile or the tool. **Done**
+    (§ 3): 24 closed, 8 turned out to be what a function computes and stay out, and 6 need a host function that does
+    not exist. `unexpressed` fell from 199 to 175, and slices and arrays no longer reach the bare file as host text.
   - **B, an extension (158).** It needs a change to the language, in five groups.
   - **C, kept out (3).** The language rules it out on purpose.
 - **Extend in five steps, largest first**, unless stage 3 says otherwise:
@@ -39,7 +40,8 @@ a few more.
   checker or the compiler can use, not by count. If agents do worse, the order above stands.
 - **Each step is measured.** It is done when the library file is rewritten under the extension, `unexpressed` falls by
   the expected count, and `libcheck` and the review pass.
-- **It is cheap to build; the cost is people's review.** The agent work for all five steps is estimated at $45 to $90.
+- **It is cheap to build; the cost is people's review.** Class A cost about $3. The agent work for the five steps left
+  is estimated at $40 to $80.
   Every step is a language change that the language's owners must accept (§ 7).
 
 ---
@@ -65,7 +67,7 @@ Every `unexpressed` clause in the `std` file names what the language lacked. Gro
 
 | Gap | Count in E1 | Class |
 | --- | --- | --- |
-| Slices | 32 type slots | A: `list<T> as 'std::primitive::slice'`, as the stage 2 library file already writes them; `strip` still carries them as host text |
+| Slices | 32 type slots | A: `list<T> as 'std::primitive::slice'`, as the stage 2 library file writes them; `strip` now does too |
 | Types with lifetime arguments (`Chars<'a>`, `Entry<'a, K, V>`) | 25 | B1 |
 | Arrays `[T; N]` | 10 | A: `list<T> where size(value) == N`, with the host type named by `as` |
 | `impl Trait`, `dyn Trait`, associated types | 5, 2 and 1 | B1 |
@@ -111,11 +113,30 @@ These are the language's own rules, applied to gaps:
 | Sign of zero, NaN payload | 1 | Named functions: `sign_bit(x)`, `total_order(a, b)` (already in § 4) | Catalog of named functions |
 
 Slices, arrays and `usize` (§ 1.2) belong here too: each is a list or an integer, refined where needed, with the host
-type named by `as`. Of the 9 formatted-text promises, about 5 are what a function computes and stay out (§ 5), so class
-A closes about 33.
+type named by `as`. Of the 9 formatted-text promises, about 5 were expected to be what a function computes;
+the build found 8 (below).
 
-All of class A is one release of the library file format and the tool. It costs about one build run, one check run and
-a batch of entry rewrites, and needs no language review.
+All of class A is one release of the library file format and the tool, and needs no language review.
+
+**Done.** Two short agents built it and rewrote the entries, for about $3 (6M tokens, 0.6% of a Max 5x week):
+
+- **Views** bound to pure host functions: a `views` list (`{name, of, host}`) at the top of the file or on a subject.
+  `libcheck` compiles each host path; 3 resolve (`HashMap` and `Vec` capacity, `Hasher::finish` as `hash`).
+- **Failure payloads**: `failures.panic` declares `{message: text, location: location}`, and a clause writes
+  `fails panic { message: msg, location: caller } when …`. `#[track_caller]` is `location: caller`.
+- **`budget` and `layout`** are clause kinds of the file.
+- **Derive templates** for Clone, Copy, PartialEq, Eq, Hash and Default, in `src/derive.rs`; `libfmt --expand` shows
+  the per-field clauses. `weave` does not consume them yet.
+- **A host profile**, `libraries/host-rust-1.97.0.json`: the panic strategy, the caller location, and one signature
+  per arm for `assert_eq!`, `panic!`, `vec!` and `write!`.
+- **Named functions** `sign_bit` and `is_nan` join `total_order`.
+- **Slices and arrays** strip to `list<T> as 'std::primitive::slice'` and `list<T> where size(value) == N as
+  'std::primitive::array'`; all 42 such slots of E1 are now lists. `usize` was already `u64 as 'usize'`.
+
+Of the 38, 24 are closed. 8 are what a function computes (Debug and Display text, and the Debug rendering inside
+`Result::expect`), relabelled and moved to class C. 6 stay as `no host state`: `Entry::or_insert`, `Formatter`,
+`TryFromIntError`, `Display::fmt`, `Hasher::write` and `Hash` need state that no pure host function reads; they wait
+for B1, where an implementation can declare its own views.
 
 ---
 
@@ -268,15 +289,16 @@ function rust 'std::primitive::str::chars'(self: ref<text>) -> some 'std::iter::
 
 | Step | Closes | Unexpressed after | First consumer | Wait for |
 | --- | --- | --- | --- | --- |
-| A, format and profile | about 33 | about 166 | Agents, through better library files | Nothing |
-| B1, traits and implementations | 52 | about 114 | `weave`, which carries `impl Trait`, `dyn Trait` and lifetime arguments only as Rust text | Nothing |
-| B4, the first two (`const`, must-use) | 32 | about 82 | `weave` (`const fn`); the compiler and lints | Nothing |
-| B2, `given` | 30 | about 52 | Discharge of generated checks | Trial stage 4 or later |
-| B4, the rest | 15 | about 37 | The memory clauses of language § 7 and § 8 | — |
-| B3, callbacks | 15 | about 22 | Agents writing iterator and option code | E5 |
-| B5, sequences | 14 | about 8 | Agents writing iterator code | E4 and E5 |
+| A, format and profile (done) | 24 | 175 | Agents, through better library files | — |
+| B1, traits and implementations | 52 | about 123 | `weave`, which carries `impl Trait`, `dyn Trait` and lifetime arguments only as Rust text | Nothing |
+| B4, the first two (`const`, must-use) | 32 | about 91 | `weave` (`const fn`); the compiler and lints | Nothing |
+| B2, `given` | 30 | about 61 | Discharge of generated checks | Trial stage 4 or later |
+| B4, the rest | 15 | about 46 | The memory clauses of language § 7 and § 8 | — |
+| B3, callbacks | 15 | about 31 | Agents writing iterator and option code | E5 |
+| B5, sequences | 14 | about 17 | Agents writing iterator code | E4 and E5 |
 
-The 8 left are class C: 3 positive effects and about 5 formatted texts.
+The 17 left are 11 of class C (3 positive effects, 8 computed texts) and the 6 host-state promises, unless B1's views
+cover them.
 
 The counts are estimates: an extension may close fewer promises than its labels suggest, and a rewrite may find new
 ones. Each step lands in the same way:
@@ -308,16 +330,16 @@ That review is the real cost, and it is not counted here. The agent work uses th
 
 | Step | Build and check runs | Entries rewritten | Estimated cost |
 | --- | --- | --- | --- |
-| A | 1 and 1 | about 35 | $5 to $10 |
+| A (measured) | 2 agents | 38 | about $3 |
 | B1 | 3 and 2 | about 50 | $15 to $30 |
 | B2 | 1 and 1 | about 30 | $5 to $10 |
 | B3 | 1 and 1 | about 15 | $4 to $8 |
 | B4 | 2 and 1 | about 45 | $8 to $15 |
 | B5 | 2 and 1 | about 15 | $8 to $15 |
-| **All** | | **about 190** | **$45 to $90** |
+| **B1 to B5, left** | | **about 155** | **$40 to $80** |
 
 Each range assumes short agents, as stage 1 ran; stage 2's single long agent cost twice the unit (trial § 14.1). At the
-Max 5x proxy of trial § 14.3, all of it is about 9 to 17% of a week.
+Max 5x proxy of trial § 14.3, what is left is about 8 to 15% of a week.
 
 ---
 

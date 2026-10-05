@@ -25,6 +25,7 @@ const USAGE: &str = "usage:
       signature compile check; exits non-zero on a missing item (unless --allow-missing), an invalid file or a
       mismatched signature
   bare-rust libfmt <library-file>...
+  bare-rust libfmt --expand <library-file>     (print what each type's `derive` list expands to)
       rewrite library files in canonical form
   bare-rust libstats <library-file> [--work <dir>] [--no-signatures]
       the counts of a library file (entries and clauses by kind, status and source, the `unexpressed` promises by what
@@ -171,6 +172,11 @@ fn run(args: Vec<String>) -> Result<(), String> {
             Ok(())
         }
         Some("libfmt") => {
+            if args[2] == "--expand" {
+                let v: serde_json::Value = serde_json::from_str(&rd(&args[3])?).map_err(|e| format!("{}: {e}", args[3]))?;
+                print!("{}", bare_rust::derive::show(&v));
+                return Ok(());
+            }
             let paths: Vec<PathBuf> = args[2..].iter().map(PathBuf::from).collect();
             let n = bare_rust::libcheck::format_files(&paths)?;
             println!("libfmt: {} of {} files rewritten", n, paths.len());

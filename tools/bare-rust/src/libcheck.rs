@@ -30,7 +30,10 @@ pub fn heads(kind: &str) -> &'static [&'static str] {
         "on failure" => &["on failure"],
         "fails" => &["fails"],
         "fails only" => &["fails only"],
-        "panics" => &["fails panic when"],
+        "panics" => &["fails panic when", "fails panic"],
+        "budget" => &["budget"],
+        "layout" => &["layout", "size", "align"],
+        "derive" => &["derive"],
         "never panics" => &["never panics"],
         "result must be used" => &["result must be used"],
         "effects" => &[
@@ -100,6 +103,20 @@ fn type_strings(sub: &Value) -> Vec<(String, String)> {
     out
 }
 
+/// The views of a file: (name, subject, host path), the file's own and those of its subjects (whose `of` is the subject).
+pub fn views_of(file: &Value) -> Vec<(String, String, String)> {
+    let q = |v: &Value, k: &str| v[k].as_str().unwrap_or("").trim_matches('\'').to_string();
+    let mut out: Vec<(String, String, String)> = file["views"].as_array().into_iter().flatten().map(|v| (q(v, "name"), q(v, "of"), q(v, "host"))).collect();
+    for s in file["subjects"].as_array().into_iter().flatten() {
+        out.extend(s["views"].as_array().into_iter().flatten().map(|v| (q(v, "name"), s["name"].as_str().unwrap_or("").to_string(), q(v, "host"))));
+    }
+    out
+}
+
+fn is_host_path(p: &str) -> bool {
+    p.contains("::") && ["std::", "core::", "alloc::"].iter().any(|r| p.starts_with(r))
+}
+
 /// Everything that is wrong with a library file's content: the schema, the rules the schema cannot say, and the
 /// canonical layout of `text`.
 pub fn validate(file: &Value, text: Option<&str>) -> Vec<String> {
@@ -111,6 +128,31 @@ pub fn validate(file: &Value, text: Option<&str>) -> Vec<String> {
     }
     let mut seen: BTreeSet<(String, String)> = BTreeSet::new();
     let failures: BTreeSet<String> = file["failures"].as_object().into_iter().flat_map(|m| m.keys().cloned()).collect();
+    // a failure is `"runtime"`, or `{ "class": …, "payload": { field: type } }`, whose fields `fails F { field: e }` fills
+    let mut payload: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for (f, d) in file["failures"].as_object().into_iter().flatten() {
+        for (field, t) in d["payload"].as_object().into_iter().flatten() {
+            payload.entry(f.clone()).or_default().insert(field.clone());
+            if let Err(e) = t.as_str().map_or(Err("a payload field has a type".into()), Ty::parse) {
+                errs.push(format!("failure `{f}`: payload field `{field}`: {e}"));
+            }
+        }
+    }
+    // views: pure host functions that name state a value holds, declared for the file or for one subject
+    let subject_names: BTreeSet<&str> = file["subjects"].as_array().into_iter().flatten().filter_map(|s| s["name"].as_str()).collect();
+    let all_views: Vec<(String, String, String)> = views_of(file);
+    let mut seen_views = BTreeSet::new();
+    for (name, of, host) in &all_views {
+        if !seen_views.insert((name.clone(), of.clone())) {
+            errs.push(format!("view `{name}` of `{of}` is declared twice"));
+        }
+        if !subject_names.contains(of.as_str()) {
+            errs.push(format!("view `{name}`: `{of}` is not a subject of the file"));
+        }
+        if !is_host_path(host) || !host.starts_with(&format!("{of}::")) {
+            errs.push(format!("view `{name}`: `{host}` is not a host path under `{of}`"));
+        }
+    }
     let variants: BTreeSet<String> = file["subjects"]
         .as_array()
         .into_iter()
@@ -147,7 +189,20 @@ pub fn validate(file: &Value, text: Option<&str>) -> Vec<String> {
                 errs.push(format!("{at}: generic `{}` is declared twice", g["name"].as_str().unwrap_or("")));
             }
         }
-        let mut scope = Scope { names: variants.clone(), failures: failures.clone() };
+        let mut scope = Scope { names: variants.clone(), failures: failures.clone(), payload: payload.clone() };
+        scope.names.extend(all_views.iter().map(|v| v.0.clone()));
+        if kind == "type" {
+            scope.names.insert("Self".into());
+            scope.names.insert("other".into());
+        }
+        for d in sub["derive"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+            if !crate::derive::is_template(d) {
+                errs.push(format!("{at}: `{d}` is not a derive template ({})", crate::derive::TEMPLATES.iter().map(|t| t.0).collect::<Vec<_>>().join(", ")));
+            }
+        }
+        if sub["derive"].is_array() && (kind != "type" || sub["fields"].is_null() && sub["variants"].is_null()) {
+            errs.push(format!("{at}: `derive` is for a type with `fields` or `variants`"));
+        }
         for n in sub["params"].as_array().into_iter().flatten().filter_map(|p| p["name"].as_str()) {
             scope.names.insert(n.to_string());
         }
@@ -159,7 +214,12 @@ pub fn validate(file: &Value, text: Option<&str>) -> Vec<String> {
         }
         for (j, c) in sub["clauses"].as_array().into_iter().flatten().enumerate() {
             let (k, t) = (c["kind"].as_str().unwrap_or(""), c["text"].as_str().unwrap_or(""));
-            if k != "unexpressed" {
+            if k == "derive" {
+                let d = t.strip_prefix("derive ").unwrap_or("");
+                if !crate::derive::is_template(d) || !name.ends_with(&format!("::{d}!")) {
+                    errs.push(format!("{at}: clause {j}: `{t}` names a template that is not this derive's"));
+                }
+            } else if k != "unexpressed" {
                 errs.extend(lint(k, t, heads(k), &scope).into_iter().map(|e| format!("{at}: clause {j}: {e}")));
             }
         }
@@ -424,6 +484,9 @@ pub struct SigReport {
     pub mismatches: Vec<(String, String)>,
     /// Subjects checked by kind: (checked, mismatched).
     pub by_kind: BTreeMap<String, (usize, usize)>,
+    /// Views whose host path resolved, and those whose generics the type's subject does not fix.
+    pub views_checked: usize,
+    pub views_unchecked: Vec<String>,
 }
 
 impl SigReport {
@@ -463,6 +526,24 @@ pub fn check_signatures(file: &Value, work: &Path, target: &Path) -> R<SigReport
         src.push('\n');
         line += n;
     }
+    // a view's host path must resolve as a method of its type, whose generics the type's subject gives
+    for (name, of, host) in views_of(file) {
+        let Some(t) = file["subjects"].as_array().into_iter().flatten().find(|s| s["name"].as_str() == Some(&of)) else { continue };
+        let (g, w) = generics_of(t);
+        let mut args: Vec<&str> = t["generics"].as_array().into_iter().flatten().filter_map(|g| g["name"].as_str()).collect();
+        args.sort_by_key(|a| !a.starts_with('\''));
+        let m = host.rsplit("::").next().unwrap_or("");
+        let code = if t["kind"] == "trait" {
+            format!("fn _v{line}<Self_: {of}>() {{ let _ = <Self_ as {of}>::{m}; }}")
+        } else {
+            format!("fn _v{line}{g}(){w} {{ let _ = <{of}<{}>>::{m}; }}", args.join(", "))
+        };
+        let label = format!("view {name} of {of}");
+        ranges.push((line, line, label, "view".into()));
+        src.push_str(&code);
+        src.push('\n');
+        line += 1;
+    }
     let dir = work.join("libcheck");
     fs::create_dir_all(dir.join("src")).map_err(|e| format!("{}: {e}", dir.display()))?;
     // Cargo's fingerprint of a path package does not depend on where it is, so scratch crates of one name share it, and
@@ -495,6 +576,14 @@ pub fn check_signatures(file: &Value, work: &Path, target: &Path) -> R<SigReport
         rep.mismatches.push(("(scratch crate)".into(), s));
     }
     for (_, _, name, kind) in &ranges {
+        if kind == "view" {
+            match (bad.get(name), vague.contains(name)) {
+                (Some(m), _) => rep.mismatches.push((name.clone(), m.clone())),
+                (None, true) => rep.views_unchecked.push(name.clone()),
+                _ => rep.views_checked += 1,
+            }
+            continue;
+        }
         let e = rep.by_kind.entry(kind.clone()).or_default();
         if let Some(m) = bad.get(name) {
             rep.mismatches.push((name.clone(), m.clone()));
@@ -524,6 +613,10 @@ pub struct LibReport {
     pub sigs: Option<SigReport>,
     /// Why the check could not run, if it could not.
     pub skipped: Option<String>,
+    /// The host profile's path and its macro arms, when the library has one.
+    pub host: Option<(PathBuf, usize)>,
+    /// Derive clauses the library's `derive` lists expand to.
+    pub expanded: usize,
 }
 
 impl LibReport {
@@ -558,6 +651,7 @@ impl LibReport {
             "signatures": s.map(|s| json!({
                 "checked": s.checked.len(), "resolved": s.resolved.len(), "unchecked": s.unchecked_total(),
                 "unchecked_by_reason": s.unchecked.iter().map(|(k, v)| (k.clone(), json!(v))).collect::<serde_json::Map<_, _>>(),
+                "views": { "resolved": s.views_checked, "unchecked": s.views_unchecked },
                 "mismatches": s.mismatches.iter().map(|(n, m)| json!({"subject": n, "error": m})).collect::<Vec<_>>(),
             })),
         })
@@ -584,6 +678,9 @@ impl LibReport {
             }
         }
         println!("  schema    {}  {} problems", st(self.valid_ok()), self.invalid.len());
+        if let Some((p, arms)) = &self.host {
+            println!("  host      {}: {arms} macro arms; {} derive clauses expanded", p.display(), self.expanded);
+        }
         for e in &self.invalid {
             println!("              {e}");
         }
@@ -599,6 +696,7 @@ impl LibReport {
             for (why, v) in &s.unchecked {
                 println!("              unchecked ({why}): {}", v.len());
             }
+            println!("              views: {} host paths resolved, {} unchecked", s.views_checked, s.views_unchecked.len());
             for (n, m) in &s.mismatches {
                 println!("              mismatch {n}: {m}");
             }
@@ -633,6 +731,14 @@ pub fn libcheck(dir: &Path, libraries: &Path, work: &Path, target: &Path) -> R<L
     rep.invalid = validate(&file, Some(&text));
     if file["crate"].as_str() != Some(&format!("std {version}")) {
         rep.invalid.push(format!("crate is {:?}, but the toolchain is std {version}", file["crate"]));
+    }
+    rep.expanded = file["subjects"].as_array().into_iter().flatten().map(|s| crate::derive::expand(s).len()).sum();
+    let hp = crate::host::host_path(libraries, file["host"].as_str().unwrap_or("rust"), &version);
+    if let Ok(t) = fs::read_to_string(&hp) {
+        let p: Value = serde_json::from_str(&t).map_err(|e| format!("{}: {e}", hp.display()))?;
+        let (arms, errs) = crate::host::validate(&p, &file, Some(&t));
+        rep.invalid.extend(errs);
+        rep.host = Some((hp, arms));
     }
     rep.sigs = Some(check_signatures(&file, &work.join(&info.name), target)?);
     Ok(rep)

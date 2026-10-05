@@ -2,9 +2,9 @@
 //! element fits on one line.
 use serde_json::Value;
 
-const ORDER: [&str; 36] = [
-    "format", "host", "crate", "module", "status", "failures", "subjects", "holes", "kind", "n", "name", "visible", "visible_path",
-    "generics", "for", "bounds", "where", "trait", "self", "type", "form", "fields", "variants", "params", "result",
+const ORDER: [&str; 44] = [
+    "format", "host", "version", "crate", "module", "status", "failures", "panic", "macros", "views", "subjects", "arms", "pattern", "when", "holes", "kind", "n", "name", "visible", "visible_path",
+    "generics", "for", "bounds", "where", "trait", "self", "type", "form", "fields", "derive", "variants", "params", "result",
     "fails", "clauses", "access", "hold", "rights", "guarantee", "from", "lifetime", "locals", "hints", "sep",
 ];
 
@@ -13,6 +13,9 @@ const ORDER: [&str; 36] = [
 const CLAUSE_ORDER: [&str; 5] = ["kind", "text", "source", "reason", "status"];
 
 fn rank(parent: &str, k: &str) -> usize {
+    if parent == "views" {
+        return ["name", "of", "host"].iter().position(|o| *o == k).unwrap_or(3);
+    }
     if parent == "clauses" {
         return CLAUSE_ORDER.iter().position(|o| *o == k).unwrap_or(CLAUSE_ORDER.len());
     }

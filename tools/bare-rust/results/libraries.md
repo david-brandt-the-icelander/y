@@ -11,16 +11,18 @@ crate (49 functions, 25 types, 19 traits, 11 macros, 1 const), and one more, `st
 
 | Entries | Count | | Clauses | Stated | `unexpressed` |
 | --- | ---: | --- | --- | ---: | ---: |
-| function (22 are trait methods) | 49 | | `ensure` | 43 | |
+| function (22 are trait methods) | 49 | | `ensure` | 46 | |
 | type | 26 | | `effects` | 14 | |
 | trait | 19 | | `result must be used` | 18 | |
 | macro | 11 | | `never panics` | 13 | |
-| const | 1 | | `law` | 8 | |
-| | | | `fails panic when` | 5 | |
+| const | 1 | | `law` | 9 | |
+| | | | `fails panic` | 5 | |
+| | | | `derive` | 6 | |
 | | | | `callback` | 3 | |
-| | | | `unexpressed` | | 199 |
+| | | | `budget`, `layout`, `invariant`, `on failure` | 2, 1, 1, 1 | |
+| | | | `unexpressed` | | 175 |
 
-303 clauses in all: 104 stated and 199 `unexpressed`, on 105 of the 106 subjects (`char::MAX` has none: its value is
+294 clauses in all: 119 stated and 175 `unexpressed`, on 105 of the 106 subjects (`char::MAX` has none: its value is
 now in its type). `std` documents what panics, never a precondition, so no `require` or `fails … when` is stated apart
 from the five `panic` ones. Stated clauses by status: documentation 49, observed in a body 33, `#[must_use]` lifted 22,
 hand-written none (part A's one hand-written clause, `cmp::max.an_argument`, now cites the documentation).
@@ -30,25 +32,43 @@ hand-written none (part A's one hand-written clause, `cmp::max.an_argument`, now
 0 mismatched. Of 139 type slots, 126 map to the type language (91%) and 13 are host text: lifetime argument 7,
 associated type 5, never type 1. Slices are no longer host text (below).
 
-## What the language lacked: the `unexpressed` promises (199)
+## What the language lacked: the `unexpressed` promises (175)
 
-Each reason in the file starts with its label, so these are counts of labels.
+Each reason in the file starts with its label, so these are counts of labels. Class A of `proposal/language-gaps.md` § 3
+(file format, tool and host profile, no language change) took the file from 199 to 175; see the next section.
 
-- **Types, traits and impls (101).** No impl or associated type 38; promise conditional on a bound or on a default
-  body an impl may override 22; must-use on a type 14; call resolves to an unnamed impl 11; no quantifier over fields
-  (derives) 7; requirement on bound implementations 6; no variants of a host enum 3.
+- **Types, traits and impls (94).** No impl or associated type 38; promise conditional on a bound or on a default
+  body an impl may override 22; must-use on a type 14; call resolves to an unnamed impl 11; requirement on bound
+  implementations 6; no variants of a host enum 3.
 - **Sequences and collections (22).** No sequence value 14; no identity of moved values 6; no frame condition on a
   collection 1; no tuple parts 1.
-- **Hosts and effects (40).** No host state (capacity, hasher, formatter) 10; no value of a callback result 7; no order
-  of calls 6; no drop 4; no unwinding behaviour 4; no positive effect 3; no resource exhaustion 2; callback clause has
-  no condition 2; no build profile (overflow checks) 2.
-- **Text, numbers and constants (29).** No const-ness 18; no formatted text 9; no sign of zero or NaN payload 1; no
-  expected or amortised cost 1.
-- **Macros and the file format (7).** No macro arguments (per-arm signature) 4; no `budget` or `layout` clause kind 3.
+- **Hosts and effects (32).** No host state 6 (an entry's hidden map, the formatter, a hasher's writes, the cause of a
+  `TryFromIntError`: no pure host function reads them); no value of a callback result 7; no order of calls 6; no drop 4;
+  no positive effect 3; no resource exhaustion 2; callback clause has no condition 2; no build profile (overflow
+  checks) 2.
+- **Text, numbers and constants (27).** No const-ness 18; what a function computes 8 (Debug and Display text, a
+  derived Debug, `assert_eq!`'s and `write!`'s text: language § 16, class C); no expected or amortised cost 1.
 
-Two findings reach beyond the language. The externals lists name a trait method, never the impl a call resolved to, so a
-promise that depends on the impl (`try_from` on integers, `into_iter` on a `Vec`) has no subject. And the file's clause
-kinds omit `budget` and `layout`, which language § 5 has.
+## Class A: what moved
+
+- **Views** (`views` on the file, or on a subject): `{ "name": "capacity", "of": "'std::vec::Vec'", "host": "'std::vec::Vec::capacity'" }`.
+  A clause calls it by name (`invariant fits : size(self) <= capacity(self)`). `libcheck` checks that `host` is under
+  `of` and compiles `<Vec<T>>::capacity` against rustc: 3 views, all resolved (`HashMap` and `Vec` capacity,
+  `Hasher::finish` as `hash`).
+- **Failure payloads**: `failures.panic` is `{ "class": "runtime", "payload": { "message": "text", "location": "location" } }`;
+  `fails panic { message: msg, location: caller } when self is none` fills it, and a field the failure lacks is refused.
+  `#[track_caller]` is `location: caller`.
+- **`budget` and `layout`** are clause kinds (`budget allocates at most 0 B per call when capacity == 0`, `size 0`).
+- **Derives**: `derive Clone` on the macro subject names a template; a type subject's `"derive": [...]` is expanded per
+  field by `src/derive.rs` (one table), shown by `bare-rust libfmt --expand <file>`. `weave` does not consume it yet.
+  Debug is not a template: the text a derive writes is what a function computes.
+- **Host profile** `libraries/host-rust-1.97.0.json` (a file of its own: none of it is a promise of a `std` item): the
+  panic strategy (`unwind`), the location attribute, and 10 macro arms for `assert_eq!`, `panic!`, `vec!` and `write!`,
+  one signature each. `libcheck` validates it against the library (a line `host`).
+- **Named functions**: `sign_bit`, `is_nan` join `total_order` as words of the clause lint.
+
+One finding reaches beyond the language: the externals lists name a trait method, never the impl a call resolved to, so
+a promise that depends on the impl (`try_from` on integers, `into_iter` on a `Vec`) has no subject.
 
 ## The repair round: what an independent review found, and what became `unexpressed`
 

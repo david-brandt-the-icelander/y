@@ -3,7 +3,7 @@
 //! path is quoted (language 15's `STABLE`) and looks like one; a failure named by `fails` is declared in the file; and
 //! every other name is a parameter, `result`, `self`, a generic, a variant of a subject of the file, a name the clause
 //! binds (`all x`, `is V(x)`), or a word of the expression language.
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// What a clause may name besides the words of the language: the subject's own names and the file's.
 #[derive(Default)]
@@ -12,6 +12,8 @@ pub struct Scope {
     pub names: BTreeSet<String>,
     /// The failures the file declares.
     pub failures: BTreeSet<String>,
+    /// The payload fields each failure declares: `fails F { field: e } when p` may fill only these.
+    pub payload: BTreeMap<String, BTreeSet<String>>,
 }
 
 /// Words of language 4 and 6, and of the clause forms that carry no expression.
@@ -19,8 +21,17 @@ const WORDS: &[&str] = &[
     "and", "or", "not", "implies", "iff", "if", "then", "else", "exists", "is", "in", "matches", "fits", "finite", "all", "any", "old",
     "result", "self", "true", "false", "none", "value", "size", "count", "length", "byte_length", "utf16_length", "utf8", "sum", "min",
     "max", "same", "approx", "total_order", "distinct", "sorted", "by", "subset", "view", "called", "exactly", "at", "most", "least",
-    "once", "before", "return", "only", "on", "when",
+    "once", "before", "return", "only", "on", "when", "sign_bit", "is_nan", "payload", "caller",
 ];
+
+/// Words only a clause of one kind may use: what a `budget` bounds and what a `layout` states (language 6.7, 6.1).
+fn kind_words(kind: &str) -> &'static [&'static str] {
+    match kind {
+        "budget" => &["allocates", "retains", "work", "bytes", "sent", "round_trips", "per", "call", "instance", "frame", "B", "KB", "MB", "O", "p50", "p99"],
+        "layout" => &["c", "packed", "transparent", "align"],
+        _ => &[],
+    }
+}
 
 #[derive(Debug, PartialEq)]
 enum Tok {
@@ -99,8 +110,32 @@ pub fn lint(kind: &str, text: &str, heads: &[&str], scope: &Scope) -> Vec<String
     if let Some(f) = failure.filter(|f| !scope.failures.contains(*f)) {
         errs.push(format!("failure `{f}` is not declared in the file's `failures`: `{text}`"));
     }
+    // `fails F { field: e, … } when p` fills the payload F declares: its field names are not expressions
+    let mut skip: BTreeSet<usize> = BTreeSet::new();
+    let at = usize::from(kind == "fails");
+    if toks.get(at) == Some(&Tok::Punct('{')) {
+        let declared = failure.and_then(|f| scope.payload.get(f));
+        let mut depth = 0;
+        for (i, t) in toks.iter().enumerate().skip(at) {
+            match t {
+                Tok::Punct('(' | '[' | '{') => depth += 1,
+                Tok::Punct(')' | ']' | '}') => depth -= 1,
+                Tok::Word(w) if depth == 1 && toks.get(i + 1) == Some(&Tok::Punct(':')) && matches!(toks[i - 1], Tok::Punct('{' | ',')) => {
+                    skip.insert(i);
+                    if !declared.is_some_and(|d| d.contains(w)) {
+                        errs.push(format!("`{w}` is not a payload field of failure `{}`: `{text}`", failure.unwrap_or("")));
+                    }
+                }
+                _ => {}
+            }
+            if depth == 0 {
+                break;
+            }
+        }
+    }
     // a clause names itself: `ensure name :`, `law name :`, `callback name :`
     let named = matches!(toks.first(), Some(Tok::Word(_))) && toks.get(1) == Some(&Tok::Punct(':')) && kind != "fails";
+    let extra = kind_words(kind);
     let mut bound: BTreeSet<&str> = BTreeSet::new();
     for (i, t) in toks.iter().enumerate() {
         match t {
@@ -112,7 +147,7 @@ pub fn lint(kind: &str, text: &str, heads: &[&str], scope: &Scope) -> Vec<String
                 }
                 let own = (named && i == 0) || (kind == "fails" && i == 0);
                 let field = i > 0 && toks[i - 1] == Tok::Punct('.');
-                if !(WORDS.contains(&w.as_str()) || bound.contains(w.as_str()) || scope.names.contains(w) || own || field) {
+                if !(skip.contains(&i) || extra.contains(&w.as_str()) || WORDS.contains(&w.as_str()) || bound.contains(w.as_str()) || scope.names.contains(w) || own || field) {
                     errs.push(format!("unknown name `{w}` in `{text}`"));
                 }
             }
@@ -128,8 +163,9 @@ mod tests {
 
     fn scope() -> Scope {
         Scope {
-            names: ["k", "K", "V", "Self", "Less", "Greater", "Err", "Ok"].iter().map(|s| s.to_string()).collect(),
+            names: ["k", "K", "V", "msg", "Self", "Less", "Greater", "Err", "Ok"].iter().map(|s| s.to_string()).collect(),
             failures: ["panic".to_string()].into(),
+            payload: [("panic".to_string(), ["message".to_string(), "location".to_string()].into())].into(),
         }
     }
 
@@ -145,6 +181,11 @@ mod tests {
             ("law", "law", "law dual : all a : Self : all b : Self : ('std::cmp::Ord::cmp'(a, b) is Less) iff ('std::cmp::Ord::cmp'(b, a) is Greater)"),
             ("panics", "fails panic when", "fails panic when self is Err(e) and e == e"),
             ("effects", "calls only", "calls only 'std::cmp::Ord::max'"),
+            ("panics", "fails panic", "fails panic { message: msg, location: caller } when self is Err(e)"),
+            ("ensure", "ensure", "ensure unsigned : not sign_bit(result) and not is_nan(self)"),
+            ("budget", "budget", "budget allocates at most 0 B per call when k == 0"),
+            ("layout", "size", "size 0"),
+            ("layout", "layout", "layout transparent"),
             ("callback", "callback", "callback f : called at most once before return"),
             ("ensure", "ensure", "ensure f : self matches /\\p{White_Space}/ and finite self implies result == (if self < 0.0 then -self else self)"),
         ] {
@@ -163,6 +204,11 @@ mod tests {
         assert!(bad("ensure", "ensure", "require x : true").contains("starts with `ensure`"));
         assert!(bad("fails", "fails", "fails Boom when true").contains("not declared"));
         assert!(lint("panics", "fails panic when true", &["fails panic when"], &Scope::default()).join(";").contains("not declared"));
+        assert!(bad("panics", "fails panic", "fails panic { text: k } when true").contains("not a payload field of failure `panic`"));
+        assert!(bad("panics", "fails panic", "fails panic { message: nope } when true").contains("unknown name `nope`"));
+        assert!(bad("budget", "budget", "budget c at most").contains("unknown name `c`"));
+        assert!(bad("layout", "layout", "layout allocates").contains("unknown name `allocates`"));
+        assert!(bad("ensure", "ensure", "ensure x : allocates == k").contains("unknown name `allocates`"));
         // a name bound by a quantifier or a pattern is known only after it
         assert!(bad("ensure", "ensure", "ensure x : e == k and (self is Err(e))").contains("unknown name `e`"));
     }

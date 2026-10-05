@@ -29,16 +29,42 @@
       "description": "The module's file, relative to the crate root; for a library file, the library's root module path (`std`)."
     },
     "status": {
-      "description": "The default status of the file's clauses: a status name, as `strip` writes it (`lifted`), or a status with its reason, `{ \"assumed\": \"hand-written\" }`, which is language 10.2's `assumed … because \"hand-written\"`.",
+      "description": "The default status of the file's clauses: a status name, as `strip` writes it (`lifted`), or a status with its reason, `{ \"assumed\": \"hand-written\" }`, which is language 10.2's `assumed \u2026 because \"hand-written\"`.",
       "$ref": "#/$defs/status"
     },
     "failures": {
       "type": "object",
-      "description": "The failures the file's clauses name, as language 15's `failure NAME : user | runtime`: the name and its class. A library file for Rust declares `panic`, the Rust host's runtime failure, which `fails panic when p` names.",
+      "description": "The failures the file's clauses name, as language 15's `failure NAME : user | runtime`: the name and its class, or `{ \"class\": \u2026, \"payload\": { field: type } }` when the failure carries a payload that `fails NAME { field: e } when p` fills. A library file for Rust declares `panic`, the Rust host's runtime failure, with `message` and `location`.",
       "additionalProperties": {
-        "enum": [
-          "user",
-          "runtime"
+        "oneOf": [
+          {
+            "enum": [
+              "user",
+              "runtime"
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "class"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "class": {
+                "enum": [
+                  "user",
+                  "runtime"
+                ]
+              },
+              "payload": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
         ]
       }
     },
@@ -53,6 +79,22 @@
       "description": "Per function or constant (by subject name), the types that fill holes no slot covers.",
       "additionalProperties": {
         "$ref": "#/$defs/holes"
+      }
+    },
+    "views": {
+      "type": "array",
+      "description": "Views declared for the file: named pure projections of state a value holds beyond its value (language 15's `view(e)`), each bound to a host function. Usable in any clause of the file.",
+      "items": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/view"
+          },
+          {
+            "required": [
+              "of"
+            ]
+          }
+        ]
       }
     }
   },
@@ -379,6 +421,20 @@
             "$ref": "#/$defs/clause"
           },
           "description": "What the signature slots cannot say, in order."
+        },
+        "views": {
+          "type": "array",
+          "description": "Views of this subject, as the file's `views` without `of`.",
+          "items": {
+            "$ref": "#/$defs/view"
+          }
+        },
+        "derive": {
+          "type": "array",
+          "description": "For a type with `fields` or `variants`: the derive templates (`Clone`, `PartialEq`, `Eq`, `Hash`, `Default`, `Copy`) it uses, which `libfmt --expand` expands into one clause per field.",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "additionalProperties": false,
@@ -530,6 +586,9 @@
             "invariant",
             "access",
             "hold",
+            "budget",
+            "layout",
+            "derive",
             "compat",
             "unexpressed"
           ]
@@ -570,6 +629,28 @@
           "required": [
             "reason"
           ]
+        }
+      }
+    },
+    "view": {
+      "type": "object",
+      "required": [
+        "name",
+        "host"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z_][a-z0-9_]*$"
+        },
+        "of": {
+          "type": "string",
+          "description": "The subject the view reads, quoted: `'std::vec::Vec'`. Required in the file's list; a subject's own list means that subject."
+        },
+        "host": {
+          "type": "string",
+          "description": "The pure host function the view is bound to, quoted and under `of`: `'std::vec::Vec::capacity'`. A clause calls the view by name: `capacity(self)`."
         }
       }
     }
