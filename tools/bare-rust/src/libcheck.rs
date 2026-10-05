@@ -5,7 +5,7 @@ use crate::cargo;
 use crate::clause::{lint, Scope};
 use crate::externals::{self, Kind};
 use crate::json::canonical;
-use crate::types::Ty;
+use crate::types::{Lower, Ty};
 use crate::{first_error, parse_rust, R};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
@@ -74,6 +74,7 @@ pub fn heads(kind: &str) -> &'static [&'static str] {
             "shared readonly",
         ],
         "hold" => &["hold"],
+        "implements" => &["implements"],
         "compat" => &["version", "compatible with", "replaces", "was", "deprecated", "stable", "visible to"],
         _ => &[],
     }
@@ -87,6 +88,17 @@ fn type_strings(sub: &Value) -> Vec<(String, String)> {
         }
     };
     add("type".into(), &sub["type"]);
+    add("trait".into(), &sub["trait"]);
+    add("self".into(), &sub["self"]);
+    for (n, t) in sub["assoc"].as_object().into_iter().flatten() {
+        add(format!("associated type `{n}`"), t);
+    }
+    for (i, e) in sub["implements"].as_array().into_iter().flatten().enumerate() {
+        add(format!("implements {i}"), &e["trait"]);
+        for (n, t) in e["assoc"].as_object().into_iter().flatten() {
+            add(format!("implements {i}: associated type `{n}`"), t);
+        }
+    }
     for p in sub["params"].as_array().into_iter().flatten() {
         add(format!("param `{}`", p["name"].as_str().unwrap_or("?")), &p["type"]);
     }
@@ -153,6 +165,7 @@ pub fn validate(file: &Value, text: Option<&str>) -> Vec<String> {
             errs.push(format!("view `{name}`: `{host}` is not a host path under `{of}`"));
         }
     }
+    let subject_by_name: BTreeMap<&str, &Value> = file["subjects"].as_array().into_iter().flatten().filter_map(|s| Some((s["name"].as_str()?, s))).collect();
     let variants: BTreeSet<String> = file["subjects"]
         .as_array()
         .into_iter()
@@ -183,6 +196,42 @@ pub fn validate(file: &Value, text: Option<&str>) -> Vec<String> {
                 errs.push(format!("{at}: {what}: {e}"));
             }
         }
+        let head = |t: &Value| -> String {
+            let s = t.as_str().unwrap_or("");
+            s.split(['<', ' ']).next().unwrap_or("").to_string()
+        };
+        if kind == "impl" {
+            if sub["trait"].is_null() || sub["self"].is_null() {
+                errs.push(format!("{at}: an impl names its `trait` and the `self` type it is for"));
+            }
+            if !name.ends_with(&format!(" as {}", head(&sub["trait"]))) {
+                errs.push(format!("{at}: an impl is named `<type> as <trait>`, ending in its trait `{}`", head(&sub["trait"])));
+            }
+        } else {
+            if !sub["assoc"].is_null() {
+                errs.push(format!("{at}: `assoc` is for an impl"));
+            }
+            if !sub["self"].is_null() {
+                errs.push(format!("{at}: `self` is for an impl"));
+            }
+        }
+        if !sub["implements"].is_null() && kind != "type" {
+            errs.push(format!("{at}: `implements` is for a type"));
+        }
+        for (j, e) in sub["implements"].as_array().into_iter().flatten().enumerate() {
+            if let Some(i) = e["impl"].as_str() {
+                match subject_by_name.get(i) {
+                    Some(t) if t["kind"] == "impl" && head(&t["trait"]) == head(&e["trait"]) => {}
+                    Some(_) => errs.push(format!("{at}: implements {j}: `{i}` is not an impl of `{}`", head(&e["trait"]))),
+                    None => errs.push(format!("{at}: implements {j}: `{i}` is not a subject of the file")),
+                }
+            }
+        }
+        if let Some(i) = sub["impl"].as_str() {
+            if kind != "function" || !subject_by_name.get(i).is_some_and(|t| t["kind"] == "impl") {
+                errs.push(format!("{at}: `impl` is for a function, and names an impl subject of the file: `{i}`"));
+            }
+        }
         let mut names = BTreeSet::new();
         for g in sub["generics"].as_array().into_iter().flatten() {
             if !names.insert(g["name"].as_str().unwrap_or("").to_string()) {
@@ -209,8 +258,14 @@ pub fn validate(file: &Value, text: Option<&str>) -> Vec<String> {
         for n in sub["generics"].as_array().into_iter().flatten().filter_map(|g| g["name"].as_str()) {
             scope.names.insert(n.trim_start_matches('\'').to_string());
         }
-        if kind == "trait" {
+        if matches!(kind, "trait" | "impl") || sub["impl"].is_string() {
             scope.names.insert("Self".into());
+        }
+        scope.names.extend(sub["assoc"].as_object().into_iter().flatten().map(|(n, _)| n.clone()));
+        for l in sub["hold"]["for"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+            if !sub["generics"].as_array().into_iter().flatten().any(|g| g["name"].as_str() == Some(l)) {
+                errs.push(format!("{at}: `hold` is for the lifetime `{l}`, which the subject does not declare"));
+            }
         }
         for (j, c) in sub["clauses"].as_array().into_iter().flatten().enumerate() {
             let (k, t) = (c["kind"].as_str().unwrap_or(""), c["text"].as_str().unwrap_or(""));
@@ -319,6 +374,44 @@ fn ty_rust(v: &Value, access: &Value, lt: Option<&str>) -> Result<String, String
     Ty::parse(s)?.rust(access["rights"] == "write", lt)
 }
 
+/// The same, with each `some I` turned into a generic parameter: a function pointer type cannot hold `impl Trait`.
+fn ty_rust_lowered(v: &Value, access: &Value, lt: Option<&str>, lower: &mut Lower) -> Result<String, String> {
+    match v.as_str() {
+        Some(s) => Ty::parse(s)?.rust_lowered(access["rights"] == "write", lt, lower),
+        None => ty_rust(v, access, lt),
+    }
+}
+
+/// An impl's self type, its trait, and its trait with the associated types it fixes (a bound; a path cannot hold them).
+fn impl_parts(imp: &Value) -> Result<(String, String, String), String> {
+    let self_t = ty_rust(&imp["self"], &Value::Null, None)?;
+    Ok((self_t, ty_rust(&imp["trait"], &Value::Null, None)?, trait_with_assoc(&imp["trait"], &imp["assoc"], imp)?))
+}
+
+/// `std::iter::Iterator<Item = char>`: the trait of an impl or of an `implements` entry, with the associated types
+/// it fixes. A borrow in an associated type needs a lifetime a bound can name: the subject's only one.
+fn trait_with_assoc(tr: &Value, assoc: &Value, owner: &Value) -> Result<String, String> {
+    let t = ty_rust(tr, &Value::Null, None)?;
+    let lts: Vec<&str> = owner["generics"].as_array().into_iter().flatten().filter_map(|g| g["name"].as_str()).filter(|n| n.starts_with('\'')).collect();
+    let mut parts = vec![];
+    for (n, v) in assoc.as_object().into_iter().flatten() {
+        let lt = if has_ref(v) {
+            match lts.as_slice() {
+                [one] => Some(*one),
+                _ => return Err("an associated type borrows, and the subject has not exactly one lifetime to name".into()),
+            }
+        } else {
+            None
+        };
+        parts.push(format!("{n} = {}", ty_rust(v, &Value::Null, lt)?));
+    }
+    Ok(match (parts.is_empty(), t.strip_suffix('>')) {
+        (true, _) => t,
+        (false, Some(open)) => format!("{open}, {}>", parts.join(", ")),
+        (false, None) => format!("{t}<{}>", parts.join(", ")),
+    })
+}
+
 fn bounds_of(g: &Value) -> Vec<String> {
     let mut b: Vec<String> = vec![];
     for k in ["bounds", "where"] {
@@ -327,8 +420,9 @@ fn bounds_of(g: &Value) -> Vec<String> {
     b
 }
 
-/// `<T: A + B, 'a>` and the where clause, of a subject's generics. A generic named `Self` becomes `Self_`.
-fn generics_of(sub: &Value) -> (String, String) {
+/// The generic parameters (`T: A + B`, `'a`), lifetimes first, and the where clause of a subject's generics. A generic
+/// named `Self` becomes `Self_`.
+fn generics_parts(sub: &Value) -> (Vec<String>, String) {
     let mut params = vec![];
     for g in sub["generics"].as_array().into_iter().flatten() {
         let n = g["name"].as_str().unwrap_or("");
@@ -336,7 +430,6 @@ fn generics_of(sub: &Value) -> (String, String) {
         let b = bounds_of(g).join(" + ");
         params.push(if b.is_empty() { n.to_string() } else { format!("{n}: {b}") });
     }
-    // lifetimes first
     params.sort_by_key(|p| !p.starts_with('\''));
     let preds: Vec<String> = sub["where"]
         .as_array()
@@ -347,9 +440,22 @@ fn generics_of(sub: &Value) -> (String, String) {
             format!("{}: {}", w["for"].as_str().unwrap_or("_"), b.join(" + "))
         })
         .collect();
-    let g = if params.is_empty() { String::new() } else { format!("<{}>", params.join(", ")) };
     let w = if preds.is_empty() { String::new() } else { format!(" where {}", preds.join(", ")) };
-    (g, w)
+    (params, w)
+}
+
+fn angle(params: &[String]) -> String {
+    if params.is_empty() {
+        String::new()
+    } else {
+        format!("<{}>", params.join(", "))
+    }
+}
+
+/// `<T: A + B, 'a>` and the where clause, of a subject's generics.
+fn generics_of(sub: &Value) -> (String, String) {
+    let (p, w) = generics_parts(sub);
+    (angle(&p), w)
 }
 
 /// The Rust expression for a function subject's path, or why there is none.
@@ -372,10 +478,18 @@ fn fn_path(sub: &Value) -> Result<String, String> {
     Ok(name.to_string())
 }
 
-fn gen_function(sub: &Value) -> Gen {
+/// The check of a function. `path` is its Rust path when the name is not (a method of an impl).
+///
+/// A function pointer cannot hold `impl Trait`, so a `some` in a parameter becomes a generic parameter with its bound, and
+/// the function is coerced as before. A `some` result is checked another way: the function is called, on values that
+/// are never made (`loop {}`), inside a closure whose result must meet the bound.
+fn gen_function(sub: &Value, path: Option<String>) -> Gen {
     let go = || -> Result<String, String> {
-        let (g, mut w) = generics_of(sub);
-        let path = fn_path(sub)?;
+        let (mut gp, mut w) = generics_parts(sub);
+        let path = match path {
+            Some(p) => p,
+            None => fn_path(sub)?,
+        };
         // a trait method can only be called on a `Self` that implements the trait: not something an entry restates
         if let Some(tr) = path.strip_prefix("<Self_ as ").and_then(|p| p.rsplit_once(">::")).map(|(t, _)| t) {
             w = if w.is_empty() { format!(" where Self_: {tr}") } else { format!("{w}, Self_: {tr}") };
@@ -383,15 +497,17 @@ fn gen_function(sub: &Value) -> Gen {
         let params = sub["params"].as_array().ok_or("no params")?;
         let (mut binder, mut ps) = (vec![], vec![]);
         let mut lt_of: BTreeMap<String, String> = BTreeMap::new();
+        let mut lower = Lower { inner: "'__e".into(), params: vec![] };
         for (i, p) in params.iter().enumerate() {
             let lt = has_ref(&p["type"]).then(|| format!("'p{i}"));
             if let Some(l) = &lt {
                 binder.push(l.clone());
                 lt_of.insert(p["name"].as_str().unwrap_or("").to_string(), l.clone());
             }
-            ps.push(ty_rust(&p["type"], &p["access"], lt.as_deref())?);
+            ps.push(ty_rust_lowered(&p["type"], &p["access"], lt.as_deref(), &mut lower)?);
         }
         let mut ret = String::new();
+        let mut some_result: Option<String> = None;
         if !sub["result"].is_null() {
             let r = &sub["result"];
             let lt = if has_ref(&r["type"]) || has_ref(&r["fails"]) {
@@ -408,6 +524,15 @@ fn gen_function(sub: &Value) -> Gen {
             } else {
                 None
             };
+            let rt = r["type"].as_str().map(Ty::parse).transpose()?;
+            if let Some(b) = rt.as_ref().and_then(|t| t.bounds_rust("'__e")) {
+                if !r["fails"].is_null() {
+                    return Err("a `some` result that fails".into());
+                }
+                some_result = Some(b?);
+            } else if rt.as_ref().is_some_and(Ty::has_some) || r["fails"].as_str().and_then(|f| Ty::parse(f).ok()).is_some_and(|t| t.has_some()) {
+                return Err("a `some` below the top of the result".into());
+            }
             let t = ty_rust(&r["type"], &r["access"], lt.as_deref())?;
             ret = if r["fails"].is_null() {
                 format!(" -> {t}")
@@ -415,9 +540,33 @@ fn gen_function(sub: &Value) -> Gen {
                 format!(" -> std::result::Result<{t}, {}>", ty_rust(&r["fails"], &Value::Null, lt.as_deref())?)
             };
         }
-        let hr = if binder.is_empty() { String::new() } else { format!("for<{}> ", binder.join(", ")) };
-        let body = format!("let _: {hr}fn({}){ret} = {path};", ps.join(", "));
-        Ok(format!("fn {{id}}{g}(){w} {{ {} }}", word_replace(&body, "Self", "Self_")))
+        let mut helper = String::new();
+        let body = if let Some(bound) = some_result {
+            // lifetimes are early-bound here: the values are made by `loop {}`, not coerced from a pointer
+            gp.splice(0..0, binder.drain(..));
+            let args: Vec<String> = (0..ps.len()).map(|i| format!("a{i}")).collect();
+            let lets: Vec<String> = ps.iter().enumerate().map(|(i, t)| format!("let a{i}: {t} = loop {{}};")).collect();
+            // the bound is in an item of its own, which takes the generics again: a function inside another cannot use them
+            let mut hp = gp.clone();
+            if bound.contains("'__e") {
+                hp.insert(0, "'__e".into());
+            }
+            hp.push(format!("R: {bound}"));
+            hp.push("F: FnOnce() -> R".into());
+            let names: Vec<String> = gp.iter().filter(|p| !p.starts_with('\'')).map(|p| p.split(':').next().unwrap_or("").to_string()).collect();
+            let turbofish = names.iter().cloned().chain(["_".to_string(), "_".to_string()]).collect::<Vec<_>>().join(", ");
+            helper = format!("fn {{id}}_need{}(_: F){w} {{}}\n", angle(&hp));
+            format!("{{id}}_need::<{turbofish}>(|| {{ {} {path}({}) }});", lets.join(" "), args.join(", "))
+        } else {
+            let hr = if binder.is_empty() { String::new() } else { format!("for<{}> ", binder.join(", ")) };
+            format!("let _: {hr}fn({}){ret} = {path};", ps.join(", "))
+        };
+        if !lower.params.is_empty() {
+            gp.extend(lower.params.iter().cloned());
+            gp.insert(0, "'__e".into());
+        }
+        gp.sort_by_key(|p| !p.starts_with('\''));
+        Ok(format!("{}fn {{id}}{}(){w} {{ {} }}", word_replace(&helper, "Self", "Self_"), angle(&gp), word_replace(&body, "Self", "Self_")))
     };
     match go() {
         Ok(s) => Gen::Checked(s),
@@ -425,11 +574,77 @@ fn gen_function(sub: &Value) -> Gen {
     }
 }
 
+/// The two items that prove `self_t: tr` under a subject's generics: a function that holds the bound, with the generics
+/// and one more parameter for the type, and a function that names it. The bound is in an item of its own because a
+/// function inside another cannot use the other's generics.
+fn proves(sub: &Value, suffix: &str, self_t: &str, tr: &str) -> String {
+    let (mut params, w) = generics_parts(sub);
+    let names: Vec<String> = params.iter().filter(|p| !p.starts_with('\'')).map(|p| p.split(':').next().unwrap_or("").to_string()).collect();
+    params.push(format!("X: ?Sized + {tr}"));
+    let turbofish = names.iter().cloned().chain([self_t.to_string()]).collect::<Vec<_>>().join(", ");
+    let (g, _) = generics_of(sub);
+    format!("fn {{id}}{suffix}_need{}(){w} {{}}\nfn {{id}}{suffix}{g}(){w} {{ {{id}}{suffix}_need::<{turbofish}>(); }}", angle(&params))
+}
+
+/// An impl: its self type implements its trait, with the associated types it fixes.
+fn gen_impl(sub: &Value) -> Gen {
+    let go = || -> Result<String, String> {
+        let (self_t, _, tr) = impl_parts(sub)?;
+        Ok(proves(sub, "", &self_t, &tr))
+    };
+    go().map_or_else(Gen::Unchecked, Gen::Checked)
+}
+
+/// What a type declares it implements, each entry checked as an impl is, with the type's own generics.
+fn implements_checks(sub: &Value, id_suffix: &str) -> Result<Vec<String>, String> {
+    let name = sub["name"].as_str().unwrap_or("");
+    let mut args: Vec<&str> = sub["generics"].as_array().into_iter().flatten().filter_map(|g| g["name"].as_str()).collect();
+    args.sort_by_key(|p| !p.starts_with('\''));
+    let a = if args.is_empty() { String::new() } else { format!("<{}>", args.join(", ")) };
+    let mut out = vec![];
+    for (i, e) in sub["implements"].as_array().into_iter().flatten().enumerate() {
+        let tr = trait_with_assoc(&e["trait"], &e["assoc"], sub)?;
+        out.push(proves(sub, &format!("{id_suffix}{i}"), &format!("{name}{a}"), &tr));
+    }
+    Ok(out)
+}
+
 /// The check for one subject, with `{id}` where its function name goes.
 pub fn generate(sub: &Value) -> Gen {
+    generate_in(sub, &Value::Null)
+}
+
+/// The same, for a subject of `file`: a method of an impl is checked through the impl's self type and trait.
+pub fn generate_in(sub: &Value, file: &Value) -> Gen {
+    if let Some(i) = sub["impl"].as_str() {
+        let imp = file["subjects"].as_array().into_iter().flatten().find(|s| s["name"].as_str() == Some(i) && s["kind"] == "impl");
+        let Some(imp) = imp else { return Gen::Unchecked(format!("impl `{i}` is not a subject of the file")) };
+        let go = || -> Result<(Value, String), String> {
+            let (self_t, tr, _) = impl_parts(imp)?;
+            let method = sub["name"].as_str().unwrap_or("").rsplit("::").next().unwrap_or("");
+            // the impl's generics come first, then the method's
+            let mut merged = sub.clone();
+            for k in ["generics", "where"] {
+                let all: Vec<Value> = imp[k].as_array().into_iter().flatten().chain(sub[k].as_array().into_iter().flatten()).cloned().collect();
+                if !all.is_empty() {
+                    merged[k] = Value::Array(all);
+                }
+            }
+            Ok((merged, format!("<{self_t} as {tr}>::{method}")))
+        };
+        return match go() {
+            Ok((m, path)) => gen_function(&m, Some(path)),
+            Err(e) => Gen::Unchecked(e),
+        };
+    }
+    generate_plain(sub)
+}
+
+fn generate_plain(sub: &Value) -> Gen {
     let (kind, name) = (sub["kind"].as_str().unwrap_or(""), sub["name"].as_str().unwrap_or(""));
     match kind {
-        "function" => gen_function(sub),
+        "function" => gen_function(sub, None),
+        "impl" => gen_impl(sub),
         "const" | "static" => {
             let go = || -> Result<String, String> {
                 let t = ty_rust(&sub["type"], &Value::Null, Some("'static"))?;
@@ -443,7 +658,12 @@ pub fn generate(sub: &Value) -> Gen {
             let mut args = args;
             args.sort_by_key(|p| !p.starts_with('\''));
             let a = if args.is_empty() { String::new() } else { format!("<{}>", args.join(", ")) };
-            Gen::Checked(format!("fn {{id}}{g}(){w} {{ let _: Option<*const {name}{a}> = None; }}"))
+            let mut code = format!("fn {{id}}{g}(){w} {{ let _: Option<*const {name}{a}> = None; }}");
+            match implements_checks(sub, "_impl") {
+                Ok(more) => more.iter().for_each(|m| code += &format!("\n{m}")),
+                Err(e) => return Gen::Unchecked(e),
+            }
+            Gen::Checked(code)
         }
         "trait" => {
             if sub["generics"].as_array().is_none_or(Vec::is_empty) {
@@ -504,7 +724,7 @@ pub fn check_signatures(file: &Value, work: &Path, target: &Path) -> R<SigReport
     for (i, sub) in file["subjects"].as_array().into_iter().flatten().enumerate() {
         let (kind, name) = (sub["kind"].as_str().unwrap_or("").to_string(), sub["name"].as_str().unwrap_or("").to_string());
         let id = format!("_c{i}");
-        let (code, resolved) = match generate(sub) {
+        let (code, resolved) = match generate_in(sub, file) {
             Gen::Checked(c) => (c, false),
             Gen::Resolved(c) => (c, true),
             Gen::Unchecked(why) => {

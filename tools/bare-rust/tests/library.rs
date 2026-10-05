@@ -144,6 +144,23 @@ fn committed_externals_lists_are_current() {
 }
 
 #[test]
+fn externals_record_the_impl_each_call_resolves_to() {
+    let (_, e) = externals(&corpus("strsim"), true).unwrap();
+    let impls = |p: &str| e.items[&(Kind::Function, p.to_string())].impls.iter().cloned().collect::<Vec<_>>();
+    // a trait method names the impl of the trait for the head of the self type, a method of the type its own impl
+    assert!(impls("std::iter::Iterator::zip").contains(&"impl std::iter::Iterator for std::str::Chars".to_string()), "{:?}", impls("std::iter::Iterator::zip"));
+    assert_eq!(impls("std::collections::HashMap::with_capacity"), vec!["impl std::collections::HashMap".to_string()]);
+    assert_eq!(impls("std::primitive::char::is_whitespace"), vec!["impl char".to_string()]);
+    // a free function has none, and the committed list carries them
+    assert!(e.items[&(Kind::Function, "std::cmp::min".to_string())].impls.is_empty());
+    let (_, fnv) = externals(&corpus("fnv"), true).unwrap();
+    assert_eq!(fnv.items[&(Kind::Function, "std::convert::From::from".to_string())].impls.iter().next().map(String::as_str), Some("impl std::convert::From<u8> for u64"));
+    let committed: Value = serde_json::from_str(&fs::read_to_string(libraries().join("externals/fnv.json")).unwrap()).unwrap();
+    let from = committed["items"].as_array().unwrap().iter().find(|i| i["path"] == "std::convert::From::from").unwrap();
+    assert_eq!(from["impls"], json!(["impl std::convert::From<u8> for u64"]));
+}
+
+#[test]
 fn without_all_targets_test_code_is_left_out() {
     let (_, lib_only) = externals(&corpus("strsim"), false).unwrap();
     let (_, all) = externals(&corpus("strsim"), true).unwrap();
@@ -560,4 +577,190 @@ fn libstats_counts_what_the_file_holds() {
         assert!(t.contains(want), "{want}: {t}");
     }
     assert!(!t.contains("reasons carry no label"), "{t}");
+}
+
+// ---------- B1: implementations, implements, existential types, lifetimes and generics ----------
+
+const CHAR: &str = "text where length(value) == 1 as 'char'";
+
+/// `Chars<'a>` as the plan writes it: it holds a borrow for `'a` and implements `Iterator { Item = char }` and `Clone`; the
+/// impl of `Iterator` is a subject of its own, with its method `next`.
+fn chars_with_its_impl() -> Value {
+    let mut f = exemplars_only();
+    f.as_object_mut().unwrap().remove("views");
+    let chars = subject_mut(&mut f, "std::str::Chars");
+    chars["hold"] = json!({"kind": "borrows", "for": ["'a"]});
+    chars["implements"] = json!([
+        {"trait": "std::iter::Iterator", "assoc": {"Item": CHAR}, "impl": "std::str::Chars as std::iter::Iterator"},
+        {"trait": "std::clone::Clone"}
+    ]);
+    chars["clauses"].as_array_mut().unwrap().push(json!({
+        "kind": "implements", "text": "implements 'std::iter::Iterator' { Item = char }", "source": "1.97.0 core/src/str/iter.rs:35, impls: Iterator 35",
+        "status": {"assumed": "documentation"}
+    }));
+    chars["clauses"].as_array_mut().unwrap().push(json!({
+        "kind": "hold", "text": "hold : borrows for 'a", "source": "1.97.0 core/src/str/iter.rs:30, body: struct Chars<'a>", "status": {"observed": "from the declaration"}
+    }));
+    let subjects = f["subjects"].as_array_mut().unwrap();
+    subjects.push(json!({
+        "kind": "impl", "name": "std::str::Chars as std::iter::Iterator", "generics": [{"name": "'a", "bounds": []}],
+        "self": "std::str::Chars<'a>", "trait": "std::iter::Iterator", "assoc": {"Item": CHAR},
+        "clauses": [{"kind": "effects", "text": "no io", "source": "1.97.0 core/src/str/iter.rs:35, body: next", "status": {"observed": "body"}}]
+    }));
+    subjects.push(json!({
+        "kind": "function", "name": "std::str::Chars as std::iter::Iterator::next", "impl": "std::str::Chars as std::iter::Iterator",
+        "params": [{"name": "self", "type": "ref<std::str::Chars<'a>>", "access": {"rights": "write", "guarantee": "exclusive"}}],
+        "result": {"type": format!("{CHAR}?")}
+    }));
+    f
+}
+
+#[test]
+fn an_impl_is_a_subject_and_a_type_declares_what_it_implements() {
+    let f = chars_with_its_impl();
+    assert_eq!(errors(&f), "");
+    // the clause forms are accepted: `implements`, `hold : borrows for 'a`, the associated type's name and type
+    let mut bad = f.clone();
+    let cl = |f: &mut Value, i: usize, t: &str| subject_mut(f, "std::str::Chars")["clauses"][i]["text"] = json!(t);
+    cl(&mut bad, 2, "implements 'std::iter::Iterator' { Item = nope }");
+    cl(&mut bad, 3, "hold : borrows for 'zz");
+    let e = errors(&bad);
+    assert!(e.contains("unknown name `nope`") && e.contains("unknown lifetime `'zz`"), "{e}");
+    // an impl names its trait and its self type, and is named by them; an implements entry names a real impl of its trait
+    let mut bad = f.clone();
+    let imp = subject_mut(&mut bad, "std::str::Chars as std::iter::Iterator");
+    imp.as_object_mut().unwrap().remove("self");
+    imp["name"] = json!("std::str::Chars as std::clone::Clone");
+    subject_mut(&mut bad, "std::str::Chars")["implements"][0]["impl"] = json!("std::str::Chars as std::nowhere");
+    subject_mut(&mut bad, "std::str::Chars")["hold"]["for"] = json!(["'b"]);
+    let e = errors(&bad);
+    for want in ["names its `trait` and the `self` type", "ending in its trait `std::iter::Iterator`", "is not a subject of the file", "does not declare"] {
+        assert!(e.contains(want), "{want}: {e}");
+    }
+    // an associated type is parsed like any other type, and `assoc` belongs to an impl
+    let mut bad = f.clone();
+    subject_mut(&mut bad, "std::str::Chars")["implements"][0]["assoc"]["Item"] = json!("list<");
+    subject_mut(&mut bad, "std::str::Chars")["assoc"] = json!({"Item": "u8"});
+    let e = errors(&bad);
+    assert!(e.contains("implements 0: associated type `Item`") && e.contains("`assoc` is for an impl"), "{e}");
+    // an implements clause is a clause kind, and the schema takes the old files unchanged
+    let (file, text) = std_file();
+    assert_eq!(validate(&file, Some(&text)), Vec::<String>::new());
+}
+
+#[test]
+fn an_impl_and_its_methods_compile_against_the_real_std_impl() {
+    let f = chars_with_its_impl();
+    let r = check_signatures(&f, &work("sig-impl"), &target()).unwrap();
+    assert_eq!(r.mismatches, vec![], "{:?}", r.mismatches);
+    for n in ["std::str::Chars as std::iter::Iterator", "std::str::Chars as std::iter::Iterator::next", "std::str::Chars"] {
+        assert!(r.checked.contains(&n.to_string()), "{n}: checked {:?}, unchecked {:?}", r.checked, r.unchecked);
+    }
+    assert_eq!(r.by_kind["impl"], (1, 0));
+    // the wrong associated type, an impl the real type does not have, a method that is not the real one
+    let mut f = chars_with_its_impl();
+    subject_mut(&mut f, "std::str::Chars as std::iter::Iterator")["assoc"]["Item"] = json!("u8");
+    subject_mut(&mut f, "std::str::Chars")["implements"][0]["assoc"]["Item"] = json!("u8");
+    subject_mut(&mut f, "std::str::Chars")["implements"][1]["trait"] = json!("std::marker::Copy");
+    subject_mut(&mut f, "std::str::Chars as std::iter::Iterator::next")["result"]["type"] = json!("u8?");
+    let r = check_signatures(&f, &work("sig-impl-wrong"), &target()).unwrap();
+    let by: std::collections::BTreeMap<&str, &str> = r.mismatches.iter().map(|(n, m)| (n.as_str(), m.as_str())).collect();
+    assert!(by["std::str::Chars as std::iter::Iterator"].starts_with("E0271"), "{by:?}");
+    assert!(by["std::str::Chars"].starts_with("E0271") || by["std::str::Chars"].starts_with("E0277"), "{by:?}");
+    assert!(by["std::str::Chars as std::iter::Iterator::next"].starts_with("E0308"), "{by:?}");
+    // an impl that is not there at all
+    let mut f = chars_with_its_impl();
+    f["subjects"].as_array_mut().unwrap().push(json!({
+        "kind": "impl", "name": "std::str::Chars as std::marker::Copy", "generics": [{"name": "'a", "bounds": []}],
+        "self": "std::str::Chars<'a>", "trait": "std::marker::Copy"
+    }));
+    let r = check_signatures(&f, &work("sig-impl-absent"), &target()).unwrap();
+    assert_eq!(r.mismatches.len(), 1, "{:?}", r.mismatches);
+    assert!(r.mismatches[0].0 == "std::str::Chars as std::marker::Copy" && r.mismatches[0].1.starts_with("E0277"), "{:?}", r.mismatches);
+}
+
+#[test]
+fn some_and_any_are_checked_as_the_real_function_takes_and_returns_them() {
+    let mut f = exemplars_only();
+    f.as_object_mut().unwrap().remove("views");
+    let subjects = f["subjects"].as_array_mut().unwrap();
+    // `some I` as a parameter is a generic with the bound; `any I as 'Box'` is `Box<dyn I>`
+    subjects.push(json!({
+        "kind": "function", "name": "std::fs::write",
+        "params": [{"name": "path", "type": "some std::convert::AsRef<std::path::Path>"},
+                   {"name": "contents", "type": "some std::convert::AsRef<list<u8> as 'std::primitive::slice'>"}],
+        "result": {"type": "()", "fails": "std::io::Error"}
+    }));
+    subjects.push(json!({
+        "kind": "function", "name": "std::io::Error::new",
+        "params": [{"name": "kind", "type": "std::io::ErrorKind"},
+                   {"name": "error", "type": "some std::convert::Into<any std::error::Error + Send + Sync as 'std::boxed::Box'>"}],
+        "result": {"type": "std::io::Error"}
+    }));
+    // `some I` as the result: the real result type implements `I`, with the associated types
+    subjects.push(json!({
+        "kind": "function", "name": "std::iter::repeat", "generics": [{"name": "T", "bounds": ["std::clone::Clone"]}],
+        "params": [{"name": "elt", "type": "T"}],
+        "result": {"type": "some std::iter::Iterator { Item = T }"}
+    }));
+    // a borrow inside a bound is shared and unnamed, and the result borrows from the one reference it is given
+    subjects.push(json!({
+        "kind": "function", "name": "std::primitive::str::split_whitespace",
+        "params": [{"name": "self", "type": "ref<text>", "access": {"rights": "read", "guarantee": "readers"}}],
+        "result": {"type": "some std::iter::Iterator { Item = ref<text> }", "hold": {"kind": "borrows", "from": "self"}}
+    }));
+    assert_eq!(errors(&f), "");
+    let r = check_signatures(&f, &work("sig-exist"), &target()).unwrap();
+    assert_eq!(r.mismatches, vec![], "{:?}", r.mismatches);
+    for n in ["std::fs::write", "std::io::Error::new", "std::iter::repeat", "std::primitive::str::split_whitespace"] {
+        assert!(r.checked.contains(&n.to_string()), "{n}: checked {:?}, unchecked {:?}", r.checked, r.unchecked);
+    }
+    // a bound the real function does not meet is a mismatch
+    subject_mut(&mut f, "std::iter::repeat")["result"]["type"] = json!("some std::iter::Iterator { Item = u8 }");
+    subject_mut(&mut f, "std::fs::write")["params"][1]["type"] = json!("some std::fmt::Display");
+    let r = check_signatures(&f, &work("sig-exist-wrong"), &target()).unwrap();
+    let by: std::collections::BTreeMap<&str, &str> = r.mismatches.iter().map(|(n, m)| (n.as_str(), m.as_str())).collect();
+    assert!(by["std::iter::repeat"].starts_with("E0271"), "{by:?}");
+    assert!(by["std::fs::write"].starts_with("E0277"), "{by:?}");
+    assert_eq!(r.mismatches.len(), 2, "{by:?}");
+    // what is not at the top of a result cannot be checked this way, and is said so
+    let mut f = exemplars_only();
+    f["subjects"].as_array_mut().unwrap().push(json!({
+        "kind": "function", "name": "std::iter::repeat", "generics": [{"name": "T", "bounds": []}], "params": [{"name": "elt", "type": "T"}],
+        "result": {"type": "some std::iter::Iterator { Item = T }", "fails": "std::io::Error"}
+    }));
+    let r = check_signatures(&f, &work("sig-exist-unchecked"), &target()).unwrap();
+    assert!(r.unchecked.contains_key("a `some` result that fails"), "{:?}", r.unchecked);
+}
+
+#[test]
+fn generics_and_lifetimes_on_host_subjects_are_checked() {
+    // `for 'a`, `for T where T: Bound` on a type, a function and an impl, against the real items
+    let mut f = exemplars_only();
+    f.as_object_mut().unwrap().remove("views");
+    let subjects = f["subjects"].as_array_mut().unwrap();
+    subjects.push(json!({
+        "kind": "type", "name": "std::slice::Iter", "generics": [{"name": "'a", "bounds": []}, {"name": "T", "bounds": ["'a"]}],
+        "hold": {"kind": "borrows", "for": ["'a"]},
+        "implements": [{"trait": "std::iter::Iterator", "assoc": {"Item": "ref<T>"}}]
+    }));
+    subjects.push(json!({
+        "kind": "impl", "name": "std::vec::Vec as std::clone::Clone", "generics": [{"name": "T", "bounds": ["std::clone::Clone"]}],
+        "self": "list<T> as 'std::vec::Vec'", "trait": "std::clone::Clone"
+    }));
+    subjects.push(json!({
+        "kind": "impl", "name": "std::vec::Vec as std::iter::IntoIterator", "generics": [{"name": "T", "bounds": []}],
+        "self": "list<T> as 'std::vec::Vec'", "trait": "std::iter::IntoIterator", "assoc": {"Item": "T"}
+    }));
+    assert_eq!(errors(&f), "");
+    let r = check_signatures(&f, &work("sig-generics"), &target()).unwrap();
+    // `Item = &'a T` needs a lifetime a bound can name, and the type has `'a`
+    assert_eq!(r.mismatches, vec![], "{:?}", r.mismatches);
+    for n in ["std::slice::Iter", "std::vec::Vec as std::clone::Clone", "std::vec::Vec as std::iter::IntoIterator"] {
+        assert!(r.checked.contains(&n.to_string()), "{n}: {:?} {:?}", r.checked, r.unchecked);
+    }
+    // the bound of the impl is the real one's: without `T: Clone` the impl does not exist
+    subject_mut(&mut f, "std::vec::Vec as std::clone::Clone")["generics"][0]["bounds"] = json!([]);
+    let r = check_signatures(&f, &work("sig-generics-wrong"), &target()).unwrap();
+    assert!(r.mismatches.iter().any(|(n, m)| n == "std::vec::Vec as std::clone::Clone" && m.starts_with("E0277")), "{:?}", r.mismatches);
 }

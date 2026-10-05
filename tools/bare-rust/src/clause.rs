@@ -21,7 +21,8 @@ const WORDS: &[&str] = &[
     "and", "or", "not", "implies", "iff", "if", "then", "else", "exists", "is", "in", "matches", "fits", "finite", "all", "any", "old",
     "result", "self", "true", "false", "none", "value", "size", "count", "length", "byte_length", "utf16_length", "utf8", "sum", "min",
     "max", "same", "approx", "total_order", "distinct", "sorted", "by", "subset", "view", "called", "exactly", "at", "most", "least",
-    "once", "before", "return", "only", "on", "when", "sign_bit", "is_nan", "payload", "caller",
+    "once", "before", "return", "only", "on", "when", "sign_bit", "is_nan", "payload", "caller", "some", "implements", "borrows",
+    "owns", "shares", "from", "for", "as",
 ];
 
 /// Words only a clause of one kind may use: what a `budget` bounds and what a `layout` states (language 6.7, 6.1).
@@ -33,10 +34,15 @@ fn kind_words(kind: &str) -> &'static [&'static str] {
     }
 }
 
+/// Type words of language 3.4, which an associated type or a bound may use.
+const TYPE_WORDS: &[&str] = &["int", "char", "text", "bytes", "decimal", "time", "instant", "duration", "list", "set", "map", "ref"];
+
 #[derive(Debug, PartialEq)]
 enum Tok {
     Word(String),
     Quoted(String),
+    /// `'a`, after `for` or another lifetime: a name here means a lifetime of the subject, not a host path.
+    Lifetime(String),
     Punct(char),
     Other,
 }
@@ -49,6 +55,10 @@ fn lex(t: &str) -> Result<Vec<Tok>, String> {
         let regex = c == '/' && matches!(out.last(), Some(Tok::Word(w)) if w == "matches");
         if c.is_whitespace() {
             i += 1;
+        } else if c == '\'' && lifetime_at(&cs, i) && lifetime_context(&out) {
+            let n = cs[i + 1..].iter().take_while(|x| x.is_alphanumeric() || **x == '_').count();
+            out.push(Tok::Lifetime(cs[i + 1..i + 1 + n].iter().collect()));
+            i += n + 1;
         } else if c == '\'' || c == '"' || regex {
             let end = (i + 1..cs.len()).find(|&j| cs[j] == c && cs[j - 1] != '\\').ok_or(format!("unterminated `{c}` in `{t}`"))?;
             out.push(if c == '\'' { Tok::Quoted(cs[i + 1..end].iter().collect()) } else { Tok::Other });
@@ -82,6 +92,21 @@ fn lex(t: &str) -> Result<Vec<Tok>, String> {
     match open.last() {
         Some(o) => Err(format!("unclosed `{o}` in `{t}`")),
         None => Ok(out),
+    }
+}
+
+/// A quote that opens a lifetime name no quote closes: `'a`, and not the host path `'std::x'` or `'v1'`.
+fn lifetime_at(cs: &[char], i: usize) -> bool {
+    let n = cs[i + 1..].iter().take_while(|x| x.is_alphanumeric() || **x == '_').count();
+    n > 0 && !cs[i + 1].is_ascii_digit() && !matches!(cs.get(i + 1 + n), Some('\'' | ':'))
+}
+
+/// Where a lifetime may stand: after `for`, and in a list of lifetimes.
+fn lifetime_context(out: &[Tok]) -> bool {
+    match out.last() {
+        Some(Tok::Word(w)) => w == "for",
+        Some(Tok::Punct(',')) => matches!(out.len().checked_sub(2).and_then(|i| out.get(i)), Some(Tok::Lifetime(_))),
+        _ => false,
     }
 }
 
@@ -137,8 +162,12 @@ pub fn lint(kind: &str, text: &str, heads: &[&str], scope: &Scope) -> Vec<String
     let named = matches!(toks.first(), Some(Tok::Word(_))) && toks.get(1) == Some(&Tok::Punct(':')) && kind != "fails";
     let extra = kind_words(kind);
     let mut bound: BTreeSet<&str> = BTreeSet::new();
+    // `implements 'I' { Item = T }` and `some 'I' { Item = T }` name the associated types of the interface
+    let assoc_clause = kind == "implements" || toks.iter().any(|t| matches!(t, Tok::Word(w) if w == "some" || w == "any" || w == "implements"));
     for (i, t) in toks.iter().enumerate() {
         match t {
+            Tok::Lifetime(l) if !scope.names.contains(l) => errs.push(format!("unknown lifetime `'{l}` in `{text}`")),
+            Tok::Word(_) if assoc_clause && i > 0 && matches!(toks[i - 1], Tok::Punct('{' | ',')) && toks.get(i + 1) == Some(&Tok::Punct('=')) && toks.get(i + 2) != Some(&Tok::Punct('=')) => {}
             Tok::Quoted(p) if !is_host_path(p) => errs.push(format!("`'{p}'` is not a quoted host path (`'std::…'`)")),
             Tok::Word(w) => {
                 // `all x : T : p` and `any x in c : p` bind x; `v is Variant(x)` binds x
@@ -147,7 +176,7 @@ pub fn lint(kind: &str, text: &str, heads: &[&str], scope: &Scope) -> Vec<String
                 }
                 let own = (named && i == 0) || (kind == "fails" && i == 0);
                 let field = i > 0 && toks[i - 1] == Tok::Punct('.');
-                if !(skip.contains(&i) || extra.contains(&w.as_str()) || WORDS.contains(&w.as_str()) || bound.contains(w.as_str()) || scope.names.contains(w) || own || field) {
+                if !(skip.contains(&i) || extra.contains(&w.as_str()) || WORDS.contains(&w.as_str()) || bound.contains(w.as_str()) || scope.names.contains(w) || own || field || (assoc_clause && (crate::types::is_prim(w) || TYPE_WORDS.contains(&w.as_str())))) {
                     errs.push(format!("unknown name `{w}` in `{text}`"));
                 }
             }
@@ -191,6 +220,26 @@ mod tests {
         ] {
             assert_eq!(bad(k, h, t), "", "{t}");
         }
+    }
+
+    #[test]
+    fn the_forms_of_interfaces_implementations_and_lifetimes_pass() {
+        let mut sc = scope();
+        sc.names.extend(["a", "b", "Item"].map(String::from));
+        let ok = |kind: &str, head: &str, t: &str| assert_eq!(lint(kind, t, &[head], &sc), Vec::<String>::new(), "{t}");
+        ok("implements", "implements", "implements 'std::iter::Iterator' { Item = char }, 'std::clone::Clone'");
+        ok("implements", "implements", "implements 'std::convert::From<u8>' { Item = 'std::string::String', Other = list<u8> }");
+        ok("hold", "hold", "hold : borrows for 'a");
+        ok("hold", "hold", "hold : borrows for 'a, 'b");
+        ok("hold", "hold", "hold result : borrows from self");
+        ok("ensure", "ensure", "ensure ok : result is some 'std::iter::Iterator' { Item = u8 }");
+        // an associated type's name is not a name to look up, a lifetime is looked up, and a host path is still quoted
+        let bad = |kind: &str, head: &str, t: &str| lint(kind, t, &[head], &sc).join("; ");
+        assert!(bad("hold", "hold", "hold : borrows for 'zz").contains("unknown lifetime `'zz`"));
+        assert!(bad("implements", "implements", "implements 'std::iter::Iterator' { Item = nope }").contains("unknown name `nope`"));
+        assert!(bad("implements", "implements", "implements std::iter::Iterator { Item = char }").contains("not quoted"));
+        assert!(bad("implements", "implements", "implements 'x' { Item = char }").contains("not a quoted host path"));
+        assert!(bad("ensure", "ensure", "ensure x : result == 'v1").contains("unterminated"), "a quote that is not after `for` is not a lifetime");
     }
 
     #[test]

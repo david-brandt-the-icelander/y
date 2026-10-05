@@ -7,9 +7,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
 const KINDS: [&str; 10] = ["function", "type", "trait", "macro", "const", "impl", "alias", "static", "module", "use"];
-const CLAUSE_KINDS: [&str; 19] = [
+const CLAUSE_KINDS: [&str; 20] = [
     "require", "ensure", "on failure", "fails", "fails only", "panics", "never panics", "result must be used", "effects", "law", "callback",
-    "invariant", "budget", "layout", "derive", "access", "hold", "compat", "unexpressed",
+    "invariant", "budget", "layout", "derive", "access", "hold", "implements", "compat", "unexpressed",
 ];
 
 /// What a clause's `reason` says the language lacks: the text before the first `: `.

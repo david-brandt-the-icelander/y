@@ -17,11 +17,26 @@ pub enum Ty {
     As(Box<Ty>, String),
     /// A refinement beyond the one `Char` has: the predicate after `where` (or after `and`, on a `Char`), erased in Rust.
     Refined(Box<Ty>, String),
+    /// A lifetime argument of a host type: `'a`, `'_`, `'static`. Only an argument of `App` or of a bound has one.
+    Lifetime(String),
+    /// `some I`: a value of one type, fixed by the subject, that implements the interfaces (Rust's `impl Trait`).
+    Some(Vec<Bound>),
+    /// `any I`: a value of any type that implements the interfaces, reached through a reference or a host pointer
+    /// (Rust's `dyn Trait`).
+    Any(Vec<Bound>),
+}
+
+/// One bound of an existential type: an interface with its arguments and its associated types, or a lifetime.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Bound {
+    /// `Into<text>`, `Iterator { Item = u8 }`, or the call sugar `Fn(u8) -> bool`.
+    Iface { path: String, args: Vec<Ty>, assoc: Vec<(String, Ty)>, call: Option<(Vec<Ty>, Option<Box<Ty>>)> },
+    Lifetime(String),
 }
 
 const PRIMS: [&str; 14] =
     ["bool", "u8", "u16", "u32", "u64", "u128", "i8", "i16", "i32", "i64", "i128", "f32", "f64", "_"];
-pub const RESERVED: [&str; 5] = ["text", "list", "map", "set", "ref"];
+pub const RESERVED: [&str; 7] = ["text", "list", "map", "set", "ref", "some", "any"];
 
 pub fn is_prim(s: &str) -> bool {
     PRIMS.contains(&s)
@@ -29,6 +44,52 @@ pub fn is_prim(s: &str) -> bool {
 
 fn join(v: &[Ty]) -> String {
     v.iter().map(Ty::show).collect::<Vec<_>>().join(", ")
+}
+
+fn show_bounds(b: &[Bound]) -> String {
+    b.iter().map(Bound::show).collect::<Vec<_>>().join(" + ")
+}
+
+impl Bound {
+    /// The string form: `Into<text>`, `Iterator { Item = u8 }`, `Fn(u8) -> bool`, `'_`.
+    pub fn show(&self) -> String {
+        match self {
+            Bound::Lifetime(l) => l.clone(),
+            Bound::Iface { path, call: Some((a, r)), .. } => {
+                format!("{path}({}){}", join(a), r.as_ref().map(|r| format!(" -> {}", r.show())).unwrap_or_default())
+            }
+            Bound::Iface { path, args, assoc, .. } => {
+                let mut s = path.clone();
+                if !args.is_empty() {
+                    s += &format!("<{}>", join(args));
+                }
+                if !assoc.is_empty() {
+                    let a: Vec<String> = assoc.iter().map(|(n, t)| format!("{n} = {}", t.show())).collect();
+                    s += &format!(" {{ {} }}", a.join(", "));
+                }
+                s
+            }
+        }
+    }
+}
+
+/// How `rust` prints: the access and lifetime of every `ref` outside an existential's bounds, and, when the check
+/// of a library file lowers existentials, the generic parameter each `some` becomes.
+struct Cx {
+    m: bool,
+    lt: Option<String>,
+    lower: Option<Lower>,
+    /// Inside the bounds of an existential: a `ref` there is shared and unnamed (`&T`).
+    in_bound: bool,
+}
+
+/// A lowering of `some I` to `__S0: I`, for a function pointer type, which cannot hold `impl Trait`.
+#[derive(Default)]
+pub struct Lower {
+    /// The lifetime of the shared references inside a bound, which a generic's bound cannot leave elided.
+    pub inner: String,
+    /// `__S0: Bound + ...` for each `some` met, in order.
+    pub params: Vec<String>,
 }
 
 impl Ty {
@@ -48,6 +109,9 @@ impl Ty {
             Ty::As(t, w) => format!("{} as '{w}'", t.show()),
             Ty::Refined(t, p) if matches!(**t, Ty::Char) => format!("{} and {p}", t.show()),
             Ty::Refined(t, p) => format!("{} where {p}", t.show()),
+            Ty::Lifetime(l) => l.clone(),
+            Ty::Some(b) => format!("some {}", show_bounds(b)),
+            Ty::Any(b) => format!("any {}", show_bounds(b)),
         }
     }
 
@@ -60,20 +124,115 @@ impl Ty {
         }
     }
 
+    /// Whether a reference hides inside the bounds of a `some` or `any`: `some Iterator { Item = ref<text> }`.
+    /// Such a reference is not a slot's `ref`, yet the value still borrows.
+    pub fn bound_borrows(&self) -> bool {
+        let inside = |b: &[Bound]| {
+            b.iter().any(|b| match b {
+                Bound::Lifetime(_) => false,
+                // the arguments of call sugar are higher-ranked: `Fn(&u8)` borrows from nothing
+                Bound::Iface { args, assoc, .. } => {
+                    let refs = |t: &Ty| t.has_ref() || t.bound_borrows();
+                    args.iter().any(refs) || assoc.iter().any(|(_, t)| refs(t))
+                }
+            })
+        };
+        match self {
+            Ty::Some(b) | Ty::Any(b) => inside(b),
+            Ty::Ref(t) | Ty::Opt(t) | Ty::As(t, _) | Ty::Refined(t, _) => t.bound_borrows(),
+            Ty::App(_, v) | Ty::Tuple(v) | Ty::Coll(_, v) => v.iter().any(Ty::bound_borrows),
+            _ => false,
+        }
+    }
+
     /// Whether the outermost wrapper is shared ownership.
     pub fn shares(&self) -> bool {
         matches!(self, Ty::As(_, w) if w.rsplit("::").next().is_some_and(|l| l == "Rc" || l == "Arc"))
     }
 
-    /// The Rust text. Every `ref` in the type is printed with `mutable` and `lifetime`.
+    /// The Rust text. Every `ref` in the type is printed with `mutable` and `lifetime`; those inside the bounds of a
+    /// `some` or `any` are always shared and elided.
     pub fn rust(&self, mutable: bool, lifetime: Option<&str>) -> R<String> {
-        self.rust_in(mutable, lifetime, false)
+        self.rust_in(&mut Cx { m: mutable, lt: lifetime.map(str::to_string), lower: None, in_bound: false }, false)
     }
 
-    fn rust_in(&self, m: bool, lt: Option<&str>, under_ref: bool) -> R<String> {
-        let list = |v: &[Ty]| -> R<String> {
-            let parts: R<Vec<String>> = v.iter().map(|t| t.rust_in(m, lt, false)).collect();
-            Ok(parts?.join(", "))
+    /// The Rust text with each `some I` replaced by a new generic parameter `__S<n>` (recorded in `lower`), as a
+    /// function pointer type needs: `fn(__S0)` with `__S0: I`. The shared references inside bounds take `lower.inner`.
+    pub fn rust_lowered(&self, mutable: bool, lifetime: Option<&str>, lower: &mut Lower) -> R<String> {
+        let mut cx = Cx { m: mutable, lt: lifetime.map(str::to_string), lower: Some(std::mem::take(lower)), in_bound: false };
+        let r = self.rust_in(&mut cx, false);
+        *lower = cx.lower.take().unwrap_or_default();
+        r
+    }
+
+    /// The bounds of a top-level `some` or `any` as Rust text, with the shared references inside them named `inner`:
+    /// what a generic parameter `R: …` must satisfy. `None` for any other type.
+    pub fn bounds_rust(&self, inner: &str) -> Option<R<String>> {
+        let (Ty::Some(b) | Ty::Any(b)) = self else { return None };
+        let mut cx = Cx { m: false, lt: None, lower: Some(Lower { inner: inner.to_string(), params: vec![] }), in_bound: false };
+        Some(Self::rust_bounds(b, &mut cx))
+    }
+
+    /// Whether the type has a `some` anywhere.
+    pub fn has_some(&self) -> bool {
+        match self {
+            Ty::Some(_) => true,
+            Ty::Any(b) => b.iter().any(|b| match b {
+                Bound::Lifetime(_) => false,
+                Bound::Iface { args, assoc, call, .. } => {
+                    args.iter().any(Ty::has_some)
+                        || assoc.iter().any(|(_, t)| t.has_some())
+                        || call.as_ref().is_some_and(|(a, r)| a.iter().any(Ty::has_some) || r.as_ref().is_some_and(|r| r.has_some()))
+                }
+            }),
+            Ty::Ref(t) | Ty::Opt(t) | Ty::As(t, _) | Ty::Refined(t, _) => t.has_some(),
+            Ty::App(_, v) | Ty::Tuple(v) | Ty::Coll(_, v) => v.iter().any(Ty::has_some),
+            _ => false,
+        }
+    }
+
+    fn rust_bounds(bs: &[Bound], cx: &mut Cx) -> R<String> {
+        let was = cx.in_bound;
+        cx.in_bound = true;
+        let mut parts = vec![];
+        for b in bs {
+            parts.push(match b {
+                Bound::Lifetime(l) => l.clone(),
+                Bound::Iface { path, call: Some((a, r)), .. } => {
+                    let a: R<Vec<String>> = a.iter().map(|t| t.rust_in(cx, false)).collect();
+                    let r = match r {
+                        Some(r) => format!(" -> {}", r.rust_in(cx, false)?),
+                        None => String::new(),
+                    };
+                    format!("{path}({}){r}", a?.join(", "))
+                }
+                Bound::Iface { path, args, assoc, .. } => {
+                    let mut inner: Vec<String> = vec![];
+                    for t in args {
+                        inner.push(t.rust_in(cx, false)?);
+                    }
+                    for (n, t) in assoc {
+                        inner.push(format!("{n} = {}", t.rust_in(cx, false)?));
+                    }
+                    if inner.is_empty() {
+                        path.clone()
+                    } else {
+                        format!("{path}<{}>", inner.join(", "))
+                    }
+                }
+            });
+        }
+        cx.in_bound = was;
+        Ok(parts.join(" + "))
+    }
+
+    fn rust_in(&self, cx: &mut Cx, under_ref: bool) -> R<String> {
+        let list = |v: &[Ty], cx: &mut Cx| -> R<String> {
+            let mut parts = vec![];
+            for t in v {
+                parts.push(t.rust_in(cx, false)?);
+            }
+            Ok(parts.join(", "))
         };
         Ok(match self {
             Ty::Prim(p) => p.clone(),
@@ -81,35 +240,54 @@ impl Ty {
             Ty::Text => "String".into(),
             Ty::Char => "char".into(),
             Ty::Name(n) => n.clone(),
-            Ty::App(n, a) => format!("{n}<{}>", list(a)?),
+            Ty::Lifetime(l) => l.clone(),
+            Ty::App(n, a) => format!("{n}<{}>", list(a, cx)?),
             Ty::Ref(t) => {
                 let mut s = String::from("&");
+                let lt = if cx.in_bound { cx.lower.as_ref().map(|l| l.inner.clone()) } else { cx.lt.clone() };
                 if let Some(l) = lt {
                     let _ = write!(s, "{l} ");
                 }
-                if m {
+                if cx.m && !cx.in_bound {
                     s.push_str("mut ");
                 }
-                s + &t.rust_in(m, lt, true)?
+                let inner = t.rust_in(cx, true)?;
+                // `&dyn A + B` would read as `(&dyn A) + B`
+                match &**t {
+                    Ty::Any(b) | Ty::Some(b) if b.len() > 1 => s + &format!("({inner})"),
+                    _ => s + &inner,
+                }
             }
-            Ty::Opt(t) => format!("Option<{}>", t.rust_in(m, lt, false)?),
-            Ty::Tuple(v) if v.len() == 1 => format!("({},)", list(v)?),
-            Ty::Tuple(v) => format!("({})", list(v)?),
+            Ty::Opt(t) => format!("Option<{}>", t.rust_in(cx, false)?),
+            Ty::Tuple(v) if v.len() == 1 => format!("({},)", list(v, cx)?),
+            Ty::Tuple(v) => format!("({})", list(v, cx)?),
             Ty::Coll(k, _) => return Err(format!("slot missing: host type name of `{k}<..>` (`as`)")),
-            Ty::Refined(t, _) => t.rust_in(m, lt, under_ref)?,
+            Ty::Refined(t, _) => t.rust_in(cx, under_ref)?,
+            Ty::Some(b) => {
+                let text = Self::rust_bounds(b, cx)?;
+                match cx.lower.as_mut() {
+                    Some(l) => {
+                        let n = format!("__S{}", l.params.len());
+                        l.params.push(format!("{n}: {text}"));
+                        n
+                    }
+                    None => format!("impl {text}"),
+                }
+            }
+            Ty::Any(b) => format!("dyn {}", Self::rust_bounds(b, cx)?),
             Ty::As(t, w) => match (&**t, w.as_str()) {
                 (_, "usize" | "isize" | "char") => w.clone(),
                 (Ty::Text, "String") => "String".into(),
                 // a slice is a `list` whose host form is the unsized `[T]`, which only a reference can name
-                (Ty::Coll(k, a), "std::primitive::slice") if k == "list" => format!("[{}]", list(a)?),
+                (Ty::Coll(k, a), "std::primitive::slice") if k == "list" => format!("[{}]", list(a, cx)?),
                 (Ty::Refined(l, p), "std::primitive::array") if matches!(&**l, Ty::Coll(k, _) if k == "list") => {
                     let (Ty::Coll(_, a), Some(n)) = (&**l, p.strip_prefix("size(value) == ")) else {
                         return Err(format!("bad array refinement `{p}`"));
                     };
-                    format!("[{}; {n}]", list(a)?)
+                    format!("[{}; {n}]", list(a, cx)?)
                 }
-                (Ty::Coll(_, a), _) => format!("{w}<{}>", list(a)?),
-                (t, _) => format!("{w}<{}>", t.rust_in(m, lt, false)?),
+                (Ty::Coll(_, a), _) => format!("{w}<{}>", list(a, cx)?),
+                (t, _) => format!("{w}<{}>", t.rust_in(cx, false)?),
             },
         })
     }
@@ -172,12 +350,107 @@ impl P<'_> {
         }
     }
     fn args(&mut self) -> R<Vec<Ty>> {
-        let mut v = vec![self.ty()?];
+        let mut v = vec![self.arg()?];
         while self.eat(",") {
-            v.push(self.ty()?);
+            v.push(self.arg()?);
         }
         self.expect(">")?;
         Ok(v)
+    }
+    /// A lifetime (`'a`, `'_`) as opposed to a quoted host path (`'std::x'`, `'v1'`): after the quote comes a name
+    /// that no closing quote and no `::` follows.
+    fn at_lifetime(&mut self) -> Option<String> {
+        self.ws();
+        if self.s.get(self.i) != Some(&b'\'') {
+            return None;
+        }
+        let mut j = self.i + 1;
+        while self.s.get(j).is_some_and(|c| c.is_ascii_alphanumeric() || *c == b'_') {
+            j += 1;
+        }
+        let first = self.s.get(self.i + 1).copied().unwrap_or(b' ');
+        let named = j > self.i + 1 && (first.is_ascii_alphabetic() || first == b'_');
+        if !named || self.s.get(j) == Some(&b'\'') || self.s.get(j) == Some(&b':') {
+            return None;
+        }
+        let l = String::from_utf8_lossy(&self.s[self.i..j]).into_owned();
+        self.i = j;
+        Some(l)
+    }
+    fn arg(&mut self) -> R<Ty> {
+        match self.at_lifetime() {
+            Some(l) => Ok(Ty::Lifetime(l)),
+            None => self.ty(),
+        }
+    }
+    /// `+`-separated bounds after `some` or `any`: a name or quoted host path, with arguments, associated types
+    /// `{ A = T }` or call sugar `(T) -> U`; or a lifetime.
+    fn bounds(&mut self) -> R<Vec<Bound>> {
+        let mut v = vec![];
+        loop {
+            if let Some(l) = self.at_lifetime() {
+                v.push(Bound::Lifetime(l));
+            } else {
+                self.ws();
+                let path = if self.s.get(self.i) == Some(&b'\'') {
+                    self.i += 1;
+                    let st = self.i;
+                    while self.s.get(self.i).is_some_and(|c| *c != b'\'') {
+                        self.i += 1;
+                    }
+                    let p = String::from_utf8_lossy(&self.s[st..self.i]).into_owned();
+                    self.expect("'")?;
+                    p
+                } else {
+                    self.ident()
+                };
+                if path.is_empty() {
+                    return Err(format!("bad type: an interface is expected at {}", self.i));
+                }
+                let (mut args, mut assoc, mut call) = (vec![], vec![], None);
+                if self.s.get(self.i) == Some(&b'<') {
+                    self.i += 1;
+                    args = self.args()?;
+                }
+                if self.eat("(") {
+                    let mut a = vec![];
+                    if !self.eat(")") {
+                        a.push(self.ty()?);
+                        while self.eat(",") {
+                            a.push(self.ty()?);
+                        }
+                        self.expect(")")?;
+                    }
+                    let r = if self.eat("->") { Some(Box::new(self.ret()?)) } else { None };
+                    call = Some((a, r));
+                } else if self.eat("{") {
+                    loop {
+                        let n = self.ident();
+                        if n.is_empty() {
+                            return Err(format!("bad type: an associated type name is expected at {}", self.i));
+                        }
+                        self.expect("=")?;
+                        assoc.push((n, self.ty()?));
+                        if !self.eat(",") {
+                            break;
+                        }
+                    }
+                    self.expect("}")?;
+                }
+                v.push(Bound::Iface { path, args, assoc, call });
+            }
+            if !self.eat("+") {
+                return Ok(v);
+            }
+        }
+    }
+    /// The result of call sugar: a type without `as` or a refinement, which belong to the whole type.
+    fn ret(&mut self) -> R<Ty> {
+        let mut t = self.base()?;
+        while self.eat("?") {
+            t = Ty::Opt(Box::new(t));
+        }
+        Ok(t)
     }
     fn ty(&mut self) -> R<Ty> {
         let mut t = self.base()?;
@@ -220,6 +493,10 @@ impl P<'_> {
         let id = self.ident();
         if id.is_empty() {
             return Err(format!("bad type at {}", self.i));
+        }
+        if (id == "some" || id == "any") && self.s.get(self.i) == Some(&b' ') {
+            let b = self.bounds()?;
+            return Ok(if id == "some" { Ty::Some(b) } else { Ty::Any(b) });
         }
         let generic = self.s.get(self.i) == Some(&b'<');
         if generic {
@@ -268,5 +545,52 @@ mod tests {
         assert!(Ty::parse("text where ").is_err());
         // the char form alone is still a char
         assert_eq!(Ty::parse("text where length(value) == 1 as 'char'").unwrap(), Ty::As(Box::new(Ty::Char), "char".into()));
+    }
+
+    #[test]
+    fn existentials_lifetime_arguments_and_associated_types_round_trip() {
+        for t in [
+            "some Display",
+            "some Into<text>",
+            "some Iterator { Item = (u8, ref<text>) } + Clone + '_",
+            "any std::error::Error + Send + Sync as 'std::boxed::Box'",
+            "ref<any Fn(ref<u8>) -> bool>",
+            "ref<any Iterator { Item = u8 }>",
+            "Chars<'a>",
+            "ref<list<Node<'_>> as 'Vec'>",
+            "Self::Item",
+            "some Foo<'a, u8> { A = u8, B = list<u8> as 'Vec' }",
+        ] {
+            assert_eq!(Ty::parse(t).unwrap().show(), t, "{t}");
+        }
+        // a quoted interface is the same interface; a quoted host path is not a lifetime
+        assert_eq!(Ty::parse("some 'std::iter::Iterator' { Item = u8 }").unwrap().show(), "some std::iter::Iterator { Item = u8 }");
+        assert_eq!(Ty::parse("u8 as 'v1'").unwrap().show(), "u8 as 'v1'");
+        assert!(Ty::parse("some").is_ok_and(|t| t == Ty::Name("some".into())), "`some` alone is a name");
+        assert!(Ty::parse("some Iterator { Item u8 }").is_err() && Ty::parse("some Iterator { Item = u8").is_err());
+        assert!(Ty::parse("some ").is_err());
+    }
+
+    #[test]
+    fn existentials_print_as_rust_and_lower_to_generics() {
+        let rust = |t: &str| Ty::parse(t).unwrap().rust(false, None).unwrap();
+        assert_eq!(rust("some Iterator { Item = (u8, ref<text>) } + Clone + '_"), "impl Iterator<Item = (u8, &str)> + Clone + '_");
+        assert_eq!(rust("some Into<text>"), "impl Into<String>");
+        assert_eq!(rust("ref<any Fn(ref<u8>) -> bool>"), "&dyn Fn(&u8) -> bool");
+        assert_eq!(rust("any Error + Send + Sync as 'std::boxed::Box'"), "std::boxed::Box<dyn Error + Send + Sync>");
+        assert_eq!(rust("ref<any Error + Send>"), "&(dyn Error + Send)");
+        // the references of a bound are shared whatever the slot's access is; the slot's own are not
+        assert_eq!(Ty::parse("ref<any Iterator { Item = ref<u8> }>").unwrap().rust(true, Some("'p0")).unwrap(), "&'p0 mut dyn Iterator<Item = &u8>");
+        let t = Ty::parse("ref<some Iterator { Item = ref<u8> }>").unwrap();
+        assert!(t.has_ref() && t.bound_borrows());
+        assert!(!Ty::parse("some Iterator { Item = ref<u8> }").unwrap().has_ref());
+        assert!(!Ty::parse("some Fn(ref<u8>) -> bool").unwrap().bound_borrows(), "the arguments of call sugar are higher-ranked");
+        let mut lower = Lower { inner: "'__e".into(), params: vec![] };
+        let t = Ty::parse("(some Iterator { Item = ref<u8> }, some Clone)").unwrap();
+        assert_eq!(t.rust_lowered(false, None, &mut lower).unwrap(), "(__S0, __S1)");
+        assert_eq!(lower.params, vec!["__S0: Iterator<Item = &'__e u8>".to_string(), "__S1: Clone".to_string()]);
+        assert_eq!(Ty::parse("some Iterator { Item = u8 }").unwrap().bounds_rust("'e").unwrap().unwrap(), "Iterator<Item = u8>");
+        assert!(Ty::parse("u8").unwrap().bounds_rust("'e").is_none());
+        assert!(Ty::parse("list<some Clone> as 'Vec'").unwrap().has_some());
     }
 }

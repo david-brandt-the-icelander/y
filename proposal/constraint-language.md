@@ -151,6 +151,7 @@ use economy                   -- quantities: Isk, ItemQuantity
 | `table` | A table in the catalog | `table space.Ships` |
 | `resource` | A host type that holds something outside memory: a file, socket, lock, connection or GPU buffer | `resource java 'java.sql.Connection'` |
 | `interface` | A trait, interface, protocol or abstract class; the clauses bind every implementation | `interface rust 'edb::Procedure'` |
+| `impl` | One implementation of an interface for a type; its clauses add to the interface's (§ 6.11) | `impl rust 'std::iter::Iterator' for 'std::str::Chars'` |
 | `quantity` | A conserved or dimensioned quantity | `quantity Isk : decimal(19, 2)` |
 | `conserve` | A conservation law over columns | `conserve Isk across wallet.Balances.balance, …` |
 | `failure` | A named failure and its class | `failure NotYours : user` |
@@ -202,7 +203,9 @@ cannot check is reported as such for every subject of that host, never silently 
 - **Units and quantities:** `unit m`, `unit s`; `quantity Distance : decimal in m`; arithmetic checks dimensions, and
   conversion between units is an explicit named function.
 - **Generics:** `for T where T: Comparable` binds a type parameter and its bounds; bounds name interfaces, so they are
-  checked as behavioural subtyping (§ 6.10).
+  checked as behavioural subtyping (§ 6.10). `for 'a` binds a lifetime, and a host subject of any kind may bind both
+  (§ 6.11). **Existential types:** `some I` is a value of one type, fixed by the subject, that implements `I`; `any I` is a
+  value of any type that implements `I` (§ 6.11).
 - **Representation.** A type in the language says which values are allowed. When a host needs a representation the
   profile does not choose by default, `as` names it: `map<Key, Entry> as 'std::collections::BTreeMap'`.
 
@@ -295,6 +298,7 @@ Clauses are of two sorts, and the difference decides how they are checked.
 | Concurrency | `confined to`, `sendable`, `shareable`, `guarded by`, `lock order`, `atomic`, `linearizable`, `no suspension while holding`, `no blocking in`, `not reentrant`, `cancellation safe`, `publishes` | Who may touch what, from where, in what order | Property | 6.8 |
 | Information | `label`, `flows only to`, `never flows … to`, `declassify … when … because`, `sanitised by` | Where information may go | Property | 6.9 |
 | Compatibility and visibility | `version`, `compatible with`, `replaces`, `was`, `deprecated`, `stable`, `visible to` | What may change between versions, and who may refer to what | Checked at build | 6.10 |
+| Interfaces and implementations | `implements`, `assoc`, `for`, `some`, `any`, `hold … borrows for` | Which interfaces a type implements, what an implementation adds, and what a host subject is parameterised by | Checked at build | 6.11 |
 | Lifetime | `hold`, `lifetime …`, `instances …`, `no strong cycle`, `model` | How long entities live and who keeps them | Property | 7 |
 | Mutability and aliasing | `access`, `readonly`, `immutable`, `frozen after`, `write once`, `append only`, `monotonic`, `mutates only`, `interior`, `unchanged`, `exclusive`, `sole`, `disjoint`, `shared readonly` | Who may change what, and through how many paths | Property; predicate for columns | 8 |
 | Derived languages | `local` | A type a woven host needs inside a body | Checked at weave | 11.2 |
@@ -724,8 +728,85 @@ variant market.OrderKind = Buy | Sell | Contract open
 Runtime failures are open by design: any enforced constraint may reject. So moving a harvested constraint from watched
 to enforced changes no contract and needs no person, as the proposal's soak window requires. An implementation of an
 `interface` obeys behavioural subtyping: its preconditions are no stronger than the interface's, and its postconditions,
-bounds, lifetimes and access no weaker. `visible to public | crate | module | m` states who may refer to a subject, as
+bounds, lifetimes and access no weaker (§ 6.11 says how an implementation is stated). `visible to public | crate | module | m` states who may refer to a subject, as
 access modifiers do. `edb review` classifies every constraint change in a pull request by this table.
+
+### 6.11 Interfaces and their implementations
+
+**Meaning.** The clauses of an `interface` bind every implementation (§ 9), and an implementation may promise more than
+the interface does (§ 6.10). Four things are needed to say that, and the language so far has none of them. A type says
+which interfaces it implements, and what each associated type is in it. An implementation is a subject, whose clauses
+add to the interface's. A value can be of a type that is only known by its interface: one type that the subject fixes
+(`some I`, Rust's `impl Trait`), or any type that implements it (`any I`, Rust's `dyn Trait`). And a host subject can
+take parameters: lifetimes, which a type that holds a borrow cannot do without, and types with bounds, which are
+interfaces.
+
+```text
+type rust 'std::str::Chars'
+    for 'a                                          -- a lifetime parameter, as `for T where T: Bound` is a type one
+    hold : borrows for 'a                           -- the type holds a borrow; a use says from what
+    implements 'std::iter::Iterator' { Item = char }, 'std::clone::Clone'
+
+impl rust 'std::iter::Iterator' for 'std::str::Chars'
+    for 'a
+    assoc Item = char
+    function next(self: ref<Chars<'a>>) -> char?
+        access self : write exclusive
+    effects none                                    -- beyond what Iterator says of every implementation
+
+impl rust 'std::convert::From<ref<text>>' for 'std::string::String'    -- the interface's arguments choose the impl
+    function from(value: ref<text>) -> text as 'std::string::String'
+
+function rust 'eve_cache::Cache::keys'(self: ref<Cache>) -> some 'std::iter::Iterator' { Item = ref<Key> }
+    hold result : borrows from self
+
+function rust 'eve_cache::Cache::extend'(self: ref<Cache>, items: some 'std::iter::IntoIterator' { Item = T })
+    for T where T: Clone
+    access self : write exclusive
+```
+
+- **`implements I { Assoc = T }`** is a clause of a `type`: it lists the interfaces the type implements, each with its
+  arguments and the associated types it fixes. An associated type is a name an interface leaves open and every
+  implementation fills; it is used in the interface's own signatures as `Self::Item`, and in a bound as `T::Item`.
+  `implements` lists the implementations that exist; it does not say what they promise, which is the impl's.
+- **`impl I for T`** is a subject: one implementation of one interface for one type. It carries `for` parameters and
+  `where` bounds (the same as the type's, or fewer, as in `impl<'a, T: Clone> Clone for Wrap<'a, T>`), the associated types
+  `assoc Name = type`, the methods it implements, and clauses. A call that resolves to the implementation has the
+  interface's clauses and then the impl's, and a call through a bound or an `any` has the interface's alone. An impl's
+  clauses obey behavioural subtyping (§ 6.10): preconditions no stronger than the interface's, postconditions, bounds,
+  lifetimes and access no weaker. A method is named after its impl, `Chars as Iterator::next`. A type's `implements`
+  entry may name the impl subject that carries it (`impl`), and must when the implementation has clauses.
+- **`some I { Assoc = T } + J`** is the type of a value of one type that the subject fixes and the caller cannot name, and
+  that implements `I` and `J`. As a parameter it is a type the caller picks (a generic that is not named); as a result it
+  is a type the callee picks, and a caller may rely on its interfaces and on nothing more. `Fn(A) -> R` is an interface
+  with call syntax. A reference inside the bounds is shared and unnamed, and a result that has one borrows, so that
+  `hold result : borrows from self` says from what.
+- **`any I`** is the type of a value of any type that implements `I`, with dispatch through the interface: it is the
+  referent, and is reached through a reference or a host pointer, as an unsized list is (§ 3.4): `ref<any I>`, `any I as
+  'std::boxed::Box'`. Only the interface's clauses hold of it, never an impl's.
+- **`for 'a`, `for T where T: Bound`** bind parameters on any host subject: a type, a function, an impl. Bounds are
+  interfaces, so they are checked as behavioural subtyping (§ 6.10). A host type is applied to lifetimes as it is to types:
+  `Chars<'a>`, `Node<'_>`. **`hold : borrows for 'a`** is the clause of a type that holds a borrow, one for each lifetime it
+  holds; it is the lifetime counterpart of `hold f : borrows from p` on a parameter (§ 7.2), with no path because the
+  value is the holder.
+- **Fails:** as a build, not at run time. A type that does not implement what it says, an associated type that is not
+  the real one, an impl whose clauses break behavioural subtyping, a use of an `any` that relies on what only an impl says,
+  and a bound that an argument does not meet are refused at compile or review time, and `edb review` sorts the changes:
+  adding an `implements` entry or an impl is free; removing one, or changing an associated type, breaks every dependant
+  and needs a new version (§ 6.10).
+- **Checked:** by the host's compiler after weaving, which holds the bounds, the impls, the associated types and the
+  lifetimes (for Rust, `rustc`); for a library file, by compiling each entry against the real item: an impl as `X:
+  Trait<Assoc = T>`, a method as `<X as Trait>::name` with the impl's parameters, a `some` parameter as a generic with its
+  bound, a `some` result as a bound that the real result type must meet. The compiler of the language checks an impl's
+  clauses against the interface's wherever both are visible (§ 11.1).
+- **Harvested:** from the host's source and its compiler. `impl I for T` blocks give impl subjects and, for a type of the
+  same file, its `implements` entry with the associated types of the block's `type Name = …;` items; the signatures give
+  `impl Trait`, `dyn Trait`, lifetime arguments and generics; the compiler's intermediate form says which impl each call
+  resolves to. For a library, from its documentation's list of implementors and the source of its impls.
+
+What stays host text: a lifetime or `mut` inside the bounds of a `some` or `any`, a higher-ranked `for<'a>` bound, `?Sized`
+and other relaxed bounds, const generics, negative impls and fully qualified paths (`<T as I>::X`). The bounds of a
+parameter are carried as the host writes them until the language has a form for them.
 
 ---
 
@@ -1040,7 +1121,8 @@ path that breaks it before it is enforced.
 - **Generics.** `for T where T: Comparable` binds a type parameter; a clause stated for every `T` applies to every
   instance.
 - **Interfaces.** Clauses on an `interface` bind every implementation, under the rules of behavioural subtyping
-  (§ 6.10). "Every implementation of `Repository.save` is idempotent by its id" is one clause.
+  (§ 6.10). "Every implementation of `Repository.save` is idempotent by its id" is one clause. What one implementation
+  adds is an `impl` subject (§ 6.11).
 - **Model state.** The language has no ghost variables. What a specification needs as a model of an entity's state is a
   named pure projection over what exists, `view(e)`, declared in the catalog and usable anywhere an expression is.
 - **Modules and `use`.** Names are qualified by module; `use` imports predicates, blocks, failures, quantities, labels
@@ -1586,6 +1668,7 @@ declaration   = subject | failure | predicate | block | label | scope | quantity
 subject       = subject_head NL INDENT { clause NL } DEDENT ;
 subject_head  = ( "procedure" | "method" ) QNAME params [ "->" type ]
               | ( "function" | "type" | "resource" | "interface" ) [ HOST ] STABLE [ params ] [ "->" type ]
+              | "impl" [ HOST ] STABLE "for" STABLE
               | "table" QNAME ;
 HOST          = "rust" | "tsql" | "python" | "csharp" | "java" | "kotlin" | "swift" | "objc" | "cpp" | "c"
               | "go" | "php" | "typescript" | "javascript" ;
@@ -1615,6 +1698,9 @@ clause        = "let" NAME "=" expr
                                     | "conforms to" "interface" [ HOST ] STABLE )
               | "law" NAME ":" expr
               | "field" NAME ":" type
+              | generics
+              | "implements" implemented { "," implemented }
+              | "assoc" NAME "=" type
               | "layout" ( "c" | "packed" | "transparent" ) | "size" NUMBER | "align" NUMBER
               | "local" NAME ":" type
               | bound | state | protocol | temporal | budget | concurrency | flow | compat | memory | access
@@ -1624,6 +1710,16 @@ clause        = "let" NAME "=" expr
               | "not at" place { "," place }
               | "model" MODEL ;
 payload       = "{" NAME ":" expr { "," NAME ":" expr } "}" ;
+generics      = "for" generic { "," generic } [ "where" bound_pred { "," bound_pred } ] ;
+generic       = LIFETIME | NAME [ ":" bounds ] ;
+bound_pred    = ( NAME | LIFETIME ) ":" bounds ;
+implemented   = STABLE [ "{" NAME "=" type { "," NAME "=" type } "}" ] ;
+bounds        = bound { "+" bound } ;
+bound         = ( QNAME | STABLE ) [ "<" type_arg { "," type_arg } ">" ]
+                  [ "{" NAME "=" type { "," NAME "=" type } "}" | "(" [ type { "," type } ] ")" [ "->" type ] ]
+              | LIFETIME ;
+type_arg      = type | LIFETIME ;
+LIFETIME      = "'" NAME ;
 
 bound         = ( "reads only" | "writes only" | "emits only" | "sends only" | "calls only" | "effects only" )
                   path_list
@@ -1659,8 +1755,8 @@ flow          = "label" path_list ":" NAME [ "(" path ")" ] [ "when" expr ]
 compat        = "version" NUMBER | "compatible with" NUMBER { "," NUMBER } | "replaces" HOST STABLE
               | "was" STABLE | "deprecated" [ "since" NUMBER ] | "stable"
               | "visible to" ( "public" | "crate" | "module" | QNAME ) ;
-memory        = "hold" path ":" ( "owns" | "shares" | "borrows" [ "from" path ] | "observes" [ "softly" ]
-                                | "identifies" )
+memory        = "hold" [ path ] ":" ( "owns" | "shares" | "borrows" [ "from" path | "for" LIFETIME { "," LIFETIME } ]
+                                    | "observes" [ "softly" ] | "identifies" )
               | "lifetime" target lifetime_pred
               | "instances" [ "per" scope_ref ] "at most" NUMBER
               | "instances attributed to" scope_ref "are none within" duration "after" event
@@ -1692,9 +1788,12 @@ sink          = "client" | "player" [ "(" path ")" ] | "server" | "ledger" | "ch
 place         = "client" | "proxy" | "python" | "tsql" | "engine" | "host" | "replica" | "ci" ;
 status        = "observed" | "lifted" | "watched" | "enforced" | "proven" | "assumed" ;
 MODEL         = "ownership" | "tracing" | "counting" | "tracked" | "region" | "manual" | "rows" ;
-(* type, record_type, generics, duration, size, percentile, complexity, unit_expr and regex_over_calls are
-   written as in the examples: "u64?", "map<K, V> as 'std::collections::BTreeMap'", "{ a: T }",
-   "for T where T: C", "50us", "2 MB", "p99", "O(size(x))", "m / s", "begin (send | receive)* finish" *)
+(* type, record_type, duration, size, percentile, complexity, unit_expr and regex_over_calls are
+   written as in the examples: "u64?", "map<K, V> as 'std::collections::BTreeMap'", "{ a: T }", "50us", "2 MB",
+   "p99", "O(size(x))", "m / s", "begin (send | receive)* finish". A type may also be an existential,
+   "some" bounds or "any" bounds, as in "some 'std::iter::Iterator' { Item = u8 } + Clone"; a host type applied to
+   lifetimes, "Chars<'a>"; or an associated type, "Self::Item" (§ 6.11). A "for" clause on a subject binds its
+   generics: "for 'a", "for T where T: Comparable". *)
 
 expr          = (* literals, paths, T[key], T where p, calls of named pure functions, not/and/or/implies/iff,
                    comparisons, arithmetic, if-then-else, exists, is, in, matches, fits, finite, approx,

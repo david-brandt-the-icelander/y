@@ -181,6 +181,17 @@ function rust 'eve_cache::Cache::keys'(self: ref<Cache>) -> some 'std::iter::Ite
 - **Consumer.** The weaver, which carries 33 of stage 1's 78 host-text types only as Rust text. Agents, who are
   told what an iterator yields. Every host with interfaces: C#, Java, Kotlin, Swift and TypeScript all need it.
 
+**Done: the paragraph, the format and the tool; the library file is not rewritten yet.** Language § 6.11 and § 15 state
+the meaning and the grammar. The JSON gains an `implements` slot on a type (`{trait, assoc, impl}`), `assoc` and
+`trait`/`self` on an `impl` subject, `impl` on a method of one, `hold.for` on a type, and, in type strings, `some I {..}`,
+`any I`, lifetime arguments (`Chars<'a>`) and `Self::Item`. `strip` maps `impl Trait`, `dyn Trait`, lifetime arguments,
+associated types and the self types of impls into them, and `weave` prints them back; `libcheck` lints the new clause forms
+and compiles impls, `implements` entries, impl methods and existential types against the real `std`; `externals` records, for
+each function, the impls its calls resolve to (read from the `<T as Trait>::f` paths of the MIR it already reads; a call
+through a type parameter says so, by a heuristic on the name). On the corpora, host-text types fall from 39 to 3 (strsim 5 to
+0; the tool's own source 34 to 3: a pointer and two references with a lifetime in a hole). What is left as host text is in
+§ 6.11. Step 4, the rewrite of the 52 promises, and step 5's measure wait for it.
+
 ### 4.2 Promises that hold unless an implementation does otherwise (30)
 
 **What is missing.** `never panics`, `terminates` and the bounds on effects are unconditional. Most of what `std`

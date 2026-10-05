@@ -100,7 +100,7 @@
   },
   "$defs": {
     "type": {
-      "description": "A type string (`u64 as 'usize'`, `ref<Entry>?`, `map<K, V> as 'std::collections::HashMap'`), or host text for a type the language has no form for.",
+      "description": "A type string (`u64 as 'usize'`, `ref<Entry>?`, `map<K, V> as 'std::collections::HashMap'`, `Chars<'a>`, `some std::iter::Iterator { Item = u8 }`, `any std::error::Error as 'std::boxed::Box'`), or host text for a type the language has no form for.",
       "oneOf": [
         {
           "type": "string",
@@ -168,6 +168,14 @@
         "lifetime": {
           "type": "string",
           "description": "A lifetime that elision cannot express, as written."
+        },
+        "for": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "description": "On a `type`: the lifetime parameters the type borrows for, `hold : borrows for 'a`. Each is a lifetime of the subject's `generics`."
         }
       }
     },
@@ -370,6 +378,24 @@
         },
         "hold": {
           "$ref": "#/$defs/hold"
+        },
+        "implements": {
+          "type": "array",
+          "description": "The interfaces a `type` declares it implements (language 6.11): the interface with its arguments, the associated types the implementation fixes, and, when the implementation is a subject of the file, its name. A library file writes them; `strip` writes one for each `impl Trait for T` whose `T` is a type of the file.",
+          "items": {
+            "$ref": "#/$defs/implements"
+          }
+        },
+        "assoc": {
+          "type": "object",
+          "description": "For an `impl`: its associated types, `Item` to the type it is.",
+          "additionalProperties": {
+            "$ref": "#/$defs/type"
+          }
+        },
+        "impl": {
+          "type": "string",
+          "description": "For a function in a library file: the `impl` subject whose method it is. The function is checked as `<Self as Trait>::name`, with the impl's generics."
         },
         "fields": {
           "type": "array",
@@ -586,6 +612,7 @@
             "invariant",
             "access",
             "hold",
+            "implements",
             "budget",
             "layout",
             "derive",
@@ -651,6 +678,30 @@
         "host": {
           "type": "string",
           "description": "The pure host function the view is bound to, quoted and under `of`: `'std::vec::Vec::capacity'`. A clause calls the view by name: `capacity(self)`."
+        }
+      }
+    },
+    "implements": {
+      "type": "object",
+      "required": [
+        "trait"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "trait": {
+          "$ref": "#/$defs/type",
+          "description": "The interface, with its arguments: `std::iter::Iterator`, `std::convert::From<u8>`."
+        },
+        "assoc": {
+          "type": "object",
+          "description": "The associated types this implementation fixes: `{ \"Item\": \"char\" }`.",
+          "additionalProperties": {
+            "$ref": "#/$defs/type"
+          }
+        },
+        "impl": {
+          "type": "string",
+          "description": "The name of the `impl` subject that carries this implementation's generics, `where` and clauses."
         }
       }
     }
