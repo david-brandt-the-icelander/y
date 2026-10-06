@@ -833,7 +833,8 @@ function rust 'std::collections::HashMap::get'(self: ref<HashMap<K, V>>, k: ref<
     law borrow_agrees : all k : K : hash(k) == hash(borrow(k))     -- the caller's choice of type must satisfy it
 
 function rust 'std::iter::Iterator::count'(self: Self) -> u64 as 'usize'
-    ensure counted : result == old(count(self))   given build overflow_checks
+    ensure counted : old(count(self)) <= 18446744073709551615 implies result == old(count(self))
+    fails panic when old(count(self)) > 18446744073709551615   given build overflow_checks
 
 function rust 'std::cmp::Ord::max'(self: Self, other: Self) -> Self
     never panics   given default and Self.cmp never panic

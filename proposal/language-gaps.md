@@ -212,7 +212,8 @@ function rust 'std::collections::HashMap::get'(self: ref<HashMap<K, V>>, k: ref<
     law borrow_agrees : all k : K : hash(k) == hash(borrow(k))     -- the caller's types must satisfy it
 
 function rust 'std::iter::Iterator::count'(self: Self) -> u64 as 'usize'
-    ensure counted : result == old(count(self))   given build overflow_checks
+    ensure counted : old(count(self)) <= 18446744073709551615 implies result == old(count(self))
+    fails panic when old(count(self)) > 18446744073709551615   given build overflow_checks
 ```
 
 - **Closes** the 22 conditional promises, the 6 requirements on bound implementations, and the 2 that depend on the

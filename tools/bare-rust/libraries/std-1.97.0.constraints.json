@@ -58,16 +58,16 @@
         {
           "kind": "never panics",
           "text": "never panics",
-          "given": ["Q.hash, Q.eq, K.borrow, S.build_hasher never panic"],
+          "given": ["Q.hash, Q.eq, K.borrow, S.hash_one never panic"],
           "source": "1.97.0 std/src/collections/hash/map.rs:1040, body: self.base.get(k), which hashes k and compares keys with the impls of Q and K",
           "status": {
-            "observed": "from the body: hashbrown get returns None for an empty table, and otherwise hashes k with hash_one (build_hasher, Q::hash) and compares with Equivalent (Q::eq on K::borrow); the hasher's own write and finish are the residual clause"
+            "observed": "from the body: hashbrown get returns None for an empty table, and otherwise hashes k with S::hash_one (whose default body calls build_hasher and Q::hash) and compares with Equivalent (Q::eq on K::borrow); the hasher's own write and finish are the residual clause"
           }
         },
         {
           "kind": "effects",
           "text": "effects none",
-          "given": ["Q.hash, Q.eq, K.borrow, S.build_hasher effects none"],
+          "given": ["Q.hash, Q.eq, K.borrow, S.hash_one effects none"],
           "source": "1.97.0 std/src/collections/hash/map.rs:1040, body: self.base.get(k), which hashes k and compares keys with the impls of Q and K",
           "status": {
             "observed": "from the body: a lookup that reads the table and calls the four implementations"
@@ -76,7 +76,7 @@
         {
           "kind": "effects",
           "text": "terminates",
-          "given": ["Q.hash, Q.eq, K.borrow, S.build_hasher terminate"],
+          "given": ["Q.hash, Q.eq, K.borrow, S.hash_one terminate"],
           "source": "1.97.0 std/src/collections/hash/map.rs:1040, body: self.base.get(k), which hashes k and compares keys with the impls of Q and K",
           "status": {
             "observed": "from the body: a probe over a finite table plus the four implementations"
@@ -84,9 +84,9 @@
         },
         {
           "kind": "unexpressed",
-          "text": "The hasher that S::build_hasher returns runs inside the call too, through Q::hash: its write and finish are the impls of an associated type of S's bound, which no `given` item can name, so the three conditional promises above are stated without them.",
+          "text": "The hasher that S::hash_one builds (by default through S::build_hasher) runs inside the call too, through Q::hash: its write and finish are the impls of an associated type of S's bound, which no `given` item can name, so the three conditional promises above are stated without them.",
           "source": "1.97.0 std/src/collections/hash/map.rs:1040, body: self.base.get(k), which hashes k and compares keys with the impls of Q and K",
-          "reason": "no condition on an associated type's implementation: a `given` item names a method of a bound of a generic parameter, and write and finish belong to S::Hasher, an associated type of that bound. Here: the hasher built by S runs inside the call"
+          "reason": "no condition on an associated type's implementation: a `given` item names a method of a bound of a generic parameter, and write and finish belong to S::Hasher, an associated type of that bound. Here: the hasher built inside S::hash_one runs inside the call"
         },
         {
           "kind": "unexpressed",
@@ -2002,8 +2002,7 @@
       "clauses": [
         {
           "kind": "ensure",
-          "text": "ensure counted : result == old(count(self))",
-          "given": ["build overflow_checks"],
+          "text": "ensure counted : old(count(self)) <= 18446744073709551615 implies result == old(count(self))",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:195-196, doc: \"This method will call [`next`] repeatedly until [`None`] is encountered, returning the number of times it saw [`Some`].\"",
           "status": { "assumed": "documentation" }
         },
@@ -2145,7 +2144,7 @@
         },
         {
           "kind": "ensure",
-          "text": "ensure count : count(result) == count(self) + count('<U as std::iter::IntoIterator>::into_iter'(other))",
+          "text": "ensure count : count(result) == old(count(self)) + old(count('<U as std::iter::IntoIterator>::into_iter'(other)))",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:446-450, doc: \"Takes two iterators and creates a new iterator over both in sequence.\" \"`chain()` will return a new iterator which will first iterate over values from the first iterator and then over values from the second iterator.\"",
           "status": { "assumed": "documentation" }
         },
@@ -2180,7 +2179,7 @@
         },
         {
           "kind": "ensure",
-          "text": "ensure count : count(result) == (if count(self) <= count('<U as std::iter::IntoIterator>::into_iter'(other)) then count(self) else count('<U as std::iter::IntoIterator>::into_iter'(other)))",
+          "text": "ensure count : count(result) == (if old(count(self)) <= old(count('<U as std::iter::IntoIterator>::into_iter'(other))) then old(count(self)) else old(count('<U as std::iter::IntoIterator>::into_iter'(other))))",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:526-527, doc: \"If either iterator returns [`None`], [`next`] from the zipped iterator will return [`None`].\"",
           "status": { "assumed": "documentation" }
         },
