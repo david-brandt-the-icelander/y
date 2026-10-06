@@ -44,16 +44,49 @@
           "status": { "assumed": "documentation" }
         },
         {
-          "kind": "unexpressed",
-          "text": "The Hash and Eq of Q must agree with those of K, as Borrow requires: k.hash() equals the hash of the key it borrows from, and k == q.borrow() agrees with the keys' own equality.",
+          "kind": "law",
+          "text": "law borrow_eq : all k1 : K : all k2 : K : (k1 == k2) iff ('<K as std::borrow::Borrow<Q>>::borrow'(k1) == '<K as std::borrow::Borrow<Q>>::borrow'(k2))",
           "source": "1.97.0 std/src/collections/hash/map.rs:1019-1021, doc: \"The key may be any borrowed form of the map's key type, but [`Hash`] and [`Eq`] on the borrowed form *must* match those for the key type.\"",
-          "reason": "requirement on bound implementations: a requirement on the implementations of a bound, not on values: a clause cannot name what a bound's methods must satisfy at a call site. Here: the Hash and Eq of Q must agree with those of K, as Borrow requires"
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "law",
+          "text": "law borrow_hash : all k : K : all s : S : '<S as std::hash::BuildHasher>::hash_one'(s, '<K as std::borrow::Borrow<Q>>::borrow'(k)) == '<S as std::hash::BuildHasher>::hash_one'(s, k)",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1019-1021, doc: \"The key may be any borrowed form of the map's key type, but [`Hash`] and [`Eq`] on the borrowed form *must* match those for the key type.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "never panics",
+          "text": "never panics",
+          "given": ["Q.hash, Q.eq, K.borrow, S.build_hasher never panic"],
+          "source": "1.97.0 std/src/collections/hash/map.rs:1040, body: self.base.get(k), which hashes k and compares keys with the impls of Q and K",
+          "status": {
+            "observed": "from the body: hashbrown get returns None for an empty table, and otherwise hashes k with hash_one (build_hasher, Q::hash) and compares with Equivalent (Q::eq on K::borrow); the hasher's own write and finish are the residual clause"
+          }
+        },
+        {
+          "kind": "effects",
+          "text": "effects none",
+          "given": ["Q.hash, Q.eq, K.borrow, S.build_hasher effects none"],
+          "source": "1.97.0 std/src/collections/hash/map.rs:1040, body: self.base.get(k), which hashes k and compares keys with the impls of Q and K",
+          "status": {
+            "observed": "from the body: a lookup that reads the table and calls the four implementations"
+          }
+        },
+        {
+          "kind": "effects",
+          "text": "terminates",
+          "given": ["Q.hash, Q.eq, K.borrow, S.build_hasher terminate"],
+          "source": "1.97.0 std/src/collections/hash/map.rs:1040, body: self.base.get(k), which hashes k and compares keys with the impls of Q and K",
+          "status": {
+            "observed": "from the body: a probe over a finite table plus the four implementations"
+          }
         },
         {
           "kind": "unexpressed",
-          "text": "Never panics, has no effect and always returns, unless K's or Q's Hash or Eq panics, loops or has effects.",
+          "text": "The hasher that S::build_hasher returns runs inside the call too, through Q::hash: its write and finish are the impls of an associated type of S's bound, which no `given` item can name, so the three conditional promises above are stated without them.",
           "source": "1.97.0 std/src/collections/hash/map.rs:1040, body: self.base.get(k), which hashes k and compares keys with the impls of Q and K",
-          "reason": "promise conditional on a bound: no clause makes a promise depend on what an implementation does, a bound's or a default body that an implementation may override: `never panics`, `terminates` and the effect bounds are unconditional. Here: Hash::hash and Eq::eq run inside the call, so `effects none` and `never panics` would hold only for implementations that are pure"
+          "reason": "no condition on an associated type's implementation: a `given` item names a method of a bound of a generic parameter, and write and finish belong to S::Hasher, an associated type of that bound. Here: the hasher built by S runs inside the call"
         },
         {
           "kind": "unexpressed",
@@ -170,10 +203,18 @@
           "reason": "no identity of moved values: `==` is structural on values and `same` is identity of host references, which a value moved into or out of a container does not have. Here: so `result == v2` cannot tell which of two Ord-equal values came back"
         },
         {
-          "kind": "unexpressed",
-          "text": "Never panics and always returns, unless T's Ord::max, PartialOrd::lt or Ord::cmp panics or loops.",
+          "kind": "never panics",
+          "text": "never panics",
+          "given": ["T.max never panic"],
           "source": "1.97.0 core/src/cmp.rs:1682, body: v1.max(v2)",
-          "reason": "promise conditional on a bound: no clause makes a promise depend on what a bound's implementation does: `never panics` and `terminates` are unconditional"
+          "status": { "observed": "from the body: one call through the bound, T::max" }
+        },
+        {
+          "kind": "effects",
+          "text": "terminates",
+          "given": ["T.max terminate"],
+          "source": "1.97.0 core/src/cmp.rs:1682, body: v1.max(v2)",
+          "status": { "observed": "from the body: one call through the bound, T::max" }
         },
         {
           "kind": "unexpressed",
@@ -222,10 +263,18 @@
           "reason": "no identity of moved values: `==` is structural on values and `same` is identity of host references, which a value moved into or out of a container does not have. Here: so `result == v1` cannot tell which of two Ord-equal values came back"
         },
         {
-          "kind": "unexpressed",
-          "text": "Never panics and always returns, unless T's Ord::min, PartialOrd::lt or Ord::cmp panics or loops.",
+          "kind": "never panics",
+          "text": "never panics",
+          "given": ["T.min never panic"],
           "source": "1.97.0 core/src/cmp.rs:1575, body: v1.min(v2)",
-          "reason": "promise conditional on a bound: no clause makes a promise depend on what a bound's implementation does: `never panics` and `terminates` are unconditional"
+          "status": { "observed": "from the body: one call through the bound, T::min" }
+        },
+        {
+          "kind": "effects",
+          "text": "terminates",
+          "given": ["T.min terminate"],
+          "source": "1.97.0 core/src/cmp.rs:1575, body: v1.min(v2)",
+          "status": { "observed": "from the body: one call through the bound, T::min" }
         },
         {
           "kind": "unexpressed",
@@ -1115,7 +1164,7 @@
           "kind": "unexpressed",
           "text": "Hash::hash, Eq::eq and BuildHasher::build_hasher run inside the call, so it never panics and always returns only if they do.",
           "source": "1.97.0 std/src/collections/hash/map.rs:1334, body: self.base.insert(k, v)",
-          "reason": "promise conditional on a bound: no clause makes a promise depend on what a bound's implementation does: `never panics` and `terminates` are unconditional"
+          "reason": "no sufficient condition: the text names what the call needs of K's Hash and Eq and of S's build_hasher, which is necessary for `never panics` and for returning but not sufficient, so no `given` states it. Here: the call also panics when growing the table overflows, which no clause names, and S's hasher runs too"
         }
       ]
     },
@@ -1165,7 +1214,7 @@
           "kind": "unexpressed",
           "text": "Hash::hash, Eq::eq and BuildHasher::build_hasher run inside the call, so it never panics and always returns only if they do.",
           "source": "1.97.0 std/src/collections/hash/map.rs:1014, body: map_entry(self.base.rustc_entry(key))",
-          "reason": "promise conditional on a bound: no clause makes a promise depend on what a bound's implementation does: `never panics` and `terminates` are unconditional"
+          "reason": "no sufficient condition: the text names what the call needs of K's Hash and Eq and of S's build_hasher, which is necessary for `never panics` and for returning but not sufficient, so no `given` states it. Here: the call also panics when growing the table overflows, which no clause names, and S's hasher runs too"
         }
       ]
     },
@@ -1342,10 +1391,16 @@
           "status": { "observed": "from the impl blocks" }
         },
         {
+          "kind": "law",
+          "text": "law key_hash_agrees : all k1 : K : all k2 : K : all s : S : (k1 == k2) implies ('<S as std::hash::BuildHasher>::hash_one'(s, k1) == '<S as std::hash::BuildHasher>::hash_one'(s, k2))",
+          "source": "1.97.0 std/src/collections/hash/map.rs:43-45, doc: \"k1 == k2 -> hash(k1) == hash(k2)\"; \"if two keys are equal, their hashes must be equal.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
           "kind": "unexpressed",
-          "text": "Keys must satisfy k1 == k2 implies hash(k1) == hash(k2), and a key must not change, while it is in the map, in a way that changes its hash or its equality; otherwise the behaviour is unspecified: panics, wrong results, aborts, leaks and non-termination, but never undefined behaviour.",
+          "text": "A key must not change, while it is in the map, in a way that changes its hash or its equality; otherwise the behaviour is unspecified: panics, wrong results, aborts, leaks and non-termination, but never undefined behaviour.",
           "source": "1.97.0 std/src/collections/hash/map.rs:54-57, doc: \"The behavior resulting from either logic error is not specified, but will be encapsulated to the `HashMap` that observed the logic error and not result in undefined behavior. This could include panics, incorrect results, aborts, memory leaks, and non-termination.\"",
-          "reason": "requirement on bound implementations: a requirement on the implementations of a bound, not on values: a clause cannot name what a bound's methods must satisfy at a call site. Here: a requirement on the Hash and Eq implementations of K, and an effect on a key by code outside the call"
+          "reason": "no frame condition on a value held by a collection: a key changed through interior mutability while stored is an effect of code outside any call, on a value the map holds, and the outcome (any logic error, never undefined behaviour) is not a promise about a result. Here: a key stored in the map"
         },
         {
           "kind": "unexpressed",
@@ -1386,10 +1441,16 @@
           "status": { "observed": "from the impl blocks" }
         },
         {
+          "kind": "law",
+          "text": "law element_hash_agrees : all k1 : T : all k2 : T : all s : S : (k1 == k2) implies ('<S as std::hash::BuildHasher>::hash_one'(s, k1) == '<S as std::hash::BuildHasher>::hash_one'(s, k2))",
+          "source": "1.97.0 std/src/collections/hash/set.rs:23-25, doc: \"k1 == k2 -> hash(k1) == hash(k2)\"; \"if two keys are equal, their hashes must be equal.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
           "kind": "unexpressed",
-          "text": "Elements must satisfy k1 == k2 implies hash(k1) == hash(k2), and an element must not change, while it is in the set, in a way that changes its hash or its equality; otherwise the behaviour is unspecified: panics, wrong results, aborts, leaks and non-termination, but never undefined behaviour.",
+          "text": "An element must not change, while it is in the set, in a way that changes its hash or its equality; otherwise the behaviour is unspecified: panics, wrong results, aborts, leaks and non-termination, but never undefined behaviour.",
           "source": "1.97.0 std/src/collections/hash/set.rs:34-37, doc: \"The behavior resulting from either logic error is not specified, but will be encapsulated to the `HashSet` that observed the logic error and not result in undefined behavior. This could include panics, incorrect results, aborts, memory leaks, and non-termination.\"",
-          "reason": "requirement on bound implementations: a requirement on the implementations of a bound, not on values: a clause cannot name what a bound's methods must satisfy at a call site. Here: a requirement on the Hash and Eq implementations of T, and an effect on an element by code outside the call"
+          "reason": "no frame condition on a value held by a collection: an element changed through interior mutability while stored is an effect of code outside any call, on a value the set holds, and the outcome (any logic error, never undefined behaviour) is not a promise about a result. Here: an element stored in the set"
         }
       ]
     },
@@ -1926,7 +1987,7 @@
           "kind": "unexpressed",
           "text": "What next does, including whether it panics or loops, is the implementation's.",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:48, doc: \"Advances the iterator and returns the next value.\"",
-          "reason": "promise conditional on a bound: no clause makes a promise depend on what a bound's implementation does: `never panics` and `terminates` are unconditional"
+          "reason": "no promise: the trait leaves what `next` does, including whether it panics or loops, to each implementation, so there is nothing to state and nothing a `given` could qualify"
         }
       ]
     },
@@ -1942,14 +2003,16 @@
         {
           "kind": "ensure",
           "text": "ensure counted : result == old(count(self))",
+          "given": ["build overflow_checks"],
           "source": "1.97.0 core/src/iter/traits/iterator.rs:195-196, doc: \"This method will call [`next`] repeatedly until [`None`] is encountered, returning the number of times it saw [`Some`].\"",
           "status": { "assumed": "documentation" }
         },
         {
-          "kind": "unexpressed",
-          "text": "Counting more than usize::MAX elements either gives a wrong result or panics, and with overflow checks enabled a panic is guaranteed.",
-          "source": "1.97.0 core/src/iter/traits/iterator.rs:205-206, doc: \"If overflow checks are enabled, a panic is guaranteed.\"",
-          "reason": "no build profile: a promise that holds only when overflow checks or debug assertions are on has no clause. Here: `ensure counted` would then fail rather than the call panicking in a release build"
+          "kind": "panics",
+          "text": "fails panic when old(count(self)) > 18446744073709551615",
+          "given": ["build overflow_checks"],
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:205-206, doc: \"If overflow checks are enabled, a panic is guaranteed.\"; the default body adds with #[rustc_inherit_overflow_checks] (iterator.rs:231)",
+          "status": { "assumed": "documentation" }
         },
         {
           "kind": "unexpressed",
@@ -1984,13 +2047,16 @@
           "kind": "unexpressed",
           "text": "The returned iterator might panic if the index would overflow a usize, and with overflow checks enabled a panic is guaranteed.",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:1024-1025, doc: \"The returned iterator might panic if the to-be-returned index would overflow a [`usize`].\"",
-          "reason": "no build profile: a promise that holds only when overflow checks or debug assertions are on has no clause"
+          "reason": "no promise about a result's later calls: the panic is that of `next` on the returned Enumerate, a call of another subject, so `fails` on `enumerate` would be false, and the iterator has no subject of its own to state it on. Here: the index overflowing usize, with overflow checks a panic is guaranteed"
         },
         {
-          "kind": "unexpressed",
-          "text": "Creating the adapter calls nothing on the iterator and has no effect of its own, unless an implementation overrides enumerate: the default body is `Enumerate::new(self)`.",
+          "kind": "effects",
+          "text": "effects none",
+          "given": ["default"],
           "source": "1.97.0 core/src/iter/traits/iterator.rs:1048, body: Enumerate::new(self)",
-          "reason": "promise conditional on a bound: no clause makes a promise depend on what an implementation does, a bound's or a default body that an implementation may override: `never panics`, `terminates` and the effect bounds are unconditional. Here: the body is a provided method that an implementation of Iterator may override, so `effects none` would hold only for implementations that do not"
+          "status": {
+            "observed": "from the default body: Enumerate::new(self), a struct literal, a constructor that calls nothing on the iterator or the closure"
+          }
         }
       ]
     },
@@ -2016,10 +2082,13 @@
           "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
         },
         {
-          "kind": "unexpressed",
-          "text": "Creating the adapter calls nothing on the iterator and has no effect of its own, unless an implementation overrides skip: the default body is `Skip::new(self, n)`.",
+          "kind": "effects",
+          "text": "effects none",
+          "given": ["default"],
           "source": "1.97.0 core/src/iter/traits/iterator.rs:1379, body: Skip::new(self, n)",
-          "reason": "promise conditional on a bound: no clause makes a promise depend on what an implementation does, a bound's or a default body that an implementation may override: `never panics`, `terminates` and the effect bounds are unconditional. Here: the body is a provided method that an implementation of Iterator may override, so `effects none` would hold only for implementations that do not"
+          "status": {
+            "observed": "from the default body: Skip::new(self, n), a struct literal, a constructor that calls nothing on the iterator or the closure"
+          }
         }
       ]
     },
@@ -2045,10 +2114,13 @@
           "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
         },
         {
-          "kind": "unexpressed",
-          "text": "Creating the adapter calls nothing on the iterator and has no effect of its own, unless an implementation overrides take: the default body is `Take::new(self, n)`.",
+          "kind": "effects",
+          "text": "effects none",
+          "given": ["default"],
           "source": "1.97.0 core/src/iter/traits/iterator.rs:1451, body: Take::new(self, n)",
-          "reason": "promise conditional on a bound: no clause makes a promise depend on what an implementation does, a bound's or a default body that an implementation may override: `never panics`, `terminates` and the effect bounds are unconditional. Here: the body is a provided method that an implementation of Iterator may override, so `effects none` would hold only for implementations that do not"
+          "status": {
+            "observed": "from the default body: Take::new(self, n), a struct literal, a constructor that calls nothing on the iterator or the closure"
+          }
         }
       ]
     },
@@ -2078,10 +2150,13 @@
           "status": { "assumed": "documentation" }
         },
         {
-          "kind": "unexpressed",
-          "text": "Creating the adapter turns other into an iterator with IntoIterator::into_iter, whose impl is the caller's, and builds the adapter; it calls nothing on either iterator, unless an implementation overrides chain.",
+          "kind": "effects",
+          "text": "effects none",
+          "given": ["default", "U.into_iter effects none"],
           "source": "1.97.0 core/src/iter/traits/iterator.rs:515, body: Chain::new(self, other.into_iter())",
-          "reason": "promise conditional on a bound: no clause makes a promise depend on what an implementation does, a bound's or a default body that an implementation may override: `never panics`, `terminates` and the effect bounds are unconditional. Here: the body is a provided method that an implementation of Iterator may override, and it calls the impl-dependent into_iter"
+          "status": {
+            "observed": "from the default body: Chain::new(self, other.into_iter()), one call of U::into_iter and a struct literal"
+          }
         }
       ]
     },
@@ -2110,10 +2185,13 @@
           "status": { "assumed": "documentation" }
         },
         {
-          "kind": "unexpressed",
-          "text": "Creating the adapter turns other into an iterator with IntoIterator::into_iter, whose impl is the caller's, and builds the adapter; it calls nothing on either iterator, unless an implementation overrides zip.",
+          "kind": "effects",
+          "text": "effects none",
+          "given": ["default", "U.into_iter effects none"],
           "source": "1.97.0 core/src/iter/traits/iterator.rs:634, body: Zip::new(self, other.into_iter())",
-          "reason": "promise conditional on a bound: no clause makes a promise depend on what an implementation does, a bound's or a default body that an implementation may override: `never panics`, `terminates` and the effect bounds are unconditional. Here: the body is a provided method that an implementation of Iterator may override, and it calls the impl-dependent into_iter"
+          "status": {
+            "observed": "from the default body: Zip::new(self, other.into_iter()), one call of U::into_iter and a constructor that calls nothing on the iterators"
+          }
         }
       ]
     },
@@ -2150,10 +2228,13 @@
           "reason": "no order of calls: no clause states the order or the number of times a callback, a hasher or a formatter is called inside one call"
         },
         {
-          "kind": "unexpressed",
-          "text": "Creating the adapter calls nothing on the iterator or f and has no effect of its own, unless an implementation overrides map: the default body is `Map::new(self, f)`.",
+          "kind": "effects",
+          "text": "effects none",
+          "given": ["default"],
           "source": "1.97.0 core/src/iter/traits/iterator.rs:836, body: Map::new(self, f)",
-          "reason": "promise conditional on a bound: no clause makes a promise depend on what an implementation does, a bound's or a default body that an implementation may override: `never panics`, `terminates` and the effect bounds are unconditional. Here: the body is a provided method that an implementation of Iterator may override, so `effects none` would hold only for implementations that do not"
+          "status": {
+            "observed": "from the default body: Map::new(self, f), a struct literal, a constructor that calls nothing on the iterator or the closure"
+          }
         }
       ]
     },
@@ -2189,10 +2270,13 @@
           "reason": "no order of calls: no clause states the order or the number of times a callback, a hasher or a formatter is called inside one call"
         },
         {
-          "kind": "unexpressed",
-          "text": "Creating the adapter calls nothing on the iterator or predicate and has no effect of its own, unless an implementation overrides filter: the default body is `Filter::new(self, predicate)`.",
+          "kind": "effects",
+          "text": "effects none",
+          "given": ["default"],
           "source": "1.97.0 core/src/iter/traits/iterator.rs:957, body: Filter::new(self, predicate)",
-          "reason": "promise conditional on a bound: no clause makes a promise depend on what an implementation does, a bound's or a default body that an implementation may override: `never panics`, `terminates` and the effect bounds are unconditional. Here: the body is a provided method that an implementation of Iterator may override, so `effects none` would hold only for implementations that do not"
+          "status": {
+            "observed": "from the default body: Filter::new(self, predicate), a struct literal, a constructor that calls nothing on the iterator or the closure"
+          }
         }
       ]
     },
@@ -2228,10 +2312,13 @@
           "reason": "no order of calls: no clause states the order or the number of times a callback, a hasher or a formatter is called inside one call"
         },
         {
-          "kind": "unexpressed",
-          "text": "Creating the adapter calls nothing on the iterator or predicate and has no effect of its own, unless an implementation overrides take_while: the default body is `TakeWhile::new(self, predicate)`.",
+          "kind": "effects",
+          "text": "effects none",
+          "given": ["default"],
           "source": "1.97.0 core/src/iter/traits/iterator.rs:1263, body: TakeWhile::new(self, predicate)",
-          "reason": "promise conditional on a bound: no clause makes a promise depend on what an implementation does, a bound's or a default body that an implementation may override: `never panics`, `terminates` and the effect bounds are unconditional. Here: the body is a provided method that an implementation of Iterator may override, so `effects none` would hold only for implementations that do not"
+          "status": {
+            "observed": "from the default body: TakeWhile::new(self, predicate), a struct literal, a constructor that calls nothing on the iterator or the closure"
+          }
         }
       ]
     },
@@ -2256,10 +2343,13 @@
           "reason": "no value of a callback result: a clause cannot call a function argument, which need not be pure, so it cannot relate a result to what the callback returns. Here: so no count of the result can be stated"
         },
         {
-          "kind": "unexpressed",
-          "text": "Creating the adapter calls nothing on the iterator or f and has no effect of its own, unless an implementation overrides flat_map: the default body is `FlatMap::new(self, f)`.",
+          "kind": "effects",
+          "text": "effects none",
+          "given": ["default", "Self.map effects none"],
           "source": "1.97.0 core/src/iter/traits/iterator.rs:1539, body: FlatMap::new(self, f)",
-          "reason": "promise conditional on a bound: no clause makes a promise depend on what an implementation does, a bound's or a default body that an implementation may override: `never panics`, `terminates` and the effect bounds are unconditional. Here: the body is a provided method that an implementation of Iterator may override, so `effects none` would hold only for implementations that do not"
+          "status": {
+            "observed": "from the default body: FlatMap::new(self, f), which is FlattenCompat::new(iter.map(f)), so it calls Self::map, an overridable provided method, and nothing else"
+          }
         }
       ]
     },
@@ -2289,10 +2379,13 @@
           "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
         },
         {
-          "kind": "unexpressed",
-          "text": "Creating the adapter calls nothing on the iterator and has no effect of its own, unless an implementation overrides copied: the default body is `Copied::new(self)`.",
+          "kind": "effects",
+          "text": "effects none",
+          "given": ["default"],
           "source": "1.97.0 core/src/iter/traits/iterator.rs:3516, body: Copied::new(self)",
-          "reason": "promise conditional on a bound: no clause makes a promise depend on what an implementation does, a bound's or a default body that an implementation may override: `never panics`, `terminates` and the effect bounds are unconditional. Here: the body is a provided method that an implementation of Iterator may override, so `effects none` would hold only for implementations that do not"
+          "status": {
+            "observed": "from the default body: Copied::new(self), a struct literal, a constructor that calls nothing on the iterator or the closure"
+          }
         }
       ]
     },
@@ -2322,10 +2415,22 @@
           "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
         },
         {
-          "kind": "unexpressed",
-          "text": "Whether it panics or loops depends on Self::next and on B's from_iter.",
+          "kind": "never panics",
+          "text": "never panics",
+          "given": ["default", "B.from_iter, Self.next never panic"],
           "source": "1.97.0 core/src/iter/traits/iterator.rs:2090, body: FromIterator::from_iter(self)",
-          "reason": "promise conditional on a bound: no clause makes a promise depend on what a bound's implementation does: `never panics` and `terminates` are unconditional"
+          "status": {
+            "observed": "from the default body: FromIterator::from_iter(self), whose impl drives Self::next"
+          }
+        },
+        {
+          "kind": "effects",
+          "text": "terminates",
+          "given": ["default", "B.from_iter, Self.next terminate"],
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:2090, body: FromIterator::from_iter(self)",
+          "status": {
+            "observed": "from the default body: FromIterator::from_iter(self), whose impl drives Self::next"
+          }
         }
       ]
     },
@@ -2380,10 +2485,27 @@
           "reason": "no identity of moved values: `==` is structural on values and `same` is identity of host references, which a value moved into or out of a container does not have. Here: so `result == other` cannot tell which of two Ord-equal values came back"
         },
         {
-          "kind": "unexpressed",
-          "text": "Never panics, has no effect but its comparison and always returns, unless Self's PartialOrd::lt or Ord::cmp panics, loops or has effects, or an implementation overrides max.",
+          "kind": "never panics",
+          "text": "never panics",
+          "given": ["default", "Self.lt, Self.cmp never panic"],
           "source": "1.97.0 core/src/cmp.rs:1038, body: if other < self { self } else { other }",
-          "reason": "promise conditional on a bound: no clause makes a promise depend on what an implementation does, a bound's or a default body that an implementation may override: `never panics`, `terminates` and the effect bounds are unconditional. Here: the body is a default, `if other < self { self } else { other }`, which calls the impl's lt, and an implementation may replace it"
+          "status": {
+            "observed": "from the default body: `other < self`, a call of PartialOrd::lt, which an Ord type defines through cmp"
+          }
+        },
+        {
+          "kind": "effects",
+          "text": "effects none",
+          "given": ["default", "Self.lt, Self.cmp effects none"],
+          "source": "1.97.0 core/src/cmp.rs:1038, body: if other < self { self } else { other }",
+          "status": { "observed": "from the default body: a comparison and a move" }
+        },
+        {
+          "kind": "effects",
+          "text": "terminates",
+          "given": ["default", "Self.lt, Self.cmp terminate"],
+          "source": "1.97.0 core/src/cmp.rs:1038, body: if other < self { self } else { other }",
+          "status": { "observed": "from the default body: a comparison and a move" }
         }
       ]
     },
@@ -2414,13 +2536,13 @@
           "kind": "unexpressed",
           "text": "For a Copy type, y.clone() is equivalent to *y.",
           "source": "1.97.0 core/src/clone.rs:83, doc: \"if `T: Copy`, `x: T`, and `y: &T`, then `let x = y.clone();` is equivalent to `let x = *y;`.\"",
-          "reason": "requirement on bound implementations: a requirement on the implementations of a bound, not on values: a clause cannot name what a bound's methods must satisfy at a call site. Here: it holds only for types that are also Copy, and a law cannot be limited to the types that implement another trait"
+          "reason": "no law limited to a second trait: a law is over the types that implement the subject's trait, and this one holds only for those that also implement Copy. Here: y.clone() equals *y for a Copy type"
         },
         {
           "kind": "unexpressed",
           "text": "A clone method may run arbitrary code, so whether it panics, loops or has effects is the type's.",
           "source": "1.97.0 core/src/clone.rs:56-57, doc: \"the `clone` method you provide may run arbitrary code.\"",
-          "reason": "promise conditional on a bound: no clause makes a promise depend on what a bound's implementation does: `never panics` and `terminates` are unconditional"
+          "reason": "no promise: the trait leaves whether `clone` panics, loops or has effects to each type, so there is nothing to state and nothing a `given` could qualify"
         }
       ]
     },
@@ -2453,7 +2575,7 @@
           "kind": "unexpressed",
           "text": "The trait must not fail: From is for perfect conversions, and a conversion that can fail is TryFrom's. An impl is still free to panic, and impls that allocate, such as String::from and Vec::from, panic or abort when memory runs out.",
           "source": "1.97.0 core/src/convert/mod.rs:480, doc: \"**Note: This trait must not fail**. The `From` trait is intended for perfect conversions.\"",
-          "reason": "promise conditional on a bound: no clause makes a promise depend on what an implementation does, a bound's or a default body that an implementation may override: `never panics`, `terminates` and the effect bounds are unconditional. Here: the documentation asks every impl not to fail, as Deref's does, and impls that allocate exist, so `never panics` cannot be stated for the method"
+          "reason": "no promise: the documentation asks every impl not to fail, as Deref's does, but allows impls that allocate to panic or abort, so `never panics` cannot be stated for the method and no `given` names a condition that makes it hold"
         }
       ]
     },
@@ -2579,9 +2701,25 @@
           "kind": "unexpressed",
           "text": "The three laws are stated for Rhs = Self, as their quoted paths say; for two types A and B they apply only where the impls A: PartialEq<B>, B: PartialEq<A> and A: PartialEq<C> exist, and must also hold across longer chains of types. Implementations of PartialOrd and Ord must be consistent with PartialEq.",
           "source": "1.97.0 core/src/cmp.rs:58-59, doc: \"If [`PartialOrd`] or [`Ord`] are also implemented for `Self` and `Rhs`, their methods must also be consistent with `PartialEq`\"",
-          "reason": "requirement on bound implementations: a requirement on the implementations of a bound, not on values: a clause cannot name what a bound's methods must satisfy at a call site. Here: a law quantifies over one type, and the relation among several types' impls is a property of the impls that exist"
+          "reason": "no law across several types' impls: a law quantifies over the values of one type, and the relation among the impls of A, B and C (A: PartialEq<B>, B: PartialEq<A>, A: PartialEq<C>) is a property of the impls that exist, as is consistency with PartialOrd and Ord"
         }
       ]
+    },
+    {
+      "kind": "function",
+      "name": "std::cmp::PartialEq::eq",
+      "visible": "public",
+      "generics": [
+        { "name": "Self", "bounds": ["std::cmp::PartialEq<Rhs>"] },
+        { "name": "Rhs", "bounds": ["?Sized"] }
+      ],
+      "trait": "std::cmp::PartialEq<Rhs>",
+      "params": [
+        { "name": "self", "type": "ref<Self>", "access": { "rights": "read", "guarantee": "readers" } },
+        { "name": "other", "type": "ref<Rhs>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "bool" },
+      "clauses": []
     },
     {
       "kind": "trait",
@@ -2636,15 +2774,62 @@
       ]
     },
     {
+      "kind": "function",
+      "name": "std::cmp::Ord::cmp",
+      "visible": "public",
+      "generics": [{ "name": "Self", "bounds": ["std::cmp::Ord"] }],
+      "trait": "std::cmp::Ord",
+      "params": [
+        { "name": "self", "type": "ref<Self>", "access": { "rights": "read", "guarantee": "readers" } },
+        { "name": "other", "type": "ref<Self>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "std::cmp::Ordering" },
+      "clauses": []
+    },
+    {
+      "kind": "function",
+      "name": "std::cmp::Ord::min",
+      "visible": "public",
+      "generics": [{ "name": "Self", "bounds": ["std::cmp::Ord"] }],
+      "trait": "std::cmp::Ord",
+      "params": [{ "name": "self", "type": "Self" }, { "name": "other", "type": "Self" }],
+      "result": { "type": "Self" },
+      "clauses": []
+    },
+    {
+      "kind": "trait",
+      "name": "std::cmp::PartialOrd",
+      "visible": "public",
+      "generics": [{ "name": "Rhs", "bounds": ["?Sized"] }],
+      "bounds": ["std::cmp::PartialEq<Rhs>"],
+      "clauses": []
+    },
+    {
+      "kind": "function",
+      "name": "std::cmp::PartialOrd::lt",
+      "visible": "public",
+      "generics": [
+        { "name": "Self", "bounds": ["std::cmp::PartialOrd<Rhs>"] },
+        { "name": "Rhs", "bounds": ["?Sized"] }
+      ],
+      "trait": "std::cmp::PartialOrd<Rhs>",
+      "params": [
+        { "name": "self", "type": "ref<Self>", "access": { "rights": "read", "guarantee": "readers" } },
+        { "name": "other", "type": "ref<Rhs>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "bool" },
+      "clauses": []
+    },
+    {
       "kind": "trait",
       "name": "std::hash::Hash",
       "visible": "public",
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "When a type implements both Hash and Eq, k1 == k2 implies hash(k1) == hash(k2): if two keys are equal, their hashes must be equal; HashMap and HashSet rely on it, and a violation is a logic error that unsafe code must not rely on being absent.",
+          "kind": "law",
+          "text": "law eq_hash : all a : Self : all b : Self : all s : 'std::hash::RandomState' : (a == b) implies ('<std::hash::RandomState as std::hash::BuildHasher>::hash_one'(s, a) == '<std::hash::RandomState as std::hash::BuildHasher>::hash_one'(s, b))",
           "source": "1.97.0 core/src/hash/mod.rs:144, doc: \"In other words, if two keys are equal, their hashes must also be equal.\"",
-          "reason": "requirement on bound implementations: a requirement on the implementations of a bound, not on values: a clause cannot name what a bound's methods must satisfy at a call site. Here: the hash of a value is the state a Hasher reaches after hash feeds it, not a value a clause can name"
+          "status": { "assumed": "documentation" }
         },
         {
           "kind": "unexpressed",
@@ -2653,6 +2838,21 @@
           "reason": "no host state: no slot or expression names state a host object holds beyond its value: a capacity, a hasher's or formatter's state, an entry's hidden map. Here: the sequence of writes is a trace on the hasher"
         }
       ]
+    },
+    {
+      "kind": "function",
+      "name": "std::hash::Hash::hash",
+      "visible": "public",
+      "generics": [
+        { "name": "Self", "bounds": ["std::hash::Hash"] },
+        { "name": "H", "bounds": ["std::hash::Hasher"] }
+      ],
+      "trait": "std::hash::Hash",
+      "params": [
+        { "name": "self", "type": "ref<Self>", "access": { "rights": "read", "guarantee": "readers" } },
+        { "name": "state", "type": "ref<H>", "access": { "rights": "write", "guarantee": "exclusive" } }
+      ],
+      "clauses": []
     },
     {
       "views": [{ "name": "hash", "host": "'std::hash::Hasher::finish'" }],
@@ -2775,7 +2975,7 @@
           "kind": "unexpressed",
           "text": "deref should never unexpectedly fail: deref coercion inserts calls to it implicitly, so it should be infallible, though it may panic when the type is misused through programmer error; unsafe code should not rely on infallibility.",
           "source": "1.97.0 core/src/ops/deref.rs:87, doc: \"**This trait's method should never unexpectedly fail**.\"",
-          "reason": "promise conditional on a bound: no clause makes a promise depend on what an implementation does, a bound's or a default body that an implementation may override: `never panics`, `terminates` and the effect bounds are unconditional. Here: the documentation asks every impl not to fail unexpectedly, as From's does, and allows a panic on programmer error, so `never panics` cannot be stated for the method"
+          "reason": "no promise: the documentation asks every impl not to fail unexpectedly, as From's does, and allows a panic on programmer error, so `never panics` cannot be stated for the method and no `given` names a condition that makes it hold"
         },
         {
           "kind": "unexpressed",
@@ -2795,7 +2995,7 @@
           "kind": "unexpressed",
           "text": "deref_mut should never unexpectedly fail, as for deref: it is inserted implicitly by mutable deref coercion.",
           "source": "1.97.0 core/src/ops/deref.rs:214, doc: \"**This trait's method should never unexpectedly fail**.\"",
-          "reason": "promise conditional on a bound: no clause makes a promise depend on what a bound's implementation does: `never panics` and `terminates` are unconditional"
+          "reason": "no promise: the documentation asks every impl not to fail unexpectedly, as Deref's does, so `never panics` cannot be stated for the method and no `given` names a condition that makes it hold"
         }
       ]
     },

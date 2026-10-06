@@ -2,7 +2,7 @@
 
 `libraries/std-1.97.0.constraints.json` has a subject for each of the 105 external items of strsim, fnv and the golden
 crate (49 functions, 25 types, 19 traits, 11 macros, 1 const), and one more, `std::cmp::Ordering`, that the laws need
-(254 subjects: 106 entries for the corpora's items, `OccupiedEntry` for a view, and 147 impls and impl methods of B1). `bare-rust libcheck` passes for all three: no item missing, schema ok, every clause's text well formed,
+(260 subjects: 106 entries for the corpora's items, `OccupiedEntry` for a view, 147 impls and impl methods of B1, and 5 trait methods and one trait that B2's `given` items name: `Hash::hash`, `PartialEq::eq`, `PartialOrd` with `lt`, `Ord::cmp`, `Ord::min`). `bare-rust libcheck` passes for all three: no item missing, schema ok, every clause's text well formed,
 0 signatures mismatched. Strict library coverage is the default of `bare-rust check` (opt out with
 `--allow-missing-libraries`) and is asserted in `tests/corpora.rs`. The counts below are the output of
 `bare-rust libstats libraries/std-1.97.0.constraints.json`, which reads the file and compiles its signatures.
@@ -11,26 +11,28 @@ crate (49 functions, 25 types, 19 traits, 11 macros, 1 const), and one more, `st
 
 | Entries | Count | | Clauses | Stated | `unexpressed` |
 | --- | ---: | --- | --- | ---: | ---: |
-| function (22 are trait methods) | 67 | | `ensure` | 65 | |
+| function (27 are trait methods) | 72 | | `ensure` | 65 | |
 | type | 27 | | `implements` | 140 | |
-| trait | 19 | | `effects` | 14 | |
+| trait | 20 | | `effects` | 31 | |
 | macro | 11 | | `result must be used` | 18 | |
-| const | 1 | | `never panics` | 13 | |
-| impl | 129 | | `law` | 9 | |
-| | | | `fails panic`, `fails` | 9, 1 | |
+| const | 1 | | `never panics` | 18 | |
+| impl | 129 | | `law` | 14 | |
+| | | | `fails panic`, `fails` | 10, 1 | |
 | | | | `hold`, `derive`, `callback` | 5, 6, 3 | |
 | | | | `budget`, `layout`, `invariant`, `on failure` | 2, 1, 1, 1 | |
-| | | | `unexpressed` | | 138 |
+| | | | `unexpressed` | | 121 |
 
-426 clauses in all: 288 stated and 138 `unexpressed`, on 240 subjects. B1 (step 4 of `proposal/language-gaps.md` § 6)
-took `unexpressed` from 175 to 138 and added 129 impl subjects, each compiled against the real std. Stated clauses by
-status: documentation 64, observed 183, `#[must_use]` lifted 26 (counted as lifted), hand-written 15.
+437 clauses in all: 316 stated and 121 `unexpressed`, on 240 subjects. B1 (step 4 of `proposal/language-gaps.md` § 6)
+took `unexpressed` from 175 to 138 and added 129 impl subjects, each compiled against the real std; B2 took it from 138 to 121.
+24 of the stated clauses are conditional, qualified by `given` (on 16 subjects): 15 on a bound's implementations, 15 on the
+default body, 2 on a build setting. Stated clauses by
+status: documentation 70, observed 205, `#[must_use]` lifted 26 (counted as lifted), hand-written 15.
 
-**Signatures**, compiled against rustc 1.97.0: 245 checked, 5 path-resolved only (`PartialEq`, `From`, `TryFrom`,
+**Signatures**, compiled against rustc 1.97.0: 250 checked, 6 path-resolved only (`PartialEq`, `PartialOrd`, `From`, `TryFrom`,
 `Index`, `IndexMut`: a trait with generics), 4 unchecked (the bang macros `assert_eq!`, `panic!`, `vec!`, `write!`),
-0 mismatched. Of 174 type slots, 167 map to the type language (96%) and 7 are host text. Slices are no longer host text (below).
+0 mismatched. Of 188 type slots, 181 map to the type language (96%) and 7 are host text. Slices are no longer host text (below).
 
-## What the language lacked: the `unexpressed` promises (138)
+## What the language lacked: the `unexpressed` promises (121)
 
 Each reason in the file starts with its label. Class A took the file from 199 to 175; B1 (traits, implementations and
 associated types) from 175 to 138. Of B1's 52, 38 are closed outright and 14 stay under corrected labels; 6 of the
@@ -43,9 +45,38 @@ host-state ones stay (the vacant half of `Entry::or_insert` is all that moved).
   (`is_char_boundary`); no sequence value +1 (`collect`'s Result and String impls); no drop +1 (`vec::IntoIter`).
 - **Host state (6)**, unchanged: `Entry::or_insert` (the map after a vacant insert), `Formatter`, `TryFromIntError`,
   `Display::fmt`, `Hasher::write`, `Hash`.
-- **Others, untouched.** Promise conditional on a bound 22; no const-ness 18; no sequence value 14; must-use on a type
-  14; what a function computes 8; no value of a callback result 7; no identity of moved values 6; no order of calls 6;
-  requirement on bound implementations 6; no drop 4; no positive effect 3; and the smaller labels.
+- **Others, untouched.** No const-ness 18; no sequence value 15; must-use on a type 14; what a function computes 8; no
+  value of a callback result 7; no identity of moved values 6; no order of calls 6; no drop 5; no positive effect 3; and
+  the smaller labels.
+
+## Class B2: `given`
+
+B2's 30 `unexpressed` clauses (*promise conditional on a bound* 22, *requirement on bound implementations* 6, *no build
+profile* 2) are now 13: 20 are stated, 10 stay under corrected labels, and 3 are new residuals. Every `given` of the 24
+conditional clauses is checked by `libcheck` (it names a parameter of the subject, a method of its bound, a profile
+setting, or `default`).
+
+- **Stated (20).** `HashMap::get`: two laws over `K`, `Q` and `S` (`borrow_eq`, `borrow_hash`) and `never panics`, `effects
+  none`, `terminates` given `Q.hash, Q.eq, K.borrow, S.build_hasher` (hashbrown's `get` hashes with `hash_one` and compares
+  with `Equivalent`); `cmp::max` and `min`: `never panics` and `terminates` given `T.max` or `T.min`; `Ord::max`: the same
+  three given `default` and `Self.lt, Self.cmp`; `Iterator::collect`: given `default` and `B.from_iter, Self.next`;
+  `enumerate`, `skip`, `take`, `map`, `filter`, `take_while`, `copied`: `effects none given default`; `chain` and `zip`
+  add `U.into_iter effects none`; `flat_map` adds `Self.map effects none`, because its default body calls `Iterator::map`,
+  which an implementation may override (the old text missed this); `Iterator::count`: `ensure counted` and `fails panic
+  when old(count(self)) > 18446744073709551615` given `build overflow_checks`; the requirement that `k1 == k2` implies
+  equal hashes is a `law` on `Hash`, `HashMap` and `HashSet` (stated through `BuildHasher::hash_one`).
+- **Stay, relabelled (10).** *No promise* 5 (`Iterator::next`, `Clone::clone`'s arbitrary code, `From::from`, `Deref`,
+  `DerefMut`: the documentation leaves the behaviour to impls or only asks them not to fail); *no sufficient condition* 2
+  (`HashMap::insert` and `entry`: the text names what the call needs of `Hash`, `Eq` and `build_hasher`, which is necessary
+  but not sufficient because the table can overflow when it grows); *no promise about a result's later calls* 1
+  (`enumerate`'s overflow panic is that of `next` on the result); *no law limited to a second trait* 1 (`Clone` and
+  `Copy`); *no law across several types' impls* 1 (`PartialEq`).
+- **New residuals (3).** *No condition on an associated type's implementation* 1 (`S::Hasher`'s `write` and `finish`
+  run inside `get`, and no `given` item names a method of an associated type); *no frame condition on a value held by a
+  collection* 2 (a key or element must not change while stored, in `HashMap` and `HashSet`).
+- **Unsure.** `Hash`'s law uses `RandomState`'s `hash_one`, which is one hasher where the documentation says any;
+  `HashMap::get`'s given list adds `K.borrow` and `S.build_hasher`, which the old text left out, from the body of hashbrown
+  0.17.1; `count`'s `ensure counted` is now conditional on overflow checks, which weakens it, as § 6.12 writes it.
 
 ## Class A: what moved
 

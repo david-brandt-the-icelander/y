@@ -185,7 +185,7 @@ fn the_library_file_is_valid_and_canonical() {
     }
     // the impls of B1, and the methods of those impls, are subjects of their own beside the entries for the external items
     let own = file["subjects"].as_array().unwrap().iter().filter(|s| s["kind"] != "impl" && s["impl"].is_null()).count();
-    assert_eq!(own, 107, "49 functions, 27 types, 19 traits, 11 macros and 1 const: the 105 external items, Ordering for the laws, and OccupiedEntry for a view");
+    assert_eq!(own, 113, "49 functions, 27 types, 19 traits, 11 macros and 1 const: the 105 external items, Ordering for the laws, and OccupiedEntry for a view; and for B2's `given` items the trait methods Hash::hash, PartialEq::eq, PartialOrd::lt, Ord::cmp, Ord::min and the trait PartialOrd");
 }
 
 #[test]
@@ -432,7 +432,7 @@ fn the_whole_file_compiles_against_the_real_std() {
     // what the checker cannot do is the bang macros, and a trait with generics is only found by its path
     assert_eq!(r.unchecked.keys().collect::<Vec<_>>(), vec!["macro"]);
     assert_eq!(r.unchecked["macro"].len(), 4, "{:?}", r.unchecked);
-    assert_eq!(r.resolved.len(), 5, "{:?}", r.resolved);
+    assert_eq!(r.resolved.len(), 6, "{:?}", r.resolved);
     assert_eq!(r.checked.len() + r.resolved.len() + r.unchecked_total(), file["subjects"].as_array().unwrap().len());
 }
 
@@ -575,7 +575,7 @@ fn libstats_counts_what_the_file_holds() {
     let (file, _) = std_file();
     let r = check_signatures(&file, &work("stats-sigs"), &target()).unwrap();
     let t = bare_rust::libstats::libstats(&file, Some(&r));
-    for want in ["library std 1.97.0 (254 subjects)", "function (22 are trait methods)", "unexpressed", "no sequence value", "path-resolved only: std::cmp::PartialEq", "type slots (174); 167 map to the type language and 7 are host text"] {
+    for want in ["library std 1.97.0 (260 subjects)", "function (27 are trait methods)", "unexpressed", "no sequence value", "path-resolved only: std::cmp::PartialEq", "type slots (188); 181 map to the type language and 7 are host text"] {
         assert!(t.contains(want), "{want}: {t}");
     }
     assert!(!t.contains("reasons carry no label"), "{t}");
@@ -854,7 +854,8 @@ fn the_default_body_is_named_by_a_trait_method_and_a_checkable_method_is_known_t
 fn libstats_counts_conditional_clauses_apart_and_the_profile_lists_the_build_settings() {
     let f = get_with_given();
     let t = bare_rust::libstats::libstats(&f, None);
-    assert!(t.contains("conditional clauses, qualified by `given` (3 on 1 subjects)"), "{t}");
+    // the three of `get` above, and the two `given T.max` clauses of the exemplar `cmp::max`
+    assert!(t.contains("conditional clauses, qualified by `given` (5 on 2 subjects)"), "{t}");
     assert!(t.contains("on a build setting") && t.contains("on a bound's implementations"), "{t}");
     let p: Value = serde_json::from_str(&fs::read_to_string(libraries().join("host-rust-1.97.0.json")).unwrap()).unwrap();
     let names: Vec<&str> = p["build"].as_array().unwrap().iter().map(|b| b["setting"].as_str().unwrap()).collect();
