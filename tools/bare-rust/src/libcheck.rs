@@ -2,7 +2,7 @@
 //! and its signatures are the real ones, by coercing the real `std` item to the function-pointer type printed from
 //! the entry's slots and compiling the lot in a scratch crate.
 use crate::cargo;
-use crate::clause::{lint, Scope};
+use crate::clause::{lint, lint_given, GivenCtx, Scope};
 use crate::externals::{self, Kind};
 use crate::json::canonical;
 use crate::types::{Lower, Ty};
@@ -132,6 +132,61 @@ fn is_host_path(p: &str) -> bool {
 /// Everything that is wrong with a library file's content: the schema, the rules the schema cannot say, and the
 /// canonical layout of `text`.
 pub fn validate(file: &Value, text: Option<&str>) -> Vec<String> {
+    validate_with(file, text, &crate::host::builds(None))
+}
+
+/// The clause kinds a `given` may qualify: the promises that depend on what an implementation does (language 6.12).
+const GIVEN_KINDS: [&str; 5] = ["never panics", "effects", "ensure", "fails", "panics"];
+
+/// A bound's methods the file knows, with those of its supertraits: the functions named `<trait>::m`. `None` when the
+/// file has no trait subject by that name, or no method of it, so that a method name cannot be checked.
+fn bound_methods(by_name: &BTreeMap<&str, &Value>, file: &Value, bound: &str, depth: usize) -> Option<BTreeSet<String>> {
+    let head = bound.split('<').next().unwrap_or("").trim();
+    let tr = by_name.get(head).filter(|t| t["kind"] == "trait")?;
+    let prefix = format!("{head}::");
+    let mut ms: BTreeSet<String> = file["subjects"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|s| s["kind"] == "function")
+        .filter_map(|s| s["name"].as_str()?.strip_prefix(&prefix).filter(|m| !m.contains("::")).map(str::to_string))
+        .collect();
+    if depth < 8 {
+        for sup in tr["bounds"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+            ms.extend(bound_methods(by_name, file, sup, depth + 1).unwrap_or_default());
+        }
+    }
+    (!ms.is_empty()).then_some(ms)
+}
+
+/// The generic type parameters of a subject, each with the methods of its bounds when every bound is known to the file.
+fn given_generics(sub: &Value, by_name: &BTreeMap<&str, &Value>, file: &Value) -> BTreeMap<String, Option<BTreeSet<String>>> {
+    let mut out = BTreeMap::new();
+    for g in sub["generics"].as_array().into_iter().flatten() {
+        let name = g["name"].as_str().unwrap_or("");
+        if name.starts_with('\'') {
+            continue;
+        }
+        let strs = |v: &Value| -> Vec<String> { v.as_array().into_iter().flatten().filter_map(Value::as_str).map(str::to_string).collect() };
+        let mut bounds: Vec<String> = strs(&g["bounds"]).into_iter().chain(strs(&g["where"])).collect();
+        for w in sub["where"].as_array().into_iter().flatten().filter(|w| w["for"].as_str() == Some(name)) {
+            bounds.extend(strs(&w["bounds"]));
+        }
+        bounds.retain(|b| !b.starts_with('\'') && !b.starts_with('?'));
+        let mut all = Some(BTreeSet::new());
+        for b in &bounds {
+            match (bound_methods(by_name, file, b, 0), all.as_mut()) {
+                (Some(ms), Some(a)) => a.extend(ms),
+                _ => all = None,
+            }
+        }
+        out.insert(name.to_string(), all.filter(|a| !a.is_empty()));
+    }
+    out
+}
+
+/// `validate`, with the build settings a `given build` may name taken from the host profile.
+pub fn validate_with(file: &Value, text: Option<&str>, builds: &BTreeSet<String>) -> Vec<String> {
     let mut errs = vec![];
     let schema: Value = serde_json::from_str(SCHEMA).expect("schema");
     match jsonschema::validator_for(&schema) {
@@ -275,6 +330,17 @@ pub fn validate(file: &Value, text: Option<&str>) -> Vec<String> {
                     errs.push(format!("{at}: clause {j}: `{t}` names a template that is not this derive's"));
                 }
             } else if k != "unexpressed" {
+                if !c["given"].is_null() {
+                    if !GIVEN_KINDS.contains(&k) {
+                        errs.push(format!("{at}: clause {j}: a `{k}` clause is not qualified by `given` (only {})", GIVEN_KINDS.join(", ")));
+                    }
+                    let items: Vec<&str> = c["given"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
+                    let ctx = GivenCtx { generics: given_generics(sub, &subject_by_name, file), has_self: matches!(kind, "trait" | "impl" | "type") || sub["impl"].is_string() || !sub["trait"].is_null(), trait_method: kind == "function" && (!sub["trait"].is_null() || sub["impl"].is_string()), builds };
+                    errs.extend(lint_given(&items, &ctx).into_iter().map(|e| format!("{at}: clause {j}: {e}")));
+                }
+                if t.split_whitespace().any(|w| w == "given") {
+                    errs.push(format!("{at}: clause {j}: `given` is the clause's `given` slot, not part of its text: `{t}`"));
+                }
                 errs.extend(lint(k, t, heads(k), &scope).into_iter().map(|e| format!("{at}: clause {j}: {e}")));
             }
         }
@@ -948,15 +1014,18 @@ pub fn libcheck(dir: &Path, libraries: &Path, work: &Path, target: &Path) -> R<L
     rep.library = Some(path);
     rep.subjects = file["subjects"].as_array().map_or(0, Vec::len);
     rep.missing = missing(&items, &file);
-    rep.invalid = validate(&file, Some(&text));
+    let hp = crate::host::host_path(libraries, file["host"].as_str().unwrap_or("rust"), &version);
+    let profile: Option<(String, Value)> = match fs::read_to_string(&hp) {
+        Ok(t) => Some((t.clone(), serde_json::from_str(&t).map_err(|e| format!("{}: {e}", hp.display()))?)),
+        Err(_) => None,
+    };
+    rep.invalid = validate_with(&file, Some(&text), &crate::host::builds(profile.as_ref().map(|p| &p.1)));
     if file["crate"].as_str() != Some(&format!("std {version}")) {
         rep.invalid.push(format!("crate is {:?}, but the toolchain is std {version}", file["crate"]));
     }
     rep.expanded = file["subjects"].as_array().into_iter().flatten().map(|s| crate::derive::expand(s).len()).sum();
-    let hp = crate::host::host_path(libraries, file["host"].as_str().unwrap_or("rust"), &version);
-    if let Ok(t) = fs::read_to_string(&hp) {
-        let p: Value = serde_json::from_str(&t).map_err(|e| format!("{}: {e}", hp.display()))?;
-        let (arms, errs) = crate::host::validate(&p, &file, Some(&t));
+    if let Some((t, p)) = &profile {
+        let (arms, errs) = crate::host::validate(p, &file, Some(t));
         rep.invalid.extend(errs);
         rep.host = Some((hp, arms));
     }

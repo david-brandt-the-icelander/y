@@ -186,6 +186,70 @@ pub fn lint(kind: &str, text: &str, heads: &[&str], scope: &Scope) -> Vec<String
     errs
 }
 
+/// What a `given` item may name, for one subject: the generics with the methods their bounds are known to have, the
+/// build settings the host profile lists, and whether the subject is a method of a trait (which has a default body).
+pub struct GivenCtx<'a> {
+    /// Each generic type parameter; `Some(methods)` when every bound of it is known to the file, `None` when a method cannot be checked.
+    pub generics: BTreeMap<String, Option<BTreeSet<String>>>,
+    /// `Self` of a trait, an impl or a type: a name that is not a generic.
+    pub has_self: bool,
+    pub trait_method: bool,
+    pub builds: &'a BTreeSet<String>,
+}
+
+/// The effects and promises a `given` item may state of the implementations it names (language 6.12).
+const GIVEN_PREDICATES: [&[&str]; 3] = [&["never", "panic"], &["terminate"], &["effects", "none"]];
+
+/// Everything wrong with the `given` items of one clause. An item is `default`, `build SETTING`, or `P.m, P.n never panic |
+/// terminate | effects none`: a bound's parameter, a method of that bound, and what its implementation promises.
+pub fn lint_given(items: &[&str], ctx: &GivenCtx) -> Vec<String> {
+    let mut errs = vec![];
+    for item in items {
+        let spaced = item.replace(',', " , ");
+        let w: Vec<&str> = spaced.split_whitespace().collect();
+        match w.as_slice() {
+            [] => errs.push("an empty `given` item".to_string()),
+            ["default"] if ctx.trait_method => {}
+            ["default"] => errs.push(format!("`given default`: the subject is not a method of a trait, so it has no default body to name: `{item}`")),
+            ["build", setting] => {
+                if !ctx.builds.contains(*setting) {
+                    errs.push(format!("`given build {setting}`: not a build setting of the host profile ({})", ctx.builds.iter().cloned().collect::<Vec<_>>().join(", ")));
+                }
+            }
+            ["build", ..] => errs.push(format!("`given build` names one setting: `{item}`")),
+            _ => {
+                let Some(cut) = GIVEN_PREDICATES.iter().find(|p| w.len() > p.len() && w[w.len() - p.len()..] == ***p) else {
+                    errs.push(format!("a `given` item is `default`, `build SETTING`, or methods then `never panic`, `terminate` or `effects none`: `{item}`"));
+                    continue;
+                };
+                let refs = &w[..w.len() - cut.len()];
+                for (i, r) in refs.iter().enumerate() {
+                    if i % 2 == 1 {
+                        if *r != "," {
+                            errs.push(format!("`given` names methods separated by commas: `{item}`"));
+                        }
+                        continue;
+                    }
+                    let Some((g, m)) = r.split_once('.').filter(|(g, m)| !g.is_empty() && !m.is_empty() && !m.contains('.')) else {
+                        errs.push(format!("`{r}` is not `Param.method` in `given {item}`"));
+                        continue;
+                    };
+                    match ctx.generics.get(g) {
+                        None if g == "Self" && ctx.has_self => {}
+                        None => errs.push(format!("`given {item}`: `{g}` is not a generic type parameter of the subject")),
+                        Some(Some(ms)) if !ms.contains(m) => errs.push(format!("`given {item}`: `{m}` is not a method of a bound of `{g}` (known: {})", ms.iter().cloned().collect::<Vec<_>>().join(", "))),
+                        Some(_) => {}
+                    }
+                }
+                if refs.len().is_multiple_of(2) {
+                    errs.push(format!("`given` names methods separated by commas: `{item}`"));
+                }
+            }
+        }
+    }
+    errs
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -260,5 +324,24 @@ mod tests {
         assert!(bad("ensure", "ensure", "ensure x : allocates == k").contains("unknown name `allocates`"));
         // a name bound by a quantifier or a pattern is known only after it
         assert!(bad("ensure", "ensure", "ensure x : e == k and (self is Err(e))").contains("unknown name `e`"));
+    }
+
+    #[test]
+    fn given_items_name_generics_methods_and_builds() {
+        let builds: BTreeSet<String> = ["overflow_checks", "panic=unwind"].map(String::from).into();
+        let ms: BTreeSet<String> = ["hash", "eq"].map(String::from).into();
+        let ctx = GivenCtx { generics: [("Q".to_string(), Some(ms)), ("K".to_string(), None)].into(), has_self: false, trait_method: false, builds: &builds };
+        let g = |items: &[&str]| lint_given(items, &ctx).join("; ");
+        assert_eq!(g(&["Q.hash, Q.eq never panic", "K.anything terminate", "Q.eq effects none", "build overflow_checks", "build panic=unwind"]), "");
+        assert!(g(&["Z.hash never panic"]).contains("`Z` is not a generic"));
+        assert!(g(&["Q.nope never panic"]).contains("`nope` is not a method of a bound of `Q`"));
+        assert!(g(&["build debug_assertions"]).contains("not a build setting"));
+        assert!(g(&["default"]).contains("no default body"));
+        assert!(g(&["Q.hash"]).contains("a `given` item is"));
+        assert!(g(&["Q.hash Q.eq never panic"]).contains("separated by commas"));
+        assert!(g(&["never panic"]).contains("a `given` item is"));
+        assert!(g(&["Q never panic"]).contains("not `Param.method`"));
+        let ctx = GivenCtx { trait_method: true, has_self: true, ..ctx };
+        assert_eq!(lint_given(&["default", "Self.eq terminate"], &ctx), Vec::<String>::new());
     }
 }

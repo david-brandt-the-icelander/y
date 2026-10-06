@@ -624,6 +624,15 @@
           "type": "string",
           "minLength": 1
         },
+        "given": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Conditions the promise relies on (language 6.12): the clause holds whenever all of them hold, and says nothing otherwise. Each is `default` (the default body of a trait method is not overridden), `build SETTING` (a setting of the host profile: overflow_checks, debug_assertions, panic=unwind, panic=abort), or `P.m, P.n never panic | terminate | effects none` (the named methods of the bound implementations of the generic parameter `P`). The clause `text` stays the unconditional form; the language form is `text given item and item`. Allowed on never panics, effects, ensure, fails and panics clauses."
+        },
         "source": {
           "type": "string",
           "minLength": 1,
@@ -649,7 +658,12 @@
       "then": {
         "required": [
           "reason"
-        ]
+        ],
+        "not": {
+          "required": [
+            "given"
+          ]
+        }
       },
       "else": {
         "not": {

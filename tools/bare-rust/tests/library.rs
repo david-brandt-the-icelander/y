@@ -183,7 +183,9 @@ fn the_library_file_is_valid_and_canonical() {
     for n in EXEMPLARS {
         assert!(names.contains(&n), "{n}");
     }
-    assert_eq!(names.len(), 106, "49 functions, 26 types, 19 traits, 11 macros and 1 const: the 105 external items, and Ordering for the laws");
+    // the impls of B1, and the methods of those impls, are subjects of their own beside the entries for the external items
+    let own = file["subjects"].as_array().unwrap().iter().filter(|s| s["kind"] != "impl" && s["impl"].is_null()).count();
+    assert_eq!(own, 107, "49 functions, 27 types, 19 traits, 11 macros and 1 const: the 105 external items, Ordering for the laws, and OccupiedEntry for a view");
 }
 
 #[test]
@@ -308,7 +310,7 @@ fn a_view_is_declared_bound_to_a_host_function_and_usable_in_clauses() {
     // the host path resolves in rustc: 3 views, none unchecked; a path that is not a method is a mismatch
     let (file, _) = std_file();
     let r = check_signatures(&file, &work("views-ok"), &target()).unwrap();
-    assert_eq!((r.views_checked, r.views_unchecked.len(), r.mismatches.len()), (3, 0, 0), "{:?}", r.mismatches);
+    assert_eq!((r.views_checked, r.views_unchecked.len(), r.mismatches.len()), (4, 0, 0), "{:?}", r.mismatches);
     let mut f = file.clone();
     f["views"][1]["host"] = json!("'std::vec::Vec::capacitee'");
     let r = check_signatures(&f, &work("views-bad"), &target()).unwrap();
@@ -431,7 +433,7 @@ fn the_whole_file_compiles_against_the_real_std() {
     assert_eq!(r.unchecked.keys().collect::<Vec<_>>(), vec!["macro"]);
     assert_eq!(r.unchecked["macro"].len(), 4, "{:?}", r.unchecked);
     assert_eq!(r.resolved.len(), 5, "{:?}", r.resolved);
-    assert_eq!(r.checked.len() + r.resolved.len() + r.unchecked_total(), 106);
+    assert_eq!(r.checked.len() + r.resolved.len() + r.unchecked_total(), file["subjects"].as_array().unwrap().len());
 }
 
 #[test]
@@ -573,7 +575,7 @@ fn libstats_counts_what_the_file_holds() {
     let (file, _) = std_file();
     let r = check_signatures(&file, &work("stats-sigs"), &target()).unwrap();
     let t = bare_rust::libstats::libstats(&file, Some(&r));
-    for want in ["library std 1.97.0 (106 subjects)", "function (22 are trait methods)", "unexpressed", "no sequence value", "path-resolved only: std::cmp::PartialEq", "type slots (139); 126 map to the type language and 13 are host text"] {
+    for want in ["library std 1.97.0 (254 subjects)", "function (22 are trait methods)", "unexpressed", "no sequence value", "path-resolved only: std::cmp::PartialEq", "type slots (174); 167 map to the type language and 7 are host text"] {
         assert!(t.contains(want), "{want}: {t}");
     }
     assert!(!t.contains("reasons carry no label"), "{t}");
@@ -621,9 +623,15 @@ fn an_impl_is_a_subject_and_a_type_declares_what_it_implements() {
     assert_eq!(errors(&f), "");
     // the clause forms are accepted: `implements`, `hold : borrows for 'a`, the associated type's name and type
     let mut bad = f.clone();
-    let cl = |f: &mut Value, i: usize, t: &str| subject_mut(f, "std::str::Chars")["clauses"][i]["text"] = json!(t);
-    cl(&mut bad, 2, "implements 'std::iter::Iterator' { Item = nope }");
-    cl(&mut bad, 3, "hold : borrows for 'zz");
+    // the clauses are found by kind, since the library file's own Chars entry carries them too
+    let cl = |f: &mut Value, kind: &str, t: &str| {
+        let cs = subject_mut(f, "std::str::Chars")["clauses"].as_array_mut().unwrap();
+        for c in cs.iter_mut().filter(|c| c["kind"] == kind) {
+            c["text"] = json!(t);
+        }
+    };
+    cl(&mut bad, "implements", "implements 'std::iter::Iterator' { Item = nope }");
+    cl(&mut bad, "hold", "hold : borrows for 'zz");
     let e = errors(&bad);
     assert!(e.contains("unknown name `nope`") && e.contains("unknown lifetime `'zz`"), "{e}");
     // an impl names its trait and its self type, and is named by them; an implements entry names a real impl of its trait
@@ -763,4 +771,93 @@ fn generics_and_lifetimes_on_host_subjects_are_checked() {
     subject_mut(&mut f, "std::vec::Vec as std::clone::Clone")["generics"][0]["bounds"] = json!([]);
     let r = check_signatures(&f, &work("sig-generics-wrong"), &target()).unwrap();
     assert!(r.mismatches.iter().any(|(n, m)| n == "std::vec::Vec as std::clone::Clone" && m.starts_with("E0277")), "{:?}", r.mismatches);
+}
+
+// ---------- B2: `given`, promises that hold unless an implementation does otherwise ----------
+
+/// `HashMap::get` as the plan writes it: it never panics given what `Q`'s `Hash` and `Eq` do, and counts only given the
+/// build. The file has the bound's methods as subjects, so a method name can be checked.
+fn get_with_given() -> Value {
+    let mut f = exemplars_only();
+    f.as_object_mut().unwrap().remove("views");
+    let subjects = f["subjects"].as_array_mut().unwrap();
+    subjects.push(json!({"kind": "trait", "name": "std::hash::Hash"}));
+    subjects.push(json!({"kind": "function", "name": "std::hash::Hash::hash", "params": [], "trait": "std::hash::Hash"}));
+    subjects.push(json!({"kind": "trait", "name": "std::cmp::Eq"}));
+    subjects.push(json!({"kind": "function", "name": "std::cmp::Eq::eq", "params": [], "trait": "std::cmp::Eq"}));
+    let get = subject_mut(&mut f, "std::collections::HashMap::get");
+    let cl = get["clauses"].as_array_mut().unwrap();
+    cl.clear();
+    cl.push(json!({"kind": "never panics", "text": "never panics", "given": ["Q.hash, Q.eq never panic"], "source": "s", "status": {"assumed": "documentation"}}));
+    cl.push(json!({"kind": "effects", "text": "effects none", "given": ["Q.hash, Q.eq effects none", "build panic=unwind"], "source": "s"}));
+    cl.push(json!({"kind": "ensure", "text": "ensure same : result == self[k]", "given": ["build overflow_checks"], "source": "s"}));
+    f
+}
+
+#[test]
+fn a_given_names_generics_methods_defaults_and_build_settings() {
+    let f = get_with_given();
+    assert_eq!(errors(&f), "");
+    fn get(f: &mut Value) -> &mut Value {
+        subject_mut(f, "std::collections::HashMap::get")
+    }
+    // each way a `given` can be wrong is reported against the clause
+    for (given, want) in [
+        ("Z.hash never panic", "`Z` is not a generic type parameter"),
+        ("Q.nope never panic", "`nope` is not a method of a bound of `Q`"),
+        ("build opt_level", "not a build setting of the host profile"),
+        ("default", "not a method of a trait"),
+        ("Q.hash", "a `given` item is"),
+    ] {
+        let mut bad = f.clone();
+        get(&mut bad)["clauses"][1]["given"] = json!([given]);
+        let e = errors(&bad);
+        assert!(e.contains(want) && e.contains("clause 1"), "{given}: {e}");
+    }
+    // `given` is the slot's, not the text's; it qualifies only the promises that depend on an implementation; an empty list is the schema's
+    let mut bad = f.clone();
+    get(&mut bad)["clauses"][0]["text"] = json!("never panics given Q.hash never panic");
+    let e = errors(&bad);
+    assert!(e.contains("the clause's `given` slot"), "{e}");
+    let mut bad = f.clone();
+    get(&mut bad)["clauses"][1]["given"] = json!([]);
+    assert!(errors(&bad).contains("schema:"), "{}", errors(&bad));
+    let mut bad = f.clone();
+    get(&mut bad)["clauses"].as_array_mut().unwrap().push(json!({"kind": "unexpressed", "text": "t", "reason": "r", "given": ["default"], "source": "s"}));
+    assert!(errors(&bad).contains("schema:"));
+    let mut bad = f.clone();
+    get(&mut bad)["clauses"].as_array_mut().unwrap().push(json!({"kind": "invariant", "text": "invariant i : true", "given": ["default"], "source": "s"}));
+    assert!(errors(&bad).contains("`invariant` clause is not qualified by `given`"), "{}", errors(&bad));
+}
+
+#[test]
+fn the_default_body_is_named_by_a_trait_method_and_a_checkable_method_is_known_to_its_bound() {
+    let mut f = get_with_given();
+    f["subjects"].as_array_mut().unwrap().push(json!({
+        "kind": "function", "name": "std::cmp::Ord::max", "params": [], "trait": "std::cmp::Ord",
+        "clauses": [{"kind": "never panics", "text": "never panics", "given": ["default", "Self.cmp never panic"], "source": "s"}]
+    }));
+    assert_eq!(errors(&f), "");
+    // `K` has a bound the file has no methods of (`Borrow`): its methods cannot be checked, so any name passes; `Q`'s are checked
+    let get = subject_mut(&mut f, "std::collections::HashMap::get");
+    get["clauses"][1]["given"] = json!(["K.anything never panic"]);
+    assert_eq!(errors(&f), "");
+    // a file with `given` is canonical when libfmt prints it, with `given` after `text`; one without it is valid unchanged
+    let f = get_with_given();
+    let c = canonical(&f);
+    assert!(c.contains("\"text\": \"never panics\",\n") && c.find("\"given\"").unwrap() > c.find("\"text\": \"never panics\"").unwrap());
+    assert_eq!(canonical(&serde_json::from_str::<Value>(&c).unwrap()), c);
+    assert_eq!(validate(&f, Some(&c)), Vec::<String>::new());
+}
+
+#[test]
+fn libstats_counts_conditional_clauses_apart_and_the_profile_lists_the_build_settings() {
+    let f = get_with_given();
+    let t = bare_rust::libstats::libstats(&f, None);
+    assert!(t.contains("conditional clauses, qualified by `given` (3 on 1 subjects)"), "{t}");
+    assert!(t.contains("on a build setting") && t.contains("on a bound's implementations"), "{t}");
+    let p: Value = serde_json::from_str(&fs::read_to_string(libraries().join("host-rust-1.97.0.json")).unwrap()).unwrap();
+    let names: Vec<&str> = p["build"].as_array().unwrap().iter().map(|b| b["setting"].as_str().unwrap()).collect();
+    assert_eq!(names, ["overflow_checks", "debug_assertions", "panic=unwind", "panic=abort"]);
+    assert_eq!(bare_rust::host::builds(Some(&p)).len(), 4);
 }

@@ -4,7 +4,10 @@
   "crate": "std 1.97.0",
   "module": "std",
   "status": { "assumed": "hand-written" },
-  "failures": { "panic": { "class": "runtime", "payload": { "location": "location", "message": "text" } } },
+  "failures": {
+    "panic": { "class": "runtime", "payload": { "location": "location", "message": "text" } },
+    "TryFromIntError": { "class": "user" }
+  },
   "views": [
     {
       "name": "capacity",
@@ -65,12 +68,24 @@
       "name": "std::str::Chars",
       "visible": "public",
       "generics": [{ "name": "'a", "bounds": [] }],
+      "implements": [
+        { "trait": "std::iter::Iterator", "assoc": { "Item": "text where length(value) == 1 as 'char'" } },
+        { "trait": "std::iter::DoubleEndedIterator" },
+        { "trait": "std::clone::Clone" },
+        { "trait": "std::fmt::Debug" }
+      ],
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "Chars<'a> implements Iterator<Item = char>, DoubleEndedIterator, Clone and Debug, and has as_str, which returns the rest of the string as a &'a str.",
-          "source": "1.97.0 core/src/str/iter.rs:30, impls: struct 30, derive Clone 27, Iterator 35, Debug 113, DoubleEndedIterator 123",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
+          "kind": "implements",
+          "text": "implements 'std::iter::Iterator' { Item = char }, 'std::iter::DoubleEndedIterator', 'std::clone::Clone', 'std::fmt::Debug'",
+          "source": "1.97.0 core/src/str/iter.rs:30, impls: Iterator 35, DoubleEndedIterator 123, derive Clone 27, Debug 113",
+          "status": { "observed": "from the impl blocks" }
+        },
+        {
+          "kind": "hold",
+          "text": "hold : borrows for 'a",
+          "source": "1.97.0 core/src/str/iter.rs:30, body: struct Chars<'a> { iter: slice::Iter<'a, u8> }",
+          "status": { "observed": "from the declaration" }
         },
         {
           "kind": "unexpressed",
@@ -78,7 +93,8 @@
           "source": "1.97.0 core/src/str/iter.rs:28, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
           "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by the chars method on str"
         }
-      ]
+      ],
+      "hold": { "kind": "borrows", "for": ["'a"] }
     },
     {
       "kind": "function",
@@ -1121,7 +1137,7 @@
         { "name": "key", "type": "K" }
       ],
       "result": {
-        "type": { "host": "std::collections::hash_map::Entry<'_, K, V>", "form": "lifetime argument" },
+        "type": "std::collections::hash_map::Entry<'_, K, V>",
         "hold": { "kind": "borrows", "from": "self" }
       },
       "clauses": [
@@ -1134,10 +1150,10 @@
           }
         },
         {
-          "kind": "unexpressed",
-          "text": "The entry is Occupied exactly when the map holds the key, and Vacant when it does not.",
+          "kind": "ensure",
+          "text": "ensure variant : (result is Occupied(e)) iff exists self[key]",
           "source": "1.97.0 std/src/collections/hash/map.rs:1014, body: map_entry(self.base.rustc_entry(key)); hashbrown 0.17.1 src/rustc_entry.rs:35-54, body: if let Some(elem) = self.table.find(hash, |q| q.0.eq(&key)) { RustcEntry::Occupied(..) } else { self.reserve(1); RustcEntry::Vacant(..) }; 1.97.0 std/src/collections/hash/map.rs:3008-3011, body: match raw { base::RustcEntry::Occupied(base) => Entry::Occupied(OccupiedEntry { base }), base::RustcEntry::Vacant(base) => Entry::Vacant(VacantEntry { base }), }",
-          "reason": "no variants of a host enum: `result is Occupied(e)` matches a variant of Entry<'a, K, V>, which is host text (a lifetime argument, and an enum whose variants hold host types), so the pattern has no type to match"
+          "status": { "observed": "from the body: the lookup of the key decides the variant" }
         },
         {
           "kind": "unexpressed",
@@ -1166,36 +1182,31 @@
         {
           "name": "Occupied",
           "fields": [
-            {
-              "type": {
-                "host": "std::collections::hash_map::OccupiedEntry<'a, K, V>",
-                "form": "lifetime argument"
-              },
-              "hold": { "kind": "owns" }
-            }
+            { "type": "std::collections::hash_map::OccupiedEntry<'a, K, V>", "hold": { "kind": "owns" } }
           ]
         },
         {
           "name": "Vacant",
           "fields": [
-            {
-              "type": {
-                "host": "std::collections::hash_map::VacantEntry<'a, K, V>",
-                "form": "lifetime argument"
-              },
-              "hold": { "kind": "owns" }
-            }
+            { "type": "std::collections::hash_map::VacantEntry<'a, K, V>", "hold": { "kind": "owns" } }
           ]
         }
       ],
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "Entry<'a, K, V> implements Debug when K and V do. It is built by HashMap::entry, and borrows the map until it is used.",
+          "kind": "implements",
+          "text": "implements 'std::fmt::Debug'",
           "source": "1.97.0 std/src/collections/hash/map.rs:1966, impls: Debug 1966, enum 1950",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value"
+          "status": { "observed": "from the impl blocks" }
+        },
+        {
+          "kind": "hold",
+          "text": "hold : borrows for 'a",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1950, body: pub enum Entry<'a, K: 'a, V: 'a> { Occupied(OccupiedEntry<'a, K, V>), Vacant(VacantEntry<'a, K, V>) }, each variant holding the `&'a mut` map through its base",
+          "status": { "observed": "from the declaration" }
         }
-      ]
+      ],
+      "hold": { "kind": "borrows", "for": ["'a"] }
     },
     {
       "kind": "function",
@@ -1207,10 +1218,7 @@
         { "name": "V", "bounds": ["'a"] }
       ],
       "params": [
-        {
-          "name": "self",
-          "type": { "host": "std::collections::hash_map::Entry<'a, K, V>", "form": "lifetime argument" }
-        },
+        { "name": "self", "type": "std::collections::hash_map::Entry<'a, K, V>" },
         { "name": "default", "type": "V" }
       ],
       "result": {
@@ -1220,16 +1228,26 @@
       },
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "When the entry is vacant, the result is the default that was inserted: result == default.",
-          "source": "1.97.0 std/src/collections/hash/map.rs:2498-2499, doc: \"Ensures a value is in the entry by inserting the default if empty, and returns a mutable reference to the value in the entry.\"",
-          "reason": "no variants of a host enum: `self is Vacant(e)` matches a variant of Entry<'a, K, V>, which is host text (a lifetime argument, and an enum whose variants hold host types), so the pattern has no type to match"
+          "kind": "ensure",
+          "text": "ensure vacant : self is Vacant(e) implies result == default",
+          "source": "1.97.0 std/src/collections/hash/map.rs:2517-2520, body: match self { Occupied(entry) => entry.into_mut(), Vacant(entry) => entry.insert(default), }",
+          "status": {
+            "observed": "from the body: the Vacant arm inserts default and returns the reference to it"
+          }
+        },
+        {
+          "kind": "ensure",
+          "text": "ensure occupied : self is Occupied(e) implies result == old(current(e))",
+          "source": "1.97.0 std/src/collections/hash/map.rs:2517-2520, body: match self { Occupied(entry) => entry.into_mut(), Vacant(entry) => entry.insert(default), }; 1.97.0 std/src/collections/hash/map.rs:2498-2499, doc: \"Ensures a value is in the entry by inserting the default if empty, and returns a mutable reference to the value in the entry.\"",
+          "status": {
+            "observed": "from the body: the Occupied arm returns into_mut of the value the entry stands for, and the default is not inserted"
+          }
         },
         {
           "kind": "unexpressed",
-          "text": "When the entry is occupied, result refers to the value already in the map, which is kept and not replaced; when vacant, default is inserted into the map first, so the map then holds it under the entry's key.",
+          "text": "When the entry is vacant, default is inserted into the map first, so the map then holds it under the entry's key.",
           "source": "1.97.0 std/src/collections/hash/map.rs:2498-2499, doc: \"Ensures a value is in the entry by inserting the default if empty, and returns a mutable reference to the value in the entry.\"",
-          "reason": "no host state: no slot or expression names state a host object holds beyond its value: a capacity, a hasher's or formatter's state, an entry's hidden map. Here: the entry stands for a slot of the map, which is not a parameter, so nothing names the existing value or the map afterwards"
+          "reason": "no host state: no slot or expression names state a host object holds beyond its value: a capacity, a hasher's or formatter's state, an entry's hidden map. Here: the entry holds the map it came from, which is not a parameter, so nothing names the map after the call"
         },
         {
           "kind": "unexpressed",
@@ -1256,15 +1274,10 @@
         { "name": "F", "bounds": ["FnOnce(&mut V)"] }
       ],
       "params": [
-        {
-          "name": "self",
-          "type": { "host": "std::collections::hash_map::Entry<'a, K, V>", "form": "lifetime argument" }
-        },
+        { "name": "self", "type": "std::collections::hash_map::Entry<'a, K, V>" },
         { "name": "f", "type": "F" }
       ],
-      "result": {
-        "type": { "host": "std::collections::hash_map::Entry<'a, K, V>", "form": "lifetime argument" }
-      },
+      "result": { "type": "std::collections::hash_map::Entry<'a, K, V>" },
       "clauses": [
         {
           "kind": "callback",
@@ -1275,10 +1288,10 @@
           }
         },
         {
-          "kind": "unexpressed",
-          "text": "The result is an Occupied entry when self was Occupied, and a Vacant entry when self was Vacant.",
+          "kind": "ensure",
+          "text": "ensure variant : (result is Occupied(r)) iff (self is Occupied(s))",
           "source": "1.97.0 std/src/collections/hash/map.rs:2621-2628, body: match self { Occupied(mut entry) => { f(entry.get_mut()); Occupied(entry) } Vacant(entry) => Vacant(entry), }",
-          "reason": "no variants of a host enum: `result is Occupied(e)` matches a variant of Entry<'a, K, V>, which is host text (a lifetime argument, and an enum whose variants hold host types), so the pattern has no type to match"
+          "status": { "observed": "from the body: each arm returns an entry of its own variant" }
         },
         {
           "kind": "unexpressed",
@@ -1303,12 +1316,30 @@
         { "name": "V", "bounds": [] },
         { "name": "S", "bounds": [] }
       ],
+      "implements": [
+        {
+          "trait": "std::iter::IntoIterator",
+          "assoc": { "IntoIter": "std::collections::hash_map::IntoIter<K, V>", "Item": "(K, V)" }
+        }
+      ],
       "clauses": [
         {
           "kind": "unexpressed",
-          "text": "HashMap<K, V, S> implements Default when S: Default (an empty map), Clone, PartialEq, Eq, Debug, Index<&Q>, FromIterator<(K, V)>, Extend<(K, V)>, and IntoIterator for the map and for references to it.",
-          "source": "1.97.0 std/src/collections/hash/map.rs:1489, impls: Default 1489, Clone 1430, PartialEq 1449, Eq 1466, Debug 1476, Index 1501, FromIterator 2939, Extend 2958, IntoIterator for & 2048, IntoIterator 2072, IntoIterator for &mut 2060",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: fnv builds its maps through Default, with S = BuildHasherDefault<FnvHasher>"
+          "text": "HashMap<K, V, S> implements Index<&Q> with Output = V, for K: Borrow<Q>, Q: Eq + Hash and S: BuildHasher.",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1501, impls: Index 1501",
+          "reason": "no elided lifetime in a trait argument: `Index<&Q>` takes a reference of an anonymous lifetime, which a bound cannot name, so `ref<Q>` as an interface argument does not compile"
+        },
+        {
+          "kind": "unexpressed",
+          "text": "IntoIterator for &mut HashMap<K, V, S>, whose Item is (&K, &mut V) and whose IntoIter is hash_map::IterMut<'a, K, V>.",
+          "source": "1.97.0 std/src/collections/hash/map.rs:2060, impls: IntoIterator for &mut 2060",
+          "reason": "no mutable reference as an impl's self type: an impl's `self` has no access, so `&mut T` cannot be written, and an associated type of a `&mut` impl would borrow mutably"
+        },
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::IntoIterator' { Item = (K, V), IntoIter = 'std::collections::hash_map::IntoIter' }",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1489, impls: IntoIterator 2072; the others are conditional and are impl subjects below",
+          "status": { "observed": "from the impl blocks" }
         },
         {
           "kind": "unexpressed",
@@ -1335,12 +1366,24 @@
       "name": "std::collections::HashSet",
       "visible": "public",
       "generics": [{ "name": "T", "bounds": [] }, { "name": "S", "bounds": [] }],
+      "implements": [
+        {
+          "trait": "std::iter::IntoIterator",
+          "assoc": { "IntoIter": "std::collections::hash_set::IntoIter<T>", "Item": "T" }
+        }
+      ],
       "clauses": [
         {
           "kind": "unexpressed",
-          "text": "HashSet<T, S> implements Default when S: Default (an empty set), Clone, PartialEq, Eq, Debug, FromIterator<T>, Extend<T> and Extend<&T>, and IntoIterator for the set and for references to it.",
-          "source": "1.97.0 std/src/collections/hash/set.rs:1279, impls: Default 1279, Clone 1124, PartialEq 1146, Eq 1162, Debug 1171, FromIterator 1182, Extend<T> 1232, Extend<&T> 1255, IntoIterator for & 1660, IntoIterator 1672",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: fnv builds its sets through Default, with S = BuildHasherDefault<FnvHasher>"
+          "text": "HashSet<T, S> implements Extend<&'a T> for T: 'a + Eq + Hash + Copy and S: BuildHasher.",
+          "source": "1.97.0 std/src/collections/hash/set.rs:1255, impls: Extend<&T> 1255",
+          "reason": "no elided lifetime in a trait argument: `Extend<&'a T>` takes a reference, which a bound cannot name, so `ref<T>` as an interface argument does not compile"
+        },
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::IntoIterator' { Item = T, IntoIter = 'std::collections::hash_set::IntoIter' }",
+          "source": "1.97.0 std/src/collections/hash/set.rs:1672, impls: IntoIterator 1672; the others are conditional and are impl subjects below",
+          "status": { "observed": "from the impl blocks" }
         },
         {
           "kind": "unexpressed",
@@ -1355,12 +1398,19 @@
       "name": "std::hash::BuildHasherDefault",
       "visible": "public",
       "generics": [{ "name": "H", "bounds": [] }],
+      "implements": [
+        { "trait": "std::default::Default" },
+        { "trait": "std::clone::Clone" },
+        { "trait": "std::fmt::Debug" },
+        { "trait": "std::cmp::PartialEq" },
+        { "trait": "std::cmp::Eq" }
+      ],
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "BuildHasherDefault<H> implements BuildHasher, with Hasher = H and build_hasher returning H::default(), when H: Default + Hasher; and Default, Clone, Debug, PartialEq and Eq for every H.",
-          "source": "1.97.0 core/src/hash/mod.rs:770, impls: BuildHasher 770, Debug 763, Clone 779, Default 787, PartialEq 794, Eq 801",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value"
+          "kind": "implements",
+          "text": "implements 'std::default::Default', 'std::clone::Clone', 'std::fmt::Debug', 'std::cmp::PartialEq', 'std::cmp::Eq'",
+          "source": "1.97.0 core/src/hash/mod.rs:753, impls: Debug 763, Clone 779, Default 787, PartialEq 794, Eq 801",
+          "status": { "observed": "from the impl blocks" }
         },
         {
           "kind": "layout",
@@ -1378,12 +1428,6 @@
       "clauses": [
         {
           "kind": "unexpressed",
-          "text": "Chain<A, B> implements Iterator<Item = A::Item> when A: Iterator and B: Iterator<Item = A::Item>; DoubleEndedIterator when both are; FusedIterator when both are; Clone and Debug when A and B are (derived).",
-          "source": "1.97.0 core/src/iter/adapters/chain.rs:23, impls: struct 23, Iterator 73, DoubleEndedIterator 205, FusedIterator 292, derive 20",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
-        },
-        {
-          "kind": "unexpressed",
           "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
           "source": "1.97.0 core/src/iter/adapters/chain.rs:21, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
           "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by Iterator::chain"
@@ -1396,12 +1440,6 @@
       "visible": "public",
       "generics": [{ "name": "I", "bounds": [] }],
       "clauses": [
-        {
-          "kind": "unexpressed",
-          "text": "Enumerate<I> implements Iterator<Item = (usize, I::Item)> when I: Iterator; DoubleEndedIterator when I is ExactSizeIterator and DoubleEndedIterator; ExactSizeIterator when I is; FusedIterator when I is; Clone and Debug when I is (derived).",
-          "source": "1.97.0 core/src/iter/adapters/enumerate.rs:18, impls: struct 18, Iterator 62, DoubleEndedIterator 175, ExactSizeIterator 250, FusedIterator 277",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
-        },
         {
           "kind": "unexpressed",
           "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
@@ -1418,12 +1456,6 @@
       "clauses": [
         {
           "kind": "unexpressed",
-          "text": "Filter<I, P> implements Iterator<Item = I::Item> when I: Iterator and P: FnMut(&I::Item) -> bool; DoubleEndedIterator and FusedIterator when I is; Clone when I and P are (derived); Debug when I is Debug (P need not be).",
-          "source": "1.97.0 core/src/iter/adapters/filter.rs:21, impls: struct 21, Iterator 90, DoubleEndedIterator 170, FusedIterator 199, Debug 69",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
-        },
-        {
-          "kind": "unexpressed",
           "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
           "source": "1.97.0 core/src/iter/adapters/filter.rs:18, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
           "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by Iterator::filter"
@@ -1436,12 +1468,6 @@
       "visible": "public",
       "generics": [{ "name": "I", "bounds": [] }, { "name": "F", "bounds": [] }],
       "clauses": [
-        {
-          "kind": "unexpressed",
-          "text": "Map<I, F> implements Iterator<Item = B> when I: Iterator and F: FnMut(I::Item) -> B; DoubleEndedIterator, ExactSizeIterator and FusedIterator when I is; Clone when I and F are (derived); Debug when I is Debug (F need not be).",
-          "source": "1.97.0 core/src/iter/adapters/map.rs:61, impls: struct 61, Iterator 99, DoubleEndedIterator 143, ExactSizeIterator 170, FusedIterator 184, Debug 78",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
-        },
         {
           "kind": "unexpressed",
           "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
@@ -1458,12 +1484,6 @@
       "clauses": [
         {
           "kind": "unexpressed",
-          "text": "Skip<I> implements Iterator<Item = I::Item> when I: Iterator; DoubleEndedIterator when I is DoubleEndedIterator and ExactSizeIterator; ExactSizeIterator and FusedIterator when I is; Clone and Debug when I is (derived).",
-          "source": "1.97.0 core/src/iter/adapters/skip.rs:21, impls: struct 21, Iterator 33, DoubleEndedIterator 191, ExactSizeIterator 188, FusedIterator 246",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
-        },
-        {
-          "kind": "unexpressed",
           "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
           "source": "1.97.0 core/src/iter/adapters/skip.rs:19, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
           "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by Iterator::skip"
@@ -1476,12 +1496,6 @@
       "visible": "public",
       "generics": [{ "name": "I", "bounds": [] }],
       "clauses": [
-        {
-          "kind": "unexpressed",
-          "text": "Take<I> implements Iterator<Item = I::Item> when I: Iterator; DoubleEndedIterator when I is DoubleEndedIterator and ExactSizeIterator; ExactSizeIterator and FusedIterator when I is; Clone and Debug when I is (derived).",
-          "source": "1.97.0 core/src/iter/adapters/take.rs:17, impls: struct 17, Iterator 29, DoubleEndedIterator 151, ExactSizeIterator 241, FusedIterator 244",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
-        },
         {
           "kind": "unexpressed",
           "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
@@ -1498,12 +1512,6 @@
       "clauses": [
         {
           "kind": "unexpressed",
-          "text": "TakeWhile<I, P> implements Iterator<Item = I::Item> when I: Iterator and P: FnMut(&I::Item) -> bool; FusedIterator when I is; not DoubleEndedIterator or ExactSizeIterator; Clone when I and P are (derived); Debug when I is Debug (P need not be).",
-          "source": "1.97.0 core/src/iter/adapters/take_while.rs:17, impls: struct 17, Iterator 37, FusedIterator 103, Debug 30",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
-        },
-        {
-          "kind": "unexpressed",
           "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
           "source": "1.97.0 core/src/iter/adapters/take_while.rs:14, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
           "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by Iterator::take_while"
@@ -1518,12 +1526,6 @@
       "clauses": [
         {
           "kind": "unexpressed",
-          "text": "Zip<A, B> implements Iterator<Item = (A::Item, B::Item)> when A: Iterator and B: Iterator; DoubleEndedIterator when both are DoubleEndedIterator and ExactSizeIterator; ExactSizeIterator and FusedIterator when both are; Clone when A and B are (derived); Debug when A and B are.",
-          "source": "1.97.0 core/src/iter/adapters/zip.rs:13, impls: struct 13, Debug 481, Iterator 74, DoubleEndedIterator 116, ExactSizeIterator 407, FusedIterator 434",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
-        },
-        {
-          "kind": "unexpressed",
           "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
           "source": "1.97.0 core/src/iter/adapters/zip.rs:11, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
           "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by Iterator::zip"
@@ -1536,12 +1538,6 @@
       "visible": "public",
       "generics": [{ "name": "I", "bounds": [] }],
       "clauses": [
-        {
-          "kind": "unexpressed",
-          "text": "Copied<I> implements Iterator<Item = T> when I: Iterator<Item = &T> and T: Copy; DoubleEndedIterator, ExactSizeIterator and FusedIterator when I is; Clone and Debug when I is (derived).",
-          "source": "1.97.0 core/src/iter/adapters/copied.rs:19, impls: struct 19, Iterator 44, DoubleEndedIterator 112, ExactSizeIterator 144, FusedIterator 159",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
-        },
         {
           "kind": "unexpressed",
           "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
@@ -1562,12 +1558,6 @@
       "clauses": [
         {
           "kind": "unexpressed",
-          "text": "FlatMap<I, U, F> implements Iterator<Item = U::Item> when I: Iterator, U: IntoIterator and F: FnMut(I::Item) -> U; DoubleEndedIterator when I is and U::IntoIter is; FusedIterator when I is; Clone when I, U, U::IntoIter and F are; Debug when I and U::IntoIter are.",
-          "source": "1.97.0 core/src/iter/adapters/flatten.rs:17, impls: struct 17, Iterator 56, DoubleEndedIterator 107, FusedIterator 142, Clone 36, Debug 46",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
-        },
-        {
-          "kind": "unexpressed",
           "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
           "source": "1.97.0 core/src/iter/adapters/flatten.rs:15, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
           "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by Iterator::flat_map"
@@ -1579,12 +1569,26 @@
       "name": "std::slice::Iter",
       "visible": "public",
       "generics": [{ "name": "'a", "bounds": [] }, { "name": "T", "bounds": ["'a"] }],
+      "implements": [
+        { "trait": "std::iter::Iterator", "assoc": { "Item": "ref<T>" } },
+        { "trait": "std::iter::DoubleEndedIterator" },
+        { "trait": "std::iter::ExactSizeIterator" },
+        { "trait": "std::iter::FusedIterator" },
+        { "trait": "std::clone::Clone" },
+        { "trait": "std::convert::AsRef<list<T> as 'std::primitive::slice'>" }
+      ],
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "Iter<'a, T> implements Iterator<Item = &'a T>, DoubleEndedIterator, ExactSizeIterator and FusedIterator and Clone for every T; Debug when T: Debug; AsRef<[T]>; and it is Send and Sync when T is Sync.",
-          "source": "1.97.0 core/src/slice/iter.rs:67, impls: struct 67, Debug 81, Clone 151, AsRef 159, Send 90, and the iterator! macro of core/src/slice/iter/macros.rs for Iterator, DoubleEndedIterator, ExactSizeIterator, FusedIterator",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
+          "kind": "implements",
+          "text": "implements 'std::iter::Iterator' { Item = ref<T> }, 'std::iter::DoubleEndedIterator', 'std::iter::ExactSizeIterator', 'std::iter::FusedIterator', 'std::clone::Clone', 'std::convert::AsRef<list<T>>'",
+          "source": "1.97.0 core/src/slice/iter.rs:67, impls: the iterator! macro of core/src/slice/iter/macros.rs for Iterator, DoubleEndedIterator, ExactSizeIterator, FusedIterator; Clone 151, AsRef 159",
+          "status": { "observed": "from the impl blocks" }
+        },
+        {
+          "kind": "hold",
+          "text": "hold : borrows for 'a",
+          "source": "1.97.0 core/src/slice/iter.rs:67, body: struct Iter<'a, T: 'a> { ptr, end_or_len, _marker: PhantomData<&'a T> }",
+          "status": { "observed": "from the declaration" }
         },
         {
           "kind": "unexpressed",
@@ -1592,19 +1596,35 @@
           "source": "1.97.0 core/src/slice/iter.rs:65, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
           "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by the iter method on slices"
         }
-      ]
+      ],
+      "hold": { "kind": "borrows", "for": ["'a"] }
     },
     {
       "kind": "type",
       "name": "std::vec::IntoIter",
       "visible": "public",
       "generics": [{ "name": "T", "bounds": [] }],
+      "implements": [
+        { "trait": "std::iter::Iterator", "assoc": { "Item": "T" } },
+        { "trait": "std::iter::DoubleEndedIterator" },
+        { "trait": "std::iter::ExactSizeIterator" },
+        { "trait": "std::iter::FusedIterator" },
+        { "trait": "std::default::Default" },
+        { "trait": "std::convert::AsRef<list<T> as 'std::primitive::slice'>" },
+        { "trait": "std::ops::Drop" }
+      ],
       "clauses": [
         {
+          "kind": "implements",
+          "text": "implements 'std::iter::Iterator' { Item = T }, 'std::iter::DoubleEndedIterator', 'std::iter::ExactSizeIterator', 'std::iter::FusedIterator', 'std::default::Default', 'std::convert::AsRef<list<T>>', 'std::ops::Drop'",
+          "source": "1.97.0 alloc/src/vec/into_iter.rs:248, impls: Iterator 248, DoubleEndedIterator 424, ExactSizeIterator 473, FusedIterator 484, AsRef 236, Default 494, Drop 541",
+          "status": { "observed": "from the impl blocks" }
+        },
+        {
           "kind": "unexpressed",
-          "text": "IntoIter<T> implements Iterator<Item = T>, DoubleEndedIterator, ExactSizeIterator, FusedIterator, Default, AsRef<[T]>, Clone when T is Clone, and Debug when T is Debug; dropping it drops the elements it has not yielded.",
-          "source": "1.97.0 alloc/src/vec/into_iter.rs:248, impls: Iterator 248, DoubleEndedIterator 424, ExactSizeIterator 473, FusedIterator 484, Debug 69, AsRef 236, Default 494, Drop 541, Clone 534",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type, and what the destructor drops is not a clause"
+          "text": "Dropping an IntoIter drops the elements it has not yielded.",
+          "source": "1.97.0 alloc/src/vec/into_iter.rs:541, body: unsafe impl<#[may_dangle] T, A: Allocator> Drop for IntoIter<T, A>: drops the remaining elements and frees the buffer",
+          "reason": "no drop: no clause says what a call does to a value's storage or whether a destructor runs. Here: the elements the iterator has not yielded are dropped when it is"
         },
         {
           "kind": "unexpressed",
@@ -1632,9 +1652,9 @@
         },
         {
           "kind": "unexpressed",
-          "text": "Range<Idx> implements Iterator<Item = Idx>, DoubleEndedIterator and FusedIterator when Idx: Step; Clone, Default, PartialEq, Eq and Hash when Idx does (derived); Debug when Idx: Debug; and it is not Copy.",
+          "text": "Range<Idx> implements Iterator<Item = Idx>, DoubleEndedIterator and FusedIterator when Idx: Step; and it is not Copy.",
           "source": "1.97.0 core/src/iter/range.rs:980, impls: Iterator 980, DoubleEndedIterator 1113, FusedIterator 1153, derives at core/src/ops/range.rs:80 and 79",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
+          "reason": "no unstable or negative bound: Step is an unstable trait that a bound cannot name, and a missing impl is not a clause"
         }
       ]
     },
@@ -1642,12 +1662,25 @@
       "kind": "type",
       "name": "std::fmt::Error",
       "visible": "public",
+      "implements": [
+        { "trait": "std::marker::Copy" },
+        { "trait": "std::clone::Clone" },
+        { "trait": "std::fmt::Debug" },
+        { "trait": "std::default::Default" },
+        { "trait": "std::cmp::Eq" },
+        { "trait": "std::hash::Hash" },
+        { "trait": "std::cmp::Ord" },
+        { "trait": "std::cmp::PartialEq" },
+        { "trait": "std::cmp::PartialOrd" },
+        { "trait": "std::fmt::Display" },
+        { "trait": "std::error::Error" }
+      ],
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "fmt::Error implements Copy, Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Display and std::error::Error.",
-          "source": "1.97.0 core/src/fmt/mod.rs:108, impls: derive 108, Display 2859",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value"
+          "kind": "implements",
+          "text": "implements 'std::marker::Copy', 'std::clone::Clone', 'std::fmt::Debug', 'std::default::Default', 'std::cmp::Eq', 'std::hash::Hash', 'std::cmp::Ord', 'std::cmp::PartialEq', 'std::cmp::PartialOrd', 'std::fmt::Display', 'std::error::Error'",
+          "source": "1.97.0 core/src/fmt/mod.rs:108, impls: derive 108, Display 2859, Error core/src/error.rs:1116",
+          "status": { "observed": "from the impl blocks" }
         },
         {
           "kind": "law",
@@ -1662,12 +1695,19 @@
       "name": "std::fmt::Formatter",
       "visible": "public",
       "generics": [{ "name": "'a", "bounds": [] }],
+      "implements": [{ "trait": "std::fmt::Write" }],
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "Formatter<'a> implements fmt::Write, so that write! can write to it.",
+          "kind": "implements",
+          "text": "implements 'std::fmt::Write'",
           "source": "1.97.0 core/src/fmt/mod.rs:561, impls: struct 561, Write 2839",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value"
+          "status": { "observed": "from the impl blocks" }
+        },
+        {
+          "kind": "hold",
+          "text": "hold : borrows for 'a",
+          "source": "1.97.0 core/src/fmt/mod.rs:561, body: struct Formatter<'a> { options, buf: &'a mut (dyn Write + 'a) }",
+          "status": { "observed": "from the declaration" }
         },
         {
           "kind": "unexpressed",
@@ -1675,18 +1715,28 @@
           "source": "1.97.0 core/src/fmt/mod.rs:551-553, doc: \"Users do not construct `Formatter`s directly; a mutable reference to one is passed to the `fmt` method of all formatting traits, like [`Debug`] and [`Display`].\"",
           "reason": "no host state: no slot or expression names state a host object holds beyond its value: a capacity, a hasher's or formatter's state, an entry's hidden map. Here: the destination and the options are host state"
         }
-      ]
+      ],
+      "hold": { "kind": "borrows", "for": ["'a"] }
     },
     {
       "kind": "type",
       "name": "std::num::TryFromIntError",
       "visible": "public",
+      "implements": [
+        { "trait": "std::fmt::Debug" },
+        { "trait": "std::marker::Copy" },
+        { "trait": "std::clone::Clone" },
+        { "trait": "std::cmp::PartialEq" },
+        { "trait": "std::cmp::Eq" },
+        { "trait": "std::fmt::Display" },
+        { "trait": "std::error::Error" }
+      ],
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "TryFromIntError implements Debug, Copy, Clone, PartialEq, Eq, Display and std::error::Error; it is the Error of the integer TryFrom impls.",
+          "kind": "implements",
+          "text": "implements 'std::fmt::Debug', 'std::marker::Copy', 'std::clone::Clone', 'std::cmp::PartialEq', 'std::cmp::Eq', 'std::fmt::Display', 'std::error::Error'",
           "source": "1.97.0 core/src/num/error.rs:9, impls: derive 9, Display 22, Error 29",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value"
+          "status": { "observed": "from the impl blocks" }
         },
         {
           "kind": "unexpressed",
@@ -1705,12 +1755,21 @@
         { "name": "None" },
         { "name": "Some", "fields": [{ "type": "T", "hold": { "kind": "owns" } }] }
       ],
+      "implements": [
+        { "trait": "std::default::Default", "impl": "std::option::Option as std::default::Default" },
+        {
+          "trait": "std::iter::IntoIterator",
+          "assoc": { "IntoIter": "std::option::IntoIter<T>", "Item": "T" },
+          "impl": "std::option::Option as std::iter::IntoIterator"
+        },
+        { "trait": "std::convert::From<T>" }
+      ],
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "Option<T> implements Clone, Eq, PartialEq, PartialOrd and Ord when T does; Copy and Hash when T does (derived); Debug when T does; Default (None) for every T; IntoIterator, which yields the value if there is one; and From<T>.",
-          "source": "1.97.0 core/src/option.rs:591, impls: derive 591, Clone 2266, Default 2299, IntoIterator 2316, From 2361, PartialEq 2434, PartialOrd 2453, Ord 2467",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the language reads Option<T> as T?, whose none and value are not a type with impls"
+          "kind": "implements",
+          "text": "implements 'std::default::Default', 'std::iter::IntoIterator' { Item = T, IntoIter = 'std::option::IntoIter' }, 'std::convert::From<T>'",
+          "source": "1.97.0 core/src/option.rs:591, impls: Default 2299, IntoIterator 2316, From 2361",
+          "status": { "observed": "from the impl blocks" }
         }
       ]
     },
@@ -1723,6 +1782,12 @@
         { "name": "Ok", "fields": [{ "type": "T", "hold": { "kind": "owns" } }] },
         { "name": "Err", "fields": [{ "type": "E", "hold": { "kind": "owns" } }] }
       ],
+      "implements": [
+        {
+          "trait": "std::iter::IntoIterator",
+          "assoc": { "IntoIter": "std::result::IntoIter<T>", "Item": "T" }
+        }
+      ],
       "clauses": [
         {
           "kind": "unexpressed",
@@ -1731,10 +1796,10 @@
           "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: as a result type the language gives T with `fails E`, and as a parameter it has no form but a host name"
         },
         {
-          "kind": "unexpressed",
-          "text": "Result<T, E> implements Clone, Eq, PartialEq, PartialOrd and Ord when T and E do; Copy and Hash when they do (derived); Debug when they do; IntoIterator, which yields the Ok value if there is one; and FromIterator<Result<A, E>> for Result<V, E>.",
-          "source": "1.97.0 core/src/result.rs:552, impls: derive 552, Clone 1887, IntoIterator 1919, FromIterator 2111",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value"
+          "kind": "implements",
+          "text": "implements 'std::iter::IntoIterator' { Item = T, IntoIter = 'std::result::IntoIter' }",
+          "source": "1.97.0 core/src/result.rs:552, impls: IntoIterator 1919",
+          "status": { "observed": "from the impl blocks" }
         }
       ]
     },
@@ -1743,12 +1808,22 @@
       "name": "std::cmp::Ordering",
       "visible": "public",
       "variants": [{ "name": "Less" }, { "name": "Equal" }, { "name": "Greater" }],
+      "implements": [
+        { "trait": "std::marker::Copy" },
+        { "trait": "std::clone::Clone" },
+        { "trait": "std::fmt::Debug" },
+        { "trait": "std::hash::Hash" },
+        { "trait": "std::cmp::Eq" },
+        { "trait": "std::cmp::PartialEq" },
+        { "trait": "std::cmp::Ord" },
+        { "trait": "std::cmp::PartialOrd" }
+      ],
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "Ordering is Less, Equal or Greater, whose discriminants are -1, 0 and 1; it is what Ord::cmp returns, and implements Copy, Clone, Debug, Hash, Eq, PartialEq, Ord and PartialOrd, with Less < Equal < Greater.",
-          "source": "1.97.0 core/src/cmp.rs:405, impls: derive Copy, Debug, Hash 397, derive_const Clone, Eq, PartialOrd, Ord, PartialEq 398, enum 405 with Less = -1, Equal = 0, Greater = 1 (408-414)",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the discriminants and the order of the variants are not fields or clauses of the type"
+          "kind": "implements",
+          "text": "implements 'std::marker::Copy', 'std::clone::Clone', 'std::fmt::Debug', 'std::hash::Hash', 'std::cmp::Eq', 'std::cmp::PartialEq', 'std::cmp::Ord', 'std::cmp::PartialOrd'",
+          "source": "1.97.0 core/src/cmp.rs:405, impls: derive Copy, Debug, Hash 397, derive_const Clone, Eq, PartialOrd, Ord, PartialEq 398",
+          "status": { "observed": "from the impl blocks" }
         }
       ]
     },
@@ -1756,18 +1831,45 @@
       "kind": "type",
       "name": "std::string::String",
       "visible": "public",
+      "implements": [
+        { "trait": "std::ops::Deref" },
+        { "trait": "std::ops::DerefMut" },
+        { "trait": "std::fmt::Display" },
+        { "trait": "std::fmt::Debug" },
+        { "trait": "std::hash::Hash" },
+        { "trait": "std::default::Default", "impl": "std::string::String as std::default::Default" },
+        { "trait": "std::clone::Clone" },
+        { "trait": "std::convert::From<char>" },
+        { "trait": "std::iter::FromIterator<char>" },
+        { "trait": "std::iter::FromIterator<std::string::String>" },
+        { "trait": "std::iter::Extend<char>" },
+        { "trait": "std::iter::Extend<std::string::String>" },
+        { "trait": "std::fmt::Write" }
+      ],
       "clauses": [
         {
           "kind": "unexpressed",
-          "text": "String implements Deref<Target = str> and DerefMut, so every str method applies to it; Display, Debug, Hash, Default, Clone, From<&str> and From<char>; FromIterator<char>, FromIterator<&str> and FromIterator<String>; Extend of the same; Add<&str>; Index<I> for ranges of byte indices; and fmt::Write.",
-          "source": "1.97.0 alloc/src/string.rs:2831, impls: Deref 2831, Display 2722, Debug 2730, Hash 2738, Default 2713, Clone 2363, From<&str> 3121, From<char> 3606, FromIterator<char> 2379, Extend<char> 2480, Add 2784, Index 2807, fmt::Write 3355",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value"
+          "text": "String implements Deref with Target = str, so every str method applies to it.",
+          "source": "1.97.0 alloc/src/string.rs:2831, impls: Deref 2831",
+          "reason": "no unsized text as an associated type: `text` as a type is the owned String, so Target = str has no form (the impl is stated without its associated type)"
         },
         {
           "kind": "unexpressed",
-          "text": "Slicing a String with byte indices that are not character boundaries panics; indexing with a single usize is not allowed.",
+          "text": "String implements From<&str>, FromIterator<&str>, Extend<&str> and Add<&str> (with Output = String).",
+          "source": "1.97.0 alloc/src/string.rs:3121, impls: From<&str> 3121, FromIterator<&str>, Extend<&str>, Add 2784",
+          "reason": "no elided lifetime in a trait argument: an interface argument that is a reference (`From<&str>`) takes an anonymous lifetime a bound cannot name, so `ref<text>` there does not compile"
+        },
+        {
+          "kind": "implements",
+          "text": "implements 'std::ops::Deref', 'std::ops::DerefMut', 'std::fmt::Display', 'std::fmt::Debug', 'std::hash::Hash', 'std::default::Default', 'std::clone::Clone', 'std::convert::From<char>', 'std::iter::FromIterator<char>', 'std::iter::FromIterator<std::string::String>', 'std::iter::Extend<char>', 'std::iter::Extend<std::string::String>', 'std::fmt::Write'",
+          "source": "1.97.0 alloc/src/string.rs:2831, impls: Deref 2831, Display 2722, Debug 2730, Hash 2738, Default 2713, Clone 2363, From<&str> 3121, From<char> 3606, FromIterator<char> 2379, Extend<char> 2480, Add 2784, fmt::Write 3355",
+          "status": { "observed": "from the impl blocks" }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Slicing a String with byte indices that are not character boundaries panics (the Index<I> impl above, for ranges); indexing with a single usize is not allowed.",
           "source": "1.97.0 alloc/src/string.rs:189-190, doc: \"Note this will panic if the byte indices provided are not character boundaries - see [`is_char_boundary`] for more details.\"",
-          "reason": "call resolves to an unnamed impl: an entry names the trait method, not the impl a call resolved to, so a promise that depends on the impl has no subject. Here: the panic belongs to the Index<Range> impl, which no entry names"
+          "reason": "no view of two arguments: a panic that depends on `is_char_boundary(self, index)` needs a pure host function of the subject and another value, and a view takes the subject alone"
         }
       ]
     },
@@ -1776,18 +1878,24 @@
       "name": "std::vec::Vec",
       "visible": "public",
       "generics": [{ "name": "T", "bounds": [] }],
+      "implements": [
+        { "trait": "std::ops::Deref", "assoc": { "Target": "list<T> as 'std::primitive::slice'" } },
+        { "trait": "std::ops::DerefMut" },
+        {
+          "trait": "std::iter::IntoIterator",
+          "assoc": { "IntoIter": "std::vec::IntoIter<T>", "Item": "T" },
+          "impl": "std::vec::Vec as std::iter::IntoIterator"
+        },
+        { "trait": "std::iter::FromIterator<T>" },
+        { "trait": "std::iter::Extend<T>" },
+        { "trait": "std::default::Default", "impl": "std::vec::Vec as std::default::Default" }
+      ],
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "Vec<T> implements Deref<Target = [T]> and DerefMut, so every slice method applies to it; IntoIterator by value, with IntoIter<T> as the iterator; Index<I> and IndexMut<I> for slice indices; FromIterator<T>; Extend<T>; Default; Clone, Hash, Eq and Ord when T does; and Debug when T does.",
-          "source": "1.97.0 alloc/src/vec/mod.rs:3782, impls: Deref 3782, IntoIterator 3931, Index 3859, FromIterator 3923, Extend 3991, Default 4293, Clone 3805, Hash 3850, Eq 4267, Ord 4271, Debug 4303",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value"
-        },
-        {
-          "kind": "unexpressed",
-          "text": "Indexing a Vec with an index that is not in it panics; get and get_mut check instead.",
-          "source": "1.97.0 alloc/src/vec/mod.rs:252-253, doc: \"However be careful: if you try to access an index which isn't in the `Vec`, your software will panic!\"",
-          "reason": "call resolves to an unnamed impl: an entry names the trait method, not the impl a call resolved to, so a promise that depends on the impl has no subject. Here: the panic belongs to the Index impl, which no entry names"
+          "kind": "implements",
+          "text": "implements 'std::ops::Deref', 'std::ops::DerefMut', 'std::iter::IntoIterator' { Item = T, IntoIter = 'std::vec::IntoIter' }, 'std::iter::FromIterator<T>', 'std::iter::Extend<T>', 'std::default::Default'",
+          "source": "1.97.0 alloc/src/vec/mod.rs:3782, impls: Deref 3782, IntoIterator 3931, FromIterator 3923, Extend 3991, Default 4293",
+          "status": { "observed": "from the impl blocks" }
         },
         {
           "kind": "invariant",
@@ -1964,10 +2072,10 @@
           "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
         },
         {
-          "kind": "unexpressed",
-          "text": "count(result) is the sum of the item counts of self and of other, where other is made an iterator by its IntoIterator impl.",
-          "source": "1.97.0 core/src/iter/traits/iterator.rs:446, doc: \"Takes two iterators and creates a new iterator over both in sequence.\"",
-          "reason": "call resolves to an unnamed impl: an entry names the trait method, not the impl a call resolved to, so a promise that depends on the impl has no subject. Here: the items of `other` are those of the iterator its IntoIterator impl makes, and `count(other)` of a generic U: IntoIterator is not the count of an iterator"
+          "kind": "ensure",
+          "text": "ensure count : count(result) == count(self) + count('<U as std::iter::IntoIterator>::into_iter'(other))",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:446-450, doc: \"Takes two iterators and creates a new iterator over both in sequence.\" \"`chain()` will return a new iterator which will first iterate over values from the first iterator and then over values from the second iterator.\"",
+          "status": { "assumed": "documentation" }
         },
         {
           "kind": "unexpressed",
@@ -1996,10 +2104,10 @@
           "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
         },
         {
-          "kind": "unexpressed",
-          "text": "count(result) is the smaller of the item counts of self and of other, where other is made an iterator by its IntoIterator impl.",
+          "kind": "ensure",
+          "text": "ensure count : count(result) == (if count(self) <= count('<U as std::iter::IntoIterator>::into_iter'(other)) then count(self) else count('<U as std::iter::IntoIterator>::into_iter'(other)))",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:526-527, doc: \"If either iterator returns [`None`], [`next`] from the zipped iterator will return [`None`].\"",
-          "reason": "call resolves to an unnamed impl: an entry names the trait method, not the impl a call resolved to, so a promise that depends on the impl has no subject. Here: the items of `other` are those of the iterator its IntoIterator impl makes, and `count(other)` of a generic U: IntoIterator is not the count of an iterator"
+          "status": { "assumed": "documentation" }
         },
         {
           "kind": "unexpressed",
@@ -2209,9 +2317,9 @@
         },
         {
           "kind": "unexpressed",
-          "text": "What the result holds is decided by B's FromIterator impl: a String collects chars, and a Result<V, E> collects an iterator of Result items into Result<V, E>, stopping at the first Err.",
+          "text": "A Result<V, E> collects an iterator of Result items into Result<V, E>, stopping at the first Err; a String collects chars. The FromIterator impls are stated as impl subjects of Result and of String; what each holds of the items is a statement about their order.",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:1974-1975, doc: \"`collect()` can also create instances of types that are not typical collections.\"",
-          "reason": "call resolves to an unnamed impl: an entry names the trait method, not the impl a call resolved to, so a promise that depends on the impl has no subject. Here: strsim and fnv collect into different B, and the call resolves to a different impl each time"
+          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
         },
         {
           "kind": "unexpressed",
@@ -2230,12 +2338,6 @@
       "params": [{ "name": "self", "type": "Self" }],
       "result": { "type": { "host": "Self::IntoIter", "form": "associated type" } },
       "clauses": [
-        {
-          "kind": "unexpressed",
-          "text": "Which items result yields, and in which order, depends on the impl the call resolves to: a Vec yields its elements, a Range its integers, an Option its value if it has one, and an Iterator is its own IntoIterator.",
-          "source": "1.97.0 core/src/iter/traits/collect.rs:293, doc: \"Creates an iterator from a value.\"",
-          "reason": "call resolves to an unnamed impl: an entry names the trait method, not the impl a call resolved to, so a promise that depends on the impl has no subject. Here: the corpora call into_iter on at least ranges, vectors and slices through different impls"
-        },
         {
           "kind": "unexpressed",
           "text": "result yields exactly the items of self, as Self::Item, in the order the impl defines.",
@@ -2330,14 +2432,7 @@
       "trait": "std::default::Default",
       "params": [],
       "result": { "type": "Self" },
-      "clauses": [
-        {
-          "kind": "unexpressed",
-          "text": "Returns the default value for the type, which is often an initial or identity value; which value that is, is the impl's: 0 for numbers, empty for String, Vec and HashMap, and the fields' defaults when derived.",
-          "source": "1.97.0 core/src/default.rs:110-111, doc: \"Default values are often some kind of initial value, identity value, or anything else that may make sense as a default.\"",
-          "reason": "call resolves to an unnamed impl: an entry names the trait method, not the impl a call resolved to, so a promise that depends on the impl has no subject. Here: the corpora call default for many types"
-        }
-      ]
+      "clauses": []
     },
     {
       "kind": "function",
@@ -2359,12 +2454,6 @@
           "text": "The trait must not fail: From is for perfect conversions, and a conversion that can fail is TryFrom's. An impl is still free to panic, and impls that allocate, such as String::from and Vec::from, panic or abort when memory runs out.",
           "source": "1.97.0 core/src/convert/mod.rs:480, doc: \"**Note: This trait must not fail**. The `From` trait is intended for perfect conversions.\"",
           "reason": "promise conditional on a bound: no clause makes a promise depend on what an implementation does, a bound's or a default body that an implementation may override: `never panics`, `terminates` and the effect bounds are unconditional. Here: the documentation asks every impl not to fail, as Deref's does, and impls that allocate exist, so `never panics` cannot be stated for the method"
-        },
-        {
-          "kind": "unexpressed",
-          "text": "Converts the input value into Self, consuming it; what the result is, is the impl's: String::from copies a &str, and an integer widening keeps the value.",
-          "source": "1.97.0 core/src/convert/mod.rs:589, doc: \"Converts to this type from the input type.\"",
-          "reason": "call resolves to an unnamed impl: an entry names the trait method, not the impl a call resolved to, so a promise that depends on the impl has no subject. Here: the corpora call from through several impls"
         }
       ]
     },
@@ -2376,20 +2465,7 @@
       "trait": "std::convert::TryFrom<T>",
       "params": [{ "name": "value", "type": "T" }],
       "result": { "type": "Self", "fails": { "host": "Self::Error", "form": "associated type" } },
-      "clauses": [
-        {
-          "kind": "unexpressed",
-          "text": "Fails with the impl's Error when the value cannot be converted; for the integer impls, whose error is TryFromIntError, it fails exactly when the value is not representable in Self, which is `fails TryFromIntError when not (value fits Self)`.",
-          "source": "1.97.0 core/src/convert/mod.rs:626-627, doc: \"Simple and safe type conversions that may fail in a controlled way under some circumstances.\"",
-          "reason": "call resolves to an unnamed impl: an entry names the trait method, not the impl a call resolved to, so a promise that depends on the impl has no subject. Here: strsim calls try_from between integer types: the condition belongs to the impl, which no entry names"
-        },
-        {
-          "kind": "unexpressed",
-          "text": "try_from is reflexive: TryFrom<T> for T is implemented and cannot fail, and its Error is Infallible.",
-          "source": "1.97.0 core/src/convert/mod.rs:643-644, doc: \"[`try_from`] is reflexive, which means that `TryFrom<T> for T` is implemented and cannot fail\"",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value"
-        }
-      ]
+      "clauses": []
     },
     {
       "kind": "function",
@@ -2523,7 +2599,7 @@
           "kind": "unexpressed",
           "text": "Floating point types implement PartialEq but not Eq, because NaN != NaN; and Eq has no methods, so the compiler cannot check that an `impl Eq` keeps the reflexivity the law above states.",
           "source": "1.97.0 core/src/cmp.rs:44-46, doc: \"in floating point numbers `NaN != NaN`, so floating point types implement `PartialEq` but not [`trait@Eq`].\"; 1.97.0 core/src/cmp.rs:291, doc: \"This property cannot be checked by the compiler, and therefore `Eq` is a trait without methods.\"",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: which types implement Eq (not f32 or f64) is a fact about impls, and the promise made by writing `impl Eq` is attached to no subject"
+          "reason": "no negative impl: the types that do not implement a trait (f32 and f64 for Eq) are not a clause, nor is the promise made by writing an `impl` of a methodless trait"
         }
       ]
     },
@@ -2588,7 +2664,7 @@
           "kind": "unexpressed",
           "text": "An implementor gives finish and write; write_u8, write_u16, write_u32, write_u64, write_u128 and write_usize, and the signed forms, have default bodies in terms of write.",
           "source": "1.97.0 core/src/hash/mod.rs:362, default body self.write(&[i]); the other write_* methods likewise",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: a trait's provided methods are not a slot"
+          "reason": "no trait items: a trait's associated types, required methods and provided methods are not recorded"
         }
       ]
     },
@@ -2601,7 +2677,7 @@
           "kind": "unexpressed",
           "text": "Item is the associated type of the elements; next is the only required method, and all the others (map, filter, count, collect and the rest) have default bodies in terms of it.",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:42, trait head: type Item; and fn next(&mut self) -> Option<Self::Item>; with no body",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item type is an associated type"
+          "reason": "no trait items: a trait's associated types, required methods and provided methods are not recorded"
         },
         {
           "kind": "unexpressed",
@@ -2611,33 +2687,8 @@
         }
       ]
     },
-    {
-      "kind": "trait",
-      "name": "std::iter::IntoIterator",
-      "visible": "public",
-      "clauses": [
-        {
-          "kind": "unexpressed",
-          "text": "Item and IntoIter are the associated types, with IntoIter: Iterator<Item = Self::Item>; every Iterator I is an IntoIterator with Item = I::Item and IntoIter = I, whose into_iter returns the iterator itself.",
-          "source": "1.97.0 core/src/iter/traits/collect.rs:283, impls: trait 283, blanket impl 317",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Item and IntoIter types are associated types"
-        }
-      ]
-    },
-    {
-      "kind": "trait",
-      "name": "std::clone::Clone",
-      "visible": "public",
-      "bounds": ["Sized"],
-      "clauses": [
-        {
-          "kind": "unexpressed",
-          "text": "Clone is a supertrait of Copy, so every Copy type is Clone, and a Copy type's clone only needs to return *self.",
-          "source": "1.97.0 core/src/clone.rs:59-60, doc: \"Since `Clone` is a supertrait of [`Copy`], any type that implements `Copy` must also implement `Clone`.\"",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: recorded on Copy as its supertrait; the consequence for clone is an impl's behaviour"
-        }
-      ]
-    },
+    { "kind": "trait", "name": "std::iter::IntoIterator", "visible": "public", "clauses": [] },
+    { "kind": "trait", "name": "std::clone::Clone", "visible": "public", "bounds": ["Sized"], "clauses": [] },
     {
       "kind": "trait",
       "name": "std::marker::Copy",
@@ -2648,7 +2699,7 @@
           "kind": "unexpressed",
           "text": "Copy has no methods: a copy is always a simple bit-wise copy, made implicitly on assignment, after which the source stays usable; a type can be Copy if all its components are, and cannot be Copy if it implements Drop.",
           "source": "1.97.0 core/src/marker.rs:353-354, doc: \"The behavior of `Copy` is not overloadable; it is always a simple bit-wise copy.\"",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: what a copy leaves usable is not a clause"
+          "reason": "no negative impl: a type that cannot implement a trait (a Copy type cannot implement Drop) is not a clause, and a methodless trait has no behaviour to state"
         }
       ]
     },
@@ -2657,14 +2708,7 @@
       "name": "std::default::Default",
       "visible": "public",
       "bounds": ["Sized"],
-      "clauses": [
-        {
-          "kind": "unexpressed",
-          "text": "Rust implements Default for various primitive types, and a type's Default can be derived when all its fields implement Default, using each field's default.",
-          "source": "1.97.0 core/src/default.rs:36, doc: \"Rust implements `Default` for various primitive types.\"",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: which types implement the trait is not a slot"
-        }
-      ]
+      "clauses": []
     },
     {
       "kind": "trait",
@@ -2672,14 +2716,7 @@
       "visible": "public",
       "generics": [{ "name": "T", "bounds": [] }],
       "bounds": ["Sized"],
-      "clauses": [
-        {
-          "kind": "unexpressed",
-          "text": "Implementing From<T> for U gives Into<U> for T by a blanket impl, so From is the one to implement; and conversions are expected to be infallible and lossless.",
-          "source": "1.97.0 core/src/convert/mod.rs:461, doc: \"One should always prefer implementing `From` over [`Into`]\"",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the blanket impl and the expectation about impls are not a slot"
-        }
-      ]
+      "clauses": []
     },
     {
       "kind": "trait",
@@ -2687,14 +2724,7 @@
       "visible": "public",
       "generics": [{ "name": "T", "bounds": [] }],
       "bounds": ["Sized"],
-      "clauses": [
-        {
-          "kind": "unexpressed",
-          "text": "Error is the associated type of a failed conversion; TryFrom<T> for U implies TryInto<U> for T.",
-          "source": "1.97.0 core/src/convert/mod.rs:642, doc: \"`TryFrom<T> for U` implies [`TryInto`]`<U> for T`\"",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Error type is an associated type"
-        }
-      ]
+      "clauses": []
     },
     {
       "kind": "trait",
@@ -2706,7 +2736,7 @@
           "kind": "unexpressed",
           "text": "An implementor describes itself through Debug and Display; source returns the lower-level source of the error, and None by default.",
           "source": "1.97.0 core/src/error.rs:10-11, doc: \"Errors must describe themselves through the [`Display`] and [`Debug`] traits.\"",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the default of a provided method is not a slot"
+          "reason": "no trait items: a trait's associated types, required methods and provided methods are not recorded"
         }
       ]
     },
@@ -2751,7 +2781,7 @@
           "kind": "unexpressed",
           "text": "Target is the associated type; if T: Deref<Target = U>, then *v is *Deref::deref(&v), &T coerces to &U, and T implicitly has the &self methods of U.",
           "source": "1.97.0 core/src/ops/deref.rs:31, doc: \"Values of type `&T` are coerced to values of type `&U`\"",
-          "reason": "no impl or associated type: no slot lists the traits a type implements, states an impl's own behaviour, or gives an associated type its value. Here: the Target type is an associated type"
+          "reason": "no deref coercion: a coercion that the compiler inserts, and the methods a type has by Deref, are not clauses; the Target of each impl is stated by the impls"
         }
       ]
     },
@@ -2774,14 +2804,7 @@
       "name": "std::ops::Index",
       "visible": "public",
       "generics": [{ "name": "Idx", "bounds": ["?Sized"] }],
-      "clauses": [
-        {
-          "kind": "unexpressed",
-          "text": "container[index] is *container.index(index) in an immutable context, and may panic if the index is out of bounds; which impls panic, and for which indices, is the impl's.",
-          "source": "1.97.0 core/src/ops/index.rs:69, doc: \"May panic if the index is out of bounds.\"",
-          "reason": "call resolves to an unnamed impl: an entry names the trait method, not the impl a call resolved to, so a promise that depends on the impl has no subject. Here: a slice or Vec indexed by a usize not in it panics, and the call resolves to that impl"
-        }
-      ]
+      "clauses": []
     },
     {
       "kind": "trait",
@@ -2789,14 +2812,7 @@
       "visible": "public",
       "generics": [{ "name": "Idx", "bounds": ["?Sized"] }],
       "bounds": ["std::ops::Index<Idx>"],
-      "clauses": [
-        {
-          "kind": "unexpressed",
-          "text": "container[index] is *container.index_mut(index) in a mutable context, and may panic if the index is out of bounds; which impls panic, and for which indices, is the impl's.",
-          "source": "1.97.0 core/src/ops/index.rs:175, doc: \"May panic if the index is out of bounds.\"",
-          "reason": "call resolves to an unnamed impl: an entry names the trait method, not the impl a call resolved to, so a promise that depends on the impl has no subject. Here: the call resolves to the impl of the container"
-        }
-      ]
+      "clauses": []
     },
     {
       "kind": "macro",
@@ -2991,6 +3007,2608 @@
           "text": "The arguments are formatted according to the format string, and the formatted text is what the writer receives.",
           "source": "1.97.0 core/src/macros/mod.rs:516-517, doc: \"Arguments will be formatted according to the specified format string and the result will be passed to the writer.\"",
           "reason": "what a function computes: the text a Debug or Display impl or a format string produces is the output of a function, which the language keeps out (language 16)"
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Chain as std::iter::Iterator",
+      "visible": "public",
+      "generics": [
+        { "name": "A", "bounds": ["std::iter::Iterator"] },
+        { "name": "B", "bounds": ["std::iter::Iterator<Item = A::Item>"] }
+      ],
+      "trait": "std::iter::Iterator",
+      "self": "std::iter::Chain<A, B>",
+      "assoc": { "Item": "A::Item" },
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::Iterator'",
+          "source": "1.97.0 core/src/iter/adapters/chain.rs:73, impls: impl of Iterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Chain as std::iter::DoubleEndedIterator",
+      "visible": "public",
+      "generics": [
+        { "name": "A", "bounds": ["std::iter::DoubleEndedIterator"] },
+        { "name": "B", "bounds": ["std::iter::DoubleEndedIterator<Item = A::Item>"] }
+      ],
+      "trait": "std::iter::DoubleEndedIterator",
+      "self": "std::iter::Chain<A, B>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::DoubleEndedIterator'",
+          "source": "1.97.0 core/src/iter/adapters/chain.rs:205, impls: impl of DoubleEndedIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Chain as std::iter::FusedIterator",
+      "visible": "public",
+      "generics": [
+        { "name": "A", "bounds": ["std::iter::FusedIterator"] },
+        { "name": "B", "bounds": ["std::iter::FusedIterator<Item = A::Item>"] }
+      ],
+      "trait": "std::iter::FusedIterator",
+      "self": "std::iter::Chain<A, B>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::FusedIterator'",
+          "source": "1.97.0 core/src/iter/adapters/chain.rs:292, impls: impl of FusedIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Chain as std::clone::Clone",
+      "visible": "public",
+      "generics": [
+        { "name": "A", "bounds": ["std::clone::Clone"] },
+        { "name": "B", "bounds": ["std::clone::Clone"] }
+      ],
+      "trait": "std::clone::Clone",
+      "self": "std::iter::Chain<A, B>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::clone::Clone'",
+          "source": "1.97.0 core/src/iter/adapters/chain.rs:20, impls: impl of Clone",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Chain as std::fmt::Debug",
+      "visible": "public",
+      "generics": [
+        { "name": "A", "bounds": ["std::fmt::Debug"] },
+        { "name": "B", "bounds": ["std::fmt::Debug"] }
+      ],
+      "trait": "std::fmt::Debug",
+      "self": "std::iter::Chain<A, B>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::fmt::Debug'",
+          "source": "1.97.0 core/src/iter/adapters/chain.rs:20, impls: impl of Debug",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Enumerate as std::iter::Iterator",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": ["std::iter::Iterator"] }],
+      "trait": "std::iter::Iterator",
+      "self": "std::iter::Enumerate<I>",
+      "assoc": { "Item": "(u64 as 'usize', I::Item)" },
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::Iterator'",
+          "source": "1.97.0 core/src/iter/adapters/enumerate.rs:62, impls: impl of Iterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Enumerate as std::iter::DoubleEndedIterator",
+      "visible": "public",
+      "generics": [
+        { "name": "I", "bounds": ["std::iter::ExactSizeIterator", "std::iter::DoubleEndedIterator"] }
+      ],
+      "trait": "std::iter::DoubleEndedIterator",
+      "self": "std::iter::Enumerate<I>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::DoubleEndedIterator'",
+          "source": "1.97.0 core/src/iter/adapters/enumerate.rs:175, impls: impl of DoubleEndedIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Enumerate as std::iter::ExactSizeIterator",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": ["std::iter::ExactSizeIterator"] }],
+      "trait": "std::iter::ExactSizeIterator",
+      "self": "std::iter::Enumerate<I>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::ExactSizeIterator'",
+          "source": "1.97.0 core/src/iter/adapters/enumerate.rs:250, impls: impl of ExactSizeIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Enumerate as std::iter::FusedIterator",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": ["std::iter::FusedIterator"] }],
+      "trait": "std::iter::FusedIterator",
+      "self": "std::iter::Enumerate<I>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::FusedIterator'",
+          "source": "1.97.0 core/src/iter/adapters/enumerate.rs:277, impls: impl of FusedIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Enumerate as std::clone::Clone",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": ["std::clone::Clone"] }],
+      "trait": "std::clone::Clone",
+      "self": "std::iter::Enumerate<I>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::clone::Clone'",
+          "source": "1.97.0 core/src/iter/adapters/enumerate.rs:14, impls: impl of Clone",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Enumerate as std::fmt::Debug",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": ["std::fmt::Debug"] }],
+      "trait": "std::fmt::Debug",
+      "self": "std::iter::Enumerate<I>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::fmt::Debug'",
+          "source": "1.97.0 core/src/iter/adapters/enumerate.rs:14, impls: impl of Debug",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Filter as std::iter::Iterator",
+      "visible": "public",
+      "generics": [
+        { "name": "I", "bounds": ["std::iter::Iterator"] },
+        { "name": "P", "bounds": ["FnMut(&I::Item) -> bool"] }
+      ],
+      "trait": "std::iter::Iterator",
+      "self": "std::iter::Filter<I, P>",
+      "assoc": { "Item": "I::Item" },
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::Iterator'",
+          "source": "1.97.0 core/src/iter/adapters/filter.rs:90, impls: impl of Iterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Filter as std::iter::DoubleEndedIterator",
+      "visible": "public",
+      "generics": [
+        { "name": "I", "bounds": ["std::iter::DoubleEndedIterator"] },
+        { "name": "P", "bounds": ["FnMut(&I::Item) -> bool"] }
+      ],
+      "trait": "std::iter::DoubleEndedIterator",
+      "self": "std::iter::Filter<I, P>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::DoubleEndedIterator'",
+          "source": "1.97.0 core/src/iter/adapters/filter.rs:170, impls: impl of DoubleEndedIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Filter as std::iter::FusedIterator",
+      "visible": "public",
+      "generics": [
+        { "name": "I", "bounds": ["std::iter::FusedIterator"] },
+        { "name": "P", "bounds": ["FnMut(&I::Item) -> bool"] }
+      ],
+      "trait": "std::iter::FusedIterator",
+      "self": "std::iter::Filter<I, P>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::FusedIterator'",
+          "source": "1.97.0 core/src/iter/adapters/filter.rs:199, impls: impl of FusedIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Filter as std::clone::Clone",
+      "visible": "public",
+      "generics": [
+        { "name": "I", "bounds": ["std::clone::Clone"] },
+        { "name": "P", "bounds": ["std::clone::Clone"] }
+      ],
+      "trait": "std::clone::Clone",
+      "self": "std::iter::Filter<I, P>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::clone::Clone'",
+          "source": "1.97.0 core/src/iter/adapters/filter.rs:20, impls: impl of Clone",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Filter as std::fmt::Debug",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": ["std::fmt::Debug"] }, { "name": "P", "bounds": [] }],
+      "trait": "std::fmt::Debug",
+      "self": "std::iter::Filter<I, P>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::fmt::Debug'",
+          "source": "1.97.0 core/src/iter/adapters/filter.rs:69, impls: impl of Debug",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Map as std::iter::Iterator",
+      "visible": "public",
+      "generics": [
+        { "name": "B", "bounds": [] },
+        { "name": "I", "bounds": ["std::iter::Iterator"] },
+        { "name": "F", "bounds": ["FnMut(I::Item) -> B"] }
+      ],
+      "trait": "std::iter::Iterator",
+      "self": "std::iter::Map<I, F>",
+      "assoc": { "Item": "B" },
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::Iterator' { Item = B }",
+          "source": "1.97.0 core/src/iter/adapters/map.rs:99, impls: impl of Iterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Map as std::iter::DoubleEndedIterator",
+      "visible": "public",
+      "generics": [
+        { "name": "B", "bounds": [] },
+        { "name": "I", "bounds": ["std::iter::DoubleEndedIterator"] },
+        { "name": "F", "bounds": ["FnMut(I::Item) -> B"] }
+      ],
+      "trait": "std::iter::DoubleEndedIterator",
+      "self": "std::iter::Map<I, F>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::DoubleEndedIterator'",
+          "source": "1.97.0 core/src/iter/adapters/map.rs:143, impls: impl of DoubleEndedIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Map as std::iter::ExactSizeIterator",
+      "visible": "public",
+      "generics": [
+        { "name": "B", "bounds": [] },
+        { "name": "I", "bounds": ["std::iter::ExactSizeIterator"] },
+        { "name": "F", "bounds": ["FnMut(I::Item) -> B"] }
+      ],
+      "trait": "std::iter::ExactSizeIterator",
+      "self": "std::iter::Map<I, F>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::ExactSizeIterator'",
+          "source": "1.97.0 core/src/iter/adapters/map.rs:170, impls: impl of ExactSizeIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Map as std::iter::FusedIterator",
+      "visible": "public",
+      "generics": [
+        { "name": "B", "bounds": [] },
+        { "name": "I", "bounds": ["std::iter::FusedIterator"] },
+        { "name": "F", "bounds": ["FnMut(I::Item) -> B"] }
+      ],
+      "trait": "std::iter::FusedIterator",
+      "self": "std::iter::Map<I, F>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::FusedIterator'",
+          "source": "1.97.0 core/src/iter/adapters/map.rs:184, impls: impl of FusedIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Map as std::clone::Clone",
+      "visible": "public",
+      "generics": [
+        { "name": "I", "bounds": ["std::clone::Clone"] },
+        { "name": "F", "bounds": ["std::clone::Clone"] }
+      ],
+      "trait": "std::clone::Clone",
+      "self": "std::iter::Map<I, F>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::clone::Clone'",
+          "source": "1.97.0 core/src/iter/adapters/map.rs:60, impls: impl of Clone",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Map as std::fmt::Debug",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": ["std::fmt::Debug"] }, { "name": "F", "bounds": [] }],
+      "trait": "std::fmt::Debug",
+      "self": "std::iter::Map<I, F>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::fmt::Debug'",
+          "source": "1.97.0 core/src/iter/adapters/map.rs:78, impls: impl of Debug",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Skip as std::iter::Iterator",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": ["std::iter::Iterator"] }],
+      "trait": "std::iter::Iterator",
+      "self": "std::iter::Skip<I>",
+      "assoc": { "Item": "I::Item" },
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::Iterator'",
+          "source": "1.97.0 core/src/iter/adapters/skip.rs:33, impls: impl of Iterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Skip as std::iter::DoubleEndedIterator",
+      "visible": "public",
+      "generics": [
+        { "name": "I", "bounds": ["std::iter::DoubleEndedIterator", "std::iter::ExactSizeIterator"] }
+      ],
+      "trait": "std::iter::DoubleEndedIterator",
+      "self": "std::iter::Skip<I>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::DoubleEndedIterator'",
+          "source": "1.97.0 core/src/iter/adapters/skip.rs:191, impls: impl of DoubleEndedIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Skip as std::iter::ExactSizeIterator",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": ["std::iter::ExactSizeIterator"] }],
+      "trait": "std::iter::ExactSizeIterator",
+      "self": "std::iter::Skip<I>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::ExactSizeIterator'",
+          "source": "1.97.0 core/src/iter/adapters/skip.rs:188, impls: impl of ExactSizeIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Skip as std::iter::FusedIterator",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": ["std::iter::FusedIterator"] }],
+      "trait": "std::iter::FusedIterator",
+      "self": "std::iter::Skip<I>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::FusedIterator'",
+          "source": "1.97.0 core/src/iter/adapters/skip.rs:246, impls: impl of FusedIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Skip as std::clone::Clone",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": ["std::clone::Clone"] }],
+      "trait": "std::clone::Clone",
+      "self": "std::iter::Skip<I>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::clone::Clone'",
+          "source": "1.97.0 core/src/iter/adapters/skip.rs:18, impls: impl of Clone",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Skip as std::fmt::Debug",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": ["std::fmt::Debug"] }],
+      "trait": "std::fmt::Debug",
+      "self": "std::iter::Skip<I>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::fmt::Debug'",
+          "source": "1.97.0 core/src/iter/adapters/skip.rs:18, impls: impl of Debug",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Take as std::iter::Iterator",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": ["std::iter::Iterator"] }],
+      "trait": "std::iter::Iterator",
+      "self": "std::iter::Take<I>",
+      "assoc": { "Item": "I::Item" },
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::Iterator'",
+          "source": "1.97.0 core/src/iter/adapters/take.rs:29, impls: impl of Iterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Take as std::iter::DoubleEndedIterator",
+      "visible": "public",
+      "generics": [
+        { "name": "I", "bounds": ["std::iter::DoubleEndedIterator", "std::iter::ExactSizeIterator"] }
+      ],
+      "trait": "std::iter::DoubleEndedIterator",
+      "self": "std::iter::Take<I>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::DoubleEndedIterator'",
+          "source": "1.97.0 core/src/iter/adapters/take.rs:151, impls: impl of DoubleEndedIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Take as std::iter::ExactSizeIterator",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": ["std::iter::ExactSizeIterator"] }],
+      "trait": "std::iter::ExactSizeIterator",
+      "self": "std::iter::Take<I>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::ExactSizeIterator'",
+          "source": "1.97.0 core/src/iter/adapters/take.rs:241, impls: impl of ExactSizeIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Take as std::iter::FusedIterator",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": ["std::iter::FusedIterator"] }],
+      "trait": "std::iter::FusedIterator",
+      "self": "std::iter::Take<I>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::FusedIterator'",
+          "source": "1.97.0 core/src/iter/adapters/take.rs:244, impls: impl of FusedIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Take as std::clone::Clone",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": ["std::clone::Clone"] }],
+      "trait": "std::clone::Clone",
+      "self": "std::iter::Take<I>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::clone::Clone'",
+          "source": "1.97.0 core/src/iter/adapters/take.rs:14, impls: impl of Clone",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Take as std::fmt::Debug",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": ["std::fmt::Debug"] }],
+      "trait": "std::fmt::Debug",
+      "self": "std::iter::Take<I>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::fmt::Debug'",
+          "source": "1.97.0 core/src/iter/adapters/take.rs:14, impls: impl of Debug",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::TakeWhile as std::iter::Iterator",
+      "visible": "public",
+      "generics": [
+        { "name": "I", "bounds": ["std::iter::Iterator"] },
+        { "name": "P", "bounds": ["FnMut(&I::Item) -> bool"] }
+      ],
+      "trait": "std::iter::Iterator",
+      "self": "std::iter::TakeWhile<I, P>",
+      "assoc": { "Item": "I::Item" },
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::Iterator'",
+          "source": "1.97.0 core/src/iter/adapters/take_while.rs:37, impls: impl of Iterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::TakeWhile as std::iter::FusedIterator",
+      "visible": "public",
+      "generics": [
+        { "name": "I", "bounds": ["std::iter::FusedIterator"] },
+        { "name": "P", "bounds": ["FnMut(&I::Item) -> bool"] }
+      ],
+      "trait": "std::iter::FusedIterator",
+      "self": "std::iter::TakeWhile<I, P>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::FusedIterator'",
+          "source": "1.97.0 core/src/iter/adapters/take_while.rs:103, impls: impl of FusedIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::TakeWhile as std::clone::Clone",
+      "visible": "public",
+      "generics": [
+        { "name": "I", "bounds": ["std::clone::Clone"] },
+        { "name": "P", "bounds": ["std::clone::Clone"] }
+      ],
+      "trait": "std::clone::Clone",
+      "self": "std::iter::TakeWhile<I, P>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::clone::Clone'",
+          "source": "1.97.0 core/src/iter/adapters/take_while.rs:16, impls: impl of Clone",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::TakeWhile as std::fmt::Debug",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": ["std::fmt::Debug"] }, { "name": "P", "bounds": [] }],
+      "trait": "std::fmt::Debug",
+      "self": "std::iter::TakeWhile<I, P>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::fmt::Debug'",
+          "source": "1.97.0 core/src/iter/adapters/take_while.rs:30, impls: impl of Debug",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Zip as std::iter::Iterator",
+      "visible": "public",
+      "generics": [
+        { "name": "A", "bounds": ["std::iter::Iterator"] },
+        { "name": "B", "bounds": ["std::iter::Iterator"] }
+      ],
+      "trait": "std::iter::Iterator",
+      "self": "std::iter::Zip<A, B>",
+      "assoc": { "Item": "(A::Item, B::Item)" },
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::Iterator'",
+          "source": "1.97.0 core/src/iter/adapters/zip.rs:74, impls: impl of Iterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Zip as std::iter::DoubleEndedIterator",
+      "visible": "public",
+      "generics": [
+        { "name": "A", "bounds": ["std::iter::DoubleEndedIterator", "std::iter::ExactSizeIterator"] },
+        { "name": "B", "bounds": ["std::iter::DoubleEndedIterator", "std::iter::ExactSizeIterator"] }
+      ],
+      "trait": "std::iter::DoubleEndedIterator",
+      "self": "std::iter::Zip<A, B>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::DoubleEndedIterator'",
+          "source": "1.97.0 core/src/iter/adapters/zip.rs:116, impls: impl of DoubleEndedIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Zip as std::iter::ExactSizeIterator",
+      "visible": "public",
+      "generics": [
+        { "name": "A", "bounds": ["std::iter::ExactSizeIterator"] },
+        { "name": "B", "bounds": ["std::iter::ExactSizeIterator"] }
+      ],
+      "trait": "std::iter::ExactSizeIterator",
+      "self": "std::iter::Zip<A, B>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::ExactSizeIterator'",
+          "source": "1.97.0 core/src/iter/adapters/zip.rs:407, impls: impl of ExactSizeIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Zip as std::iter::FusedIterator",
+      "visible": "public",
+      "generics": [
+        { "name": "A", "bounds": ["std::iter::FusedIterator"] },
+        { "name": "B", "bounds": ["std::iter::FusedIterator"] }
+      ],
+      "trait": "std::iter::FusedIterator",
+      "self": "std::iter::Zip<A, B>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::FusedIterator'",
+          "source": "1.97.0 core/src/iter/adapters/zip.rs:434, impls: impl of FusedIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Zip as std::clone::Clone",
+      "visible": "public",
+      "generics": [
+        { "name": "A", "bounds": ["std::clone::Clone"] },
+        { "name": "B", "bounds": ["std::clone::Clone"] }
+      ],
+      "trait": "std::clone::Clone",
+      "self": "std::iter::Zip<A, B>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::clone::Clone'",
+          "source": "1.97.0 core/src/iter/adapters/zip.rs:10, impls: impl of Clone",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Zip as std::fmt::Debug",
+      "visible": "public",
+      "generics": [
+        { "name": "A", "bounds": ["std::fmt::Debug"] },
+        { "name": "B", "bounds": ["std::fmt::Debug"] }
+      ],
+      "trait": "std::fmt::Debug",
+      "self": "std::iter::Zip<A, B>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::fmt::Debug'",
+          "source": "1.97.0 core/src/iter/adapters/zip.rs:481, impls: impl of Debug",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Copied as std::iter::Iterator",
+      "visible": "public",
+      "generics": [
+        { "name": "'a", "bounds": [] },
+        { "name": "I", "bounds": ["std::iter::Iterator<Item = &'a T>"] },
+        { "name": "T", "bounds": ["'a", "std::marker::Copy"] }
+      ],
+      "trait": "std::iter::Iterator",
+      "self": "std::iter::Copied<I>",
+      "assoc": { "Item": "T" },
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::Iterator' { Item = T }",
+          "source": "1.97.0 core/src/iter/adapters/copied.rs:44, impls: impl of Iterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Copied as std::iter::DoubleEndedIterator",
+      "visible": "public",
+      "generics": [
+        { "name": "'a", "bounds": [] },
+        { "name": "I", "bounds": ["std::iter::DoubleEndedIterator<Item = &'a T>"] },
+        { "name": "T", "bounds": ["'a", "std::marker::Copy"] }
+      ],
+      "trait": "std::iter::DoubleEndedIterator",
+      "self": "std::iter::Copied<I>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::DoubleEndedIterator'",
+          "source": "1.97.0 core/src/iter/adapters/copied.rs:112, impls: impl of DoubleEndedIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Copied as std::iter::ExactSizeIterator",
+      "visible": "public",
+      "generics": [
+        { "name": "'a", "bounds": [] },
+        { "name": "I", "bounds": ["std::iter::ExactSizeIterator<Item = &'a T>"] },
+        { "name": "T", "bounds": ["'a", "std::marker::Copy"] }
+      ],
+      "trait": "std::iter::ExactSizeIterator",
+      "self": "std::iter::Copied<I>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::ExactSizeIterator'",
+          "source": "1.97.0 core/src/iter/adapters/copied.rs:144, impls: impl of ExactSizeIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Copied as std::iter::FusedIterator",
+      "visible": "public",
+      "generics": [
+        { "name": "'a", "bounds": [] },
+        { "name": "I", "bounds": ["std::iter::FusedIterator<Item = &'a T>"] },
+        { "name": "T", "bounds": ["'a", "std::marker::Copy"] }
+      ],
+      "trait": "std::iter::FusedIterator",
+      "self": "std::iter::Copied<I>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::FusedIterator'",
+          "source": "1.97.0 core/src/iter/adapters/copied.rs:159, impls: impl of FusedIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Copied as std::clone::Clone",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": ["std::clone::Clone"] }],
+      "trait": "std::clone::Clone",
+      "self": "std::iter::Copied<I>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::clone::Clone'",
+          "source": "1.97.0 core/src/iter/adapters/copied.rs:18, impls: impl of Clone",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Copied as std::fmt::Debug",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": ["std::fmt::Debug"] }],
+      "trait": "std::fmt::Debug",
+      "self": "std::iter::Copied<I>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::fmt::Debug'",
+          "source": "1.97.0 core/src/iter/adapters/copied.rs:18, impls: impl of Debug",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::FlatMap as std::iter::Iterator",
+      "visible": "public",
+      "generics": [
+        { "name": "I", "bounds": ["std::iter::Iterator"] },
+        { "name": "U", "bounds": ["std::iter::IntoIterator"] },
+        { "name": "F", "bounds": ["FnMut(I::Item) -> U"] }
+      ],
+      "trait": "std::iter::Iterator",
+      "self": "std::iter::FlatMap<I, U, F>",
+      "assoc": { "Item": "U::Item" },
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::Iterator'",
+          "source": "1.97.0 core/src/iter/adapters/flatten.rs:56, impls: impl of Iterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::FlatMap as std::iter::DoubleEndedIterator",
+      "visible": "public",
+      "generics": [
+        { "name": "I", "bounds": ["std::iter::DoubleEndedIterator"] },
+        { "name": "U", "bounds": ["std::iter::IntoIterator<IntoIter: std::iter::DoubleEndedIterator>"] },
+        { "name": "F", "bounds": ["FnMut(I::Item) -> U"] }
+      ],
+      "trait": "std::iter::DoubleEndedIterator",
+      "self": "std::iter::FlatMap<I, U, F>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::DoubleEndedIterator'",
+          "source": "1.97.0 core/src/iter/adapters/flatten.rs:107, impls: impl of DoubleEndedIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::FlatMap as std::iter::FusedIterator",
+      "visible": "public",
+      "generics": [
+        { "name": "I", "bounds": ["std::iter::FusedIterator"] },
+        { "name": "U", "bounds": ["std::iter::IntoIterator"] },
+        { "name": "F", "bounds": ["FnMut(I::Item) -> U"] }
+      ],
+      "trait": "std::iter::FusedIterator",
+      "self": "std::iter::FlatMap<I, U, F>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::FusedIterator'",
+          "source": "1.97.0 core/src/iter/adapters/flatten.rs:142, impls: impl of FusedIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::FlatMap as std::clone::Clone",
+      "visible": "public",
+      "generics": [
+        { "name": "I", "bounds": ["std::clone::Clone"] },
+        {
+          "name": "U",
+          "bounds": ["std::clone::Clone", "std::iter::IntoIterator<IntoIter: std::clone::Clone>"]
+        },
+        { "name": "F", "bounds": ["std::clone::Clone"] }
+      ],
+      "trait": "std::clone::Clone",
+      "self": "std::iter::FlatMap<I, U, F>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::clone::Clone'",
+          "source": "1.97.0 core/src/iter/adapters/flatten.rs:36, impls: impl of Clone",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::FlatMap as std::fmt::Debug",
+      "visible": "public",
+      "generics": [
+        { "name": "I", "bounds": ["std::fmt::Debug"] },
+        { "name": "U", "bounds": ["std::iter::IntoIterator<IntoIter: std::fmt::Debug>"] },
+        { "name": "F", "bounds": [] }
+      ],
+      "trait": "std::fmt::Debug",
+      "self": "std::iter::FlatMap<I, U, F>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::fmt::Debug'",
+          "source": "1.97.0 core/src/iter/adapters/flatten.rs:46, impls: impl of Debug",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::slice::Iter as std::fmt::Debug",
+      "visible": "public",
+      "generics": [{ "name": "'a", "bounds": [] }, { "name": "T", "bounds": ["'a", "std::fmt::Debug"] }],
+      "trait": "std::fmt::Debug",
+      "self": "std::slice::Iter<'a, T>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::fmt::Debug'",
+          "source": "1.97.0 core/src/slice/iter.rs:81, impls: impl of Debug",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::slice::Iter as std::marker::Send",
+      "visible": "public",
+      "generics": [{ "name": "'a", "bounds": [] }, { "name": "T", "bounds": ["'a", "std::marker::Sync"] }],
+      "trait": "std::marker::Send",
+      "self": "std::slice::Iter<'a, T>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::marker::Send'",
+          "source": "1.97.0 core/src/slice/iter.rs:90, impls: unsafe impl of Send",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::slice::Iter as std::marker::Sync",
+      "visible": "public",
+      "generics": [{ "name": "'a", "bounds": [] }, { "name": "T", "bounds": ["'a", "std::marker::Sync"] }],
+      "trait": "std::marker::Sync",
+      "self": "std::slice::Iter<'a, T>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::marker::Sync'",
+          "source": "1.97.0 core/src/slice/iter.rs:88, impls: unsafe impl of Sync",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::vec::IntoIter as std::clone::Clone",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": ["std::clone::Clone"] }],
+      "trait": "std::clone::Clone",
+      "self": "std::vec::IntoIter<T>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::clone::Clone'",
+          "source": "1.97.0 alloc/src/vec/into_iter.rs:534, impls: impl of Clone",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::vec::IntoIter as std::fmt::Debug",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": ["std::fmt::Debug"] }],
+      "trait": "std::fmt::Debug",
+      "self": "std::vec::IntoIter<T>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::fmt::Debug'",
+          "source": "1.97.0 alloc/src/vec/into_iter.rs:69, impls: impl of Debug",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::ops::Range as std::clone::Clone",
+      "visible": "public",
+      "generics": [{ "name": "Idx", "bounds": ["std::clone::Clone"] }],
+      "trait": "std::clone::Clone",
+      "self": "std::ops::Range<Idx>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::clone::Clone'",
+          "source": "1.97.0 core/src/ops/range.rs:80, impls: derive of Clone",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::ops::Range as std::default::Default",
+      "visible": "public",
+      "generics": [{ "name": "Idx", "bounds": ["std::default::Default"] }],
+      "trait": "std::default::Default",
+      "self": "std::ops::Range<Idx>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::default::Default'",
+          "source": "1.97.0 core/src/ops/range.rs:80, impls: derive of Default",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::ops::Range as std::cmp::PartialEq",
+      "visible": "public",
+      "generics": [{ "name": "Idx", "bounds": ["std::cmp::PartialEq"] }],
+      "trait": "std::cmp::PartialEq",
+      "self": "std::ops::Range<Idx>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::cmp::PartialEq'",
+          "source": "1.97.0 core/src/ops/range.rs:80, impls: derive of PartialEq",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::ops::Range as std::cmp::Eq",
+      "visible": "public",
+      "generics": [{ "name": "Idx", "bounds": ["std::cmp::Eq"] }],
+      "trait": "std::cmp::Eq",
+      "self": "std::ops::Range<Idx>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::cmp::Eq'",
+          "source": "1.97.0 core/src/ops/range.rs:79, impls: derive of Eq",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::ops::Range as std::hash::Hash",
+      "visible": "public",
+      "generics": [{ "name": "Idx", "bounds": ["std::hash::Hash"] }],
+      "trait": "std::hash::Hash",
+      "self": "std::ops::Range<Idx>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::hash::Hash'",
+          "source": "1.97.0 core/src/ops/range.rs:79, impls: derive of Hash",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::ops::Range as std::fmt::Debug",
+      "visible": "public",
+      "generics": [{ "name": "Idx", "bounds": ["std::fmt::Debug"] }],
+      "trait": "std::fmt::Debug",
+      "self": "std::ops::Range<Idx>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::fmt::Debug'",
+          "source": "1.97.0 core/src/ops/range.rs:92, impls: impl of Debug",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::hash::BuildHasherDefault as std::hash::BuildHasher",
+      "visible": "public",
+      "generics": [{ "name": "H", "bounds": ["std::default::Default", "std::hash::Hasher"] }],
+      "trait": "std::hash::BuildHasher",
+      "self": "std::hash::BuildHasherDefault<H>",
+      "assoc": { "Hasher": "H" },
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::hash::BuildHasher' { Hasher = H }",
+          "source": "1.97.0 core/src/hash/mod.rs:770, impls: impl of BuildHasher",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::collections::hash_map::Entry as std::fmt::Debug",
+      "visible": "public",
+      "generics": [
+        { "name": "'a", "bounds": [] },
+        { "name": "K", "bounds": ["'a", "std::fmt::Debug"] },
+        { "name": "V", "bounds": ["'a", "std::fmt::Debug"] }
+      ],
+      "trait": "std::fmt::Debug",
+      "self": "std::collections::hash_map::Entry<'a, K, V>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::fmt::Debug'",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1966, impls: impl of Debug",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "views": [{ "name": "current", "host": "'std::collections::hash_map::OccupiedEntry::get'" }],
+      "kind": "type",
+      "name": "std::collections::hash_map::OccupiedEntry",
+      "visible": "public",
+      "generics": [
+        { "name": "'a", "bounds": [] },
+        { "name": "K", "bounds": ["'a"] },
+        { "name": "V", "bounds": ["'a"] }
+      ],
+      "clauses": [
+        {
+          "kind": "hold",
+          "text": "hold : borrows for 'a",
+          "source": "1.97.0 std/src/collections/hash/map.rs:2018, body: pub struct OccupiedEntry<'a, K: 'a, V: 'a> { base: base::RustcOccupiedEntry<'a, K, V> }, which holds the `&'a mut` map",
+          "status": { "observed": "from the declaration" }
+        }
+      ],
+      "hold": { "kind": "borrows", "for": ["'a"] }
+    },
+    {
+      "kind": "impl",
+      "name": "std::collections::HashMap as std::default::Default",
+      "visible": "public",
+      "generics": [
+        { "name": "K", "bounds": [] },
+        { "name": "V", "bounds": [] },
+        { "name": "S", "bounds": ["std::default::Default"] }
+      ],
+      "trait": "std::default::Default",
+      "self": "map<K, V, S> as 'std::collections::HashMap'",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::default::Default'",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1489, impls: impl of Default",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::collections::HashMap as std::clone::Clone",
+      "visible": "public",
+      "generics": [
+        { "name": "K", "bounds": ["std::clone::Clone"] },
+        { "name": "V", "bounds": ["std::clone::Clone"] },
+        { "name": "S", "bounds": ["std::clone::Clone"] }
+      ],
+      "trait": "std::clone::Clone",
+      "self": "map<K, V, S> as 'std::collections::HashMap'",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::clone::Clone'",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1430, impls: impl of Clone",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::collections::HashMap as std::cmp::PartialEq",
+      "visible": "public",
+      "generics": [
+        { "name": "K", "bounds": ["std::cmp::Eq", "std::hash::Hash"] },
+        { "name": "V", "bounds": ["std::cmp::PartialEq"] },
+        { "name": "S", "bounds": ["std::hash::BuildHasher"] }
+      ],
+      "trait": "std::cmp::PartialEq",
+      "self": "map<K, V, S> as 'std::collections::HashMap'",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::cmp::PartialEq'",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1449, impls: impl of PartialEq",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::collections::HashMap as std::cmp::Eq",
+      "visible": "public",
+      "generics": [
+        { "name": "K", "bounds": ["std::cmp::Eq", "std::hash::Hash"] },
+        { "name": "V", "bounds": ["std::cmp::Eq"] },
+        { "name": "S", "bounds": ["std::hash::BuildHasher"] }
+      ],
+      "trait": "std::cmp::Eq",
+      "self": "map<K, V, S> as 'std::collections::HashMap'",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::cmp::Eq'",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1466, impls: impl of Eq",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::collections::HashMap as std::fmt::Debug",
+      "visible": "public",
+      "generics": [
+        { "name": "K", "bounds": ["std::fmt::Debug"] },
+        { "name": "V", "bounds": ["std::fmt::Debug"] },
+        { "name": "S", "bounds": [] }
+      ],
+      "trait": "std::fmt::Debug",
+      "self": "map<K, V, S> as 'std::collections::HashMap'",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::fmt::Debug'",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1476, impls: impl of Debug",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::collections::HashMap as std::iter::FromIterator",
+      "visible": "public",
+      "generics": [
+        { "name": "K", "bounds": ["std::cmp::Eq", "std::hash::Hash"] },
+        { "name": "V", "bounds": [] },
+        { "name": "S", "bounds": ["std::hash::BuildHasher", "std::default::Default"] }
+      ],
+      "trait": "std::iter::FromIterator<(K, V)>",
+      "self": "map<K, V, S> as 'std::collections::HashMap'",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::FromIterator<(K, V)>'",
+          "source": "1.97.0 std/src/collections/hash/map.rs:2939, impls: impl of FromIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::collections::HashMap as std::iter::Extend",
+      "visible": "public",
+      "generics": [
+        { "name": "K", "bounds": ["std::cmp::Eq", "std::hash::Hash"] },
+        { "name": "V", "bounds": [] },
+        { "name": "S", "bounds": ["std::hash::BuildHasher"] }
+      ],
+      "trait": "std::iter::Extend<(K, V)>",
+      "self": "map<K, V, S> as 'std::collections::HashMap'",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::Extend<(K, V)>'",
+          "source": "1.97.0 std/src/collections/hash/map.rs:2958, impls: impl of Extend",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::collections::HashMap by reference as std::iter::IntoIterator",
+      "visible": "public",
+      "generics": [
+        { "name": "'a", "bounds": [] },
+        { "name": "K", "bounds": ["'a"] },
+        { "name": "V", "bounds": ["'a"] },
+        { "name": "S", "bounds": ["'a"] }
+      ],
+      "trait": "std::iter::IntoIterator",
+      "self": "ref<map<K, V, S> as 'std::collections::HashMap'>",
+      "assoc": { "IntoIter": "std::collections::hash_map::Iter<'a, K, V>", "Item": "(ref<K>, ref<V>)" },
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::IntoIterator'",
+          "source": "1.97.0 std/src/collections/hash/map.rs:2048, impls: impl of IntoIterator for &HashMap",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::collections::HashSet as std::default::Default",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }, { "name": "S", "bounds": ["std::default::Default"] }],
+      "trait": "std::default::Default",
+      "self": "set<T, S> as 'std::collections::HashSet'",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::default::Default'",
+          "source": "1.97.0 std/src/collections/hash/set.rs:1279, impls: impl of Default",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::collections::HashSet as std::clone::Clone",
+      "visible": "public",
+      "generics": [
+        { "name": "T", "bounds": ["std::clone::Clone"] },
+        { "name": "S", "bounds": ["std::clone::Clone"] }
+      ],
+      "trait": "std::clone::Clone",
+      "self": "set<T, S> as 'std::collections::HashSet'",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::clone::Clone'",
+          "source": "1.97.0 std/src/collections/hash/set.rs:1124, impls: impl of Clone",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::collections::HashSet as std::cmp::PartialEq",
+      "visible": "public",
+      "generics": [
+        { "name": "T", "bounds": ["std::cmp::Eq", "std::hash::Hash"] },
+        { "name": "S", "bounds": ["std::hash::BuildHasher"] }
+      ],
+      "trait": "std::cmp::PartialEq",
+      "self": "set<T, S> as 'std::collections::HashSet'",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::cmp::PartialEq'",
+          "source": "1.97.0 std/src/collections/hash/set.rs:1146, impls: impl of PartialEq",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::collections::HashSet as std::cmp::Eq",
+      "visible": "public",
+      "generics": [
+        { "name": "T", "bounds": ["std::cmp::Eq", "std::hash::Hash"] },
+        { "name": "S", "bounds": ["std::hash::BuildHasher"] }
+      ],
+      "trait": "std::cmp::Eq",
+      "self": "set<T, S> as 'std::collections::HashSet'",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::cmp::Eq'",
+          "source": "1.97.0 std/src/collections/hash/set.rs:1162, impls: impl of Eq",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::collections::HashSet as std::fmt::Debug",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": ["std::fmt::Debug"] }, { "name": "S", "bounds": [] }],
+      "trait": "std::fmt::Debug",
+      "self": "set<T, S> as 'std::collections::HashSet'",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::fmt::Debug'",
+          "source": "1.97.0 std/src/collections/hash/set.rs:1171, impls: impl of Debug",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::collections::HashSet as std::iter::FromIterator",
+      "visible": "public",
+      "generics": [
+        { "name": "T", "bounds": ["std::cmp::Eq", "std::hash::Hash"] },
+        { "name": "S", "bounds": ["std::hash::BuildHasher", "std::default::Default"] }
+      ],
+      "trait": "std::iter::FromIterator<T>",
+      "self": "set<T, S> as 'std::collections::HashSet'",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::FromIterator<T>'",
+          "source": "1.97.0 std/src/collections/hash/set.rs:1182, impls: impl of FromIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::collections::HashSet as std::iter::Extend",
+      "visible": "public",
+      "generics": [
+        { "name": "T", "bounds": ["std::cmp::Eq", "std::hash::Hash"] },
+        { "name": "S", "bounds": ["std::hash::BuildHasher"] }
+      ],
+      "trait": "std::iter::Extend<T>",
+      "self": "set<T, S> as 'std::collections::HashSet'",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::Extend<T>'",
+          "source": "1.97.0 std/src/collections/hash/set.rs:1232, impls: impl of Extend",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::collections::HashSet by reference as std::iter::IntoIterator",
+      "visible": "public",
+      "generics": [
+        { "name": "'a", "bounds": [] },
+        { "name": "T", "bounds": ["'a"] },
+        { "name": "S", "bounds": ["'a"] }
+      ],
+      "trait": "std::iter::IntoIterator",
+      "self": "ref<set<T, S> as 'std::collections::HashSet'>",
+      "assoc": { "IntoIter": "std::collections::hash_set::Iter<'a, T>", "Item": "ref<T>" },
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::IntoIterator'",
+          "source": "1.97.0 std/src/collections/hash/set.rs:1660, impls: impl of IntoIterator for &HashSet",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::option::Option as std::clone::Clone",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": ["std::clone::Clone"] }],
+      "trait": "std::clone::Clone",
+      "self": "T?",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::clone::Clone'",
+          "source": "1.97.0 core/src/option.rs:2266, impls: impl of Clone",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::option::Option as std::cmp::PartialEq",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": ["std::cmp::PartialEq"] }],
+      "trait": "std::cmp::PartialEq",
+      "self": "T?",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::cmp::PartialEq'",
+          "source": "1.97.0 core/src/option.rs:2434, impls: impl of PartialEq",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::option::Option as std::cmp::Eq",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": ["std::cmp::Eq"] }],
+      "trait": "std::cmp::Eq",
+      "self": "T?",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::cmp::Eq'",
+          "source": "1.97.0 core/src/option.rs:591, impls: derive of Eq",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::option::Option as std::cmp::PartialOrd",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": ["std::cmp::PartialOrd"] }],
+      "trait": "std::cmp::PartialOrd",
+      "self": "T?",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::cmp::PartialOrd'",
+          "source": "1.97.0 core/src/option.rs:2453, impls: impl of PartialOrd",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::option::Option as std::cmp::Ord",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": ["std::cmp::Ord"] }],
+      "trait": "std::cmp::Ord",
+      "self": "T?",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::cmp::Ord'",
+          "source": "1.97.0 core/src/option.rs:2467, impls: impl of Ord",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::option::Option as std::marker::Copy",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": ["std::marker::Copy"] }],
+      "trait": "std::marker::Copy",
+      "self": "T?",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::marker::Copy'",
+          "source": "1.97.0 core/src/option.rs:591, impls: derive of Copy",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::option::Option as std::hash::Hash",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": ["std::hash::Hash"] }],
+      "trait": "std::hash::Hash",
+      "self": "T?",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::hash::Hash'",
+          "source": "1.97.0 core/src/option.rs:591, impls: derive of Hash",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::option::Option as std::fmt::Debug",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": ["std::fmt::Debug"] }],
+      "trait": "std::fmt::Debug",
+      "self": "T?",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::fmt::Debug'",
+          "source": "1.97.0 core/src/option.rs:591, impls: derive of Debug",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::result::Result as std::clone::Clone",
+      "visible": "public",
+      "generics": [
+        { "name": "T", "bounds": ["std::clone::Clone"] },
+        { "name": "E", "bounds": ["std::clone::Clone"] }
+      ],
+      "trait": "std::clone::Clone",
+      "self": "std::result::Result<T, E>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::clone::Clone'",
+          "source": "1.97.0 core/src/result.rs:1887, impls: impl of Clone",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::result::Result as std::cmp::PartialEq",
+      "visible": "public",
+      "generics": [
+        { "name": "T", "bounds": ["std::cmp::PartialEq"] },
+        { "name": "E", "bounds": ["std::cmp::PartialEq"] }
+      ],
+      "trait": "std::cmp::PartialEq",
+      "self": "std::result::Result<T, E>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::cmp::PartialEq'",
+          "source": "1.97.0 core/src/result.rs:552, impls: derive of PartialEq",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::result::Result as std::cmp::Eq",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": ["std::cmp::Eq"] }, { "name": "E", "bounds": ["std::cmp::Eq"] }],
+      "trait": "std::cmp::Eq",
+      "self": "std::result::Result<T, E>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::cmp::Eq'",
+          "source": "1.97.0 core/src/result.rs:552, impls: derive of Eq",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::result::Result as std::cmp::PartialOrd",
+      "visible": "public",
+      "generics": [
+        { "name": "T", "bounds": ["std::cmp::PartialOrd"] },
+        { "name": "E", "bounds": ["std::cmp::PartialOrd"] }
+      ],
+      "trait": "std::cmp::PartialOrd",
+      "self": "std::result::Result<T, E>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::cmp::PartialOrd'",
+          "source": "1.97.0 core/src/result.rs:552, impls: derive of PartialOrd",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::result::Result as std::cmp::Ord",
+      "visible": "public",
+      "generics": [
+        { "name": "T", "bounds": ["std::cmp::Ord"] },
+        { "name": "E", "bounds": ["std::cmp::Ord"] }
+      ],
+      "trait": "std::cmp::Ord",
+      "self": "std::result::Result<T, E>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::cmp::Ord'",
+          "source": "1.97.0 core/src/result.rs:552, impls: derive of Ord",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::result::Result as std::marker::Copy",
+      "visible": "public",
+      "generics": [
+        { "name": "T", "bounds": ["std::marker::Copy"] },
+        { "name": "E", "bounds": ["std::marker::Copy"] }
+      ],
+      "trait": "std::marker::Copy",
+      "self": "std::result::Result<T, E>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::marker::Copy'",
+          "source": "1.97.0 core/src/result.rs:552, impls: derive of Copy",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::result::Result as std::hash::Hash",
+      "visible": "public",
+      "generics": [
+        { "name": "T", "bounds": ["std::hash::Hash"] },
+        { "name": "E", "bounds": ["std::hash::Hash"] }
+      ],
+      "trait": "std::hash::Hash",
+      "self": "std::result::Result<T, E>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::hash::Hash'",
+          "source": "1.97.0 core/src/result.rs:552, impls: derive of Hash",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::result::Result as std::fmt::Debug",
+      "visible": "public",
+      "generics": [
+        { "name": "T", "bounds": ["std::fmt::Debug"] },
+        { "name": "E", "bounds": ["std::fmt::Debug"] }
+      ],
+      "trait": "std::fmt::Debug",
+      "self": "std::result::Result<T, E>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::fmt::Debug'",
+          "source": "1.97.0 core/src/result.rs:552, impls: derive of Debug",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::result::Result as std::iter::FromIterator",
+      "visible": "public",
+      "generics": [
+        { "name": "A", "bounds": [] },
+        { "name": "E", "bounds": [] },
+        { "name": "V", "bounds": ["std::iter::FromIterator<A>"] }
+      ],
+      "trait": "std::iter::FromIterator<std::result::Result<A, E>>",
+      "self": "std::result::Result<V, E>",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::FromIterator<std::result::Result<A, E>>'",
+          "source": "1.97.0 core/src/result.rs:2111, impls: impl of FromIterator<Result<A, E>>",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::string::String as std::ops::Index",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": ["std::slice::SliceIndex<str>"] }],
+      "trait": "std::ops::Index<I>",
+      "self": "text as 'String'",
+      "assoc": { "Output": "I::Output" },
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::ops::Index<I>'",
+          "source": "1.97.0 alloc/src/string.rs:2807, impls: impl of Index<I>",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::vec::Vec as std::clone::Clone",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": ["std::clone::Clone"] }],
+      "trait": "std::clone::Clone",
+      "self": "list<T> as 'std::vec::Vec'",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::clone::Clone'",
+          "source": "1.97.0 alloc/src/vec/mod.rs:3805, impls: impl of Clone",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::vec::Vec as std::hash::Hash",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": ["std::hash::Hash"] }],
+      "trait": "std::hash::Hash",
+      "self": "list<T> as 'std::vec::Vec'",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::hash::Hash'",
+          "source": "1.97.0 alloc/src/vec/mod.rs:3850, impls: impl of Hash",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::vec::Vec as std::cmp::Eq",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": ["std::cmp::Eq"] }],
+      "trait": "std::cmp::Eq",
+      "self": "list<T> as 'std::vec::Vec'",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::cmp::Eq'",
+          "source": "1.97.0 alloc/src/vec/mod.rs:4267, impls: impl of Eq",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::vec::Vec as std::cmp::Ord",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": ["std::cmp::Ord"] }],
+      "trait": "std::cmp::Ord",
+      "self": "list<T> as 'std::vec::Vec'",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::cmp::Ord'",
+          "source": "1.97.0 alloc/src/vec/mod.rs:4271, impls: impl of Ord",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::vec::Vec as std::fmt::Debug",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": ["std::fmt::Debug"] }],
+      "trait": "std::fmt::Debug",
+      "self": "list<T> as 'std::vec::Vec'",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::fmt::Debug'",
+          "source": "1.97.0 alloc/src/vec/mod.rs:4303, impls: impl of Debug",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::vec::Vec as std::ops::Index",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }, { "name": "I", "bounds": ["std::slice::SliceIndex<[T]>"] }],
+      "trait": "std::ops::Index<I>",
+      "self": "list<T> as 'std::vec::Vec'",
+      "assoc": { "Output": "I::Output" },
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::ops::Index<I>'",
+          "source": "1.97.0 alloc/src/vec/mod.rs:3859, impls: impl of Index<I>",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::vec::Vec as std::ops::IndexMut",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }, { "name": "I", "bounds": ["std::slice::SliceIndex<[T]>"] }],
+      "trait": "std::ops::IndexMut<I>",
+      "self": "list<T> as 'std::vec::Vec'",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::ops::IndexMut<I>'",
+          "source": "1.97.0 alloc/src/vec/mod.rs:3869, impls: impl of IndexMut<I>",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::vec::Vec indexed by usize as std::ops::Index",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }],
+      "trait": "std::ops::Index<u64 as 'usize'>",
+      "self": "list<T> as 'std::vec::Vec'",
+      "assoc": { "Output": "T" },
+      "clauses": []
+    },
+    {
+      "kind": "function",
+      "name": "std::vec::Vec indexed by usize as std::ops::Index::index",
+      "visible": "public",
+      "impl": "std::vec::Vec indexed by usize as std::ops::Index",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<list<T> as 'std::vec::Vec'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "index", "type": "u64 as 'usize'" }
+      ],
+      "result": { "type": "ref<T>", "hold": { "kind": "borrows", "from": "self" } },
+      "clauses": [
+        {
+          "kind": "panics",
+          "text": "fails panic { location: caller } when index >= size(self)",
+          "source": "1.97.0 core/src/slice/index.rs:211, doc: \"The methods `index` and `index_mut` panic if the index is out of bounds.\"; 1.97.0 alloc/src/vec/mod.rs:252-253, doc: \"if you try to access an index which isn't in the `Vec`, your software will panic!\"",
+          "status": { "lifted": "documented panic of the usize index" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::vec::Vec indexed by usize as std::ops::IndexMut",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }],
+      "trait": "std::ops::IndexMut<u64 as 'usize'>",
+      "self": "list<T> as 'std::vec::Vec'",
+      "clauses": []
+    },
+    {
+      "kind": "function",
+      "name": "std::vec::Vec indexed by usize as std::ops::IndexMut::index_mut",
+      "visible": "public",
+      "impl": "std::vec::Vec indexed by usize as std::ops::IndexMut",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<list<T> as 'std::vec::Vec'>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        { "name": "index", "type": "u64 as 'usize'" }
+      ],
+      "result": {
+        "type": "ref<T>",
+        "access": { "rights": "write", "guarantee": "exclusive" },
+        "hold": { "kind": "borrows", "from": "self" }
+      },
+      "clauses": [
+        {
+          "kind": "panics",
+          "text": "fails panic { location: caller } when index >= size(self)",
+          "source": "1.97.0 core/src/slice/index.rs:211, doc: \"The methods `index` and `index_mut` panic if the index is out of bounds.\"; 1.97.0 alloc/src/vec/mod.rs:252-253, doc: \"if you try to access an index which isn't in the `Vec`, your software will panic!\"",
+          "status": { "lifted": "documented panic of the usize index" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::primitive::slice indexed by usize as std::ops::Index",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }],
+      "trait": "std::ops::Index<u64 as 'usize'>",
+      "self": "list<T> as 'std::primitive::slice'",
+      "assoc": { "Output": "T" },
+      "clauses": []
+    },
+    {
+      "kind": "function",
+      "name": "std::primitive::slice indexed by usize as std::ops::Index::index",
+      "visible": "public",
+      "impl": "std::primitive::slice indexed by usize as std::ops::Index",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<list<T> as 'std::primitive::slice'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "index", "type": "u64 as 'usize'" }
+      ],
+      "result": { "type": "ref<T>", "hold": { "kind": "borrows", "from": "self" } },
+      "clauses": [
+        {
+          "kind": "panics",
+          "text": "fails panic { location: caller } when index >= size(self)",
+          "source": "1.97.0 core/src/slice/index.rs:211, doc: \"The methods `index` and `index_mut` panic if the index is out of bounds.\"",
+          "status": { "lifted": "documented panic of the usize index" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::primitive::slice indexed by usize as std::ops::IndexMut",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }],
+      "trait": "std::ops::IndexMut<u64 as 'usize'>",
+      "self": "list<T> as 'std::primitive::slice'",
+      "clauses": []
+    },
+    {
+      "kind": "function",
+      "name": "std::primitive::slice indexed by usize as std::ops::IndexMut::index_mut",
+      "visible": "public",
+      "impl": "std::primitive::slice indexed by usize as std::ops::IndexMut",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<list<T> as 'std::primitive::slice'>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        { "name": "index", "type": "u64 as 'usize'" }
+      ],
+      "result": {
+        "type": "ref<T>",
+        "access": { "rights": "write", "guarantee": "exclusive" },
+        "hold": { "kind": "borrows", "from": "self" }
+      },
+      "clauses": [
+        {
+          "kind": "panics",
+          "text": "fails panic { location: caller } when index >= size(self)",
+          "source": "1.97.0 core/src/slice/index.rs:211, doc: \"The methods `index` and `index_mut` panic if the index is out of bounds.\"",
+          "status": { "lifted": "documented panic of the usize index" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::vec::Vec as std::iter::IntoIterator",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }],
+      "trait": "std::iter::IntoIterator",
+      "self": "list<T> as 'std::vec::Vec'",
+      "assoc": { "IntoIter": "std::vec::IntoIter<T>", "Item": "T" },
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::IntoIterator'",
+          "source": "1.97.0 alloc/src/vec/mod.rs:3931, impls: impl of IntoIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::vec::Vec as std::iter::IntoIterator::into_iter",
+      "visible": "public",
+      "impl": "std::vec::Vec as std::iter::IntoIterator",
+      "params": [{ "name": "self", "type": "list<T> as 'std::vec::Vec'" }],
+      "result": { "type": "std::vec::IntoIter<T>" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure count : count(result) == size(self)",
+          "source": "1.97.0 alloc/src/vec/mod.rs:3948-3950, doc: \"Creates a consuming iterator, that is, one that moves each value out of the vector (from start to end).\"",
+          "status": { "assumed": "documentation" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::option::Option as std::iter::IntoIterator",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }],
+      "trait": "std::iter::IntoIterator",
+      "self": "T?",
+      "assoc": { "IntoIter": "std::option::IntoIter<T>", "Item": "T" },
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::IntoIterator'",
+          "source": "1.97.0 core/src/option.rs:2316, impls: impl of IntoIterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::option::Option as std::iter::IntoIterator::into_iter",
+      "visible": "public",
+      "impl": "std::option::Option as std::iter::IntoIterator",
+      "params": [{ "name": "self", "type": "T?" }],
+      "result": { "type": "std::option::IntoIter<T>" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure count : count(result) == (if self is none then 0 else 1)",
+          "source": "1.97.0 core/src/option.rs:2319-2320, doc: \"Returns a consuming iterator over the possibly contained value.\"",
+          "status": { "assumed": "documentation" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::iter::Iterator as std::iter::IntoIterator",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": ["std::iter::Iterator"] }],
+      "trait": "std::iter::IntoIterator",
+      "self": "I",
+      "assoc": { "IntoIter": "I", "Item": "I::Item" },
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::IntoIterator'",
+          "source": "1.97.0 core/src/iter/traits/collect.rs:317, impls: blanket impl of IntoIterator for every Iterator",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::iter::Iterator as std::iter::IntoIterator::into_iter",
+      "visible": "public",
+      "impl": "std::iter::Iterator as std::iter::IntoIterator",
+      "params": [{ "name": "self", "type": "I" }],
+      "result": { "type": "I" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure itself : result == self",
+          "source": "1.97.0 core/src/iter/traits/collect.rs:317-325, body: fn into_iter(self) -> I { self }",
+          "status": { "observed": "from the body" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::string::String as std::default::Default",
+      "visible": "public",
+      "generics": [],
+      "trait": "std::default::Default",
+      "self": "text as 'String'",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::default::Default'",
+          "source": "1.97.0 alloc/src/string.rs:2713, impls: Default",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::string::String as std::default::Default::default",
+      "visible": "public",
+      "impl": "std::string::String as std::default::Default",
+      "params": [],
+      "result": { "type": "text as 'String'" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure empty : length(result) == 0",
+          "source": "1.97.0 alloc/src/string.rs:2713, doc: \"Creates an empty `String`.\"",
+          "status": { "assumed": "documentation" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::vec::Vec as std::default::Default",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }],
+      "trait": "std::default::Default",
+      "self": "list<T> as 'std::vec::Vec'",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::default::Default'",
+          "source": "1.97.0 alloc/src/vec/mod.rs:4293, impls: Default",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::vec::Vec as std::default::Default::default",
+      "visible": "public",
+      "impl": "std::vec::Vec as std::default::Default",
+      "params": [],
+      "result": { "type": "list<T> as 'std::vec::Vec'" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure empty : size(result) == 0",
+          "source": "1.97.0 alloc/src/vec/mod.rs:4293, doc: \"Creates an empty `Vec<T>`.\"",
+          "status": { "assumed": "documentation" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::option::Option as std::default::Default",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }],
+      "trait": "std::default::Default",
+      "self": "T?",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::default::Default'",
+          "source": "1.97.0 core/src/option.rs:2299, impls: Default",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::option::Option as std::default::Default::default",
+      "visible": "public",
+      "impl": "std::option::Option as std::default::Default",
+      "params": [],
+      "result": { "type": "T?" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure none : result is none",
+          "source": "1.97.0 core/src/option.rs:2299, doc: \"Returns [`None`][Option::None].\"",
+          "status": { "assumed": "documentation" }
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::collections::HashMap as std::default::Default::default",
+      "visible": "public",
+      "impl": "std::collections::HashMap as std::default::Default",
+      "params": [],
+      "result": { "type": "map<K, V, S> as 'std::collections::HashMap'" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure empty : size(result) == 0",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1489, doc: \"Creates an empty `HashMap<K, V, S>`, with the `Default` value for the hasher.\"",
+          "status": { "assumed": "documentation" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::primitive::u64 as std::default::Default",
+      "visible": "public",
+      "generics": [],
+      "trait": "std::default::Default",
+      "self": "u64",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::default::Default'",
+          "source": "1.97.0 core/src/default.rs:173, impls: Default",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::primitive::u64 as std::default::Default::default",
+      "visible": "public",
+      "impl": "std::primitive::u64 as std::default::Default",
+      "params": [],
+      "result": { "type": "u64" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure zero : result == 0",
+          "source": "1.97.0 core/src/default.rs:173, doc: \"Returns the default value of `0`\"",
+          "status": { "assumed": "documentation" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::primitive::usize as std::default::Default",
+      "visible": "public",
+      "generics": [],
+      "trait": "std::default::Default",
+      "self": "u64 as 'usize'",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::default::Default'",
+          "source": "1.97.0 core/src/default.rs:169, impls: Default",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::primitive::usize as std::default::Default::default",
+      "visible": "public",
+      "impl": "std::primitive::usize as std::default::Default",
+      "params": [],
+      "result": { "type": "u64 as 'usize'" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure zero : result == 0",
+          "source": "1.97.0 core/src/default.rs:169, doc: \"Returns the default value of `0`\"",
+          "status": { "assumed": "documentation" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::primitive::u64 from u8 as std::convert::From",
+      "visible": "public",
+      "generics": [],
+      "trait": "std::convert::From<u8>",
+      "self": "u64",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::convert::From<u8>'",
+          "source": "1.97.0 core/src/convert/num.rs:91, impls: From<u8>",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::primitive::u64 from u8 as std::convert::From::from",
+      "visible": "public",
+      "impl": "std::primitive::u64 from u8 as std::convert::From",
+      "params": [{ "name": "value", "type": "u8" }],
+      "result": { "type": "u64" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure widened : result == value",
+          "source": "1.97.0 core/src/convert/num.rs:91, doc: \"Converts from [`u8`] to [`u64`] losslessly.\"",
+          "status": { "assumed": "documentation" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::primitive::usize from u8 as std::convert::From",
+      "visible": "public",
+      "generics": [],
+      "trait": "std::convert::From<u8>",
+      "self": "u64 as 'usize'",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::convert::From<u8>'",
+          "source": "1.97.0 core/src/convert/num.rs:93, impls: From<u8>",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::primitive::usize from u8 as std::convert::From::from",
+      "visible": "public",
+      "impl": "std::primitive::usize from u8 as std::convert::From",
+      "params": [{ "name": "value", "type": "u8" }],
+      "result": { "type": "u64 as 'usize'" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure widened : result == value",
+          "source": "1.97.0 core/src/convert/num.rs:93, doc: \"Converts from [`u8`] to [`usize`] losslessly.\"",
+          "status": { "assumed": "documentation" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::primitive::usize from bool as std::convert::From",
+      "visible": "public",
+      "generics": [],
+      "trait": "std::convert::From<bool>",
+      "self": "u64 as 'usize'",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::convert::From<bool>'",
+          "source": "1.97.0 core/src/convert/num.rs:44-48, impls: From<bool>",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::primitive::usize from bool as std::convert::From::from",
+      "visible": "public",
+      "impl": "std::primitive::usize from bool as std::convert::From",
+      "params": [{ "name": "value", "type": "bool" }],
+      "result": { "type": "u64 as 'usize'" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure as_int : result == (if value then 1 else 0)",
+          "source": "1.97.0 core/src/convert/num.rs:44-48, doc: \"Converts from [`bool`] to [`usize`], by turning `false` into `0` and `true` into `1`.\"",
+          "status": { "assumed": "documentation" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::primitive::isize from bool as std::convert::From",
+      "visible": "public",
+      "generics": [],
+      "trait": "std::convert::From<bool>",
+      "self": "i64 as 'isize'",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::convert::From<bool>'",
+          "source": "1.97.0 core/src/convert/num.rs:44-48, impls: From<bool>",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::primitive::isize from bool as std::convert::From::from",
+      "visible": "public",
+      "impl": "std::primitive::isize from bool as std::convert::From",
+      "params": [{ "name": "value", "type": "bool" }],
+      "result": { "type": "i64 as 'isize'" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure as_int : result == (if value then 1 else 0)",
+          "source": "1.97.0 core/src/convert/num.rs:44-48, doc: \"Converts from [`bool`] to [`isize`], by turning `false` into `0` and `true` into `1`.\"",
+          "status": { "assumed": "documentation" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::convert::Into blanket as std::convert::Into",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }, { "name": "U", "bounds": ["std::convert::From<T>"] }],
+      "trait": "std::convert::Into<U>",
+      "self": "T",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::convert::Into<U>'",
+          "source": "1.97.0 core/src/convert/mod.rs:768, impls: blanket impl: From implies Into",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::primitive::u8 from u32 as std::convert::TryFrom",
+      "visible": "public",
+      "generics": [],
+      "trait": "std::convert::TryFrom<u32>",
+      "self": "u8",
+      "assoc": { "Error": "std::num::TryFromIntError" },
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::convert::TryFrom<u32>'",
+          "source": "1.97.0 core/src/convert/num.rs:395, impls: impl_try_from_upper_bounded!(u32 => u8, u16)",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::primitive::u8 from u32 as std::convert::TryFrom::try_from",
+      "visible": "public",
+      "impl": "std::primitive::u8 from u32 as std::convert::TryFrom",
+      "params": [{ "name": "value", "type": "u32" }],
+      "result": { "type": "u8", "fails": "std::num::TryFromIntError" },
+      "clauses": [
+        {
+          "kind": "fails",
+          "text": "fails TryFromIntError when not (value fits Self)",
+          "source": "1.97.0 core/src/convert/num.rs:293-298, doc: \"This returns an error if the source value is outside of the range of the target type.\"",
+          "status": { "assumed": "documentation" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::convert::TryFrom blanket as std::convert::TryFrom",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }, { "name": "U", "bounds": ["std::convert::Into<T>"] }],
+      "trait": "std::convert::TryFrom<U>",
+      "self": "T",
+      "assoc": { "Error": "std::convert::Infallible" },
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::convert::TryFrom<U>'",
+          "source": "1.97.0 core/src/convert/mod.rs:828, impls: blanket impl: TryFrom<U> for T where U: Into<T>, with Error = Infallible",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::convert::TryInto blanket as std::convert::TryInto",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": [] }, { "name": "U", "bounds": ["std::convert::TryFrom<T>"] }],
+      "trait": "std::convert::TryInto<U>",
+      "self": "T",
+      "assoc": { "Error": "U::Error" },
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::convert::TryInto<U>'",
+          "source": "1.97.0 core/src/convert/mod.rs:812, impls: blanket impl: TryFrom implies TryInto",
+          "status": { "observed": "from the impl blocks" }
         }
       ]
     }

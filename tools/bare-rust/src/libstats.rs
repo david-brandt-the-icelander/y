@@ -78,6 +78,24 @@ pub fn libstats(file: &Value, sigs: Option<&SigReport>) -> String {
             row(&mut out, k, n, total);
         }
     }
+    // clauses qualified by `given` hold only when what they name holds: counted apart from the unconditional ones
+    let given: Vec<&(&Value, &Value)> = clauses.iter().filter(|(_, c)| c["given"].as_array().is_some_and(|g| !g.is_empty())).collect();
+    let _ = writeln!(out, "\nconditional clauses, qualified by `given` ({} on {} subjects)", given.len(), given.iter().map(|(s, _)| s["name"].as_str().unwrap_or("")).collect::<BTreeSet<_>>().len());
+    for k in CLAUSE_KINDS {
+        let n = given.iter().filter(|(_, c)| c["kind"] == k).count();
+        if n > 0 {
+            row(&mut out, k, n, given.len());
+        }
+    }
+    let mut on: BTreeMap<&str, usize> = BTreeMap::new();
+    for (_, c) in &given {
+        for g in c["given"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+            *on.entry(if g == "default" { "the default body" } else if g.starts_with("build ") { "a build setting" } else { "a bound's implementations" }).or_default() += 1;
+        }
+    }
+    for (k, n) in &on {
+        row(&mut out, &format!("on {k}"), *n, given.iter().map(|(_, c)| c["given"].as_array().map_or(0, Vec::len)).sum());
+    }
     let mut by_status: BTreeMap<String, usize> = BTreeMap::new();
     let mut by_source: BTreeMap<&str, usize> = BTreeMap::new();
     for (_, c) in &clauses {
@@ -217,5 +235,18 @@ mod tests {
         assert!(t.contains("function") && t.contains("type"), "{t}");
         assert!(t.contains("no sequence value") && t.contains("2 clauses on 2 subjects"), "{t}");
         assert!(t.contains("assumed (documentation)"), "{t}");
+        assert!(t.contains("conditional clauses, qualified by `given` (0 on 0 subjects)"), "{t}");
+    }
+
+    #[test]
+    fn conditional_clauses_are_counted_apart() {
+        let f = json!({"crate": "std 1.97.0", "status": "lifted", "subjects": [
+            {"kind": "function", "name": "std::a", "clauses": [
+                {"kind": "never panics", "text": "never panics", "given": ["Q.hash never panic", "build overflow_checks"], "source": "s"},
+                {"kind": "ensure", "text": "ensure x : true", "given": ["default"], "source": "s"},
+                {"kind": "ensure", "text": "ensure y : true", "source": "s"}]}]});
+        let t = libstats(&f, None);
+        assert!(t.contains("conditional clauses, qualified by `given` (2 on 1 subjects)"), "{t}");
+        assert!(t.contains("on a build setting") && t.contains("on the default body") && t.contains("on a bound's implementations"), "{t}");
     }
 }

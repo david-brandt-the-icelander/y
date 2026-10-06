@@ -2,7 +2,7 @@
 
 `libraries/std-1.97.0.constraints.json` has a subject for each of the 105 external items of strsim, fnv and the golden
 crate (49 functions, 25 types, 19 traits, 11 macros, 1 const), and one more, `std::cmp::Ordering`, that the laws need
-(106 subjects). `bare-rust libcheck` passes for all three: no item missing, schema ok, every clause's text well formed,
+(254 subjects: 106 entries for the corpora's items, `OccupiedEntry` for a view, and 147 impls and impl methods of B1). `bare-rust libcheck` passes for all three: no item missing, schema ok, every clause's text well formed,
 0 signatures mismatched. Strict library coverage is the default of `bare-rust check` (opt out with
 `--allow-missing-libraries`) and is asserted in `tests/corpora.rs`. The counts below are the output of
 `bare-rust libstats libraries/std-1.97.0.constraints.json`, which reads the file and compiles its signatures.
@@ -11,43 +11,41 @@ crate (49 functions, 25 types, 19 traits, 11 macros, 1 const), and one more, `st
 
 | Entries | Count | | Clauses | Stated | `unexpressed` |
 | --- | ---: | --- | --- | ---: | ---: |
-| function (22 are trait methods) | 49 | | `ensure` | 46 | |
-| type | 26 | | `effects` | 14 | |
-| trait | 19 | | `result must be used` | 18 | |
-| macro | 11 | | `never panics` | 13 | |
-| const | 1 | | `law` | 9 | |
-| | | | `fails panic` | 5 | |
-| | | | `derive` | 6 | |
-| | | | `callback` | 3 | |
+| function (22 are trait methods) | 67 | | `ensure` | 65 | |
+| type | 27 | | `implements` | 140 | |
+| trait | 19 | | `effects` | 14 | |
+| macro | 11 | | `result must be used` | 18 | |
+| const | 1 | | `never panics` | 13 | |
+| impl | 129 | | `law` | 9 | |
+| | | | `fails panic`, `fails` | 9, 1 | |
+| | | | `hold`, `derive`, `callback` | 5, 6, 3 | |
 | | | | `budget`, `layout`, `invariant`, `on failure` | 2, 1, 1, 1 | |
-| | | | `unexpressed` | | 175 |
+| | | | `unexpressed` | | 138 |
 
-294 clauses in all: 119 stated and 175 `unexpressed`, on 105 of the 106 subjects (`char::MAX` has none: its value is
-now in its type). `std` documents what panics, never a precondition, so no `require` or `fails … when` is stated apart
-from the five `panic` ones. Stated clauses by status: documentation 49, observed in a body 33, `#[must_use]` lifted 22,
-hand-written none (part A's one hand-written clause, `cmp::max.an_argument`, now cites the documentation).
+426 clauses in all: 288 stated and 138 `unexpressed`, on 240 subjects. B1 (step 4 of `proposal/language-gaps.md` § 6)
+took `unexpressed` from 175 to 138 and added 129 impl subjects, each compiled against the real std. Stated clauses by
+status: documentation 64, observed 183, `#[must_use]` lifted 26 (counted as lifted), hand-written 15.
 
-**Signatures**, compiled against rustc 1.97.0: 97 checked, 5 path-resolved only (`PartialEq`, `From`, `TryFrom`,
+**Signatures**, compiled against rustc 1.97.0: 245 checked, 5 path-resolved only (`PartialEq`, `From`, `TryFrom`,
 `Index`, `IndexMut`: a trait with generics), 4 unchecked (the bang macros `assert_eq!`, `panic!`, `vec!`, `write!`),
-0 mismatched. Of 139 type slots, 126 map to the type language (91%) and 13 are host text: lifetime argument 7,
-associated type 5, never type 1. Slices are no longer host text (below).
+0 mismatched. Of 174 type slots, 167 map to the type language (96%) and 7 are host text. Slices are no longer host text (below).
 
-## What the language lacked: the `unexpressed` promises (175)
+## What the language lacked: the `unexpressed` promises (138)
 
-Each reason in the file starts with its label, so these are counts of labels. Class A of `proposal/language-gaps.md` § 3
-(file format, tool and host profile, no language change) took the file from 199 to 175; see the next section.
+Each reason in the file starts with its label. Class A took the file from 199 to 175; B1 (traits, implementations and
+associated types) from 175 to 138. Of B1's 52, 38 are closed outright and 14 stay under corrected labels; 6 of the
+host-state ones stay (the vacant half of `Entry::or_insert` is all that moved).
 
-- **Types, traits and impls (94).** No impl or associated type 38; promise conditional on a bound or on a default
-  body an impl may override 22; must-use on a type 14; call resolves to an unnamed impl 11; requirement on bound
-  implementations 6; no variants of a host enum 3.
-- **Sequences and collections (22).** No sequence value 14; no identity of moved values 6; no frame condition on a
-  collection 1; no tuple parts 1.
-- **Hosts and effects (32).** No host state 6 (an entry's hidden map, the formatter, a hasher's writes, the cause of a
-  `TryFromIntError`: no pure host function reads them); no value of a callback result 7; no order of calls 6; no drop 4;
-  no positive effect 3; no resource exhaustion 2; callback clause has no condition 2; no build profile (overflow
-  checks) 2.
-- **Text, numbers and constants (27).** No const-ness 18; what a function computes 8 (Debug and Display text, a
-  derived Debug, `assert_eq!`'s and `write!`'s text: language § 16, class C); no expected or amortised cost 1.
+- **Left from B1, relabelled (16).** No trait items 3 (what a trait's associated types and provided methods are); no
+  negative impl 2 (`Eq` and `Copy`); no elided lifetime in a trait argument 3 (`From<&str>`, `Index<&Q>`,
+  `Extend<&T>`); no deref coercion 1; no mutable reference as an impl's self type 1; no unsized text as an associated
+  type 1 (`Deref<Target = str>`); no unstable or negative bound 1 (`Step` for `Range`); no view of two arguments 1
+  (`is_char_boundary`); no sequence value +1 (`collect`'s Result and String impls); no drop +1 (`vec::IntoIter`).
+- **Host state (6)**, unchanged: `Entry::or_insert` (the map after a vacant insert), `Formatter`, `TryFromIntError`,
+  `Display::fmt`, `Hasher::write`, `Hash`.
+- **Others, untouched.** Promise conditional on a bound 22; no const-ness 18; no sequence value 14; must-use on a type
+  14; what a function computes 8; no value of a callback result 7; no identity of moved values 6; no order of calls 6;
+  requirement on bound implementations 6; no drop 4; no positive effect 3; and the smaller labels.
 
 ## Class A: what moved
 

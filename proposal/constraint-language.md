@@ -299,6 +299,7 @@ Clauses are of two sorts, and the difference decides how they are checked.
 | Information | `label`, `flows only to`, `never flows … to`, `declassify … when … because`, `sanitised by` | Where information may go | Property | 6.9 |
 | Compatibility and visibility | `version`, `compatible with`, `replaces`, `was`, `deprecated`, `stable`, `visible to` | What may change between versions, and who may refer to what | Checked at build | 6.10 |
 | Interfaces and implementations | `implements`, `assoc`, `for`, `some`, `any`, `hold … borrows for` | Which interfaces a type implements, what an implementation adds, and what a host subject is parameterised by | Checked at build | 6.11 |
+| Conditional promises | `given` | What a promise relies on: a bound's implementations, the default body, a build setting | Checked at build, as the promise is | 6.12 |
 | Lifetime | `hold`, `lifetime …`, `instances …`, `no strong cycle`, `model` | How long entities live and who keeps them | Property | 7 |
 | Mutability and aliasing | `access`, `readonly`, `immutable`, `frozen after`, `write once`, `append only`, `monotonic`, `mutates only`, `interior`, `unchanged`, `exclusive`, `sole`, `disjoint`, `shared readonly` | Who may change what, and through how many paths | Property; predicate for columns | 8 |
 | Derived languages | `local` | A type a woven host needs inside a body | Checked at weave | 11.2 |
@@ -397,7 +398,8 @@ function rust 'eve_net::frame::decode'(b: bytes) -> Frame?
 - `fails F when p` says the call fails with `F` whenever `p` held at entry. `fails only` lists the user failures a call
   may raise; marked `open`, the list may grow without a new version. Runtime failures are always possible, because an
   enforced constraint may reject, unless the subject says `never fails runtime`, the strongest form, whose name for
-  hosts with panics is `never panics`.
+  hosts with panics is `never panics`. A promise that holds only given what an implementation or the build does is qualified by
+  `given` (§ 6.12).
 - `result must be used` binds the callers: a call whose result is discarded is a build error where the host can see it,
   and a lint elsewhere.
 - `callback c : called exactly once | at most once | at least once [before return]` states how a function argument is
@@ -455,7 +457,7 @@ interface rust 'eve_market::Procedure'
 - `depends only on` is the information-flow form of a bound (as SPARK's `Depends`): the result is a function of the
   named inputs alone.
 - `terminates` says every call returns or fails. It is proven where the host can prove it and otherwise checked as a
-  budget.
+  budget. A bound that holds only given what an implementation does carries a `given` (§ 6.12).
 - **Checked:** statically where the bound is reachable: the DAL procedures and MachoNet calls a Python method can reach,
   the sealed interface of a Rust procedure, a pure function's call graph; on replays and in production, by comparing
   each manifest with the bounds that apply to it. Where no bound has been written, nothing is compared: a manifest alone
@@ -807,6 +809,70 @@ function rust 'eve_cache::Cache::extend'(self: ref<Cache>, items: some 'std::ite
 What stays host text: a lifetime or `mut` inside the bounds of a `some` or `any`, a higher-ranked `for<'a>` bound, `?Sized`
 and other relaxed bounds, const generics, negative impls and fully qualified paths (`<T as I>::X`). The bounds of a
 parameter are carried as the host writes them until the language has a form for them.
+
+### 6.12 Promises that hold unless an implementation does otherwise
+
+**Meaning.** `never panics`, `terminates`, the bounds on effects (§ 6.3), `ensure` and `fails` (§ 6.2) promise without
+condition, and little of what a library says is unconditional. `HashMap::get` never panics unless the `Hash` or `Eq` of
+its key panics, a default method may be overridden by an implementation that does not keep what the default does, and
+an arithmetic result is exact only where the build checks for overflow. A clause may therefore be qualified by `given`,
+which names what it relies on. The promise holds whenever everything it names holds, and says nothing otherwise: a
+conditional promise is weaker than an unconditional one, never stronger, and it is not a failed one. What it names is
+one of three things. **The implementations of a bound**, by parameter and method: `Q.hash` is the `hash` that `Q`'s
+`Hash` bound brings, whichever type the caller chose, and the promise is made about its behaviour (`never panic`,
+`terminate`, `effects none`). **The default body**: `given default` says the method is not overridden, so the promise is
+about the default's body and an implementation that overrides it must state its own (§ 6.11). **A host build
+setting**: `given build overflow_checks` names a setting the host profile lists (§ 3.3), which no subject chooses and
+every build fixes.
+
+```text
+function rust 'std::collections::HashMap::get'(self: ref<HashMap<K, V>>, k: ref<Q>) -> ref<V>?
+    for K, V, Q where K: 'std::borrow::Borrow<Q>', Q: 'std::hash::Hash' + 'std::cmp::Eq'
+    never panics   given Q.hash, Q.eq never panic
+    effects none   given Q.hash, Q.eq effects none
+    law borrow_agrees : all k : K : hash(k) == hash(borrow(k))     -- the caller's choice of type must satisfy it
+
+function rust 'std::iter::Iterator::count'(self: Self) -> u64 as 'usize'
+    ensure counted : result == old(count(self))   given build overflow_checks
+
+function rust 'std::cmp::Ord::max'(self: Self, other: Self) -> Self
+    never panics   given default and Self.cmp never panic
+```
+
+- **`P.m, P.n never panic | terminate | effects none`** is a condition on the implementations of one or more methods
+  of the bounds of a generic parameter `P` of the subject. A subject that has no such parameter has no such condition: an
+  implementation fixed by the subject is checked as the subject's own body. A condition is a promise of the same
+  family as the clauses it qualifies, so that it can be assumed by a checker and is asked of the caller.
+- **`given default`** may qualify the clause of a method of an interface (or an impl, § 6.11); it names no method,
+  because the method is the subject. **`given build S`** names one setting, `S`, of the host profile: for Rust,
+  `overflow_checks`, `debug_assertions`, `panic=unwind` and `panic=abort`. The list is fixed by the profile, as the
+  panic strategy is, and a name outside it is an error rather than a new setting.
+- **Several conditions** are joined by `and`, and hold together. Two clauses of one kind with different conditions are
+  two promises, and the caller may rely on whichever condition it has.
+- **A law over a generic parameter** (§ 6.2) is a requirement, not a promise: it says what a type must satisfy to be
+  a sound choice for the parameter, as `Borrow` requires of `Hash` and `Eq` above. It is stated for the parameter and
+  not for one type, binds the caller, and does not take a `given`. It is checked for each type the code instantiates the
+  parameter with, in CI, as laws are for a function (§ 6.2), and it is what the `given` conditions of the subject lean
+  on: a type that breaks its law voids what is conditional on it.
+- **Fails:** as the promise it qualifies fails, and only when the condition holds. If `Q.hash` panics, `HashMap::get`
+  may panic and nothing has been broken; if the conditions hold and the promise does not, the subject has a bug. A
+  condition that names something that does not exist (a parameter the subject lacks, a method its bound lacks, a setting the
+  profile does not list, `given default` on a function that is not a method of an interface) is refused at build. A
+  caller that discharges a generated check with a conditional promise (trial § 7.3) must also discharge its condition,
+  so a condition no one can discharge leaves the check open instead of closing it.
+- **Checked:** the condition names are checked against the subject, its bounds and the profile, as above. What a
+  conditional promise says is checked as the unconditional one is (§ 6.2, § 6.3), by the host's compiler, by tests or by
+  replay, in the builds where the condition holds. A condition on an implementation is discharged at the call site, from the
+  type chosen, by that type's own constraints: the implementation of `Hash` for `u64` states `never panics` without
+  condition, and so the call is unconditional there. A build setting is discharged from the build.
+- **Harvested:** from documentation that says "unless", "provided that", "if `T`'s … panics" or "in debug builds", from the
+  attributes and bodies that show a call to a bound's method inside a subject that otherwise cannot panic (the MIR of a call
+  through a bound names it), from `#[cfg(debug_assertions)]` and the overflow checks of arithmetic in a body, and, for
+  the default body, from the provided methods of a trait. For a library, from its documentation.
+
+What stays prose: a condition on a value rather than an implementation ("unless the iterator is infinite"), on a
+combination of conditions that `and` cannot say (`or`, `not`), on a feature of the host's toolchain other than the
+profile's, and on an unlisted build setting; a condition on a closure argument is a `callback` (§ 6.2).
 
 ---
 
@@ -1693,6 +1759,7 @@ clause        = "let" NAME "=" expr
               | "on failure" ( "unchanged" | NAME "ensure" NAME ":" expr )
               | "fails" NAME "when" expr | "fails only" NAME { "," NAME } [ "open" ]
               | "never fails runtime" | "never panics" | "result must be used"
+              | qualifiable "given" condition { "and" condition }
               | "callback" NAME ":" ( "called" ( "exactly once" | "at most once" | "at least once" )
                                       [ "before return" ]
                                     | "conforms to" "interface" [ HOST ] STABLE )
@@ -1709,6 +1776,9 @@ clause        = "let" NAME "=" expr
               | "pin" NAME status "because" STRING
               | "not at" place { "," place }
               | "model" MODEL ;
+qualifiable   = (* a clause of the form "ensure", "fails … when", "never panics", or a bound, including "terminates" *) ;
+condition     = "default" | "build" BUILD | NAME "." NAME { "," NAME "." NAME } ( "never panic" | "terminate" | "effects none" ) ;
+BUILD         = "overflow_checks" | "debug_assertions" | "panic=unwind" | "panic=abort" ;   (* the host profile's list, § 3.3 *)
 payload       = "{" NAME ":" expr { "," NAME ":" expr } "}" ;
 generics      = "for" generic { "," generic } [ "where" bound_pred { "," bound_pred } ] ;
 generic       = LIFETIME | NAME [ ":" bounds ] ;

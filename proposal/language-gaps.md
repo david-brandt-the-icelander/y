@@ -222,6 +222,19 @@ function rust 'std::iter::Iterator::count'(self: Self) -> u64 as 'usize'
 - **Consumer.** Any discharge of a generated check by a library promise (trial § 7.3): almost no `std` promise is
   unconditional, so without `given` nothing can be discharged.
 
+**Done: the paragraph, the format and the lint; the library file is not rewritten yet.** Language § 6.12 and § 15 state
+the meaning and the grammar. A clause of the library file gains an optional `given`, a list of conditions joined by `and`
+(`"Q.hash, Q.eq never panic"`, `"default"`, `"build overflow_checks"`); `text` stays the unconditional clause, and the
+language form is `text given …`. It is allowed on `never panics`, `effects`, `ensure`, `fails` and `panics` clauses, not on
+`unexpressed` or `law` (a law over a generic parameter is a requirement on the caller's type, and stays a `law`). Files
+without it stay valid. `libcheck` lints each condition: the parameter is a generic of the subject, the method exists on one
+of its bounds when the file knows the bound's methods (it knows a bound only through trait subjects and `Trait::m`
+functions, so a bound it has none of passes unchecked), `default` needs a trait method, and a build setting is one the host
+profile `libraries/host-rust-1.97.0.json` lists in its new `build` (`overflow_checks`, `debug_assertions`, `panic=unwind`,
+`panic=abort`; the fixed list is in `src/host.rs`). `libstats` reports conditional clauses as a count of their own, by
+what they are given, and `libfmt` prints `given` after `text`. No compile check of a condition against `std` yet. The
+rewrite of the 30 promises, and step 5's measure, wait for it.
+
 ### 4.3 Callbacks: their results, conditions and order (15)
 
 **What is missing.** `callback` says how often a function argument is called, but not when, not in what order relative
