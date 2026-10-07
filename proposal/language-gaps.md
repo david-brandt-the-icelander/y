@@ -357,6 +357,32 @@ function rust 'std::primitive::str::chars'(self: ref<text>) -> some 'std::iter::
 - **It waits for evidence.** It is worth building if E4 or E5 shows agents getting iterator code wrong in ways these
   promises would have prevented.
 
+**Done: the paragraph, the format, the lint and the rewrite; 12 of the 20 are closed.** Language § 6.15 defines each
+operator by its elements: `xs[i]` (optional: `none` beyond the ends, so it never fails), `xs[i..j]` (never fails; it is
+`take(j - i, skip(i, xs))`), `++`, `reverse`, `take`, `skip`, `zip`, `enumerate`, `map` and `filter` by a named pure
+function, `scalars` and `deref`; the view `yields(it)` for a finite or infinite iterator (an infinite equality is of
+every prefix, and `size`, `count` and `reverse` are decided where the sequence is finite). § 4, § 5, § 6.13's pointer, § 15's
+grammar (`seq_expr`) and § 16 are extended. `libcheck` lints the operators' arguments and that `map` and `filter` are
+given a view of the file or `scalars` or `deref`, never a parameter or callback; `libstats` counts them. The file's
+kinds are unchanged (the clauses are `ensure`). Old files stay valid. Rewrite: `unexpressed` 77 to 65.
+
+- **Closed (12).** `str::chars` (`yields(result) == scalars(self)`), `slice::iter` (`map(deref, yields(result)) ==
+  self`), `split_at_mut` (`result.0 == old(self)[..mid]`, `result.1 == old(self)[mid..]`), `Iterator::next` (`head` and
+  `advances`), `enumerate`, `skip`, `take`, `chain` (`++`), `zip`, `copied` (`map(deref, …)`), `IntoIterator::into_iter`
+  and `Vec`'s `into_iter` (which takes the claim from `vec::IntoIter`'s "yields the elements of the vector it was made
+  from").
+- **Stay under corrected labels (8 of the 20, and 4 later calls).** *No callback as a function* 4 (`map`, `filter`,
+  `take_while`, `flat_map`: the argument is a closure, and `map` takes a named function, which is what keeps expressions
+  pure); *no promise of disorder* 1 (`HashMap`'s iteration order: nothing is promised); *no lifetime for the elements of a
+  sequence* 1 (`IntoIter`'s drop); *no successor of a type parameter* 1 (`Range<Idx>` for a generic `Step`); *no from_iter
+  subject* 1 (`collect`: Result's and String's `from_iter` have no subject in the file). The four *no promise about a
+  result's later calls* (`enumerate`'s overflow, `map`'s and `filter`'s laziness, `take_while`'s consumed item) are the
+  calls of a returned adapter, which sequences do not name.
+- **Still open or unsure.** `IntoIterator::into_iter`'s `yields(result) == yields(self)` is the definition of the order a
+  collection has, so it states little beyond what it names; `next`'s `head` and `advances` hold of the state and say nothing
+  of an iterator that resumes after a `None`, and `Option<Option<T>>` items make `xs[0]` ambiguous (language § 6.15 names
+  it). No compile check of sequence clauses, and no conformance suite exists yet: the equations are the definition.
+
 ---
 
 ## 5. Class C: kept out (3)

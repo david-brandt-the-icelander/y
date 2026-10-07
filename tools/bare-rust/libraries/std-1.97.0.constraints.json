@@ -157,10 +157,10 @@
           "status": { "observed": "from the body: a struct literal and two calls that cannot panic" }
         },
         {
-          "kind": "unexpressed",
-          "text": "result yields the scalar values of self in order, from the front, and from the back through DoubleEndedIterator.",
-          "source": "1.97.0 core/src/str/mod.rs:1015-1016, doc: \"As a string slice consists of valid UTF-8, we can iterate through a string slice by [`char`]. This method returns such an iterator.\"",
-          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
+          "kind": "ensure",
+          "text": "ensure scalars : yields(result) == scalars(self)",
+          "source": "1.97.0 core/src/str/mod.rs:1015-1016, doc: \"As a string slice consists of valid UTF-8, we can iterate through a string slice by [`char`]. This method returns such an iterator.\"; the DoubleEndedIterator impl (core/src/str/iter.rs:123) takes from the back of the same sequence, which `implements` states and language 6.15 reads",
+          "status": { "assumed": "documentation" }
         }
       ]
     },
@@ -701,10 +701,10 @@
           "status": { "assumed": "documentation" }
         },
         {
-          "kind": "unexpressed",
-          "text": "result yields the elements of self by reference, in order from the first to the last (its Iterator impl is also a DoubleEndedIterator and an ExactSizeIterator).",
-          "source": "1.97.0 core/src/slice/mod.rs:1024, doc: \"The iterator yields all items from start to end.\"",
-          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
+          "kind": "ensure",
+          "text": "ensure in_order : map(deref, yields(result)) == self",
+          "source": "1.97.0 core/src/slice/mod.rs:1024, doc: \"The iterator yields all items from start to end.\"; the DoubleEndedIterator and ExactSizeIterator impls are stated by `implements` on the type",
+          "status": { "assumed": "documentation" }
         },
         {
           "kind": "effects",
@@ -752,10 +752,10 @@
           "status": { "lifted": "core/src/slice/mod.rs: #[must_use] on the item" }
         },
         {
-          "kind": "unexpressed",
-          "text": "result.0 holds the elements of self at indices 0 to mid - 1, and result.1 those at indices mid to len - 1, in order, as views into self and not copies.",
-          "source": "1.97.0 core/src/slice/mod.rs:1962-1964, doc: \"The first will contain all indices from `[0, mid)` (excluding the index `mid` itself) and the second will contain all indices from `[mid, len)` (excluding the index `len` itself).\"",
-          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
+          "kind": "ensure",
+          "text": "ensure part_elements : result.0 == old(self)[..mid] and result.1 == old(self)[mid..]",
+          "source": "1.97.0 core/src/slice/mod.rs:1962-1964, doc: \"The first will contain all indices from `[0, mid)` (excluding the index `mid` itself) and the second will contain all indices from `[mid, len)` (excluding the index `len` itself).\"; \"views into self and not copies\" is the `hold` of the result, which borrows from self",
+          "status": { "assumed": "documentation" }
         },
         {
           "kind": "ensure",
@@ -1432,7 +1432,7 @@
           "kind": "unexpressed",
           "text": "Iteration visits the key-value pairs in arbitrary order, which may differ between maps and runs.",
           "source": "1.97.0 std/src/collections/hash/map.rs:647, doc: \"An iterator visiting all key-value pairs in arbitrary order.\"",
-          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
+          "reason": "no promise of disorder: `yields` is a sequence with an order, and the language states what holds of it, and that a map's iteration order is arbitrary and may differ between maps and runs is the absence of a promise, which no clause states"
         },
         {
           "kind": "unexpressed",
@@ -1711,13 +1711,7 @@
           "kind": "unexpressed",
           "text": "Dropping an IntoIter drops the elements it has not yielded.",
           "source": "1.97.0 alloc/src/vec/into_iter.rs:541, body: unsafe impl<#[may_dangle] T, A: Allocator> Drop for IntoIter<T, A>: drops the remaining elements and frees the buffer",
-          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`. Here: the elements the iterator has not yielded, which its drop drops"
-        },
-        {
-          "kind": "unexpressed",
-          "text": "An IntoIter yields the elements of the vector it was made from, by value, in order from the first to the last.",
-          "source": "1.97.0 alloc/src/vec/into_iter.rs:32, doc: \"An iterator that moves out of a vector.\"",
-          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
+          "reason": "no lifetime for the elements of a sequence: `lifetime v ends in call` names one entity of a call, and the elements `yields(self)` has not yet given are many, dropped by a type's `Drop`. Here: the elements the iterator has not yielded, which its drop drops"
         }
       ]
     },
@@ -1735,7 +1729,7 @@
           "kind": "unexpressed",
           "text": "start..end contains all values with start <= x < end, and is empty if start >= end; when Idx: Step it is an iterator that yields start, start + 1 and so on, up to but not including end, and is a DoubleEndedIterator.",
           "source": "1.97.0 core/src/ops/range.rs:56-57, doc: \"The range `start..end` contains all values with `start <= x < end`. It is empty if `start >= end`.\"",
-          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`. Here: a range of integers is a refinement `T in a..b` in the language, but a value of this type is not"
+          "reason": "no successor of a type parameter: for an integer `yields(self)` would be `start`, `start + 1` and so on up to `end`, but `Idx` is any `Step` type, whose successor is a method and not `+ 1`, and the language has no range of a generic `Idx`. Here: a range of integers is a refinement `T in a..b` in the language, but a value of this type is not"
         },
         {
           "kind": "unexpressed",
@@ -2004,10 +1998,16 @@
       "result": { "type": { "host": "Option<Self::Item>", "form": "associated type" } },
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "Returns Some of the next item and advances the iterator, or None when iteration is finished; after a None an implementation may resume and return Some again.",
+          "kind": "ensure",
+          "text": "ensure head : result == old(yields(self))[0]",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:50-53, doc: \"Returns [`None`] when iteration is finished. Individual iterator implementations may choose to resume iteration, and so calling `next()` again may or may not eventually start returning [`Some(Item)`] again at some point.\"",
-          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "ensure",
+          "text": "ensure advances : exists result implies yields(self) == old(yields(self))[1..]",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:50-53, doc: \"Returns [`None`] when iteration is finished. Individual iterator implementations may choose to resume iteration, and so calling `next()` again may or may not eventually start returning [`Some(Item)`] again at some point.\" (what the iterator does after a None is the implementation's, so nothing is stated when result is none)",
+          "status": { "assumed": "documentation" }
         },
         {
           "kind": "unexpressed",
@@ -2063,10 +2063,10 @@
           "status": { "assumed": "documentation" }
         },
         {
-          "kind": "unexpressed",
-          "text": "result yields the pairs (i, val), where i counts the items yielded so far from 0 and val is the item itself.",
+          "kind": "ensure",
+          "text": "ensure pairs : yields(result) == enumerate(old(yields(self)))",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:1008-1010, doc: \"The iterator returned yields pairs `(i, val)`, where `i` is the current index of iteration and `val` is the value returned by the iterator.\"",
-          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
+          "status": { "assumed": "documentation" }
         },
         {
           "kind": "unexpressed",
@@ -2101,10 +2101,10 @@
           "status": { "assumed": "documentation" }
         },
         {
-          "kind": "unexpressed",
-          "text": "result yields the items of self after its first n, in order.",
+          "kind": "ensure",
+          "text": "ensure after_n : yields(result) == skip(n, old(yields(self)))",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:1354, doc: \"Creates an iterator that skips the first `n` elements.\"",
-          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
+          "status": { "assumed": "documentation" }
         },
         {
           "kind": "effects",
@@ -2133,10 +2133,10 @@
           "status": { "assumed": "documentation" }
         },
         {
-          "kind": "unexpressed",
-          "text": "result yields the first n items of self, or all of them if it has fewer, in order.",
+          "kind": "ensure",
+          "text": "ensure first_items : yields(result) == take(n, old(yields(self)))",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:1382-1383, doc: \"Creates an iterator that yields the first `n` elements, or fewer if the underlying iterator ends sooner.\"",
-          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
+          "status": { "assumed": "documentation" }
         },
         {
           "kind": "effects",
@@ -2163,10 +2163,10 @@
       "result": { "type": { "host": "std::iter::Chain<Self, U::IntoIter>", "form": "associated type" } },
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "result first yields the items of self and then those of other, in order.",
+          "kind": "ensure",
+          "text": "ensure items : yields(result) == old(yields(self)) ++ old(yields('<U as std::iter::IntoIterator>::into_iter'(other)))",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:448-450, doc: \"`chain()` will return a new iterator which will first iterate over values from the first iterator and then over values from the second iterator.\"",
-          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
+          "status": { "assumed": "documentation" }
         },
         {
           "kind": "ensure",
@@ -2198,10 +2198,10 @@
       "result": { "type": { "host": "std::iter::Zip<Self, U::IntoIter>", "form": "associated type" } },
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "result yields the pairs of the items of self and of other, taken in step and in order, and ends when either ends.",
+          "kind": "ensure",
+          "text": "ensure pairs : yields(result) == zip(old(yields(self)), old(yields('<U as std::iter::IntoIterator>::into_iter'(other))))",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:520-522, doc: \"`zip()` returns a new iterator that will iterate over two other iterators, returning a tuple where the first element comes from the first iterator, and the second element comes from the second iterator.\"",
-          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
+          "status": { "assumed": "documentation" }
         },
         {
           "kind": "ensure",
@@ -2244,7 +2244,7 @@
           "kind": "unexpressed",
           "text": "result yields f(x) for each item x of self, in order.",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:780-781, doc: \"Takes a closure and creates an iterator which calls that closure on each element.\"",
-          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`. Here: the items the result yields, each made by the callback, in order"
+          "reason": "no callback as a function: `map(f, xs)` and `filter(p, xs)` take a named pure function (language 6.15), a view of the file or a function of the language, and the parameter here is a closure, which is neither named nor pure and is called later by the result's `next`, so a `callback` clause (one call's arguments and result) does not state it either. Here: the items the result yields, each made by the callback, in order"
         },
         {
           "kind": "unexpressed",
@@ -2286,7 +2286,7 @@
           "kind": "unexpressed",
           "text": "result yields exactly the items x of self for which predicate(&x) is true, in order.",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:893, doc: \"Given an element the closure must return `true` or `false`.\"",
-          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`. Here: the items the result yields, each made by the callback, in order"
+          "reason": "no callback as a function: `map(f, xs)` and `filter(p, xs)` take a named pure function (language 6.15), a view of the file or a function of the language, and the parameter here is a closure, which is neither named nor pure and is called later by the result's `next`, so a `callback` clause (one call's arguments and result) does not state it either. Here: the items the result yields, each made by the callback, in order"
         },
         {
           "kind": "unexpressed",
@@ -2328,7 +2328,7 @@
           "kind": "unexpressed",
           "text": "result yields the items of self in order up to, and not including, the first one for which predicate returns false.",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:1190-1192, doc: \"It will call this closure on each element of the iterator, and yield elements while it returns `true`.\"",
-          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`. Here: the items the result yields, each made by the callback, in order"
+          "reason": "no callback as a function: `map(f, xs)` and `filter(p, xs)` take a named pure function (language 6.15), a view of the file or a function of the language, and the parameter here is a closure, which is neither named nor pure and is called later by the result's `next`, so a `callback` clause (one call's arguments and result) does not state it either. Here: the items the result yields, each made by the callback, in order"
         },
         {
           "kind": "unexpressed",
@@ -2365,7 +2365,7 @@
           "kind": "unexpressed",
           "text": "result yields the items of f(x) for each item x of self, one x after another, in order: it is map(f) followed by flatten.",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:1509-1510, doc: \"You can think of `flat_map(f)` as the semantic equivalent of [`map`]ping, and then [`flatten`]ing as in `map(f).flatten()`.\"",
-          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`. Here: the items the result yields, each made by the callback, in order; so no count of the result can be stated"
+          "reason": "no callback as a function: `map(f, xs)` and `filter(p, xs)` take a named pure function (language 6.15), a view of the file or a function of the language, and the parameter here is a closure, which is neither named nor pure and is called later by the result's `next`, so a `callback` clause (one call's arguments and result) does not state it either; and no `flatten`. Here: the items the result yields, each made by the callback, in order; so no count of the result can be stated"
         },
         {
           "kind": "effects",
@@ -2398,10 +2398,10 @@
           "status": { "assumed": "documentation" }
         },
         {
-          "kind": "unexpressed",
-          "text": "result yields a copy of each item of self, in order.",
+          "kind": "ensure",
+          "text": "ensure copies : yields(result) == map(deref, old(yields(self)))",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:3493-3494, doc: \"This is useful when you have an iterator over `&T`, but you need an iterator over `T`.\"",
-          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
+          "status": { "assumed": "documentation" }
         },
         {
           "kind": "effects",
@@ -2437,7 +2437,7 @@
           "kind": "unexpressed",
           "text": "A Result<V, E> collects an iterator of Result items into Result<V, E>, stopping at the first Err; a String collects chars. The FromIterator impls are stated as impl subjects of Result and of String; what each holds of the items is a statement about their order.",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:1974-1975, doc: \"`collect()` can also create instances of types that are not typical collections.\"",
-          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
+          "reason": "no from_iter subject: `collect` returns any `B: FromIterator<Item>`, which promises nothing about the items; what Result and String do with the sequence is a promise of their `from_iter`, which this file has no subject for"
         },
         {
           "kind": "never panics",
@@ -2469,10 +2469,10 @@
       "result": { "type": { "host": "Self::IntoIter", "form": "associated type" } },
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "result yields exactly the items of self, as Self::Item, in the order the impl defines.",
-          "source": "1.97.0 core/src/iter/traits/collect.rs:293, doc: \"Creates an iterator from a value.\"",
-          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
+          "kind": "ensure",
+          "text": "ensure same_items : yields(result) == yields(self)",
+          "source": "1.97.0 core/src/iter/traits/collect.rs:293, doc: \"Creates an iterator from a value.\"; `yields` of a collection is its items in the order its IntoIterator defines (language 6.15)",
+          "status": { "assumed": "documentation" }
         }
       ]
     },
@@ -5387,6 +5387,12 @@
         {
           "kind": "ensure",
           "text": "ensure count : count(result) == size(self)",
+          "source": "1.97.0 alloc/src/vec/mod.rs:3948-3950, doc: \"Creates a consuming iterator, that is, one that moves each value out of the vector (from start to end).\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "ensure",
+          "text": "ensure in_order : yields(result) == self",
           "source": "1.97.0 alloc/src/vec/mod.rs:3948-3950, doc: \"Creates a consuming iterator, that is, one that moves each value out of the vector (from start to end).\"",
           "status": { "assumed": "documentation" }
         }

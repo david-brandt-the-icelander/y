@@ -128,6 +128,37 @@ pub fn libstats(file: &Value, sigs: Option<&SigReport>) -> String {
     for (label, n) in small {
         row(&mut out, label, n, total);
     }
+    // the sequences of language 6.15, counted by the operator that carries them
+    let has = |t: &str, w: &str| words(t, w) && t.contains(&format!("{w}("));
+    // a `[` that follows a name, `)` or `]`: a slice when it holds `..`; an index when it follows `)` or `]` or holds a number
+    // (`self[k]` with a name alone is a map's lookup, which is not a sequence)
+    let bracket = |t: &str, slice: bool| {
+        let cs: Vec<char> = t.chars().collect();
+        (1..cs.len()).filter(|&i| cs[i] == '[' && (cs[i - 1].is_alphanumeric() || matches!(cs[i - 1], '_' | ')' | ']'))).any(|i| {
+            let inner: String = cs[i + 1..].iter().take_while(|c| **c != ']').collect();
+            let inner = inner.trim();
+            if slice {
+                inner.contains("..")
+            } else {
+                !inner.contains("..") && (matches!(cs[i - 1], ')' | ']') || inner.starts_with(|c: char| c.is_ascii_digit()))
+            }
+        })
+    };
+    let seq: [(&str, usize); 8] = [
+        ("`yields(e)` (6.15)", texts.iter().filter(|(_, t)| has(t, "yields")).count()),
+        ("indexing `xs[i]`", texts.iter().filter(|(_, t)| bracket(t, false)).count()),
+        ("slices `xs[i..j]`", texts.iter().filter(|(_, t)| bracket(t, true)).count()),
+        ("`++`", texts.iter().filter(|(_, t)| t.contains("++")).count()),
+        ("`reverse`, `take`, `skip`", texts.iter().filter(|(_, t)| ["reverse", "take", "skip"].iter().any(|w| has(t, w))).count()),
+        ("`zip`, `enumerate`", texts.iter().filter(|(_, t)| has(t, "zip") || has(t, "enumerate")).count()),
+        ("`map`, `filter` by a named function", texts.iter().filter(|(_, t)| has(t, "map") || has(t, "filter")).count()),
+        ("`scalars`, `deref`", texts.iter().filter(|(_, t)| words(t, "scalars") || words(t, "deref")).count()),
+    ];
+    let seq_total = texts.iter().filter(|(_, t)| has(t, "yields") || t.contains("++") || bracket(t, true) || bracket(t, false) || ["reverse", "take", "skip", "zip", "enumerate", "map", "filter"].iter().any(|w| has(t, w)) || words(t, "scalars") || words(t, "deref")).count();
+    let _ = writeln!(out, "\nsequences of language 6.15 ({seq_total} clauses)");
+    for (label, n) in seq {
+        row(&mut out, label, n, total);
+    }
     let mut by_status: BTreeMap<String, usize> = BTreeMap::new();
     let mut by_source: BTreeMap<&str, usize> = BTreeMap::new();
     for (_, c) in &clauses {

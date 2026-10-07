@@ -419,7 +419,7 @@ fn what_a_function_computes_is_not_a_gap_of_the_language() {
         assert!(!labels.contains(&gone), "{gone}");
     }
     assert_eq!(labels.iter().filter(|l| **l == "what a function computes").count(), 8);
-    assert_eq!(labels.len(), 77, "B3 took 121 to 114, B4 to 77");
+    assert_eq!(labels.len(), 65, "B3 took 121 to 114, B4 to 77, B5 to 65");
 }
 
 #[test]
@@ -576,7 +576,7 @@ fn libstats_counts_what_the_file_holds() {
     let (file, _) = std_file();
     let r = check_signatures(&file, &work("stats-sigs"), &target()).unwrap();
     let t = bare_rust::libstats::libstats(&file, Some(&r));
-    for want in ["library std 1.97.0 (260 subjects)", "function (27 are trait methods)", "unexpressed", "no sequence value", "path-resolved only: std::cmp::PartialEq", "type slots (188); 181 map to the type language and 7 are host text"] {
+    for want in ["library std 1.97.0 (260 subjects)", "function (27 are trait methods)", "unexpressed", "no callback as a function", "sequences of language 6.15 (13 clauses)", "path-resolved only: std::cmp::PartialEq", "type slots (188); 181 map to the type language and 7 are host text"] {
         assert!(t.contains(want), "{want}: {t}");
     }
     assert!(!t.contains("reasons carry no label"), "{t}");
@@ -976,12 +976,12 @@ fn b3_closed_the_callback_promises_and_relabelled_what_stays() {
     let (file, _) = std_file();
     let clauses: Vec<(&str, &Value)> = file["subjects"].as_array().unwrap().iter().flat_map(|s| s["clauses"].as_array().into_iter().flatten().map(move |c| (s["name"].as_str().unwrap(), c))).collect();
     let labels: Vec<&str> = clauses.iter().filter(|(_, c)| c["kind"] == "unexpressed").map(|(_, c)| bare_rust::libstats::reason_label(c["reason"].as_str().unwrap())).collect();
-    assert_eq!(labels.len(), 77, "121 before B3: 7 closed; B4 closed 37 more");
+    assert_eq!(labels.len(), 65, "121 before B3: 7 closed; B4 closed 37 more, B5 12 more");
     for gone in ["no value of a callback result", "no order of calls", "callback clause has no condition"] {
         assert!(!labels.contains(&gone), "{gone}");
     }
     let n = |l: &str| labels.iter().filter(|x| **x == l).count();
-    assert_eq!((n("no sequence value"), n("no promise about a result's later calls"), n("no promise")), (20, 4, 6));
+    assert_eq!((n("no sequence value"), n("no promise about a result's later calls"), n("no promise")), (0, 4, 6));
     let with = |w: &str| clauses.iter().filter(|(_, c)| c["kind"] == "callback" && c["text"].as_str().unwrap().contains(w)).count();
     assert_eq!((with(" when "), with(", with "), with(", returning ")), (3, 2, 2));
     let mut protocols: Vec<&str> = clauses.iter().filter(|(_, c)| c["kind"] == "protocol").map(|(s, _)| *s).collect();
@@ -1206,7 +1206,7 @@ fn b4_closed_the_small_additions_and_relabelled_what_stays() {
     let (file, _) = std_file();
     let clauses: Vec<(&str, &Value)> = file["subjects"].as_array().unwrap().iter().flat_map(|s| s["clauses"].as_array().into_iter().flatten().map(move |c| (s["name"].as_str().unwrap(), c))).collect();
     let labels: Vec<&str> = clauses.iter().filter(|(_, c)| c["kind"] == "unexpressed").map(|(_, c)| bare_rust::libstats::reason_label(c["reason"].as_str().unwrap())).collect();
-    assert_eq!(labels.len(), 77, "114 before B4: 37 closed");
+    assert_eq!(labels.len(), 65, "114 before B4: 37 closed, then B5: 12 closed");
     for gone in ["no const-ness", "must-use on a type", "no drop", "no identity of moved values", "no resource exhaustion", "no expected or amortised cost", "no tuple parts", "no frame condition on a collection", "no sufficient condition"] {
         assert!(!labels.contains(&gone), "{gone}");
     }
@@ -1215,6 +1215,7 @@ fn b4_closed_the_small_additions_and_relabelled_what_stays() {
         (n("no stable const-ness"), n("no identity of cloned values"), n("no identity of a stored key"), n("no effects of a destructor"), n("no arm of a macro in a clause"), n("no condition on an associated type's implementation"), n("no host state")),
         (4, 2, 1, 1, 1, 3, 7)
     );
+    assert_eq!(n("no sequence value"), 0, "B5 gave every one a sequence or a label of its own");
     let with = |k: &str, t: &str| clauses.iter().filter(|(_, c)| c["kind"] == k && c["text"].as_str().unwrap().starts_with(t)).count();
     assert_eq!((with("effects", "evaluable at compile time"), with("result must be used", "must be used"), with("never panics", "never panics except exhausted"), with("budget", "budget work expected")), (14, 14, 2, 2));
     // every const claim of the file is an item the host promises to keep const
@@ -1224,5 +1225,114 @@ fn b4_closed_the_small_additions_and_relabelled_what_stays() {
     // each type that carries `#[must_use]` says so, and the iterator adapters cite their attribute
     for (s, c) in clauses.iter().filter(|(_, c)| c["kind"] == "result must be used" && c["text"] == "must be used") {
         assert!(c["source"].as_str().unwrap().contains("attribute #[must_use"), "{s}");
+    }
+}
+
+// ---------- B5: sequences (language 6.15) ----------
+
+/// The exemplars of the small additions, with a view for `map` to name.
+fn sequences() -> Value {
+    let mut f = small_additions();
+    subject_mut(&mut f, "std::str::Chars")["views"] = json!([{"name": "widen", "host": "'std::str::Chars::as_str'"}]);
+    f
+}
+
+#[test]
+fn sequences_take_the_operators_of_language_6_15_and_old_clauses_stay_valid() {
+    let f = sequences();
+    assert_eq!(errors(&f), "");
+    let s = "std::primitive::slice::split_at_mut";
+    for (kind, text, want) in [
+        ("ensure", "ensure e : result.0 == old(self)[..mid] and result.1 == old(self)[mid..]", ""),
+        ("ensure", "ensure e : old(self)[mid] == none or old(self)[0 .. mid] == old(self)[..mid]", ""),
+        ("ensure", "ensure e : yields(result.0) ++ yields(result.1) == old(yields(self))", ""),
+        ("ensure", "ensure e : reverse(reverse(old(self))) == old(self) and take(mid, skip(1, old(self))) == old(self)[1..mid]", ""),
+        ("ensure", "ensure e : zip(old(self), enumerate(old(self))) == [] and map(deref, old(self)) == filter(widen, old(self))", ""),
+        ("ensure", "ensure e : map(scalars, old(self)) == old(self)", ""),
+        ("ensure", "ensure e : map(f, old(self)) == old(self)", "unknown name `f`"),
+        ("ensure", "ensure e : map(mid, old(self)) == old(self)", "is a parameter or callback, not a named pure function"),
+        ("ensure", "ensure e : filter('std::primitive::slice::is_empty', old(self)) == old(self)", "takes the name of a pure function first"),
+        ("ensure", "ensure e : map(deref) == old(self)", "`map` takes 2 arguments"),
+        ("ensure", "ensure e : yields() == old(self)", "`yields` takes 1 argument"),
+        ("ensure", "ensure e : take(1, 2, 3) == old(self)", "`take` takes 2 arguments"),
+        ("ensure", "ensure e : old(self)[mid == 1", "unclosed `[`"),
+        ("ensure", "ensure e : old(self)[zz..] == []", "unknown name `zz`"),
+        ("ensure", "ensure e : old(self)[1..2] == yields(zz)", "unknown name `zz`"),
+        // the older forms of the same clauses
+        ("ensure", "ensure e : size(result.0) == mid and (all x in result.1 : x == x)", ""),
+    ] {
+        let e = with_clause(&f, s, 0, kind, text);
+        if want.is_empty() {
+            assert_eq!(e, "", "{text}");
+        } else {
+            assert!(e.contains(want), "{text}: {e}");
+        }
+    }
+    let c = canonical(&f);
+    assert_eq!(validate(&f, Some(&c)), Vec::<String>::new());
+}
+
+#[test]
+fn libstats_counts_the_sequences() {
+    let mut f = sequences();
+    let line = |t: &str, l: &str| t.lines().find(|x| x.contains(l)).unwrap_or("").split_whitespace().rev().nth(1).unwrap_or("0").parse::<usize>().unwrap_or(0);
+    let rows = ["`yields(e)`", "indexing `xs[i]`", "slices `xs[i..j]`", "`++`", "`reverse`, `take`, `skip`", "`zip`, `enumerate`", "`map`, `filter`", "`scalars`, `deref`"];
+    let before_t = bare_rust::libstats::libstats(&f, None);
+    let before: Vec<usize> = rows.iter().map(|r| line(&before_t, r)).collect();
+    let s = "std::primitive::slice::split_at_mut";
+    let cl = subject_mut(&mut f, s)["clauses"].as_array_mut().unwrap();
+    for t in [
+        "ensure a : yields(result.0) ++ yields(result.1) == old(yields(self))",
+        "ensure b : result.0 == old(self)[..mid]",
+        "ensure c : old(self)[0] == none",
+        "ensure d : reverse(take(mid, skip(1, old(self)))) == []",
+        "ensure e : zip(old(self), enumerate(old(self))) == []",
+        "ensure f : map(deref, old(self)) == old(self)",
+    ] {
+        cl.push(json!({"kind": "ensure", "text": t, "source": "s", "status": {"assumed": "documentation"}}));
+    }
+    let t = bare_rust::libstats::libstats(&f, None);
+    let total = |t: &str| t.lines().find(|x| x.starts_with("sequences of language 6.15")).unwrap().to_string();
+    assert_eq!(total(&t), format!("sequences of language 6.15 ({} clauses)", total(&before_t).split('(').nth(1).unwrap().split(' ').next().unwrap().parse::<usize>().unwrap() + 6), "{t}");
+    let after: Vec<usize> = rows.iter().map(|r| line(&t, r)).collect();
+    // a: yields and `++`; b: a slice; c: an index; d: reverse, take, skip; e: zip, enumerate; f: map and deref
+    let delta: Vec<usize> = after.iter().zip(&before).map(|(a, b)| a - b).collect();
+    assert_eq!(delta, [1, 1, 1, 1, 1, 1, 1, 1], "{t}");
+}
+
+#[test]
+fn b5_stated_what_the_sequences_state_and_relabelled_what_stays() {
+    let (file, _) = std_file();
+    let clauses: Vec<(&str, &Value)> = file["subjects"].as_array().unwrap().iter().flat_map(|s| s["clauses"].as_array().into_iter().flatten().map(move |c| (s["name"].as_str().unwrap(), c))).collect();
+    let labels: Vec<&str> = clauses.iter().filter(|(_, c)| c["kind"] == "unexpressed").map(|(_, c)| bare_rust::libstats::reason_label(c["reason"].as_str().unwrap())).collect();
+    assert_eq!(labels.len(), 65, "77 before B5: 12 closed");
+    assert!(!labels.contains(&"no sequence value"));
+    let n = |l: &str| labels.iter().filter(|x| **x == l).count();
+    assert_eq!(
+        (n("no callback as a function"), n("no promise about a result's later calls"), n("no promise of disorder"), n("no lifetime for the elements of a sequence"), n("no successor of a type parameter"), n("no from_iter subject")),
+        (4, 4, 1, 1, 1, 1)
+    );
+    // the twelve that now state a sequence, by subject
+    let says = |subject: &str, text: &str| clauses.iter().any(|(s, c)| *s == subject && c["kind"] == "ensure" && c["text"].as_str().unwrap() == text);
+    for (s, t) in [
+        ("std::primitive::str::chars", "ensure scalars : yields(result) == scalars(self)"),
+        ("std::primitive::slice::iter", "ensure in_order : map(deref, yields(result)) == self"),
+        ("std::primitive::slice::split_at_mut", "ensure part_elements : result.0 == old(self)[..mid] and result.1 == old(self)[mid..]"),
+        ("std::iter::Iterator::next", "ensure head : result == old(yields(self))[0]"),
+        ("std::iter::Iterator::next", "ensure advances : exists result implies yields(self) == old(yields(self))[1..]"),
+        ("std::iter::Iterator::enumerate", "ensure pairs : yields(result) == enumerate(old(yields(self)))"),
+        ("std::iter::Iterator::skip", "ensure after_n : yields(result) == skip(n, old(yields(self)))"),
+        ("std::iter::Iterator::take", "ensure first_items : yields(result) == take(n, old(yields(self)))"),
+        ("std::iter::Iterator::copied", "ensure copies : yields(result) == map(deref, old(yields(self)))"),
+        ("std::iter::IntoIterator::into_iter", "ensure same_items : yields(result) == yields(self)"),
+        ("std::vec::Vec as std::iter::IntoIterator::into_iter", "ensure in_order : yields(result) == self"),
+    ] {
+        assert!(says(s, t), "{s}: {t}");
+    }
+    // an adapter's callback is not a named function, so `map` and its kin stay under a label of their own
+    for s in ["map", "filter", "take_while", "flat_map"] {
+        let name = format!("std::iter::Iterator::{s}");
+        assert!(clauses.iter().any(|(n, c)| *n == name && c["kind"] == "unexpressed" && c["reason"].as_str().unwrap().starts_with("no callback as a function")), "{s}");
+        assert!(!clauses.iter().any(|(n, c)| *n == name && c["text"].as_str().unwrap().contains("yields(")), "{s}: a closure is not a named function");
     }
 }

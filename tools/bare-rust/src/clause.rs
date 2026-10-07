@@ -18,7 +18,16 @@ pub struct Scope {
     pub events: BTreeSet<String>,
     /// The methods a parameter's type is known to have, for `param.method` in a `protocol`; `None` when they cannot be checked.
     pub event_methods: BTreeMap<String, Option<BTreeSet<String>>>,
+    /// The named pure functions `map` and `filter` may take (language 6.15): the file's views. The language's own
+    /// (`PURE_BUILTINS`) are always allowed.
+    pub pure: BTreeSet<String>,
 }
+
+/// The pure functions the language itself names (language 6.15): `scalars(text)` and `deref(ref)`.
+pub const PURE_BUILTINS: &[&str] = &["scalars", "deref"];
+
+/// The operators of language 6.15 that take parentheses, and how many arguments each takes.
+pub const SEQUENCE_OPS: &[(&str, usize)] = &[("yields", 1), ("reverse", 1), ("enumerate", 1), ("scalars", 1), ("deref", 1), ("take", 2), ("skip", 2), ("zip", 2), ("map", 2), ("filter", 2)];
 
 /// Words of language 4 and 6, and of the clause forms that carry no expression.
 const WORDS: &[&str] = &[
@@ -26,7 +35,7 @@ const WORDS: &[&str] = &[
     "result", "self", "true", "false", "none", "value", "size", "count", "length", "byte_length", "utf16_length", "utf8", "sum", "min",
     "max", "same", "approx", "total_order", "distinct", "sorted", "by", "subset", "view", "called", "exactly", "at", "most", "least",
     "once", "before", "return", "only", "on", "when", "sign_bit", "is_nan", "payload", "caller", "some", "implements", "borrows",
-    "owns", "shares", "from", "for", "as", "moved",
+    "owns", "shares", "from", "for", "as", "moved", "yields", "reverse", "enumerate", "scalars", "deref", "take", "skip", "zip", "map", "filter",
 ];
 
 /// Words only a clause of one kind may use: what a `budget` bounds and what a `layout` states (language 6.7, 6.1).
@@ -303,6 +312,52 @@ fn pattern_binders(toks: &[Tok]) -> BTreeSet<usize> {
     out
 }
 
+/// The sequence operators of language 6.15: each takes its arguments, and `map` and `filter` take a named pure function
+/// first (a view of the file or one of the language's), never a parameter, a callback or a closure.
+fn lint_sequences(toks: &[Tok], text: &str, scope: &Scope) -> Vec<String> {
+    let mut errs = vec![];
+    for (i, t) in toks.iter().enumerate() {
+        let Tok::Word(w) = t else { continue };
+        let Some(&(_, arity)) = SEQUENCE_OPS.iter().find(|(n, _)| n == w) else { continue };
+        if toks.get(i + 1) != Some(&Tok::Punct('(')) || (i > 0 && toks[i - 1] == Tok::Punct('.')) {
+            continue;
+        }
+        // the arguments: tokens up to each top-level comma, until the bracket that closes
+        let (mut depth, mut args, mut start) = (0, vec![], i + 2);
+        for (j, u) in toks.iter().enumerate().skip(i + 1) {
+            match u {
+                Tok::Punct('(' | '[' | '{') => depth += 1,
+                Tok::Punct(')' | ']' | '}') => {
+                    depth -= 1;
+                    if depth == 0 {
+                        args.push((start, j));
+                        break;
+                    }
+                }
+                Tok::Punct(',') if depth == 1 => {
+                    args.push((start, j));
+                    start = j + 1;
+                }
+                _ => {}
+            }
+        }
+        if args.len() != arity || args.iter().any(|(a, b)| a >= b) {
+            errs.push(format!("`{w}` takes {arity} argument{} in `{text}`", if arity == 1 { "" } else { "s" }));
+            continue;
+        }
+        if w == "map" || w == "filter" {
+            let (a, b) = args[0];
+            match &toks[a..b] {
+                [Tok::Word(f)] if PURE_BUILTINS.contains(&f.as_str()) || scope.pure.contains(f) => {}
+                [Tok::Word(f)] if scope.names.contains(f) => errs.push(format!("`{f}` is a parameter or callback, not a named pure function: `{w}` takes a view of the file or a function of the language (language 6.15) in `{text}`")),
+                [Tok::Word(f)] => errs.push(format!("`{f}` is not a named pure function (a view of the file, `scalars` or `deref`) in `{text}`")),
+                _ => errs.push(format!("`{w}` takes the name of a pure function first, not an expression, in `{text}`")),
+            }
+        }
+    }
+    errs
+}
+
 /// Everything wrong with one clause's text. `heads` are the keywords its kind may start with (none: no check).
 pub fn lint(kind: &str, text: &str, heads: &[&str], scope: &Scope) -> Vec<String> {
     let head = heads.iter().filter(|h| text == **h || text.starts_with(&format!("{h} ")) || text.starts_with(&format!("{h}:"))).max_by_key(|h| h.len());
@@ -324,6 +379,7 @@ pub fn lint(kind: &str, text: &str, heads: &[&str], scope: &Scope) -> Vec<String
     if kind == "obliges" {
         errs.extend(lint_obliges(&toks, text));
     }
+    errs.extend(lint_sequences(&toks, text, scope));
     let patterns = pattern_binders(&toks);
     // a callback clause's `with` and `returning` (language 6.13)
     let (binders, parts_errs) = if kind == "callback" {
@@ -579,6 +635,25 @@ mod tests {
         assert_eq!(ens("ensure p : result is (a, _) implies size(a) == mid"), "");
         assert!(ens("ensure p : result is (a, b) implies size(c) == mid").contains("unknown name `c`"));
         assert_eq!(ens("ensure p : result moved from src"), "");
+    }
+
+    #[test]
+    fn sequences_take_named_pure_functions() {
+        let mut sc = scope();
+        sc.names.extend(["self", "other", "f", "n", "mid", "capacity"].map(String::from));
+        sc.pure.insert("capacity".into());
+        let ens = |t: &str| lint("ensure", t, &["ensure"], &sc).join("; ");
+        assert_eq!(ens("ensure a : yields(result) == scalars(self)"), "");
+        assert_eq!(ens("ensure b : yields(result) == old(yields(self))[n..] ++ [other] and yields(result)[0] == none"), "");
+        assert_eq!(ens("ensure c : result.0 == old(self)[..mid] and result.1 == old(self)[mid..size(old(self))]"), "");
+        assert_eq!(ens("ensure d : yields(result) == zip(skip(n, old(yields(self))), take(n, enumerate(reverse(yields(other)))))"), "");
+        assert_eq!(ens("ensure e : map(deref, yields(result)) == self and filter(capacity, yields(self)) == []"), "");
+        assert!(ens("ensure f : yields(result) == map(f, yields(self))").contains("parameter or callback"));
+        assert!(ens("ensure g : yields(result) == map(g, yields(self))").contains("not a named pure function"));
+        assert!(ens("ensure h : yields(result) == map(deref + 1, yields(self))").contains("name of a pure function"));
+        assert!(ens("ensure i : yields(result) == take(yields(self))").contains("takes 2 arguments"));
+        assert!(ens("ensure j : yields(result, self) == []").contains("takes 1 argument"));
+        assert!(ens("ensure k : yields() == []").contains("takes 1 argument"));
     }
 
     #[test]

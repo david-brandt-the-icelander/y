@@ -298,6 +298,7 @@ pub fn validate_with(file: &Value, text: Option<&str>, builds: &BTreeSet<String>
         }
         let mut scope = Scope { names: variants.clone(), failures: failures.clone(), payload: payload.clone(), ..Scope::default() };
         scope.names.extend(all_views.iter().map(|v| v.0.clone()));
+        scope.pure.extend(all_views.iter().map(|v| v.0.clone()));
         if kind == "type" {
             scope.names.insert("Self".into());
             scope.names.insert("other".into());

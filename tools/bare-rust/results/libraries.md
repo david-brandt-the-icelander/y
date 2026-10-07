@@ -11,7 +11,7 @@ crate (49 functions, 25 types, 19 traits, 11 macros, 1 const), and one more, `st
 
 | Entries | Count | | Clauses | Stated | `unexpressed` |
 | --- | ---: | --- | --- | ---: | ---: |
-| function (27 are trait methods) | 72 | | `ensure` | 71 | |
+| function (27 are trait methods) | 72 | | `ensure` | 84 | |
 | type | 27 | | `implements` | 140 | |
 | trait | 20 | | `effects` | 45 | |
 | macro | 11 | | `result must be used` | 32 | |
@@ -20,19 +20,19 @@ crate (49 functions, 25 types, 19 traits, 11 macros, 1 const), and one more, `st
 | | | | `fails panic`, `fails` | 10, 1 | |
 | | | | `hold`, `derive`, `callback`, `protocol` | 10, 6, 3, 2 | |
 | | | | `budget`, `layout`, `invariant`, `on failure`, `access` | 4, 1, 1, 1, 1 | |
-| | | | `unexpressed` | | 77 |
+| | | | `unexpressed` | | 65 |
 
-441 clauses in all: 364 stated and 77 `unexpressed`, on 240 subjects. B1 (step 4 of `proposal/language-gaps.md` § 6)
-took `unexpressed` from 175 to 138 and added 129 impl subjects, each compiled against the real std; B2 took it from 138 to 121; B3 (callbacks) from 121 to 114; B4 (eight small additions) from 114 to 77.
+442 clauses in all: 377 stated and 65 `unexpressed`, on 240 subjects. B1 (step 4 of `proposal/language-gaps.md` § 6)
+took `unexpressed` from 175 to 138 and added 129 impl subjects, each compiled against the real std; B2 took it from 138 to 121; B3 (callbacks) from 121 to 114; B4 (eight small additions) from 114 to 77; B5 (sequences) from 77 to 65.
 25 of the stated clauses are conditional, qualified by `given` (on 18 subjects): 17 `given` items on a bound's implementations, 15 on the
 default body, 1 on a build setting. Stated clauses by
-status: documentation 87, observed 208, lifted 54 (the attributes `#[must_use]` and `rustc_const_stable`), hand-written 15.
+status: documentation 100, observed 208, lifted 54 (the attributes `#[must_use]` and `rustc_const_stable`), hand-written 15.
 
 **Signatures**, compiled against rustc 1.97.0: 250 checked, 6 path-resolved only (`PartialEq`, `PartialOrd`, `From`, `TryFrom`,
 `Index`, `IndexMut`: a trait with generics), 4 unchecked (the bang macros `assert_eq!`, `panic!`, `vec!`, `write!`),
 0 mismatched. Of 188 type slots, 181 map to the type language (96%) and 7 are host text. Slices are no longer host text (below).
 
-## What the language lacked: the `unexpressed` promises (77)
+## What the language lacked: the `unexpressed` promises (65)
 
 Each reason in the file starts with its label. Class A took the file from 199 to 175; B1 (traits, implementations and
 associated types) from 175 to 138. Of B1's 52, 38 are closed outright and 14 stay under corrected labels; 6 of the
@@ -42,7 +42,7 @@ host-state ones stay (the vacant half of `Entry::or_insert` is all that moved).
   negative impl 2 (`Eq` and `Copy`); no elided lifetime in a trait argument 3 (`From<&str>`, `Index<&Q>`,
   `Extend<&T>`); no deref coercion 1; no mutable reference as an impl's self type 1; no unsized text as an associated
   type 1 (`Deref<Target = str>`); no unstable or negative bound 1 (`Step` for `Range`); no view of two arguments 1
-  (`is_char_boundary`); no sequence value +1 (`collect`'s Result and String impls); no drop +1 (`vec::IntoIter`).
+  (`is_char_boundary`); no sequence value +1 (`collect`'s Result and String impls); no drop +1 (`vec::IntoIter`). B5 relabelled the last two (below).
 - **Host state (6)**, unchanged: `Entry::or_insert` (the map after a vacant insert), `Formatter`, `TryFromIntError`,
   `Display::fmt`, `Hasher::write`, `Hash`.
 - **Others.** What a function computes 8; no positive effect 3; and the smaller labels. B3 changed no sequence value (15
@@ -50,7 +50,41 @@ host-state ones stay (the vacant half of `Entry::or_insert` is all that moved).
   result* (7), *no order of calls* (6) and *callback clause has no condition* (2). B4 removed *no const-ness* (18),
   *must-use on a type* (14), *no identity of moved values* (6), *no drop* (5), *no resource exhaustion* (2), *no
   expected or amortised cost* (1), *no tuple parts* (1), *no frame condition on a collection* (1) and *no sufficient
-  condition* (2); see below.
+  condition* (2). B5 removed *no sequence value* (20); see below.
+
+## Class B5: sequences
+
+B5's 20 *no sequence value* clauses (14 of the plan, with the 6 that B3 and B4 added) are now 8: 12 are stated, and the 8 stay
+under labels of their own. The new forms are language § 6.15's `yields(it)`, `xs[i]`, `xs[i..j]`, `++`, `reverse`, `take`,
+`skip`, `zip`, `enumerate`, `map` and `filter` by a named function, and `scalars` and `deref`; the file's kind is `ensure`,
+with no new one. `libcheck` lints each operator's arguments and that `map` and `filter` are given a name from the file's
+views or the language's own, never a parameter or callback; `libstats` prints 13 clauses with sequences (12 with
+`yields`, 1 index, 2 slices, 1 `++`, 3 with `scalars` or `deref`). The new clauses are not compiled
+against `std`: only the lint reads them.
+
+- **Stated (12).** `str::chars`: `yields(result) == scalars(self)` (core/src/str/mod.rs:1013-1016; the
+  `DoubleEndedIterator` half is the type's `implements`, and `next_back` is the same sequence from the back by § 6.15).
+  `slice::iter`: `map(deref, yields(result)) == self`. `split_at_mut`: `result.0 == old(self)[..mid]` and `result.1 ==
+  old(self)[mid..]` (mod.rs:1962-1964; "views, not copies" is the result's `hold`). `Iterator::next`: `head`, `result ==
+  old(yields(self))[0]`, and `advances`, `exists result implies yields(self) == old(yields(self))[1..]`
+  (iterator.rs:50-53; after a `None` nothing is said). `enumerate`: `enumerate(old(yields(self)))`; `skip`: `skip(n, …)`;
+  `take`: `take(n, …)`; `chain`: `old(yields(self)) ++ old(yields('<U as IntoIterator>::into_iter'(other)))`; `zip`:
+  `zip(…, …)`; `copied`: `map(deref, old(yields(self)))`; `IntoIterator::into_iter`: `yields(result) == yields(self)`;
+  and `Vec`'s `into_iter`: `yields(result) == self` (vec/mod.rs:3948-3950, "from start to end"), which takes the claim from
+  `vec::IntoIter`'s "yields the elements of the vector it was made from". Each cites the line the entry already cited.
+- **Stay, relabelled (8).** *No callback as a function* 4 (`map`, `filter`, `take_while`, `flat_map`: the argument is a
+  closure, not a named function, and `callback` states one call); *no promise of disorder* 1 (`HashMap`'s arbitrary
+  iteration order); *no lifetime for the elements of a sequence* 1 (`vec::IntoIter`'s drop of the elements it has not
+  yielded: `lifetime` names one entity of a call); *no successor of a type parameter* 1 (`Range<Idx>`, `Idx: Step`);
+  *no from_iter subject* 1 (`collect`: the `from_iter` of `Result` and `String` has no subject here). *No promise about a
+  result's later calls* stays at 4.
+- **Unsure.** `into_iter`'s clause says little: `yields` of a collection is defined as what its `IntoIterator` gives.
+  `next`'s clauses are about the present state and cannot say what an iterator that resumes does. `copied` reads a
+  reference and its value as `deref`; `slice::iter`'s "by reference" is carried by the `Iter` type's `Item = ref<T>`.
+  `Range`'s integer case could be written (`range(a, b)`), and is not, because `Idx` is any `Step` type.
+- **Tool limits.** `libcheck` lints names, arity and the named-function rule; it does not compile a sequence clause or
+  check a `yields` against a running iterator, and has no conformance suite for the operators. A `map` or `filter` name
+  must be a view of the file (checked by compiling its host path) or `scalars` or `deref`; a quoted host path is refused.
 
 ## Class B4: eight small additions
 
