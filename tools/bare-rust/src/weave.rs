@@ -452,8 +452,18 @@ impl<'a> Weaver<'a> {
         let name_n = f.child_by_field_name("name").unwrap();
         let sname = self.namer.unique(format!("{}::{}", sc.path, text(name_n, src)));
         let sub = self.find(&sname)?;
+        // a clause that stands for host text: `#[must_use]` before the item, `const` after its visibility (language 6.14)
+        let says = |kind: &str, t: &str| sub["clauses"].as_array().into_iter().flatten().any(|c| c["kind"] == kind && c["text"] == t);
+        self.at(&sname, "clauses");
+        if says("result must be used", "result must be used") {
+            self.ins(f.start_byte(), "#[must_use] ".into());
+        }
         self.at(&sname, "visible");
         self.ins(f.start_byte(), vis_text(sub)?);
+        self.at(&sname, "clauses");
+        if says("effects", "evaluable at compile time") {
+            self.ins(f.start_byte(), "const ".into());
+        }
         self.at(&sname, "generics");
         self.ins(name_n.end_byte(), generics_text(sub));
         let params_n = f.child_by_field_name("parameters").unwrap();

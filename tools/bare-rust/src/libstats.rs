@@ -7,10 +7,16 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
 const KINDS: [&str; 10] = ["function", "type", "trait", "macro", "const", "impl", "alias", "static", "module", "use"];
-const CLAUSE_KINDS: [&str; 21] = [
+const CLAUSE_KINDS: [&str; 22] = [
     "require", "ensure", "on failure", "fails", "fails only", "panics", "never panics", "result must be used", "effects", "law", "callback", "protocol",
-    "invariant", "budget", "layout", "derive", "access", "hold", "implements", "compat", "unexpressed",
+    "obliges", "invariant", "budget", "layout", "derive", "access", "hold", "implements", "compat", "unexpressed",
 ];
+
+/// Whether a clause text takes a part of a tuple, `result.0`: a digit after a dot that follows a name, and not a number.
+fn tuple_part(t: &str) -> bool {
+    let cs: Vec<char> = t.chars().collect();
+    (1..cs.len().saturating_sub(1)).any(|i| cs[i] == '.' && cs[i + 1].is_ascii_digit() && (cs[i - 1].is_alphabetic() || cs[i - 1] == '_' || cs[i - 1] == ')') && !cs.get(i + 2).is_some_and(|c| c.is_alphanumeric() || *c == '.'))
+}
 
 /// What a clause's `reason` says the language lacks: the text before the first `: `.
 pub fn reason_label(reason: &str) -> &str {
@@ -102,6 +108,25 @@ pub fn libstats(file: &Value, sigs: Option<&SigReport>) -> String {
     let _ = writeln!(out, "\ncallback clauses ({} on {} subjects), and protocols over calls ({})", callbacks.len(), callbacks.iter().map(|(s, _)| s["name"].as_str().unwrap_or("")).collect::<BTreeSet<_>>().len(), clauses.iter().filter(|(_, c)| c["kind"] == "protocol").count());
     for (label, word) in [("with a condition (`when`)", "when"), ("with the call's arguments (`with`)", "with"), ("with the call's result (`returning`)", "returning")] {
         row(&mut out, label, callbacks.iter().filter(|(_, c)| has(c, word)).count(), callbacks.len());
+    }
+    // the small additions of language 6.14, counted by the form that carries them
+    let stated_text = |c: &Value| c["kind"] != "unexpressed" && c["kind"] != "derive";
+    let texts: Vec<(&str, &str)> = clauses.iter().filter(|(_, c)| stated_text(c)).map(|(_, c)| (c["kind"].as_str().unwrap_or(""), c["text"].as_str().unwrap_or(""))).collect();
+    let words = |t: &str, w: &str| t.split(|ch: char| !(ch.is_alphanumeric() || ch == '_')).any(|x| x == w);
+    let small: [(&str, usize); 9] = [
+        ("`evaluable at compile time` (6.14.1)", texts.iter().filter(|(k, t)| *k == "effects" && *t == "evaluable at compile time").count()),
+        ("`must be used` on a type or trait (6.14.2)", texts.iter().filter(|(k, t)| *k == "result must be used" && t.starts_with("must be used")).count()),
+        ("`moved from` (6.14.3)", texts.iter().filter(|(_, t)| words(t, "moved")).count()),
+        ("`ends in call`, `survive call` (6.14.4)", texts.iter().filter(|(k, t)| *k == "hold" && t.starts_with("lifetime") && (t.ends_with("survive call") || t.contains(" ends in call"))).count()),
+        ("`never panics except exhausted` (6.14.5)", texts.iter().filter(|(k, t)| *k == "never panics" && t.starts_with("never panics except exhausted")).count()),
+        ("`expected`, `amortised` cost (6.14.6)", texts.iter().filter(|(k, t)| *k == "budget" && (words(t, "expected") || words(t, "amortised"))).count()),
+        ("tuple parts, `result.0`, `is (a, b)` (6.14.7)", texts.iter().filter(|(_, t)| tuple_part(t) || t.contains(" is (")).count()),
+        ("element frame, `mutates only p[e]` (6.14.8)", texts.iter().filter(|(k, t)| *k == "access" && t.starts_with("mutates only") && t.contains('[')).count()),
+        ("`obliges caller` (6.14.9)", texts.iter().filter(|(k, _)| *k == "obliges").count()),
+    ];
+    let _ = writeln!(out, "\nsmall additions of language 6.14 ({} clauses)", small.iter().map(|(_, n)| n).sum::<usize>());
+    for (label, n) in small {
+        row(&mut out, label, n, total);
     }
     let mut by_status: BTreeMap<String, usize> = BTreeMap::new();
     let mut by_source: BTreeMap<&str, usize> = BTreeMap::new();

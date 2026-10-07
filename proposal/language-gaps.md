@@ -298,6 +298,45 @@ Each is a clause or an expression, small enough to add on its own:
 The first two close 32 promises with almost no new meaning: `const` restricts effects, which bounds already do, and
 must-use extends an existing clause from a subject to a type.
 
+**Done: the paragraphs, the format, the lint, strip and weave for two, and the rewrite; 37 of the 47 are closed.**
+Language § 6.14 states the nine additions in the form of § 6 (one subsection each), extends § 4, § 6.2, § 6.3, § 6.7, § 7.2,
+§ 7.3, § 8.2 and § 10.2 with a pointer, and § 15 with the grammar: `evaluable at compile time`; `must be used` on a type or
+trait; `hold result : moved from v` and the expression `result moved from v`; `lifetime v ends in call [when p]` and
+`lifetime a, b survive call`; `never panics except exhausted`; `budget work expected amortised O(1)`; `result.0`, and the
+patterns `let (a, b)` and `e is (a, b)`; `mutates only self[key]`; and `obliges caller : p because "…"`. The library file
+keeps each in the kind it extends (`effects`, `result must be used`, `hold`, `never panics`, `budget`, `ensure`,
+`access`), with one new kind, `obliges`. `libcheck` lints the forms (`moved from` names one path, `ends in call` and
+`survive call` have their shape, the `because` of an `obliges` is a quoted reason, `is (a, b)` binds its names, and
+`must be used` is for a type or trait, `evaluable at compile time` and `obliges` for a function), and compiles each
+`const` claim by calling the item from a `const fn`. `strip` turns `const fn` and a plain `#[must_use]` into clauses and
+`weave` writes them back (`#[must_use]` before the visibility, `const` after it); a `#[must_use = "…"]` keeps its message
+as host text. `libstats` counts the nine forms. Old files stay valid. Rewrite: `unexpressed` 114 to 77.
+
+- **Closed (37).** `const` 14 (the items with `rustc_const_stable`); must-use 14 (11 iterator types, `Result`, the
+  `Iterator` trait, `Chars`); moves 3 (`cmp::max`, `cmp::min`, `Ord::max`: on a tie the second or first argument comes
+  back); ends 2 (`mem::swap`: `lifetime x, y survive call`; `mem::replace`: `lifetime dest, src survive call`, with the two
+  `hold … moved from` its documentation states); exhaustion 2 (`HashMap::insert` and `entry`: `never panics except
+  exhausted given K.hash, K.eq, S.hash_one never panic`); cost 1 (`HashMap::get`: `budget work expected O(1)`, from std's
+  table of collection costs, which the entry had called absent; `insert` gains `expected amortised`); tuple parts 1
+  (`split_at_mut`: the sizes of `result.0` and `result.1`, and `disjoint`).
+- **Stay under corrected labels (10 of the 47, and 3 more).** *No stable const-ness* 4 (`cmp::max`, `cmp::min`,
+  `Option::map_or_else`, `slice::iter` are `rustc_const_unstable`: no release is bound to keep them const). *No identity
+  of cloned values* 2 (`Clone::clone` and `vec![elem; n]`: `moved from` says a value moved, not what a clone shares) and *no
+  identity of a stored key* 1 (`HashMap::insert` keeps the old key: `self[k]` looks up a value, and no expression names the
+  key the map holds). `Entry::or_insert`: the drop of `default` in the occupied arm is stated (`lifetime default ends in
+  call when self is Occupied(e)`), and the rest is *no effects of a destructor* (V's `Drop` is arbitrary code, so no
+  `never panics`), and the frame condition is *no host state*: the map the entry borrows is not a name, so `mutates only
+  self[key]` has no collection to be about. `vec![expr; 0]` is *no arm of a macro in a clause* (`elem` and `n` are names of
+  one arm of the host profile, not of the subject). `vec::IntoIter`'s drop of the elements not yielded is *no sequence
+  value*. `insert` and `entry`'s *no sufficient condition* (2) is now *no condition on an associated type's
+  implementation*, the hasher's own `write` and `finish`, as `get`'s.
+- **Still open or unsure.** The tie rules of `max`, `min` and `Ord::max` are stated as moves; that the loser is dropped
+  follows from ownership and is not stated (the `ends` of a generic value that a provided method may override has no `given`).
+  `never panics except exhausted` for `insert` leaves out the destructor of the replaced key, as every `never panics`
+  of the file leaves out the drop of a type parameter. No compile check of moves, drops, exhaustion or must-use, and `strip`
+  reads only functions: `#[must_use]` on a type, `unsafe fn` as `obliges`, and `let (a, b)` have no library use yet (the
+  corpora have no `unsafe fn`, and a library `let` has no clause kind).
+
 ### 4.5 Sequences (14)
 
 **What is missing.** The language has `list<T>` and facts about collections (`size`, `in`, `count`, `all`), but no

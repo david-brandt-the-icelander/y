@@ -244,7 +244,8 @@ A host type maps onto these through its profile: T-SQL `INT` to `i32`, `NVARCHAR
 - **Time:** `now` is the time of the request at its place in history and `tick` its tick; durations carry units: `50us`,
   `5 ticks`, `30 s`, `2 frames`.
 - **Equality and identity:** `==` is structural on values; `same(a, b)` is identity of host references; rows compare by
-  key.
+  key; `p moved from q` is identity of a value that moved (§ 6.14.3).
+- **Tuples:** `e.0`, `e.1` are the parts of a tuple, and a pattern `(a, b)` names them, in `let` and after `is` (§ 6.14.7).
 - **Collections:** `size`, `in`, `subset`, `distinct`, `sorted by`, `all x in c : p`, `any x in c : p`, `count`, `sum`.
   `min` and `max` return an optional value, absent for an empty collection. In a `law` only, a quantifier may range over
   a type, `all x : T : p`, because laws are checked on generated values and never at run time.
@@ -261,7 +262,7 @@ A host type maps onto these through its profile: T-SQL `INT` to `i32`, `NVARCHAR
 - **Functions:** a function used in a constraint is named in the catalog or declared with a reference implementation in
   a host. It must be total, deterministic and free of effects, which is itself checked as a bound (§ 6.3); its generated
   forms are compared like every other check.
-- **`let`:** binds a name to a value for the later clauses of its subject. A name is bound once.
+- **`let`:** binds a name, or a tuple pattern `(a, b)`, to a value for the later clauses of its subject. A name is bound once.
 - **Cost:** every predicate has a static cost: rows read by key, index ranges, and collection sizes bounded by argument
   shapes. Placement uses it (§ 10.3).
 
@@ -301,6 +302,7 @@ Clauses are of two sorts, and the difference decides how they are checked.
 | Interfaces and implementations | `implements`, `assoc`, `for`, `some`, `any`, `hold … borrows for` | Which interfaces a type implements, what an implementation adds, and what a host subject is parameterised by | Checked at build | 6.11 |
 | Conditional promises | `given` | What a promise relies on: a bound's implementations, the default body, a build setting | Checked at build, as the promise is | 6.12 |
 | Callbacks and calls | `callback … when / with / returning`, `protocol` over calls | When a function argument is called, with what, what it returned, and in what order | Checked by wrappers or in CI | 6.13 |
+| Small additions | `evaluable at compile time`, `must be used`, `moved from`, `ends in call`, `survive call`, `except exhausted`, `expected`, `amortised`, `result.0`, `mutates only p[e]`, `obliges caller` | Compile-time evaluation, must-use types, moves, drops, exhaustion, expected cost, tuple parts, an element frame, what a caller must establish | As the section each extends | 6.14 |
 | Lifetime | `hold`, `lifetime …`, `instances …`, `no strong cycle`, `model` | How long entities live and who keeps them | Property | 7 |
 | Mutability and aliasing | `access`, `readonly`, `immutable`, `frozen after`, `write once`, `append only`, `monotonic`, `mutates only`, `interior`, `unchanged`, `exclusive`, `sole`, `disjoint`, `shared readonly` | Who may change what, and through how many paths | Property; predicate for columns | 8 |
 | Derived languages | `local` | A type a woven host needs inside a body | Checked at weave | 11.2 |
@@ -399,10 +401,11 @@ function rust 'eve_net::frame::decode'(b: bytes) -> Frame?
 - `fails F when p` says the call fails with `F` whenever `p` held at entry. `fails only` lists the user failures a call
   may raise; marked `open`, the list may grow without a new version. Runtime failures are always possible, because an
   enforced constraint may reject, unless the subject says `never fails runtime`, the strongest form, whose name for
-  hosts with panics is `never panics`. A promise that holds only given what an implementation or the build does is qualified by
+  hosts with panics is `never panics`. `never panics except exhausted` leaves open the one failure of running out of what the platform gives
+  (§ 6.14.5). A promise that holds only given what an implementation or the build does is qualified by
   `given` (§ 6.12).
 - `result must be used` binds the callers: a call whose result is discarded is a build error where the host can see it,
-  and a lint elsewhere.
+  and a lint elsewhere. A type can say `must be used` for every subject that returns it (§ 6.14.2).
 - `callback c : called exactly once | at most once | at least once [before return]` states how a function argument is
   called, as Kotlin's `callsInPlace` does; `callback c : conforms to interface rust 'eve_ui::Handler'` applies an
   interface's clauses to whatever is passed. A callback may carry a condition, name its arguments and bind its result
@@ -458,6 +461,7 @@ interface rust 'eve_market::Procedure'
   the engine treat them as reductions.
 - `depends only on` is the information-flow form of a bound (as SPARK's `Depends`): the result is a function of the
   named inputs alone.
+- `evaluable at compile time` says the body may run in a constant context (§ 6.14.1).
 - `terminates` says every call returns or fails. It is proven where the host can prove it and otherwise checked as a
   budget. A bound that holds only given what an implementation does carries a `given` (§ 6.12).
 - **Checked:** statically where the bound is reachable: the DAL procedures and MachoNet calls a Python method can reach,
@@ -607,6 +611,8 @@ type csharp 'Studio.Ui.InventoryWindow'
     budget allocates at most 0 B per frame        -- after the first frame
 ```
 
+- `budget work expected O(f)` bounds the mean over the subject's random choices, and `amortised` the average over a
+  sequence of calls (§ 6.14.6).
 - **Checked:** on the recorded corpora and fights in CI, against the previous release; in production from the router's
   timings and the manifests.
 - **Harvested:** from timings and manifests, with how cost grows with input fitted from the recordings.
@@ -941,6 +947,192 @@ What stays outside: what a callback does to a value that lives on in a result (`
 result yields is a sequence the language cannot state), a protocol whose next step depends on a value the calls
 returned (`next` is called until it returns none), and an order among calls of different arguments of several subjects.
 
+### 6.14 Eight small additions
+
+Each is a clause or an expression that extends a section already written, and is small enough to state on its own
+(language-gaps § 4.4). They are collected here because they share a form: one sentence of meaning, one line of syntax,
+one way to fail. The section each extends is named in its heading.
+
+#### 6.14.1 `const`: evaluable at compile time (extends § 6.3)
+
+**Meaning.** `evaluable at compile time` says the body of a subject may run in a constant context: the host compiler
+may call it while it builds. It is a bound on effects, as trial § 12 says of `const fn`. It forbids input and output, a
+clock, randomness, suspension and any call to a subject that is not itself evaluable at compile time, and it requires
+that the same inputs give the same result. Unlike `effects none` it permits writes through the subject's own `&mut`
+arguments, which is what `mem::swap` does. It is a promise only where the host promises it to later versions; a body that
+is evaluable under an unstable host feature makes none, and states none.
+
+```text
+function rust 'std::primitive::slice::len'(self: ref<list<T> as 'std::primitive::slice'>) -> u64 as 'usize'
+    evaluable at compile time
+function rust 'std::mem::swap'(x: ref<T>, y: ref<T>)
+    evaluable at compile time          -- and the writes through x and y are allowed
+```
+
+- **Fails:** a call in a constant context of a subject that is not, a build error at the call. A body that breaks the
+  claim is a bug in the subject: the host compiler refuses it, where it can see.
+- **Checked:** by the host compiler where the host has the notion (`const fn`, `constexpr`): `weave` writes `const`
+  from the clause and `strip` reads it back. A library's claim is checked by calling the item in a constant context.
+- **Harvested:** from `const fn` and `constexpr`, and, for a library, from the stability attribute (`rustc_const_stable`
+  is a promise, `rustc_const_unstable` is not).
+
+#### 6.14.2 Must-use on a type (extends § 6.2)
+
+**Meaning.** `result must be used` (§ 6.2) attaches to a subject. `must be used` attaches to a type, or to an interface:
+a value of it that is dropped without being used is a bug in the caller, wherever it was made. Every subject whose result
+is the type, or `some` of the interface, then has `result must be used` without writing it; in the Rust host a `fails E`
+result is a `Result`, which is must-use, so a subject that fails has it too. A subject may add its own clause for a reason
+of its own (`mem::replace`: "you can just assign the new value").
+
+```text
+type rust 'std::iter::Chain'
+    must be used
+type rust 'std::result::Result'
+    must be used
+```
+
+- **Fails:** a discarded value is a build error where the host can see it, and a lint elsewhere.
+- **Checked:** by the host's own lint (`unused_must_use`, `[[nodiscard]]`); `weave` writes `#[must_use]` for the plain
+  attribute. A message the host carries stays in `source`.
+- **Harvested:** from `#[must_use]` on a type or a trait, `[[nodiscard]]` on a class.
+
+#### 6.14.3 Moves (extends § 7.2)
+
+**Meaning.** A value that moves keeps its identity (§ 7.1: an entity is anything with identity). `==` cannot show it,
+because it is structural: two values that compare equal are not told apart, and `max` of two of them returns one. `same`
+is the identity of host references, not of a value that moves. `p moved from q` is true when the entity at `p` after the
+call is the entity `q` named at entry: moved, not copied or cloned. It is an expression, usable under `implies` and
+`when`; `hold p : moved from q` is its unconditional form, beside `owns`, `shares` and `borrows`. A copy (`Copy`,
+`clone`) is a new entity and is never moved from.
+
+```text
+function rust 'std::cmp::max'(v1: T, v2: T) -> T
+    ensure tie_second : (v1 <= v2 and v1 >= v2) implies result moved from v2
+function rust 'std::mem::replace'(dest: ref<T>, src: T) -> T
+    hold dest   : moved from src
+    hold result : moved from dest
+```
+
+- **Fails:** a value that is not the one named is a bug in the subject.
+- **Checked:** statically, under ownership, where a move is visible in the body; otherwise in tests, by values that
+  compare equal and carry a tag. Under counting and tracing the identity is the host reference, and `same` applies.
+- **Harvested:** from documentation that says which argument is returned or kept ("returns the second argument"), and
+  from the arm of a body that returns a parameter.
+
+#### 6.14.4 Ends and drops (extends § 7.3)
+
+**Meaning.** `lifetime v ends in call [when p]` says the entity `v` had at entry ends before the call returns: it is
+dropped, and its destructor runs, unless it was moved out; with `when`, only where `p` holds. `lifetime a, b survive
+call` says none of the named entities ends in the call: no destructor runs, none is freed or deinitialised, and a move
+to a result or to a holder is a survival. For a reference parameter the entity is its referent. Both are over the scope
+`call` (§ 7.1). A by-value argument that neither clause names is left unstated.
+
+```text
+function rust 'std::mem::swap'(x: ref<T>, y: ref<T>)
+    lifetime x, y survive call
+function rust 'std::collections::hash_map::Entry::or_insert'(self: Entry<'a, K, V>, default: V) -> ref<V>
+    lifetime default ends in call when self is Occupied(e)
+```
+
+- **Fails:** a drop that happens where `survive` says none, or does not happen where `ends` says it does, is a bug in
+  the subject.
+- **Checked:** statically under ownership (drop elaboration shows which values are dropped on which path); in tests by
+  a value whose destructor counts. Under tracing a drop is release (§ 7.1), and `ends` is read as `released`.
+- **Harvested:** from documentation that says "dropped" or "without deinitializing", and from the arm of a body that does
+  not move a parameter.
+
+#### 6.14.5 Resource exhaustion (extends § 6.2)
+
+**Meaning.** `never panics` (§ 6.2) is false of every call that may need more memory than the platform gives.
+`never panics except exhausted` keeps the rest of it: the one failure left open is exhaustion, that the platform refuses
+what the call asks for (an allocation, or a size that overflows the host's index type while the call works out how much
+to ask for). What the host does then is the host's (a capacity-overflow panic, an abort on allocation failure); no other
+panic and no other runtime failure is possible. It may carry `given` (§ 6.12), and `never panics` alone says exhaustion
+cannot happen, which is the stronger promise.
+
+```text
+function rust 'std::collections::HashMap::entry'(self: ref<map<K, V, S>>, key: K) -> Entry<'_, K, V>
+    never panics except exhausted given K.hash, K.eq, S.hash_one never panic
+```
+
+- **Fails:** a panic that is not exhaustion is a bug in the subject; exhaustion is not.
+- **Checked:** as `never panics`, in tests under an allocator that cannot fail, where a panic is a bug; and under one
+  that can, where only an abort or the host's capacity panic is allowed.
+- **Harvested:** from documentation that says "panics if the new capacity exceeds" and "aborts on allocation failure",
+  and from a body that reserves.
+
+#### 6.14.6 Expected and amortised cost (extends § 6.7)
+
+**Meaning.** `budget work O(f)` bounds every call. `budget work expected O(f)` bounds the mean over the subject's own
+random choices (a hash seed, a pivot): one call may cost more, and nothing bounds the worst. `budget work amortised
+O(f)` bounds the total of any sequence of n calls on one instance, started from empty, by n times `f`: one call may
+cost more, the average per call does not. Both words together say both. A budget never fails a request (§ 6.7).
+
+```text
+function rust 'std::collections::HashMap::get'(self: ref<map<K, V, S>>, k: ref<Q>) -> ref<V>?
+    budget work expected O(1)
+function rust 'std::collections::HashMap::insert'(self: ref<map<K, V, S>>, k: K, v: V) -> V?
+    budget work expected amortised O(1)
+```
+
+- **Checked:** in CI on a work counter (probes, comparisons) over many seeds, or over generated sequences of calls,
+  against the previous release.
+- **Harvested:** from documentation that says "expected" or "amortized"; std's table of collection costs marks them `~`
+  and `*`.
+
+#### 6.14.7 Tuple parts (extends § 4)
+
+**Meaning.** `e.0`, `e.1` are the components of a tuple, by position. A pattern `(a, b)`, with `_` for a part that is not
+wanted, binds a name to each part: `let (a, b) = e` for the later clauses of the subject, and `e is (a, b)` as `is`
+binds the names of a variant. Both are for a call that returns a tuple.
+
+```text
+function rust 'std::primitive::slice::split_at_mut'(self: ref<list<T> as 'std::primitive::slice'>, mid: u64 as 'usize')
+        -> (ref<list<T> as 'std::primitive::slice'>, ref<list<T> as 'std::primitive::slice'>)
+    ensure sizes : size(result.0) == mid and size(result.1) == old(size(self)) - mid
+    disjoint result.0, result.1
+    ensure same_sizes : result is (head, tail) implies size(head) + size(tail) == old(size(self))
+```
+
+- **Fails:** a component the tuple lacks (`.2` of a pair) and a pattern of the wrong length are refused at build.
+- **Checked:** at build, by the type of `e`. **Harvested:** from the documentation of the parts of a pair.
+
+#### 6.14.8 Element frame condition (extends § 8.2)
+
+**Meaning.** `mutates only p[e]` is `mutates only` (§ 8.2) with one element of a collection for its path: the element of
+`p` at key `e` may change, appear or vanish, and every other element keeps its value and its place. It says nothing of the
+collection's state that is not an element (a capacity, a hasher), which a path of its own bounds. It is the clause for
+what `ensure others_kept : all k2 in old(self) : k2 != k implies self[k2] == old(self[k2])` says of one subject.
+
+```text
+function rust 'std::collections::HashMap::insert'(self: ref<map<K, V, S>>, k: K, v: V) -> V?
+    mutates only self[k]
+```
+
+- **Checked:** as `mutates only` (§ 8.2), by comparing the collection before and after on generated calls.
+  **Harvested:** from documentation that says "no other key changes".
+
+#### 6.14.9 Obligations on callers (extends § 10.2)
+
+**Meaning.** `assume name : p because "…"` (§ 10.2) is what a subject relies on and does not check. `obliges caller : p
+because "…"` is the same seen from the caller: a precondition the callee does not check, which every call must establish.
+It differs from `require`, which is checked at entry and fails: when `p` is false nothing fails, and the host may do
+anything (for `unsafe fn` in Rust, undefined behaviour). The `because` says what goes wrong, for the reviewer who reads the
+call site.
+
+```text
+function rust 'std::primitive::slice::get_unchecked'(self: ref<list<T> as 'std::primitive::slice'>, i: u64 as 'usize') -> ref<T>
+    obliges caller : i < size(self) because "the index is not checked; out of bounds is undefined behaviour"
+```
+
+- **Checked:** each call site shows the reason, as an `assume` of its own in review; where `p` is a predicate, a debug
+  build asserts it. The host's `unsafe` marks the call. **Harvested:** from the `# Safety` section of an `unsafe fn`.
+
+What stays outside: whether a `const` body is evaluated at compile time (the host may, and need not); a drop by a body
+the subject cannot name (a value of a type parameter is dropped by its own destructor, whose effects `given` names no
+method of); the identity of what a clone shares with its original; the map that an entry handle borrows, which is not a
+name, so `mutates only p[e]` has no collection to be about there.
+
 ---
 
 ## 7. Lifetime
@@ -1005,6 +1197,9 @@ function rust 'eve_cache::Cache::get'(self: ref<Cache>, key: ref<Key>) -> ref<En
     hold result : borrows from self
 ```
 
+A value that moves is not one of the five: it keeps its identity and its holder changes. `hold result : moved from v` and
+the expression `result moved from v` say which value came back where `==` cannot (§ 6.14.3).
+
 ### 7.3 Lifetime predicates
 
 Each predicate is defined over the core; § 7.4 and § 7.5 give its meaning under each model.
@@ -1024,6 +1219,8 @@ Each predicate is defined over the core; § 7.4 and § 7.5 give its meaning unde
   release`.
 - **`lifetime e reachable only from p, q`:** every strong path to `e` from a root passes through one of the named
   holders. It forbids leaks into global caches, event buses and static collections.
+- **`lifetime e ends in call [when p]`:** `e` is dropped before the call returns, where `p` holds, unless it was moved
+  out; **`lifetime a, b survive call`:** none of them ends in the call (§ 6.14.4).
 - **`lifetime e on end refuse | invalidate`:** under tracked references, ending `e` while tracked references remain
   either fails or invalidates them.
 - **`lifetime e stable address [while held by p]`:** `e` does not move while the named paths refer to it, as Rust's
@@ -1181,7 +1378,8 @@ read-only interface in Java promise only that this path does not write, not that
 - **`monotonic f increasing | non-decreasing | decreasing | non-increasing`:** versions, sequences, skill points, closed
   ticks.
 - **`mutates only p, q`:** the in-memory counterpart of `writes only`: the subject writes nothing reachable from its
-  inputs except through the named paths.
+  inputs except through the named paths. A path may name one element of a collection, `self[key]`: every other element
+  is unchanged (§ 6.14.8).
 - **`interior p`** names hidden mutable state inside an otherwise immutable entity (a cache, a memo, a lazily computed
   field), and **`unchanged view(e) = …`** states what must stay the same despite it: the entity is immutable as seen
   through the named pure projection. This is how Rust's `Cell` and `OnceCell` and C++'s `mutable` are stated honestly.
@@ -1304,7 +1502,8 @@ refuses a change to a `pin` that no person has approved.
 `assume name : p because "…"` states something the subject relies on and does not check, at a boundary where another
 place checks it or where it cannot be checked at all: what the proxy enforced, what a foreign library promises, what an
 `unowned(unsafe)` reference relies on. An assumption is shown in review like any exception, and every assumption is
-listed with what would break if it were false.
+listed with what would break if it were false. `obliges caller : p because "…"` is the same seen from the caller: a
+precondition the callee does not check, which each call must establish (§ 6.14.9).
 
 ### 10.3 Where a constraint runs
 
@@ -1819,13 +2018,14 @@ typedef       = "type" NAME [ generics ] "=" type NL ;
 variantdef    = "variant" QNAME "=" NAME [ "(" type ")" ] { "|" NAME [ "(" type ")" ] } [ "open" ] NL ;
 conserve      = "conserve" NAME "across" path_list NL ;
 
-clause        = "let" NAME "=" expr
+clause        = "let" ( NAME | pattern ) "=" expr
               | "from" NAME { "," NAME }
               | "require" [ NAME ":" ] expr [ "else" NAME [ payload ] ]
               | "ensure" [ NAME ":" ] expr
               | "on failure" ( "unchanged" | NAME "ensure" NAME ":" expr )
               | "fails" NAME "when" expr | "fails only" NAME { "," NAME } [ "open" ]
-              | "never fails runtime" | "never panics" | "result must be used"
+              | "never fails runtime" | "never panics" [ "except exhausted" ]
+              | "result must be used" | "must be used" | "obliges caller" ":" expr "because" STRING
               | qualifiable "given" condition { "and" condition }
               | "callback" NAME ":" ( "called" ( "exactly once" | "at most once" | "at least once" )
                                       [ "before return" ] [ "when" expr ]
@@ -1847,6 +2047,7 @@ clause        = "let" NAME "=" expr
 qualifiable   = (* a clause of the form "ensure", "fails … when", "never panics", or a bound, including "terminates" *) ;
 condition     = "default" | "build" BUILD | NAME "." NAME { "," NAME "." NAME } ( "never panic" | "terminate" | "effects none" ) ;
 BUILD         = "overflow_checks" | "debug_assertions" | "panic=unwind" | "panic=abort" ;   (* the host profile's list, § 3.3 *)
+pattern       = "(" ( NAME | "_" ) { "," ( NAME | "_" ) } ")" ;   (* a tuple's parts, also after "is": e is (a, b) *)
 arg           = expr | NAME ;                       (* a new NAME names the argument for the clauses that follow; "with" and "returning" need "exactly once" or "at most once" *)
 payload       = "{" NAME ":" expr { "," NAME ":" expr } "}" ;
 generics      = "for" generic { "," generic } [ "where" bound_pred { "," bound_pred } ] ;
@@ -1864,7 +2065,7 @@ bound         = ( "reads only" | "writes only" | "emits only" | "sends only" | "
                   path_list
               | "effects none" | "no io" | "no clock" | "no randomness" [ "except rolls" ] | "no suspension"
               | "deterministic" | "idempotent by" path | "commutes with" QNAME
-              | "depends only on" path_list | "terminates" ;
+              | "depends only on" path_list | "terminates" | "evaluable at compile time" ;
 state         = "invariant" NAME ":" expr [ "holds" ( "at write" | "at commit" | "between calls" | "always" ) ]
               | "unique" NAME ":" "(" path_list ")" [ "where" expr ] [ "per shard" | "global" ]
               | "reference" path "->" [ "one of" ] QNAME { "," QNAME }
@@ -1879,7 +2080,7 @@ temporal      = ( "always" | "never" | "eventually" ) NAME ":" expr
               | ( "before" | "since" | "until" ) event ":" expr [ "within" duration ]
               | "rate" [ "per" scope_ref ] "<=" NUMBER "per" duration
               | "statistic" NAME ":" expr "within" expr ".." expr "over" NUMBER "samples" ;
-budget        = "budget" ( percentile "<=" duration [ "on" QNAME ] | "work" complexity
+budget        = "budget" ( percentile "<=" duration [ "on" QNAME ] | "work" [ "expected" ] [ "amortised" ] complexity
               | "round_trips" "<=" NUMBER | "bytes sent" "<=" expr | "allocates at most" size [ "per" scope_ref ]
               | "retains at most" size [ "per" ( "instance" | scope_ref ) ] ) ;
 concurrency   = "confined to" scope_ref | "sendable" | "shareable" | "guarded by" path ":" path_list
@@ -1895,13 +2096,15 @@ compat        = "version" NUMBER | "compatible with" NUMBER { "," NUMBER } | "re
               | "was" STABLE | "deprecated" [ "since" NUMBER ] | "stable"
               | "visible to" ( "public" | "crate" | "module" | QNAME ) ;
 memory        = "hold" [ path ] ":" ( "owns" | "shares" | "borrows" [ "from" path | "for" LIFETIME { "," LIFETIME } ]
-                                    | "observes" [ "softly" ] | "identifies" )
+                                    | "observes" [ "softly" ] | "identifies" | "moved from" path )
               | "lifetime" target lifetime_pred
+              | "lifetime" path_list "survive call"
               | "instances" [ "per" scope_ref ] "at most" NUMBER
               | "instances attributed to" scope_ref "are none within" duration "after" event
               | "no strong cycle" [ "through" path_list ] ;
 target        = path | "every ref<" type ">" [ "obtained from" path ] | "rows" ;
-lifetime_pred = "outlives" path | "within" scope_ref | "ends with" path | "does not escape" [ scope_ref ]
+lifetime_pred = "outlives" path | "within" scope_ref | "ends with" path | "ends in call" [ "when" expr ]
+              | "does not escape" [ scope_ref ]
               | "escapes only to" path_list | "ends within" duration "after" event
               | "at most" duration [ "after" event ]
               | "released by" NAME "exactly once" | "released before end" | "ends by" NAME "exactly once"
@@ -1915,7 +2118,7 @@ access        = "access" path ":" ( "identify" | "read" | "write" ) ( "exclusive
               | "mutates only" path_list | "interior" path | "unchanged" "view(" path ")" [ "=" expr ]
               | "exclusive" path | "sole" path | "disjoint" path "," path { "," path } | "shared readonly" path ;
 
-path          = NAME { "." NAME | "[" expr "]" } [ ".*" ] | STABLE ;
+path          = NAME { "." ( NAME | NUMBER ) | "[" expr "]" } [ ".*" ] | STABLE ;   (* NUMBER: a tuple's part, result.0; "[" expr "]" in "mutates only" is one element *)
 path_list     = path { "," path } ;
 event         = ( "begin" | "end" | "released" ) "(" path ")" | "call" QNAME | "return" QNAME
               | ( "insert" | "update" | "delete" ) QNAME | "emit" NAME | "construct" | "publish"
@@ -1936,7 +2139,7 @@ MODEL         = "ownership" | "tracing" | "counting" | "tracked" | "region" | "m
 
 expr          = (* literals, paths, T[key], T where p, calls of named pure functions, not/and/or/implies/iff,
                    comparisons, arithmetic, if-then-else, exists, is, in, matches, fits, finite, approx,
-                   all/any/count/sum/min/max over collections, old(e), result, same(a, b), view(e);
+                   all/any/count/sum/min/max over collections, old(e), result, same(a, b), p moved from q, view(e);
                    defined in § 4 *) ;
 ```
 

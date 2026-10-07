@@ -26,15 +26,17 @@ const WORDS: &[&str] = &[
     "result", "self", "true", "false", "none", "value", "size", "count", "length", "byte_length", "utf16_length", "utf8", "sum", "min",
     "max", "same", "approx", "total_order", "distinct", "sorted", "by", "subset", "view", "called", "exactly", "at", "most", "least",
     "once", "before", "return", "only", "on", "when", "sign_bit", "is_nan", "payload", "caller", "some", "implements", "borrows",
-    "owns", "shares", "from", "for", "as",
+    "owns", "shares", "from", "for", "as", "moved",
 ];
 
 /// Words only a clause of one kind may use: what a `budget` bounds and what a `layout` states (language 6.7, 6.1).
 fn kind_words(kind: &str) -> &'static [&'static str] {
     match kind {
-        "budget" => &["allocates", "retains", "work", "bytes", "sent", "round_trips", "per", "call", "instance", "frame", "B", "KB", "MB", "O", "p50", "p99"],
+        "budget" => &["allocates", "retains", "work", "bytes", "sent", "round_trips", "per", "call", "instance", "frame", "B", "KB", "MB", "O", "p50", "p99", "expected", "amortised"],
         "layout" => &["c", "packed", "transparent", "align"],
         "callback" => &["with", "returning"],
+        "hold" => &["ends", "survive", "call"],
+        "obliges" => &["because"],
         _ => &[],
     }
 }
@@ -233,6 +235,74 @@ fn lint_protocol(toks: &[Tok], text: &str, scope: &Scope) -> Vec<String> {
     errs
 }
 
+/// The `hold` clauses of language 6.14: `hold p : moved from q`, `lifetime v ends in call [when p]` and `lifetime a, b
+/// survive call`. The other forms of a `hold` clause are not checked past their names.
+fn lint_hold(head: &str, toks: &[Tok], text: &str, scope: &Scope) -> Vec<String> {
+    let mut errs = vec![];
+    // `hold p : …` holds the path `p` (the subject's own when there is none), which the subject has
+    if let (Some(Tok::Word(p)), Some(Tok::Punct(':'))) = (toks.first(), toks.get(1)) {
+        if head == "hold" && p != "result" && !scope.names.contains(p) {
+            errs.push(format!("`{p}` is not a parameter of the subject in `{text}`"));
+        }
+    }
+    let word = |i: usize| match toks.get(i) {
+        Some(Tok::Word(w)) => w.as_str(),
+        _ => "",
+    };
+    if let Some(m) = toks.iter().position(|t| matches!(t, Tok::Word(w) if w == "moved")) {
+        // `moved from q`: q is a path, and ends the clause
+        let mut k = m + 3;
+        while toks.get(k) == Some(&Tok::Punct('.')) && matches!(toks.get(k + 1), Some(Tok::Word(_) | Tok::Other)) {
+            k += 2;
+        }
+        let ok = head == "hold" && word(m + 1) == "from" && !word(m + 2).is_empty() && k == toks.len();
+        if !ok {
+            errs.push(format!("`moved from` names one path and ends a `hold` clause: `{text}`"));
+        }
+    }
+    if head == "lifetime" {
+        let survive = toks.iter().position(|t| matches!(t, Tok::Word(w) if w == "survive"));
+        let ends = toks.iter().position(|t| matches!(t, Tok::Word(w) if w == "ends"));
+        if let Some(s) = survive {
+            let names_ok = s > 0 && toks[..s].iter().enumerate().all(|(i, t)| if i % 2 == 0 { matches!(t, Tok::Word(_)) } else { *t == Tok::Punct(',') }) && s % 2 == 1;
+            if !names_ok || word(s + 1) != "call" || toks.len() != s + 2 {
+                errs.push(format!("`lifetime a, b survive call` names the entities that do not end in the call, and nothing follows: `{text}`"));
+            }
+        } else if let Some(e) = ends.filter(|e| word(e + 1) == "in") {
+            if word(e + 2) != "call" || e != 1 || !(toks.len() == e + 3 || word(e + 3) == "when" && toks.len() > e + 4) {
+                errs.push(format!("`lifetime v ends in call` names one entity, and may be followed by `when` and a condition: `{text}`"));
+            }
+        }
+    }
+    errs
+}
+
+/// `obliges caller : p because "…"`: a condition, and the reason in a string that ends the clause.
+fn lint_obliges(toks: &[Tok], text: &str) -> Vec<String> {
+    let because = toks.iter().rposition(|t| matches!(t, Tok::Word(w) if w == "because"));
+    let ok = toks.first() == Some(&Tok::Punct(':')) && because.is_some_and(|b| b > 1 && b + 2 == toks.len() && toks[b + 1] == Tok::Other);
+    if ok {
+        vec![]
+    } else {
+        vec![format!("`obliges caller : p because \"…\"` states a condition and the reason, in quotes: `{text}`")]
+    }
+}
+
+/// The names a tuple pattern binds after `is`: `e is (a, b)`.
+fn pattern_binders(toks: &[Tok]) -> BTreeSet<usize> {
+    let mut out = BTreeSet::new();
+    for (i, t) in toks.iter().enumerate() {
+        if is_word(Some(t), "is") && toks.get(i + 1) == Some(&Tok::Punct('(')) {
+            for (j, u) in toks.iter().enumerate().skip(i + 2).take_while(|(_, u)| **u != Tok::Punct(')')) {
+                if matches!(u, Tok::Word(_)) {
+                    out.insert(j);
+                }
+            }
+        }
+    }
+    out
+}
+
 /// Everything wrong with one clause's text. `heads` are the keywords its kind may start with (none: no check).
 pub fn lint(kind: &str, text: &str, heads: &[&str], scope: &Scope) -> Vec<String> {
     let head = heads.iter().filter(|h| text == **h || text.starts_with(&format!("{h} ")) || text.starts_with(&format!("{h}:"))).max_by_key(|h| h.len());
@@ -248,6 +318,13 @@ pub fn lint(kind: &str, text: &str, heads: &[&str], scope: &Scope) -> Vec<String
         return lint_protocol(&toks, text, scope);
     }
     let mut errs = vec![];
+    if kind == "hold" {
+        errs.extend(lint_hold(head.map_or("", |h| *h), &toks, text, scope));
+    }
+    if kind == "obliges" {
+        errs.extend(lint_obliges(&toks, text));
+    }
+    let patterns = pattern_binders(&toks);
     // a callback clause's `with` and `returning` (language 6.13)
     let (binders, parts_errs) = if kind == "callback" {
         let parts = callback_parts(&toks, text);
@@ -293,7 +370,7 @@ pub fn lint(kind: &str, text: &str, heads: &[&str], scope: &Scope) -> Vec<String
     for (i, t) in toks.iter().enumerate() {
         match t {
             Tok::Lifetime(l) if !scope.names.contains(l) => errs.push(format!("unknown lifetime `'{l}` in `{text}`")),
-            Tok::Word(w) if binders.contains(&i) => {
+            Tok::Word(w) if binders.contains(&i) || patterns.contains(&i) => {
                 bound.insert(w);
             }
             Tok::Word(_) if assoc_clause && i > 0 && matches!(toks[i - 1], Tok::Punct('{' | ',')) && toks.get(i + 1) == Some(&Tok::Punct('=')) && toks.get(i + 2) != Some(&Tok::Punct('=')) => {}
@@ -474,6 +551,34 @@ mod tests {
         assert_eq!(pr("protocol begin (f | self.next)* end"), "");
         assert!(pr("protocol self.nope").contains("not a method"));
         assert!(pr("protocol g").contains("not a callback or a parameter"));
+    }
+
+    #[test]
+    fn the_small_additions_have_forms_of_their_own() {
+        let mut sc = scope();
+        sc.names.extend(["dest", "src", "self", "mid"].map(String::from));
+        let hold = |t: &str| lint("hold", t, &["hold", "lifetime"], &sc).join("; ");
+        assert_eq!(hold("hold result : moved from dest"), "");
+        assert_eq!(hold("hold dest : moved from src.0"), "");
+        assert_eq!(hold("lifetime src ends in call when src == dest"), "");
+        assert_eq!(hold("lifetime dest, src survive call"), "");
+        assert!(hold("hold result : moved from").contains("names one path"));
+        assert!(hold("hold zzz : moved from src").contains("not a parameter"));
+        assert!(hold("lifetime dest, src survive").contains("survive call"));
+        assert!(hold("lifetime src ends in call when").contains("ends in call"));
+        assert!(hold("hold : borrows from dest").is_empty(), "the older forms are not touched");
+        let ob = |t: &str| lint("obliges", t, &["obliges caller"], &sc).join("; ");
+        assert_eq!(ob("obliges caller : src == dest because \"two values\""), "");
+        assert!(ob("obliges caller : src == dest").contains("reason"));
+        assert!(ob("obliges caller : because \"x\"").contains("reason"));
+        assert_eq!(lint("never panics", "never panics except exhausted", &["never panics except exhausted", "never panics"], &sc), Vec::<String>::new());
+        assert!(!lint("never panics", "never panics except broke", &["never panics except exhausted", "never panics"], &sc).is_empty());
+        assert_eq!(lint("budget", "budget work expected amortised O(1)", &["budget"], &sc), Vec::<String>::new());
+        let ens = |t: &str| lint("ensure", t, &["ensure"], &sc).join("; ");
+        assert_eq!(ens("ensure p : size(result.0) == mid and result.1 == src"), "");
+        assert_eq!(ens("ensure p : result is (a, _) implies size(a) == mid"), "");
+        assert!(ens("ensure p : result is (a, b) implies size(c) == mid").contains("unknown name `c`"));
+        assert_eq!(ens("ensure p : result moved from src"), "");
     }
 
     #[test]

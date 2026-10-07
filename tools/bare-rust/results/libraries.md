@@ -11,28 +11,28 @@ crate (49 functions, 25 types, 19 traits, 11 macros, 1 const), and one more, `st
 
 | Entries | Count | | Clauses | Stated | `unexpressed` |
 | --- | ---: | --- | --- | ---: | ---: |
-| function (27 are trait methods) | 72 | | `ensure` | 67 | |
+| function (27 are trait methods) | 72 | | `ensure` | 71 | |
 | type | 27 | | `implements` | 140 | |
-| trait | 20 | | `effects` | 31 | |
-| macro | 11 | | `result must be used` | 18 | |
-| const | 1 | | `never panics` | 18 | |
+| trait | 20 | | `effects` | 45 | |
+| macro | 11 | | `result must be used` | 32 | |
+| const | 1 | | `never panics` | 20 | |
 | impl | 129 | | `law` | 16 | |
 | | | | `fails panic`, `fails` | 10, 1 | |
-| | | | `hold`, `derive`, `callback`, `protocol` | 5, 6, 3, 2 | |
-| | | | `budget`, `layout`, `invariant`, `on failure` | 2, 1, 1, 1 | |
-| | | | `unexpressed` | | 114 |
+| | | | `hold`, `derive`, `callback`, `protocol` | 10, 6, 3, 2 | |
+| | | | `budget`, `layout`, `invariant`, `on failure`, `access` | 4, 1, 1, 1, 1 | |
+| | | | `unexpressed` | | 77 |
 
-436 clauses in all: 322 stated and 114 `unexpressed`, on 240 subjects. B1 (step 4 of `proposal/language-gaps.md` § 6)
-took `unexpressed` from 175 to 138 and added 129 impl subjects, each compiled against the real std; B2 took it from 138 to 121; B3 (callbacks) from 121 to 114.
-24 of the stated clauses are conditional, qualified by `given` (on 16 subjects): 15 on a bound's implementations, 15 on the
-default body, 2 on a build setting. Stated clauses by
-status: documentation 76, observed 205, `#[must_use]` lifted 26 (counted as lifted), hand-written 15.
+441 clauses in all: 364 stated and 77 `unexpressed`, on 240 subjects. B1 (step 4 of `proposal/language-gaps.md` § 6)
+took `unexpressed` from 175 to 138 and added 129 impl subjects, each compiled against the real std; B2 took it from 138 to 121; B3 (callbacks) from 121 to 114; B4 (eight small additions) from 114 to 77.
+25 of the stated clauses are conditional, qualified by `given` (on 18 subjects): 17 `given` items on a bound's implementations, 15 on the
+default body, 1 on a build setting. Stated clauses by
+status: documentation 87, observed 208, lifted 54 (the attributes `#[must_use]` and `rustc_const_stable`), hand-written 15.
 
 **Signatures**, compiled against rustc 1.97.0: 250 checked, 6 path-resolved only (`PartialEq`, `PartialOrd`, `From`, `TryFrom`,
 `Index`, `IndexMut`: a trait with generics), 4 unchecked (the bang macros `assert_eq!`, `panic!`, `vec!`, `write!`),
 0 mismatched. Of 188 type slots, 181 map to the type language (96%) and 7 are host text. Slices are no longer host text (below).
 
-## What the language lacked: the `unexpressed` promises (114)
+## What the language lacked: the `unexpressed` promises (77)
 
 Each reason in the file starts with its label. Class A took the file from 199 to 175; B1 (traits, implementations and
 associated types) from 175 to 138. Of B1's 52, 38 are closed outright and 14 stay under corrected labels; 6 of the
@@ -45,10 +45,66 @@ host-state ones stay (the vacant half of `Entry::or_insert` is all that moved).
   (`is_char_boundary`); no sequence value +1 (`collect`'s Result and String impls); no drop +1 (`vec::IntoIter`).
 - **Host state (6)**, unchanged: `Entry::or_insert` (the map after a vacant insert), `Formatter`, `TryFromIntError`,
   `Display::fmt`, `Hasher::write`, `Hash`.
-- **Others, untouched.** No const-ness 18; must-use on a type 14; what a function computes 8; no identity of moved
-  values 6; no drop 5; no positive effect 3; and the smaller labels. B3 changed no sequence value (15 to 19), no promise
-  (5 to 6) and no promise about a result's later calls (1 to 4), and removed *no value of a callback result* (7), *no
-  order of calls* (6) and *callback clause has no condition* (2); see below.
+- **Others.** What a function computes 8; no positive effect 3; and the smaller labels. B3 changed no sequence value (15
+  to 19), no promise (5 to 6) and no promise about a result's later calls (1 to 4), and removed *no value of a callback
+  result* (7), *no order of calls* (6) and *callback clause has no condition* (2). B4 removed *no const-ness* (18),
+  *must-use on a type* (14), *no identity of moved values* (6), *no drop* (5), *no resource exhaustion* (2), *no
+  expected or amortised cost* (1), *no tuple parts* (1), *no frame condition on a collection* (1) and *no sufficient
+  condition* (2); see below.
+
+## Class B4: eight small additions
+
+B4's 47 `unexpressed` clauses (*no const-ness* 18, *must-use on a type* 14, *no identity of moved values* 6, *no drop* 4,
+*no resource exhaustion* 2, one each of *no expected or amortised cost*, *no tuple parts* and *no frame condition on a
+collection*), with `vec::IntoIter`'s fifth *no drop*, are now 11: 37 are stated, and 11 stay under corrected labels
+(`insert` and `entry`'s two *no sufficient condition* became *no condition on an associated type's implementation*).
+The new forms are language § 6.14's `evaluable at compile time`, `must be used`, `moved from`, `ends in call` and
+`survive call`, `never panics except exhausted`, `expected` and `amortised`, `result.0` and `is (a, b)`, `mutates only
+self[key]` and `obliges caller`; the file's kinds are those they extend, plus `obliges`. `libcheck` lints each form and
+compiles every `const` claim by calling the item from a `const fn`; a claim on `cmp::max` (unstable const-ness) or on
+`str::chars` (not const) is refused, with E0658 and E0015. `libstats` prints the nine forms: 14 `evaluable at compile
+time`, 14 `must be used`, 5 `moved from`, 3 `ends in call` or `survive call`, 2 `never panics except exhausted`, 2
+expected cost, 2 tuple-part clauses, no element frame and no `obliges` in this file.
+
+- **Stated (37).** *Const (14)*: `mem::swap`, `mem::replace`, `Option::as_ref`, `as_mut`, `expect`, `is_none`,
+  `slice::len`, `split_at_mut`, `str::is_empty`, `String::len`, `char::is_whitespace`, `f64::abs`, `usize::saturating_sub`
+  and `u64::wrapping_mul`: each `evaluable at compile time`, from the `rustc_const_stable` attribute on the item (status
+  lifted; each cited line was read in the 1.97.0 `rust-src`). *Must-use (14)*: `must be used` on `Chars`, `Chain`,
+  `Enumerate`, `Filter`, `Map`, `Skip`, `Take`, `TakeWhile`, `Zip`, `Copied`, `FlatMap`, `slice::Iter`, `Result` and the
+  trait `Iterator`, from their `#[must_use]` (the message stays in `source`). *Moves (3)*: `ensure tie_second : (v1 <= v2 and
+  v1 >= v2) implies result moved from v2` on `cmp::max`, `tie_first` on `cmp::min` (`result moved from v1`), and the same
+  for `Ord::max` (`other`): cmp.rs:1539 and 1646, documentation. *Ends (2)*: `lifetime x, y survive call` on `mem::swap`
+  (mod.rs:763, "without deinitializing either one") and `lifetime dest, src survive call` on `mem::replace` (mod.rs:855,
+  "Neither value is dropped"), which also gains `hold dest : moved from src` and `hold result : moved from dest` (mod.rs:853,
+  "Moves `src` into the referenced `dest`, returning the previous `dest` value"). *Exhaustion (2)*: `never panics except
+  exhausted given K.hash, K.eq, S.hash_one never panic` on `HashMap::insert` and `entry`: hashbrown 0.17.1 panics only in
+  `Fallibility::Infallible`'s capacity overflow and aborts through `handle_alloc_error` (`src/raw.rs:33-45`), and
+  everything else it calls is the hasher and `Eq`. *Cost (1)*: `budget work expected O(1)` on `HashMap::get`, and `expected
+  amortised O(1)` on `insert`, from the table in `std/src/collections/mod.rs:117` and its legend (lines 88-89). The old
+  entry said std states no cost, and cited hashbrown; it was wrong, and its "worst case linear in the capacity" is not a
+  std promise and is gone. *Tuple parts (1)*: `split_at_mut`: `size(result.0) == mid and size(result.1) == old(size(self))
+  - mid`, and `disjoint result.0, result.1` (mod.rs:1962-1964).
+- **Stay, relabelled (11).** *No stable const-ness* 4 (`cmp::max`, `cmp::min`, `Option::map_or_else`, `slice::iter`
+  are `rustc_const_unstable`); *no identity of cloned values* 2 (`Clone::clone`, `vec![elem; n]`) and *no identity of a
+  stored key* 1 (`insert` keeps the old key); *no effects of a destructor* 1, *no host state* +1 (`Entry::or_insert`:
+  the drop of `default` is stated as `lifetime default ends in call when self is Occupied(e)`, from the body; the rest is
+  V's `Drop`, and the map the entry holds is not a name for `mutates only self[key]`); *no arm of a macro in a clause* 1
+  (`vec![expr; 0]`); *no sequence value* +1 (`IntoIter`'s unyielded elements, was *no drop*); *no condition on an
+  associated type's implementation* +2 (the hasher's `write` and `finish` in `insert` and `entry`).
+- **Unsure.** (1) `max`, `min` and `Ord::max`'s "and the other is dropped" is not stated: it follows from ownership, and a
+  `lifetime … ends in call` on a generic value that a provided method may override cannot carry a `given`. (2)
+  `never panics except exhausted` for `insert` ignores the destructor of the key it drops when the map has an equal one,
+  as `cmp::max`'s `never panics` ignores the drop of the argument it does not return. (3) `must be used` on the trait
+  `Iterator` is read as applying to a `some Iterator` result, which is what the attribute does for `impl Iterator`. (4)
+  The `given` list of the two `never panics` is `get`'s, minus the borrow. (5) `lifetime default ends in call` is read
+  from the body of `or_insert` (map.rs:2517-2520), not a documented promise. (6) A `const fn` that panics is still
+  `evaluable at compile time`: the claim is that a constant context may call it, as `Option::expect` is.
+- **Tool limits.** `strip` and `weave` carry `const fn` and a plain `#[must_use]` on a function only (a type's
+  `#[must_use]`, and one with a message, stay host text), and `unsafe fn` is host text, with no `obliges`. The `const`
+  check calls a function item from a `const fn` and skips a `some` result and a macro; a trait method with a `const` claim is
+  refused by rustc, which is right today. Nothing compiles `must be used`, `moved from`, `ends in call` or `survive call`
+  against std: they are lints of the clause, not checks of the host. `let (a, b)` is in the language (§ 6.14.7) and
+  the lint handles `is (a, b)`; the library file has no `let` clause.
 
 ## Class B3: callbacks, their results, conditions and order
 

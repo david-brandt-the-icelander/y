@@ -485,3 +485,48 @@ impl<'a> Shape for Chars2<'a> {
     assert_eq!(w["self"], "Wrap<'a, T>");
     assert_eq!(subject(&j, "demo::Wrap")["implements"][0]["impl"], "demo::Wrap as From");
 }
+
+#[test]
+fn const_fn_and_plain_must_use_are_clauses_not_host_text() {
+    let src = r#"
+pub struct C {
+    v: Vec<u8>,
+}
+impl C {
+    #[inline]
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        3
+    }
+    pub const fn new() -> C {
+        C { v: Vec::new() }
+    }
+    pub const unsafe fn raw(&self) -> u8 {
+        0
+    }
+}
+#[must_use = "the message has no slot"]
+pub fn kept(a: u32) -> u32 {
+    a
+}
+#[must_use]
+pub(crate) fn plain(a: u32) -> u32 {
+    a
+}
+pub const fn g(a: u32) -> u32 {
+    a
+}
+"#;
+    let (b, j) = roundtrip(src);
+    assert!(!b.contains("const fn") && !b.contains("const unsafe") && b.contains("unsafe fn raw"), "{b}");
+    assert!(b.contains("#[inline]") && b.contains("#[must_use = \"the message has no slot\"]") && !b.contains("#[must_use]"), "{b}");
+    let says = |n: &str| -> Vec<String> { subject(&j, n)["clauses"].as_array().map_or(vec![], |c| c.iter().map(|c| c["text"].as_str().unwrap().to_string()).collect()) };
+    assert_eq!(says("demo::C::len"), ["evaluable at compile time", "result must be used"]);
+    assert_eq!(says("demo::C::raw"), ["evaluable at compile time"]);
+    assert_eq!(says("demo::plain"), ["result must be used"]);
+    assert_eq!(says("demo::g"), ["evaluable at compile time"]);
+    assert!(says("demo::kept").is_empty(), "a message has no slot, so the attribute stays host text");
+    // weave writes them back in place: the attribute before the visibility, `const` after it
+    let w = weave(&b, &j).unwrap();
+    assert!(w.contains("#[must_use] pub(crate) fn plain") && w.contains("pub const fn g") && w.contains("pub const unsafe fn raw"), "{w}");
+}

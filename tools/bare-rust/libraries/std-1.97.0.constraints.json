@@ -89,10 +89,10 @@
           "reason": "no condition on an associated type's implementation: a `given` item names a method of a bound of a generic parameter, and write and finish belong to S::Hasher, an associated type of that bound. Here: the hasher built inside S::hash_one runs inside the call"
         },
         {
-          "kind": "unexpressed",
-          "text": "Expected constant time under a hasher whose output is uniformly distributed; the worst case is linear in the table's capacity.",
-          "source": "hashbrown, the table behind std's HashMap (probe sequence); std's documentation states no cost",
-          "reason": "no expected or amortised cost: `budget work` bounds the worst case; no clause states an expected or amortised cost"
+          "kind": "budget",
+          "text": "budget work expected O(1)",
+          "source": "1.97.0 std/src/collections/mod.rs:89, doc: \"Operations with an *expected* cost are suffixed with a `~`.\"; 1.97.0 std/src/collections/mod.rs:117, doc: \"| [`HashMap`]    | *O*(1)~                | *O*(1)~*                | *O*(1)~ \"",
+          "status": { "assumed": "documentation" }
         }
       ]
     },
@@ -121,10 +121,10 @@
           "status": { "observed": "from the declaration" }
         },
         {
-          "kind": "unexpressed",
-          "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
+          "kind": "result must be used",
+          "text": "must be used",
           "source": "1.97.0 core/src/str/iter.rs:28, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
-          "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by the chars method on str"
+          "status": { "lifted": "core/src/str/iter.rs: #[must_use] on the type" }
         }
       ],
       "hold": { "kind": "borrows", "for": ["'a"] }
@@ -197,10 +197,10 @@
           "status": { "observed": "from the body: one call of Ord::max, a method of the bound T: Ord" }
         },
         {
-          "kind": "unexpressed",
-          "text": "When v1 and v2 compare equal under Ord, the value returned is v2 and v1 is dropped.",
+          "kind": "ensure",
+          "text": "ensure tie_second : (v1 <= v2 and v1 >= v2) implies result moved from v2",
           "source": "1.97.0 core/src/cmp.rs:1646, doc: \"Returns the second argument if the comparison determines them to be equal.\"",
-          "reason": "no identity of moved values: `==` is structural on values and `same` is identity of host references, which a value moved into or out of a container does not have. Here: so `result == v2` cannot tell which of two Ord-equal values came back"
+          "status": { "assumed": "documentation" }
         },
         {
           "kind": "never panics",
@@ -220,7 +220,7 @@
           "kind": "unexpressed",
           "text": "const fn, but its const-ness is unstable (feature const_cmp, issue 143800): no promise.",
           "source": "1.97.0 core/src/cmp.rs:1680, attribute #[rustc_const_unstable(feature = \"const_cmp\", issue = \"143800\")]",
-          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+          "reason": "no stable const-ness: `evaluable at compile time` is stated only for an item the host promises to keep const (`rustc_const_stable`); this one is `rustc_const_unstable` (feature const_cmp), so no release is bound to keep it"
         }
       ]
     },
@@ -257,10 +257,10 @@
           "status": { "observed": "from the body: one call of Ord::min, a method of the bound T: Ord" }
         },
         {
-          "kind": "unexpressed",
-          "text": "When v1 and v2 compare equal under Ord, the value returned is v1 and v2 is dropped.",
+          "kind": "ensure",
+          "text": "ensure tie_first : (v1 <= v2 and v1 >= v2) implies result moved from v1",
           "source": "1.97.0 core/src/cmp.rs:1539, doc: \"Returns the first argument if the comparison determines them to be equal.\"",
-          "reason": "no identity of moved values: `==` is structural on values and `same` is identity of host references, which a value moved into or out of a container does not have. Here: so `result == v1` cannot tell which of two Ord-equal values came back"
+          "status": { "assumed": "documentation" }
         },
         {
           "kind": "never panics",
@@ -280,7 +280,7 @@
           "kind": "unexpressed",
           "text": "const fn, but its const-ness is unstable (feature const_cmp, issue 143800): no promise.",
           "source": "1.97.0 core/src/cmp.rs:1573, attribute #[rustc_const_unstable(feature = \"const_cmp\", issue = \"143800\")]",
-          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+          "reason": "no stable const-ness: `evaluable at compile time` is stated only for an item the host promises to keep const (`rustc_const_stable`); this one is `rustc_const_unstable` (feature const_cmp), so no release is bound to keep it"
         }
       ]
     },
@@ -315,16 +315,16 @@
           }
         },
         {
-          "kind": "unexpressed",
-          "text": "Neither value is deinitialized or dropped: each moves, bit for bit, into the other's place.",
+          "kind": "hold",
+          "text": "lifetime x, y survive call",
           "source": "1.97.0 core/src/mem/mod.rs:763, doc: \"Swaps the values at two mutable locations, without deinitializing either one.\"",
-          "reason": "no drop: no clause says what a call does to a value's storage or whether a destructor runs"
+          "status": { "assumed": "documentation" }
         },
         {
-          "kind": "unexpressed",
-          "text": "const fn: callable in a const context, stable since 1.85.0 (feature const_swap).",
+          "kind": "effects",
+          "text": "evaluable at compile time",
           "source": "1.97.0 core/src/mem/mod.rs:783, attribute #[rustc_const_stable(feature = \"const_swap\", since = \"1.85.0\")]",
-          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+          "status": { "lifted": "core/src/mem/mod.rs: #[rustc_const_stable] on the item" }
         }
       ]
     },
@@ -366,16 +366,28 @@
           }
         },
         {
-          "kind": "unexpressed",
-          "text": "Neither value is dropped.",
+          "kind": "hold",
+          "text": "lifetime dest, src survive call",
           "source": "1.97.0 core/src/mem/mod.rs:855, doc: \"Neither value is dropped.\"",
-          "reason": "no drop: no clause says what a call does to a value's storage or whether a destructor runs"
+          "status": { "assumed": "documentation" }
         },
         {
-          "kind": "unexpressed",
-          "text": "const fn: callable in a const context, stable since 1.83.0 (feature const_replace).",
+          "kind": "hold",
+          "text": "hold dest : moved from src",
+          "source": "1.97.0 core/src/mem/mod.rs:853, doc: \"Moves `src` into the referenced `dest`, returning the previous `dest` value.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "hold",
+          "text": "hold result : moved from dest",
+          "source": "1.97.0 core/src/mem/mod.rs:853, doc: \"Moves `src` into the referenced `dest`, returning the previous `dest` value.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "effects",
+          "text": "evaluable at compile time",
           "source": "1.97.0 core/src/mem/mod.rs:914, attribute #[rustc_const_stable(feature = \"const_replace\", since = \"1.83.0\")]",
-          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+          "status": { "lifted": "core/src/mem/mod.rs: #[rustc_const_stable] on the item" }
         }
       ]
     },
@@ -414,10 +426,10 @@
           "status": { "observed": "from the body: a match with no panic and no arithmetic" }
         },
         {
-          "kind": "unexpressed",
-          "text": "const fn: callable in a const context, stable since 1.48.0 (feature const_option_basics).",
+          "kind": "effects",
+          "text": "evaluable at compile time",
           "source": "1.97.0 core/src/option.rs:739, attribute #[rustc_const_stable(feature = \"const_option_basics\", since = \"1.48.0\")]",
-          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+          "status": { "lifted": "core/src/option.rs: #[rustc_const_stable] on the item" }
         }
       ]
     },
@@ -462,10 +474,10 @@
           "status": { "observed": "from the body: a match with no panic and no arithmetic" }
         },
         {
-          "kind": "unexpressed",
-          "text": "const fn: callable in a const context, stable since 1.83.0 (feature const_option).",
+          "kind": "effects",
+          "text": "evaluable at compile time",
           "source": "1.97.0 core/src/option.rs:762, attribute #[rustc_const_stable(feature = \"const_option\", since = \"1.83.0\")]",
-          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+          "status": { "lifted": "core/src/option.rs: #[rustc_const_stable] on the item" }
         }
       ]
     },
@@ -493,10 +505,10 @@
           "status": { "assumed": "documentation" }
         },
         {
-          "kind": "unexpressed",
-          "text": "const fn: callable in a const context, stable since 1.83.0 (feature const_option).",
+          "kind": "effects",
+          "text": "evaluable at compile time",
           "source": "1.97.0 core/src/option.rs:964, attribute #[rustc_const_stable(feature = \"const_option\", since = \"1.83.0\")]",
-          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+          "status": { "lifted": "core/src/option.rs: #[rustc_const_stable] on the item" }
         }
       ]
     },
@@ -535,10 +547,10 @@
           "status": { "observed": "from the body: the negation of is_some, which reads the discriminant" }
         },
         {
-          "kind": "unexpressed",
-          "text": "const fn: callable in a const context, stable since 1.48.0 (feature const_option_basics).",
+          "kind": "effects",
+          "text": "evaluable at compile time",
           "source": "1.97.0 core/src/option.rs:680, attribute #[rustc_const_stable(feature = \"const_option_basics\", since = \"1.48.0\")]",
-          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+          "status": { "lifted": "core/src/option.rs: #[rustc_const_stable] on the item" }
         }
       ]
     },
@@ -581,7 +593,7 @@
           "kind": "unexpressed",
           "text": "const fn, but its const-ness is unstable (feature const_option_ops, issue 143956): no promise.",
           "source": "1.97.0 core/src/option.rs:1267, attribute #[rustc_const_unstable(feature = \"const_option_ops\", issue = \"143956\")]",
-          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+          "reason": "no stable const-ness: `evaluable at compile time` is stated only for an item the host promises to keep const (`rustc_const_stable`); this one is `rustc_const_unstable` (feature const_option_ops), so no release is bound to keep it"
         }
       ]
     },
@@ -661,10 +673,10 @@
           "status": { "observed": "from the body: reads the length stored in the slice reference" }
         },
         {
-          "kind": "unexpressed",
-          "text": "const fn: callable in a const context, stable since 1.39.0 (feature const_slice_len).",
+          "kind": "effects",
+          "text": "evaluable at compile time",
           "source": "1.97.0 core/src/slice/mod.rs:112, attribute #[rustc_const_stable(feature = \"const_slice_len\", since = \"1.39.0\")]",
-          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+          "status": { "lifted": "core/src/slice/mod.rs: #[rustc_const_stable] on the item" }
         }
       ]
     },
@@ -704,7 +716,7 @@
           "kind": "unexpressed",
           "text": "const fn, but its const-ness is unstable (feature const_slice_make_iter, issue 137737): no promise.",
           "source": "1.97.0 core/src/slice/mod.rs:1038, attribute #[rustc_const_unstable(feature = \"const_slice_make_iter\", issue = \"137737\")]",
-          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+          "reason": "no stable const-ness: `evaluable at compile time` is stated only for an item the host promises to keep const (`rustc_const_stable`); this one is `rustc_const_unstable` (feature const_slice_make_iter), so no release is bound to keep it"
         }
       ]
     },
@@ -746,16 +758,22 @@
           "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`"
         },
         {
-          "kind": "unexpressed",
-          "text": "The two parts have mid and len - mid elements, and no element is in both: the parts are disjoint mutable views.",
+          "kind": "ensure",
+          "text": "ensure part_sizes : size(result.0) == mid and size(result.1) == old(size(self)) - mid",
           "source": "1.97.0 core/src/slice/mod.rs:1962-1964, doc: \"The first will contain all indices from `[0, mid)` (excluding the index `mid` itself) and the second will contain all indices from `[mid, len)` (excluding the index `len` itself).\"",
-          "reason": "no tuple parts: no syntax projects a component of a tuple or names a pattern of it. Here: sizes and `disjoint` need a name for each part of the result tuple"
+          "status": { "assumed": "documentation" }
         },
         {
-          "kind": "unexpressed",
-          "text": "const fn: callable in a const context, stable since 1.83.0 (feature const_slice_split_at_mut).",
+          "kind": "access",
+          "text": "disjoint result.0, result.1",
+          "source": "1.97.0 core/src/slice/mod.rs:1962-1964, doc: \"The first will contain all indices from `[0, mid)` (excluding the index `mid` itself) and the second will contain all indices from `[mid, len)` (excluding the index `len` itself).\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "effects",
+          "text": "evaluable at compile time",
           "source": "1.97.0 core/src/slice/mod.rs:1986, attribute #[rustc_const_stable(feature = \"const_slice_split_at_mut\", since = \"1.83.0\")]",
-          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+          "status": { "lifted": "core/src/slice/mod.rs: #[rustc_const_stable] on the item" }
         }
       ]
     },
@@ -793,10 +811,10 @@
           "status": { "observed": "from the body: compares the byte length with zero" }
         },
         {
-          "kind": "unexpressed",
-          "text": "const fn: callable in a const context, stable since 1.39.0 (feature const_str_is_empty).",
+          "kind": "effects",
+          "text": "evaluable at compile time",
           "source": "1.97.0 core/src/str/mod.rs:169, attribute #[rustc_const_stable(feature = \"const_str_is_empty\", since = \"1.39.0\")]",
-          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+          "status": { "lifted": "core/src/str/mod.rs: #[rustc_const_stable] on the item" }
         }
       ]
     },
@@ -838,10 +856,10 @@
           "status": { "observed": "from the body: reads the length of the backing Vec<u8>" }
         },
         {
-          "kind": "unexpressed",
-          "text": "const fn: callable in a const context, stable since 1.87.0 (feature const_vec_string_slice).",
+          "kind": "effects",
+          "text": "evaluable at compile time",
           "source": "1.97.0 alloc/src/string.rs:1866, attribute #[rustc_const_stable(feature = \"const_vec_string_slice\", since = \"1.87.0\")]",
-          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+          "status": { "lifted": "alloc/src/string.rs: #[rustc_const_stable] on the item" }
         }
       ]
     },
@@ -877,10 +895,10 @@
           "status": { "observed": "from the body: a match over ranges and a table lookup" }
         },
         {
-          "kind": "unexpressed",
-          "text": "const fn: callable in a const context, stable since 1.87.0 (feature const_char_classify).",
+          "kind": "effects",
+          "text": "evaluable at compile time",
           "source": "1.97.0 core/src/char/methods.rs:992, attribute #[rustc_const_stable(feature = \"const_char_classify\", since = \"1.87.0\")]",
-          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+          "status": { "lifted": "core/src/char/methods.rs: #[rustc_const_stable] on the item" }
         }
       ]
     },
@@ -929,10 +947,10 @@
           "status": { "assumed": "hand-written" }
         },
         {
-          "kind": "unexpressed",
-          "text": "const fn: callable in a const context, stable since 1.85.0 (feature const_float_methods).",
+          "kind": "effects",
+          "text": "evaluable at compile time",
           "source": "1.97.0 core/src/num/f64.rs:1608, attribute #[rustc_const_stable(feature = \"const_float_methods\", since = \"1.85.0\")]",
-          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+          "status": { "lifted": "core/src/num/f64.rs: #[rustc_const_stable] on the item" }
         }
       ]
     },
@@ -968,10 +986,10 @@
           "status": { "observed": "from the body: one intrinsic call; it saturates and never overflows" }
         },
         {
-          "kind": "unexpressed",
-          "text": "const fn: callable in a const context, stable since 1.47.0 (feature const_saturating_int_methods).",
+          "kind": "effects",
+          "text": "evaluable at compile time",
           "source": "1.97.0 core/src/num/uint_macros.rs:2469, attribute #[rustc_const_stable(feature = \"const_saturating_int_methods\", since = \"1.47.0\")]",
-          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+          "status": { "lifted": "core/src/num/uint_macros.rs: #[rustc_const_stable] on the item" }
         }
       ]
     },
@@ -1007,10 +1025,10 @@
           "status": { "observed": "from the body: one intrinsic call; it wraps and never overflows" }
         },
         {
-          "kind": "unexpressed",
-          "text": "const fn: callable in a const context, stable since 1.32.0 (feature const_wrapping_math).",
+          "kind": "effects",
+          "text": "evaluable at compile time",
           "source": "1.97.0 core/src/num/uint_macros.rs:2655, attribute #[rustc_const_stable(feature = \"const_wrapping_math\", since = \"1.32.0\")]",
-          "reason": "no const-ness: `const fn` has neither a slot nor a clause (proposal 12: host text only)"
+          "status": { "lifted": "core/src/num/uint_macros.rs: #[rustc_const_stable] on the item" }
         }
       ]
     },
@@ -1143,22 +1161,31 @@
           }
         },
         {
+          "kind": "budget",
+          "text": "budget work expected amortised O(1)",
+          "source": "1.97.0 std/src/collections/mod.rs:88, doc: \"Operations which have an *amortized* cost are suffixed with a `*`.\"; 1.97.0 std/src/collections/mod.rs:89, doc: \"Operations with an *expected* cost are suffixed with a `~`.\"; 1.97.0 std/src/collections/mod.rs:117, doc: \"| [`HashMap`]    | *O*(1)~                | *O*(1)~*                | *O*(1)~ \"",
+          "status": { "assumed": "documentation" }
+        },
+        {
           "kind": "unexpressed",
           "text": "The key is not updated: when the map already has a key equal to k, it keeps that key and drops k.",
           "source": "1.97.0 std/src/collections/hash/map.rs:1310-1311, doc: \"The key is not updated, though; this matters for types that can be `==` without being identical.\"",
-          "reason": "no identity of moved values: `==` is structural on values and `same` is identity of host references, which a value moved into or out of a container does not have"
+          "reason": "no identity of a stored key: `self[k]` looks a value up by key, so no expression names the key the map holds, which is what the promise is about: the key already in the map stays, and the new one is dropped"
+        },
+        {
+          "kind": "never panics",
+          "text": "never panics except exhausted",
+          "given": ["K.hash, K.eq, S.hash_one never panic"],
+          "source": "1.97.0 std/src/collections/hash/map.rs:1334, body: self.base.insert(k, v); hashbrown 0.17.1 src/map.rs:1806-1821, body: make_hash, then find_or_find_insert_index with a hasher to rehash the table if it must grow; hashbrown 0.17.1 src/raw.rs:33-45, body: Fallibility::Infallible => panic!(\"Hash table capacity overflow\") and handle_alloc_error(layout); 1.97.0 std/src/collections/hash/map.rs:904, doc: \"Panics if the new allocation size overflows [`usize`].\" (the doc of reserve); 1.97.0 alloc/src/alloc.rs:526, doc: \"print a message to standard error and abort the process.\"",
+          "status": {
+            "observed": "from the body: hashbrown insert hashes k with S::hash_one, compares with K::eq, and may rehash with the same hasher; its only other panic is the capacity overflow of a growing table, and a failed allocation aborts (src/raw.rs:33-45). The destructor of k, which is dropped when the map already has an equal key, is not named"
+          }
         },
         {
           "kind": "unexpressed",
-          "text": "The call may have to grow the table, which panics when the new allocation size overflows usize (documented for reserve, which grows the same table); when the allocator fails, the process by default prints a message and aborts. The docs of insert state no panic.",
-          "source": "1.97.0 std/src/collections/hash/map.rs:1334, body: self.base.insert(k, v); hashbrown 0.17.1 src/map.rs:1810-1812, body: .find_or_find_insert_index(hash, equivalent, hasher), which is given a hasher to rehash the table if it must grow; 1.97.0 std/src/collections/hash/map.rs:904, doc: \"Panics if the new allocation size overflows [`usize`].\" (the doc of reserve); 1.97.0 alloc/src/alloc.rs:526, doc: \"print a message to standard error and abort the process.\"",
-          "reason": "no resource exhaustion: allocation failure aborts or panics under a condition no clause can name, so `never panics` cannot be claimed"
-        },
-        {
-          "kind": "unexpressed",
-          "text": "Hash::hash, Eq::eq and BuildHasher::build_hasher run inside the call, so it never panics and always returns only if they do.",
+          "text": "The hasher that S::hash_one builds (by default through S::build_hasher) runs inside the call too, through K::hash: its write and finish are the impls of an associated type of S's bound, which no `given` item can name, so the conditional promise above is stated without them.",
           "source": "1.97.0 std/src/collections/hash/map.rs:1334, body: self.base.insert(k, v)",
-          "reason": "no sufficient condition: the text names what the call needs of K's Hash and Eq and of S's build_hasher, which is necessary for `never panics` and for returning but not sufficient, so no `given` states it. Here: the call also panics when growing the table overflows, which no clause names, and S's hasher runs too"
+          "reason": "no condition on an associated type's implementation: a `given` item names a method of a bound of a generic parameter, and write and finish belong to S::Hasher, an associated type of that bound. Here: the hasher built inside S::hash_one runs inside the call"
         }
       ]
     },
@@ -1199,16 +1226,19 @@
           "status": { "observed": "from the body: the lookup of the key decides the variant" }
         },
         {
-          "kind": "unexpressed",
-          "text": "When the key is absent, entry reserves room for one more element before it returns the vacant entry; reserving panics when the new allocation size overflows usize (documented for reserve), and when the allocator fails the process by default prints a message and aborts. The docs of entry state no panic.",
-          "source": "1.97.0 std/src/collections/hash/map.rs:1014, body: map_entry(self.base.rustc_entry(key)); hashbrown 0.17.1 src/rustc_entry.rs:46, body: self.reserve(1); 1.97.0 std/src/collections/hash/map.rs:904, doc: \"Panics if the new allocation size overflows [`usize`].\" (the doc of reserve); 1.97.0 alloc/src/alloc.rs:526, doc: \"print a message to standard error and abort the process.\"",
-          "reason": "no resource exhaustion: allocation failure aborts or panics under a condition no clause can name, so `never panics` cannot be claimed"
+          "kind": "never panics",
+          "text": "never panics except exhausted",
+          "given": ["K.hash, K.eq, S.hash_one never panic"],
+          "source": "1.97.0 std/src/collections/hash/map.rs:1014, body: map_entry(self.base.rustc_entry(key)); hashbrown 0.17.1 src/rustc_entry.rs:35-54, body: if let Some(elem) = self.table.find(hash, |q| q.0.eq(&key)) { RustcEntry::Occupied(..) } else { self.reserve(1); RustcEntry::Vacant(..) }; hashbrown 0.17.1 src/raw.rs:33-45, body: Fallibility::Infallible => panic!(\"Hash table capacity overflow\") and handle_alloc_error(layout); 1.97.0 std/src/collections/hash/map.rs:904, doc: \"Panics if the new allocation size overflows [`usize`].\" (the doc of reserve); 1.97.0 alloc/src/alloc.rs:526, doc: \"print a message to standard error and abort the process.\"",
+          "status": {
+            "observed": "from the body: a lookup that hashes key with S::hash_one and compares with K::eq, and, for an absent key, a reserve of room for one element; the reserve panics only on capacity overflow and aborts on a failed allocation (src/raw.rs:33-45). The entry takes key, so nothing is dropped"
+          }
         },
         {
           "kind": "unexpressed",
-          "text": "Hash::hash, Eq::eq and BuildHasher::build_hasher run inside the call, so it never panics and always returns only if they do.",
+          "text": "The hasher that S::hash_one builds (by default through S::build_hasher) runs inside the call too, through K::hash: its write and finish are the impls of an associated type of S's bound, which no `given` item can name, so the conditional promise above is stated without them.",
           "source": "1.97.0 std/src/collections/hash/map.rs:1014, body: map_entry(self.base.rustc_entry(key))",
-          "reason": "no sufficient condition: the text names what the call needs of K's Hash and Eq and of S's build_hasher, which is necessary for `never panics` and for returning but not sufficient, so no `given` states it. Here: the call also panics when growing the table overflows, which no clause names, and S's hasher runs too"
+          "reason": "no condition on an associated type's implementation: a `given` item names a method of a bound of a generic parameter, and write and finish belong to S::Hasher, an associated type of that bound. Here: the hasher built inside S::hash_one runs inside the call"
         }
       ]
     },
@@ -1293,16 +1323,24 @@
           "reason": "no host state: no slot or expression names state a host object holds beyond its value: a capacity, a hasher's or formatter's state, an entry's hidden map. Here: the entry holds the map it came from, which is not a parameter, so nothing names the map after the call"
         },
         {
-          "kind": "unexpressed",
-          "text": "Inserting into a vacant entry adds the pair without growing the table (the room was reserved when entry made the vacant entry), so it cannot fail for want of room; the default of an occupied entry is dropped unused, and V's destructor may run arbitrary code.",
+          "kind": "hold",
+          "text": "lifetime default ends in call when self is Occupied(e)",
           "source": "1.97.0 std/src/collections/hash/map.rs:2517-2520, body: match self { Occupied(entry) => entry.into_mut(), Vacant(entry) => entry.insert(default), }; hashbrown 0.17.1 src/rustc_entry.rs:574-578, body: self.table.insert_no_grow(self.hash, (self.key, value))",
-          "reason": "no drop: no clause says what a call does to a value's storage or whether a destructor runs. Here: the default is dropped when the entry is occupied, and V's Drop may panic or have effects"
+          "status": {
+            "observed": "from the body: the Occupied arm returns the entry's own value and moves default nowhere, so default is dropped when the call ends; the Vacant arm moves it into the map"
+          }
+        },
+        {
+          "kind": "unexpressed",
+          "text": "Inserting into a vacant entry adds the pair without growing the table (the room was reserved when entry made the vacant entry), so it cannot fail for want of room. The default of an occupied entry is dropped by V's destructor, which may run arbitrary code, so the call is not stated to never panic.",
+          "source": "1.97.0 std/src/collections/hash/map.rs:2517-2520, body: match self { Occupied(entry) => entry.into_mut(), Vacant(entry) => entry.insert(default), }; hashbrown 0.17.1 src/rustc_entry.rs:574-578, body: self.table.insert_no_grow(self.hash, (self.key, value))",
+          "reason": "no effects of a destructor: V's Drop runs inside the call and is arbitrary code, so no `never panics`, `effects none` or `terminates` can be stated for the call, and no `given` item names a destructor"
         },
         {
           "kind": "unexpressed",
           "text": "No other key of the map changes.",
           "source": "1.97.0 std/src/collections/hash/map.rs:2498-2499, doc: \"Ensures a value is in the entry by inserting the default if empty, and returns a mutable reference to the value in the entry.\"",
-          "reason": "no frame condition on a collection: no clause says that every element other than the one touched is unchanged"
+          "reason": "no host state: no slot or expression names state a host object holds beyond its value: a capacity, a hasher's or formatter's state, an entry's hidden map. Here: the map the entry holds is not a parameter, so `mutates only self[key]` has no collection to be about"
         }
       ]
     },
@@ -1476,10 +1514,10 @@
       "generics": [{ "name": "A", "bounds": [] }, { "name": "B", "bounds": [] }],
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
+          "kind": "result must be used",
+          "text": "must be used",
           "source": "1.97.0 core/src/iter/adapters/chain.rs:21, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
-          "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by Iterator::chain"
+          "status": { "lifted": "core/src/iter/adapters/chain.rs: #[must_use] on the type" }
         }
       ]
     },
@@ -1490,10 +1528,10 @@
       "generics": [{ "name": "I", "bounds": [] }],
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
+          "kind": "result must be used",
+          "text": "must be used",
           "source": "1.97.0 core/src/iter/adapters/enumerate.rs:15, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
-          "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by Iterator::enumerate"
+          "status": { "lifted": "core/src/iter/adapters/enumerate.rs: #[must_use] on the type" }
         }
       ]
     },
@@ -1504,10 +1542,10 @@
       "generics": [{ "name": "I", "bounds": [] }, { "name": "P", "bounds": [] }],
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
+          "kind": "result must be used",
+          "text": "must be used",
           "source": "1.97.0 core/src/iter/adapters/filter.rs:18, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
-          "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by Iterator::filter"
+          "status": { "lifted": "core/src/iter/adapters/filter.rs: #[must_use] on the type" }
         }
       ]
     },
@@ -1518,10 +1556,10 @@
       "generics": [{ "name": "I", "bounds": [] }, { "name": "F", "bounds": [] }],
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
+          "kind": "result must be used",
+          "text": "must be used",
           "source": "1.97.0 core/src/iter/adapters/map.rs:58, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
-          "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by Iterator::map"
+          "status": { "lifted": "core/src/iter/adapters/map.rs: #[must_use] on the type" }
         }
       ]
     },
@@ -1532,10 +1570,10 @@
       "generics": [{ "name": "I", "bounds": [] }],
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
+          "kind": "result must be used",
+          "text": "must be used",
           "source": "1.97.0 core/src/iter/adapters/skip.rs:19, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
-          "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by Iterator::skip"
+          "status": { "lifted": "core/src/iter/adapters/skip.rs: #[must_use] on the type" }
         }
       ]
     },
@@ -1546,10 +1584,10 @@
       "generics": [{ "name": "I", "bounds": [] }],
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
+          "kind": "result must be used",
+          "text": "must be used",
           "source": "1.97.0 core/src/iter/adapters/take.rs:15, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
-          "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by Iterator::take"
+          "status": { "lifted": "core/src/iter/adapters/take.rs: #[must_use] on the type" }
         }
       ]
     },
@@ -1560,10 +1598,10 @@
       "generics": [{ "name": "I", "bounds": [] }, { "name": "P", "bounds": [] }],
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
+          "kind": "result must be used",
+          "text": "must be used",
           "source": "1.97.0 core/src/iter/adapters/take_while.rs:14, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
-          "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by Iterator::take_while"
+          "status": { "lifted": "core/src/iter/adapters/take_while.rs: #[must_use] on the type" }
         }
       ]
     },
@@ -1574,10 +1612,10 @@
       "generics": [{ "name": "A", "bounds": [] }, { "name": "B", "bounds": [] }],
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
+          "kind": "result must be used",
+          "text": "must be used",
           "source": "1.97.0 core/src/iter/adapters/zip.rs:11, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
-          "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by Iterator::zip"
+          "status": { "lifted": "core/src/iter/adapters/zip.rs: #[must_use] on the type" }
         }
       ]
     },
@@ -1588,10 +1626,10 @@
       "generics": [{ "name": "I", "bounds": [] }],
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
+          "kind": "result must be used",
+          "text": "must be used",
           "source": "1.97.0 core/src/iter/adapters/copied.rs:17, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
-          "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by Iterator::copied"
+          "status": { "lifted": "core/src/iter/adapters/copied.rs: #[must_use] on the type" }
         }
       ]
     },
@@ -1606,10 +1644,10 @@
       ],
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
+          "kind": "result must be used",
+          "text": "must be used",
           "source": "1.97.0 core/src/iter/adapters/flatten.rs:15, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
-          "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by Iterator::flat_map"
+          "status": { "lifted": "core/src/iter/adapters/flatten.rs: #[must_use] on the type" }
         }
       ]
     },
@@ -1640,10 +1678,10 @@
           "status": { "observed": "from the declaration" }
         },
         {
-          "kind": "unexpressed",
-          "text": "Iterators are lazy and do nothing unless consumed: a value of this type that is not used does nothing.",
+          "kind": "result must be used",
+          "text": "must be used",
           "source": "1.97.0 core/src/slice/iter.rs:65, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
-          "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: the type is created by the iter method on slices"
+          "status": { "lifted": "core/src/slice/iter.rs: #[must_use] on the type" }
         }
       ],
       "hold": { "kind": "borrows", "for": ["'a"] }
@@ -1673,7 +1711,7 @@
           "kind": "unexpressed",
           "text": "Dropping an IntoIter drops the elements it has not yielded.",
           "source": "1.97.0 alloc/src/vec/into_iter.rs:541, body: unsafe impl<#[may_dangle] T, A: Allocator> Drop for IntoIter<T, A>: drops the remaining elements and frees the buffer",
-          "reason": "no drop: no clause says what a call does to a value's storage or whether a destructor runs. Here: the elements the iterator has not yielded are dropped when it is"
+          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`. Here: the elements the iterator has not yielded, which its drop drops"
         },
         {
           "kind": "unexpressed",
@@ -1839,10 +1877,10 @@
       ],
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "A Result that is not used may be an Err that nobody handled: #[must_use] on the type makes every function that returns a Result must-use.",
+          "kind": "result must be used",
+          "text": "must be used",
           "source": "1.97.0 core/src/result.rs:554, attribute #[must_use = \"this `Result` may be an `Err` variant, which should be handled\"]",
-          "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind. Here: as a result type the language gives T with `fails E`, and as a parameter it has no form but a host name"
+          "status": { "lifted": "core/src/result.rs: #[must_use] on the type" }
         },
         {
           "kind": "implements",
@@ -2466,10 +2504,10 @@
           "status": { "lifted": "core/src/cmp.rs: #[must_use] on the item" }
         },
         {
-          "kind": "unexpressed",
-          "text": "When self and other compare equal under Ord, the value returned is other and self is dropped.",
+          "kind": "ensure",
+          "text": "ensure tie_second : (self <= other and self >= other) implies result moved from other",
           "source": "1.97.0 core/src/cmp.rs:1004, doc: \"Returns the second argument if the comparison determines them to be equal.\"",
-          "reason": "no identity of moved values: `==` is structural on values and `same` is identity of host references, which a value moved into or out of a container does not have. Here: so `result == other` cannot tell which of two Ord-equal values came back"
+          "status": { "assumed": "documentation" }
         },
         {
           "kind": "never panics",
@@ -2511,7 +2549,7 @@
           "kind": "unexpressed",
           "text": "Returns a duplicate of the value; what duplicate means varies by type: a deep, independent copy for most types, and another reference to the same data for references, Rc and Arc.",
           "source": "1.97.0 core/src/clone.rs:195, doc: \"Returns a duplicate of the value.\"",
-          "reason": "no identity of moved values: `==` is structural on values and `same` is identity of host references, which a value moved into or out of a container does not have. Here: a clause cannot say whether result shares storage with self"
+          "reason": "no identity of cloned values: `moved from` says a value moved, not what a clone shares with its original; whether the duplicate is an independent copy or the same data is each type's own, and the trait states no rule"
         },
         {
           "kind": "law",
@@ -2873,10 +2911,10 @@
           "reason": "no trait items: a trait's associated types, required methods and provided methods are not recorded"
         },
         {
-          "kind": "unexpressed",
-          "text": "Iterators are lazy and do nothing unless consumed: #[must_use] on the trait makes a discarded iterator a warning wherever it is returned.",
+          "kind": "result must be used",
+          "text": "must be used",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:40, attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]",
-          "reason": "must-use on a type: `result must be used` attaches to a subject, not to a type whose every use it should bind"
+          "status": { "lifted": "core/src/iter/traits/iterator.rs: #[must_use] on the trait" }
         }
       ]
     },
@@ -3179,13 +3217,13 @@
           "kind": "unexpressed",
           "text": "vec![elem; n] uses clone to duplicate elem, so vec![Rc::new(1); 5] holds five references to the same value, not five independent values.",
           "source": "1.97.0 alloc/src/macros.rs:26-27, doc: \"This will use `clone` to duplicate an expression, so one should be careful using this with types having a nonstandard `Clone` implementation.\"",
-          "reason": "no identity of moved values: `==` is structural on values and `same` is identity of host references, which a value moved into or out of a container does not have"
+          "reason": "no identity of cloned values: `moved from` says a value moved, not what the clones share with the original; whether the elements are independent or the same data (Rc) is the element type's own Clone"
         },
         {
           "kind": "unexpressed",
           "text": "vec![expr; 0] is allowed and gives an empty vector, but still evaluates expr and drops the value at once, so its side effects happen.",
           "source": "1.97.0 alloc/src/macros.rs:33-34, doc: \"This will still evaluate `expr`, however, and immediately drop the resulting value, so be mindful of side effects.\"",
-          "reason": "no drop: no clause says what a call does to a value's storage or whether a destructor runs"
+          "reason": "no arm of a macro in a clause: the entry has no parameters, so `lifetime elem ends in call when n == 0` has no `elem` or `n` to name; they are the parameters of one arm in the host profile"
         }
       ]
     },

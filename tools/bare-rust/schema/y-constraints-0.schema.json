@@ -594,7 +594,7 @@
         "source"
       ],
       "additionalProperties": false,
-      "description": "A clause the signature slots cannot say. `kind` names the family and `text` is the clause in the syntax of language 15, keyword included (`ensure found : result == self[k]`); `panics` is `fails panic when p`, `panic` being the Rust host's runtime failure. A `callback` clause may name the call's arguments and result (`callback f : called exactly once when exists self, with self, returning r`; the names `with` gives and `returning` binds are in scope in the subject's other clauses, language 6.13), and a `protocol` is a regular expression over the subject's calls (`protocol self.next+`). `unexpressed` is a promise the language cannot state: `text` is free text and `reason` says why the language cannot say it. Those are the gaps that feed proposal 12.",
+      "description": "A clause the signature slots cannot say. `kind` names the family and `text` is the clause in the syntax of language 15, keyword included (`ensure found : result == self[k]`); `panics` is `fails panic when p`, `panic` being the Rust host's runtime failure. A `callback` clause may name the call's arguments and result (`callback f : called exactly once when exists self, with self, returning r`; the names `with` gives and `returning` binds are in scope in the subject's other clauses, language 6.13), and a `protocol` is a regular expression over the subject's calls (`protocol self.next+`). Language 6.14 adds clauses to existing kinds: `effects` `evaluable at compile time`, `result must be used` with `must be used` on a type or trait, `hold` `hold result : moved from v` and `lifetime v ends in call when p` and `lifetime a, b survive call`, `never panics except exhausted`, `budget work expected amortised O(1)`, `access` `mutates only self[key]`, and `result.0` and `is (a, b)` in expressions; and the kind `obliges`, `obliges caller : p because \"…\"`. `unexpressed` is a promise the language cannot state: `text` is free text and `reason` says why the language cannot say it. Those are the gaps that feed proposal 12.",
       "properties": {
         "kind": {
           "enum": [
@@ -610,6 +610,7 @@
             "law",
             "callback",
             "protocol",
+            "obliges",
             "invariant",
             "access",
             "hold",

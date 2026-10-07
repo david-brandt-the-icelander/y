@@ -419,7 +419,7 @@ fn what_a_function_computes_is_not_a_gap_of_the_language() {
         assert!(!labels.contains(&gone), "{gone}");
     }
     assert_eq!(labels.iter().filter(|l| **l == "what a function computes").count(), 8);
-    assert_eq!(labels.len(), 114, "B3 took 121 to 114");
+    assert_eq!(labels.len(), 77, "B3 took 121 to 114, B4 to 77");
 }
 
 #[test]
@@ -976,15 +976,253 @@ fn b3_closed_the_callback_promises_and_relabelled_what_stays() {
     let (file, _) = std_file();
     let clauses: Vec<(&str, &Value)> = file["subjects"].as_array().unwrap().iter().flat_map(|s| s["clauses"].as_array().into_iter().flatten().map(move |c| (s["name"].as_str().unwrap(), c))).collect();
     let labels: Vec<&str> = clauses.iter().filter(|(_, c)| c["kind"] == "unexpressed").map(|(_, c)| bare_rust::libstats::reason_label(c["reason"].as_str().unwrap())).collect();
-    assert_eq!(labels.len(), 114, "121 before B3: 7 closed");
+    assert_eq!(labels.len(), 77, "121 before B3: 7 closed; B4 closed 37 more");
     for gone in ["no value of a callback result", "no order of calls", "callback clause has no condition"] {
         assert!(!labels.contains(&gone), "{gone}");
     }
     let n = |l: &str| labels.iter().filter(|x| **x == l).count();
-    assert_eq!((n("no sequence value"), n("no promise about a result's later calls"), n("no promise")), (19, 4, 6));
+    assert_eq!((n("no sequence value"), n("no promise about a result's later calls"), n("no promise")), (20, 4, 6));
     let with = |w: &str| clauses.iter().filter(|(_, c)| c["kind"] == "callback" && c["text"].as_str().unwrap().contains(w)).count();
     assert_eq!((with(" when "), with(", with "), with(", returning ")), (3, 2, 2));
     let mut protocols: Vec<&str> = clauses.iter().filter(|(_, c)| c["kind"] == "protocol").map(|(s, _)| *s).collect();
     protocols.sort();
     assert_eq!(protocols, ["std::assert_eq!", "std::iter::Iterator::count"]);
+}
+
+// ---------- B4: eight small additions (language 6.14) ----------
+
+/// The subjects the small additions are written on: `slice::len`, `mem::replace`, `slice::split_at_mut`, and the exemplar `Chars`.
+fn small_additions() -> Value {
+    let mut f = exemplars_only();
+    f.as_object_mut().unwrap().remove("views");
+    let slice = "ref<list<T> as 'std::primitive::slice'>";
+    let subjects = f["subjects"].as_array_mut().unwrap();
+    subjects.push(json!({
+        "kind": "function", "name": "std::primitive::slice::len", "generics": [{"name": "T", "bounds": []}],
+        "params": [{"name": "self", "type": slice, "access": {"rights": "read", "guarantee": "readers"}}], "result": {"type": "u64 as 'usize'"},
+        "clauses": [{"kind": "effects", "text": "evaluable at compile time", "source": "s", "status": {"lifted": "s"}}]
+    }));
+    subjects.push(json!({
+        "kind": "function", "name": "std::mem::replace", "generics": [{"name": "T", "bounds": []}],
+        "params": [{"name": "dest", "type": "ref<T>", "access": {"rights": "write", "guarantee": "exclusive"}}, {"name": "src", "type": "T"}], "result": {"type": "T"},
+        "clauses": [
+            {"kind": "hold", "text": "lifetime dest, src survive call", "source": "s", "status": {"assumed": "documentation"}},
+            {"kind": "hold", "text": "hold dest : moved from src", "source": "s", "status": {"assumed": "documentation"}},
+            {"kind": "hold", "text": "hold result : moved from dest", "source": "s", "status": {"assumed": "documentation"}},
+            {"kind": "ensure", "text": "ensure moved : dest == src implies result moved from src", "source": "s", "status": {"assumed": "documentation"}},
+            {"kind": "never panics", "text": "never panics except exhausted", "source": "s", "status": {"assumed": "documentation"}},
+            {"kind": "budget", "text": "budget work expected amortised O(1)", "source": "s", "status": {"assumed": "documentation"}}
+        ]
+    }));
+    subjects.push(json!({
+        "kind": "function", "name": "std::primitive::slice::split_at_mut", "generics": [{"name": "T", "bounds": []}],
+        "params": [{"name": "self", "type": slice, "access": {"rights": "write", "guarantee": "exclusive"}}, {"name": "mid", "type": "u64 as 'usize'"}],
+        "result": {"type": format!("({slice}, {slice})"), "access": {"rights": "write", "guarantee": "exclusive"}, "hold": {"kind": "borrows", "from": "self"}},
+        "clauses": [
+            {"kind": "ensure", "text": "ensure part_sizes : size(result.0) == mid and size(result.1) == old(size(self)) - mid", "source": "s", "status": {"assumed": "documentation"}},
+            {"kind": "ensure", "text": "ensure pair : result is (head, tail) implies size(head) + size(tail) == old(size(self))", "source": "s", "status": {"assumed": "documentation"}},
+            {"kind": "access", "text": "disjoint result.0, result.1", "source": "s", "status": {"assumed": "documentation"}}
+        ]
+    }));
+    subject_mut(&mut f, "std::str::Chars")["clauses"] = json!([{"kind": "result must be used", "text": "must be used", "source": "s", "status": {"lifted": "s"}}]);
+    f
+}
+
+/// The errors after the clause `n` of a subject becomes `kind` and `text` (or is added, past the end).
+fn with_clause(f: &Value, subject: &str, n: usize, kind: &str, text: &str) -> String {
+    let mut g = f.clone();
+    let cl = subject_mut(&mut g, subject)["clauses"].as_array_mut().unwrap();
+    let c = json!({"kind": kind, "text": text, "source": "s", "status": {"assumed": "documentation"}});
+    if n < cl.len() {
+        cl[n] = c;
+    } else {
+        cl.push(c);
+    }
+    errors(&g)
+}
+
+#[test]
+fn the_small_additions_validate_and_old_clauses_stay_valid() {
+    let f = small_additions();
+    assert_eq!(errors(&f), "");
+    let c = canonical(&f);
+    assert_eq!(validate(&f, Some(&c)), Vec::<String>::new());
+    // the older forms of the same kinds are still the same clauses
+    let r = "std::mem::replace";
+    for (n, kind, text) in [(4, "never panics", "never panics"), (5, "budget", "budget work O(size(dest))"), (1, "hold", "hold dest : owns")] {
+        assert_eq!(with_clause(&f, r, n, kind, text), "", "{text}");
+    }
+}
+
+#[test]
+fn evaluable_at_compile_time_is_a_bound_on_a_function() {
+    let f = small_additions();
+    assert_eq!(with_clause(&f, "std::mem::replace", 9, "effects", "evaluable at compile time"), "");
+    let e = with_clause(&f, "std::str::Chars", 9, "effects", "evaluable at compile time");
+    assert!(e.contains("is for a function"), "{e}");
+    let e = with_clause(&f, "std::mem::replace", 9, "effects", "evaluable at compile time now");
+    assert!(e.contains("unknown name `now`"), "{e}");
+    let e = with_clause(&f, "std::mem::replace", 9, "effects", "evaluable at run time");
+    assert!(e.contains("starts with"), "{e}");
+}
+
+#[test]
+fn must_be_used_is_for_a_type_and_result_must_be_used_for_a_function() {
+    let f = small_additions();
+    let e = with_clause(&f, "std::str::Chars", 0, "result must be used", "result must be used");
+    assert!(e.contains("`must be used` is for a type or a trait"), "{e}");
+    let e = with_clause(&f, "std::mem::replace", 9, "result must be used", "must be used");
+    assert!(e.contains("`must be used` is for a type or a trait"), "{e}");
+    assert_eq!(with_clause(&f, "std::mem::replace", 9, "result must be used", "result must be used"), "");
+    // a trait can be must-use too (Iterator)
+    let mut g = f.clone();
+    g["subjects"].as_array_mut().unwrap().push(json!({"kind": "trait", "name": "std::iter::Iterator", "clauses": [{"kind": "result must be used", "text": "must be used", "source": "s", "status": {"lifted": "s"}}]}));
+    assert_eq!(errors(&g), "");
+}
+
+#[test]
+fn a_move_names_one_path_and_an_end_names_the_call() {
+    let f = small_additions();
+    let r = "std::mem::replace";
+    for (kind, text, want) in [
+        ("hold", "hold result : moved from dest", ""),
+        ("hold", "hold dest : moved from src", ""),
+        ("hold", "hold nope : moved from src", "`nope` is not a parameter of the subject"),
+        ("hold", "hold result : moved from nope", "unknown name `nope`"),
+        ("hold", "hold result : moved from", "`moved from` names one path"),
+        ("hold", "hold result : moved from dest src", "`moved from` names one path"),
+        ("hold", "hold result : moved from dest.0", ""),
+        ("hold", "lifetime src ends in call", ""),
+        ("hold", "lifetime src ends in call when src == dest", ""),
+        ("hold", "lifetime src ends in call when", "`lifetime v ends in call`"),
+        ("hold", "lifetime src, dest ends in call", "`lifetime v ends in call`"),
+        ("hold", "lifetime src survive call", ""),
+        ("hold", "lifetime dest, src survive call", ""),
+        ("hold", "lifetime dest, survive call", "`lifetime a, b survive call`"),
+        ("hold", "lifetime dest src survive call", "`lifetime a, b survive call`"),
+        ("hold", "lifetime dest survive call now", "`lifetime a, b survive call`"),
+        ("hold", "lifetime nope survive call", "unknown name `nope`"),
+        ("ensure", "ensure m : result moved from src", ""),
+        ("ensure", "ensure m : result moved from nope", "unknown name `nope`"),
+    ] {
+        let e = with_clause(&f, r, 1, kind, text);
+        if want.is_empty() {
+            assert_eq!(e, "", "{text}");
+        } else {
+            assert!(e.contains(want), "{text}: {e}");
+        }
+    }
+}
+
+#[test]
+fn exhaustion_cost_and_obligations_have_forms_of_their_own() {
+    let f = small_additions();
+    let r = "std::mem::replace";
+    for (n, kind, text, want) in [
+        (4, "never panics", "never panics except exhausted", ""),
+        (4, "never panics", "never panics except broke", "unknown name `broke`"),
+        (4, "never panics", "never panics except", "unknown name `except`"),
+        (5, "budget", "budget work expected O(1)", ""),
+        (5, "budget", "budget work amortised O(size(dest))", ""),
+        (5, "budget", "budget work sometimes O(1)", "unknown name `sometimes`"),
+        (9, "obliges", "obliges caller : src == dest because \"the two must be told apart\"", ""),
+        (9, "obliges", "obliges caller : src == dest", "states a condition and the reason"),
+        (9, "obliges", "obliges caller : src == dest because src", "states a condition and the reason"),
+        (9, "obliges", "obliges caller : because \"x\"", "states a condition and the reason"),
+        (9, "obliges", "obliges caller : nope because \"x\"", "unknown name `nope`"),
+        (9, "obliges", "assume caller : src because \"x\"", "starts with `obliges caller`"),
+    ] {
+        let e = with_clause(&f, r, n, kind, text);
+        if want.is_empty() {
+            assert_eq!(e, "", "{text}");
+        } else {
+            assert!(e.contains(want), "{text}: {e}");
+        }
+    }
+    let e = with_clause(&f, "std::str::Chars", 9, "obliges", "obliges caller : true because \"x\"");
+    assert!(e.contains("`obliges caller` is for a function"), "{e}");
+}
+
+#[test]
+fn tuple_parts_and_element_frames_name_what_the_subject_has() {
+    let f = small_additions();
+    let s = "std::primitive::slice::split_at_mut";
+    for (n, kind, text, want) in [
+        (0, "ensure", "ensure p : size(result.0) == mid and size(result.1) == mid", ""),
+        (0, "ensure", "ensure p : result.1 == result.0", ""),
+        (1, "ensure", "ensure p : result is (a, _) implies size(a) == mid", ""),
+        (1, "ensure", "ensure p : result is (a, b) implies size(c) == 1", "unknown name `c`"),
+        (1, "ensure", "ensure p : size(a) == 1", "unknown name `a`"),
+        (2, "access", "disjoint result.0, result.1", ""),
+        (2, "access", "disjoint result.0, other", "unknown name `other`"),
+        (2, "access", "mutates only self[mid]", ""),
+        (2, "access", "mutates only self[mid], result.0", ""),
+        (2, "access", "mutates only self[kee]", "unknown name `kee`"),
+    ] {
+        let e = with_clause(&f, s, n, kind, text);
+        if want.is_empty() {
+            assert_eq!(e, "", "{text}");
+        } else {
+            assert!(e.contains(want), "{text}: {e}");
+        }
+    }
+}
+
+#[test]
+fn a_const_claim_is_checked_by_calling_the_item_in_a_const_context() {
+    let mut f = small_additions();
+    let r = check_signatures(&f, &work("sig-const"), &target()).unwrap();
+    assert_eq!(r.mismatches, vec![], "{:?}", r.mismatches);
+    assert!(r.checked.contains(&"std::primitive::slice::len".to_string()));
+    // `cmp::max` is a `const fn` whose const-ness is unstable: calling it where a constant is needed does not compile
+    subject_mut(&mut f, "std::cmp::max")["clauses"] = json!([{"kind": "effects", "text": "evaluable at compile time", "source": "s", "status": {"lifted": "s"}}]);
+    // so is a function that is not const at all
+    subject_mut(&mut f, "std::mem::replace")["clauses"].as_array_mut().unwrap().push(json!({"kind": "effects", "text": "evaluable at compile time", "source": "s", "status": {"lifted": "s"}}));
+    subject_mut(&mut f, "std::primitive::str::chars")["clauses"] = json!([{"kind": "effects", "text": "evaluable at compile time", "source": "s", "status": {"lifted": "s"}}]);
+    let r = check_signatures(&f, &work("sig-const-bad"), &target()).unwrap();
+    let by: std::collections::BTreeMap<&str, &str> = r.mismatches.iter().map(|(n, m)| (n.as_str(), m.as_str())).collect();
+    assert!(by["std::cmp::max"].starts_with("E0658"), "unstable const-ness: {by:?}");
+    assert!(by["std::primitive::str::chars"].starts_with("E0015"), "{by:?}");
+    assert!(!by.contains_key("std::mem::replace") && !by.contains_key("std::primitive::slice::len"), "a const fn passes: {by:?}");
+    assert_eq!(r.mismatches.len(), 2, "{by:?}");
+}
+
+#[test]
+fn libstats_counts_the_small_additions() {
+    // the exemplars carry `cmp::max`'s tie and `HashMap::get`'s expected cost
+    let f = small_additions();
+    let t = bare_rust::libstats::libstats(&f, None);
+    assert!(t.contains("small additions of language 6.14 (13 clauses)"), "{t}");
+    let line = |l: &str| t.lines().find(|x| x.contains(l)).unwrap_or("").split_whitespace().rev().nth(1).unwrap_or("").to_string();
+    assert_eq!(
+        [line("(6.14.1)"), line("(6.14.2)"), line("(6.14.3)"), line("(6.14.4)"), line("(6.14.5)"), line("(6.14.6)"), line("(6.14.7)"), line("(6.14.8)"), line("(6.14.9)")],
+        ["1", "1", "4", "1", "1", "2", "3", "0", "0"].map(String::from),
+        "{t}"
+    );
+}
+
+#[test]
+fn b4_closed_the_small_additions_and_relabelled_what_stays() {
+    let (file, _) = std_file();
+    let clauses: Vec<(&str, &Value)> = file["subjects"].as_array().unwrap().iter().flat_map(|s| s["clauses"].as_array().into_iter().flatten().map(move |c| (s["name"].as_str().unwrap(), c))).collect();
+    let labels: Vec<&str> = clauses.iter().filter(|(_, c)| c["kind"] == "unexpressed").map(|(_, c)| bare_rust::libstats::reason_label(c["reason"].as_str().unwrap())).collect();
+    assert_eq!(labels.len(), 77, "114 before B4: 37 closed");
+    for gone in ["no const-ness", "must-use on a type", "no drop", "no identity of moved values", "no resource exhaustion", "no expected or amortised cost", "no tuple parts", "no frame condition on a collection", "no sufficient condition"] {
+        assert!(!labels.contains(&gone), "{gone}");
+    }
+    let n = |l: &str| labels.iter().filter(|x| **x == l).count();
+    assert_eq!(
+        (n("no stable const-ness"), n("no identity of cloned values"), n("no identity of a stored key"), n("no effects of a destructor"), n("no arm of a macro in a clause"), n("no condition on an associated type's implementation"), n("no host state")),
+        (4, 2, 1, 1, 1, 3, 7)
+    );
+    let with = |k: &str, t: &str| clauses.iter().filter(|(_, c)| c["kind"] == k && c["text"].as_str().unwrap().starts_with(t)).count();
+    assert_eq!((with("effects", "evaluable at compile time"), with("result must be used", "must be used"), with("never panics", "never panics except exhausted"), with("budget", "budget work expected")), (14, 14, 2, 2));
+    // every const claim of the file is an item the host promises to keep const
+    for (s, c) in clauses.iter().filter(|(_, c)| c["text"] == "evaluable at compile time") {
+        assert!(c["source"].as_str().unwrap().contains("rustc_const_stable"), "{s}");
+    }
+    // each type that carries `#[must_use]` says so, and the iterator adapters cite their attribute
+    for (s, c) in clauses.iter().filter(|(_, c)| c["kind"] == "result must be used" && c["text"] == "must be used") {
+        assert!(c["source"].as_str().unwrap().contains("attribute #[must_use"), "{s}");
+    }
 }

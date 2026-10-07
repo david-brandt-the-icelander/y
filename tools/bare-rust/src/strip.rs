@@ -913,6 +913,20 @@ impl<'a> Stripper<'a> {
         sub.insert("kind".into(), json!("function"));
         sub.insert("name".into(), json!(sname));
         self.vis(f, &mut sub)?;
+        // `const fn` and a plain `#[must_use]` are clauses, not host text (language 6.14.1, 6.14.2); a `#[must_use = "…"]`
+        // keeps its message, which has no slot, and stays in the body
+        let mut clauses = vec![];
+        if let Some(mods) = all_children(f).into_iter().find(|c| c.kind() == "function_modifiers") {
+            if let Some(kw) = all_children(mods).into_iter().find(|c| c.kind() == "const") {
+                let next = kw.next_sibling().or_else(|| mods.next_sibling()).ok_or("parse-error: const without fn")?;
+                self.cuts.push((kw.start_byte(), next.start_byte(), String::new()));
+                clauses.push(json!({"kind": "effects", "text": "evaluable at compile time", "source": "const fn"}));
+            }
+        }
+        if let Some(a) = f.prev_sibling().filter(|a| a.kind() == "attribute_item" && collapse(text(*a, src)) == "#[must_use]") {
+            self.cuts.push((a.start_byte(), f.start_byte(), String::new()));
+            clauses.push(json!({"kind": "result must be used", "text": "result must be used", "source": "attribute #[must_use]"}));
+        }
         let (gens, extra, names) = self.generics(f, name_n.end_byte(), true, &life.elide)?;
         Self::put_generics(&mut sub, gens, extra);
         let mut g = sc.generics.clone();
@@ -1025,6 +1039,9 @@ impl<'a> Stripper<'a> {
             }
             sub.insert("result".into(), Value::Object(res));
             self.cuts.push((params_n.end_byte(), rt.end_byte(), String::new()));
+        }
+        if !clauses.is_empty() {
+            sub.insert("clauses".into(), Value::Array(clauses));
         }
         self.subjects.push(Value::Object(sub));
         if let Some(body) = f.child_by_field_name("body") {

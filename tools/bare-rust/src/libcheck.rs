@@ -34,8 +34,9 @@ pub fn heads(kind: &str) -> &'static [&'static str] {
         "budget" => &["budget"],
         "layout" => &["layout", "size", "align"],
         "derive" => &["derive"],
-        "never panics" => &["never panics"],
-        "result must be used" => &["result must be used"],
+        "never panics" => &["never panics except exhausted", "never panics"],
+        "result must be used" => &["result must be used", "must be used"],
+        "obliges" => &["obliges caller"],
         "effects" => &[
             "effects none",
             "effects only",
@@ -48,6 +49,7 @@ pub fn heads(kind: &str) -> &'static [&'static str] {
             "commutes with",
             "depends only on",
             "terminates",
+            "evaluable at compile time",
             "reads only",
             "writes only",
             "emits only",
@@ -74,7 +76,7 @@ pub fn heads(kind: &str) -> &'static [&'static str] {
             "disjoint",
             "shared readonly",
         ],
-        "hold" => &["hold"],
+        "hold" => &["hold", "lifetime"],
         "implements" => &["implements"],
         "compat" => &["version", "compatible with", "replaces", "was", "deprecated", "stable", "visible to"],
         _ => &[],
@@ -362,6 +364,15 @@ pub fn validate_with(file: &Value, text: Option<&str>, builds: &BTreeSet<String>
                 if t.split_whitespace().any(|w| w == "given") {
                     errs.push(format!("{at}: clause {j}: `given` is the clause's `given` slot, not part of its text: `{t}`"));
                 }
+                // language 6.14: `must be used` is for a type or a trait, `result must be used` for a subject with a result;
+                // `evaluable at compile time` and `obliges caller` are for a function
+                let on_type = matches!(kind, "type" | "trait");
+                if k == "result must be used" && on_type != t.starts_with("must be used") {
+                    errs.push(format!("{at}: clause {j}: `must be used` is for a type or a trait and `result must be used` for a function or macro: `{t}`"));
+                }
+                if (t == "evaluable at compile time" || k == "obliges") && kind != "function" {
+                    errs.push(format!("{at}: clause {j}: `{}` is for a function: `{t}`", if k == "obliges" { "obliges caller" } else { "evaluable at compile time" }));
+                }
                 errs.extend(lint(k, t, heads(k), if k == "callback" { &before_callbacks } else { &scope }).into_iter().map(|e| format!("{at}: clause {j}: {e}")));
             }
         }
@@ -628,6 +639,18 @@ fn gen_function(sub: &Value, path: Option<String>) -> Gen {
             };
         }
         let mut helper = String::new();
+        // `evaluable at compile time` (language 6.14.1): a `const fn` that only calls the item, with its arguments moved in
+        let const_claim = sub["clauses"].as_array().into_iter().flatten().any(|c| c["kind"] == "effects" && c["text"] == "evaluable at compile time");
+        let const_fn = if const_claim && some_result.is_none() {
+            let mut cg = binder.clone();
+            cg.extend(gp.iter().cloned());
+            cg.sort_by_key(|p| !p.starts_with('\''));
+            let params: Vec<String> = ps.iter().enumerate().map(|(i, t)| format!("a{i}: {t}")).collect();
+            let args: Vec<String> = (0..ps.len()).map(|i| format!("a{i}")).collect();
+            Some((cg, params.join(", "), format!("{path}({})", args.join(", "))))
+        } else {
+            None
+        };
         let body = if let Some(bound) = some_result {
             // lifetimes are early-bound here: the values are made by `loop {}`, not coerced from a pointer
             gp.splice(0..0, binder.drain(..));
@@ -653,7 +676,16 @@ fn gen_function(sub: &Value, path: Option<String>) -> Gen {
             gp.insert(0, "'__e".into());
         }
         gp.sort_by_key(|p| !p.starts_with('\''));
-        Ok(format!("{}fn {{id}}{}(){w} {{ {} }}", word_replace(&helper, "Self", "Self_"), angle(&gp), word_replace(&body, "Self", "Self_")))
+        let mut code = format!("{}fn {{id}}{}(){w} {{ {} }}", word_replace(&helper, "Self", "Self_"), angle(&gp), word_replace(&body, "Self", "Self_"));
+        if let Some((mut cg, params, call)) = const_fn {
+            cg.extend(lower.params.iter().cloned());
+            if !lower.params.is_empty() {
+                cg.insert(0, "'__e".into());
+            }
+            cg.sort_by_key(|p| !p.starts_with('\''));
+            code += &word_replace(&format!("\nconst fn {{id}}_const{}({params}){ret}{w} {{ {call} }}", angle(&cg)), "Self", "Self_");
+        }
+        Ok(code)
     };
     match go() {
         Ok(s) => Gen::Checked(s),
