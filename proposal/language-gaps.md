@@ -259,6 +259,26 @@ function rust 'std::iter::Iterator::count'(self: Self) -> u64 as 'usize'
 - **Closes** the callback-result promises (7), the conditional callbacks (2), and the order of calls (6).
 - **Checked** by generated wrappers around the argument, where the host allows one, and in CI otherwise.
 
+**Done: the paragraph, the format, the lint and the rewrite; 7 of the 15 are closed.** Language § 6.13 and § 15 state the
+meaning and the grammar: `callback c : called exactly once when p, with a, b, returning r`, where `when` is a condition
+on the subject's own names, `with` lists the call's arguments (an expression, or a new name for that argument) and
+`returning` binds the result; `with` and `returning` need `exactly once` or `at most once`; `protocol` is § 6.5's
+regular expression over the subject's callbacks, its parameters and the methods of a parameter's bounds (`self.next`).
+The library file keeps the clause in `text` (no new slot), and gains the clause kind `protocol`. `libcheck` lints a
+callback's `when` and `with` against the subject's names, `returning` and the new `with` names are in scope in the
+subject's other clauses and in no callback's `when`, a protocol names callbacks, parameters and methods of known
+bounds, and `libstats` counts callback clauses by what they name. Old files stay valid. Rewrite: `unexpressed` 121 to
+114. Closed: `Option::map_or_else` (2: a conditional callback each, and `ensure` on the result), `Entry::and_modify` (2:
+the condition, and the identity of the value `f` receives and the entry holds), `Ord` (1: `max` and `min` as laws over
+`cmp`, which unfolds the `max_by` and `min_by` that the contract names), `Iterator::count` (1: `protocol self.next+`)
+and `assert_eq!` (1: `protocol left right`). Not closed, and relabelled (8): the callback of `map`, `filter` and
+`take_while` is called by `next` on the returned adapter, a call of another subject, so none of what the proposal
+expected for them can be said of the function itself (*no promise about a result's later calls* 3, with `enumerate`'s
+4), nor what the adapter yields (*no sequence value*, +4 with `flat_map`, which needs B5); `Hasher::write` promises
+nothing about its order (*no promise*). Still open: `count`'s protocol says `next` is called and at least once, not
+that the run ends at the first none, which depends on a value the calls returned; a callback on a result's `next`
+would need a field of the result to be a callback of its own subject. No compile check of the clauses against `std`.
+
 ### 4.4 Eight small additions (47)
 
 Each is a clause or an expression, small enough to add on its own:

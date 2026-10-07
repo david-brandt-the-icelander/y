@@ -300,6 +300,7 @@ Clauses are of two sorts, and the difference decides how they are checked.
 | Compatibility and visibility | `version`, `compatible with`, `replaces`, `was`, `deprecated`, `stable`, `visible to` | What may change between versions, and who may refer to what | Checked at build | 6.10 |
 | Interfaces and implementations | `implements`, `assoc`, `for`, `some`, `any`, `hold … borrows for` | Which interfaces a type implements, what an implementation adds, and what a host subject is parameterised by | Checked at build | 6.11 |
 | Conditional promises | `given` | What a promise relies on: a bound's implementations, the default body, a build setting | Checked at build, as the promise is | 6.12 |
+| Callbacks and calls | `callback … when / with / returning`, `protocol` over calls | When a function argument is called, with what, what it returned, and in what order | Checked by wrappers or in CI | 6.13 |
 | Lifetime | `hold`, `lifetime …`, `instances …`, `no strong cycle`, `model` | How long entities live and who keeps them | Property | 7 |
 | Mutability and aliasing | `access`, `readonly`, `immutable`, `frozen after`, `write once`, `append only`, `monotonic`, `mutates only`, `interior`, `unchanged`, `exclusive`, `sole`, `disjoint`, `shared readonly` | Who may change what, and through how many paths | Property; predicate for columns | 8 |
 | Derived languages | `local` | A type a woven host needs inside a body | Checked at weave | 11.2 |
@@ -404,7 +405,8 @@ function rust 'eve_net::frame::decode'(b: bytes) -> Frame?
   and a lint elsewhere.
 - `callback c : called exactly once | at most once | at least once [before return]` states how a function argument is
   called, as Kotlin's `callsInPlace` does; `callback c : conforms to interface rust 'eve_ui::Handler'` applies an
-  interface's clauses to whatever is passed.
+  interface's clauses to whatever is passed. A callback may carry a condition, name its arguments and bind its result
+  for the later clauses (§ 6.13).
 - `law` states an algebraic property over one or more subjects: round trips, inverses, idempotence of a pure function,
   associativity of a merge. It quantifies over a type, so it is checked in CI on generated values and on the recorded
   corpora, never at run time.
@@ -546,6 +548,7 @@ resource rust 'eve_net::QuicStream'
   not name are unconstrained. It is checked per entity, by a small automaton inserted by wrappers, or proven in Rust by
   the typestate pattern, one type per state, or watched from the manifests. A protocol whose next step depends on data,
   beyond what `when` on a state machine can say, is stated as a state machine over a field that records the state.
+  A subject may also state a protocol over its own calls, to its callbacks and to methods of its parameters (§ 6.13).
 - **Harvested:** state machines per entity from the manifests and the log, in simulation time, separating the game's
   hidden states from the old mechanism's (a ship in neither system was the mechanism's).
 
@@ -873,7 +876,70 @@ function rust 'std::cmp::Ord::max'(self: Self, other: Self) -> Self
 
 What stays prose: a condition on a value rather than an implementation ("unless the iterator is infinite"), on a
 combination of conditions that `and` cannot say (`or`, `not`), on a feature of the host's toolchain other than the
-profile's, and on an unlisted build setting; a condition on a closure argument is a `callback` (§ 6.2).
+profile's, and on an unlisted build setting; a condition on a closure argument is a `callback` (§ 6.13).
+
+### 6.13 Callbacks: their conditions, arguments, results and order
+
+**Meaning.** `callback c : called exactly once` (§ 6.2) says how often a function argument is called, and nothing else. A
+library says more: `Option::map_or_else` calls its `default` when the option is none and its `f` with the value when
+there is one, and its result is what the one it called returned. A callback clause may therefore state **when** the
+argument is called (`when p`, a condition on the call's entry; where it does not hold the argument is not called),
+**with what** (`with`, the call's arguments), and **what it returned** (`returning r`). The result is a value that
+crossed the boundary (principle 5), not a call the language makes: a clause never calls a function argument, which need
+not be pure, it only names what the one call gave. The names `with` and `returning` give are in scope in the subject's
+other clauses, so that a postcondition can say what the result is in terms of them. A **protocol** over the subject's own
+calls states their order: the same regular expression as § 6.5, whose events are here the subject's callbacks, its
+parameters, and the methods of a parameter's bounds (`self.next`), with `begin` and `end` of the call itself.
+
+```text
+function rust 'std::option::Option::map_or_else'(self: T?, default: D, f: F) -> U
+    callback default : called exactly once when self is none, returning d
+    callback f       : called exactly once when exists self, with self, returning r
+    ensure from_callback : result == (if exists self then r else d)
+
+function rust 'std::collections::hash_map::Entry::and_modify'(self: Entry<'a, K, V>, f: F) -> Entry<'a, K, V>
+    callback f : called exactly once when self is Occupied(e), with v
+    ensure in_place : result is Occupied(r) implies same(current(r), v)
+
+function rust 'std::iter::Iterator::count'(self: Self) -> u64 as 'usize'
+    protocol self.next+                  -- next is called, and at least once, even if there are no items
+
+macro rust 'std::assert_eq!'(left: ref<T>, right: ref<U>)
+    protocol left right                  -- left is evaluated, then right, once each
+```
+
+- **`callback c : called … [before return] [when p] [, with a, b] [, returning r]`.** `when` is an expression over the
+  subject's names, `self`, the parameters and the generics, never over what a callback returns. Each `with` item is an
+  expression over the same names, which the argument equals (by identity, for a reference), or a single new name, which
+  names that argument for the clauses that follow (`with v` above is the `&mut V` that `f` receives). `returning r`
+  binds one name and ends the clause. `with` and `returning` need `exactly once` or `at most once`, because they name
+  the values of one call. `r` and `v` exist only where the callback is called, so a clause that uses them says where
+  (`if exists self then r else d`, `result is Occupied(r) implies …`).
+- **`protocol` over calls.** An event is a callback or a parameter of the subject (for a macro, a parameter is the
+  evaluation of its argument, and for a function it is the passing of it), or `p.m`, the method `m` of the bounds of
+  parameter `p` (`self.next` when `Self: Iterator`). `*`, `+`, `?`, `|` and brackets are as in § 6.5, and calls the
+  protocol does not name are unconstrained. A protocol over one call of the subject begins at its entry and ends at its
+  return; it does not reach into a result's later calls, which belong to another subject.
+- **Fails:** a callback called when its condition does not hold, not called when it does, or called other than the clause
+  counts, is a bug in the subject: the call is the subject's, and so is the promise. A postcondition that uses a name from
+  a callback that was not called is a bug in the clause. A protocol that the calls do not follow is reported, or
+  rejected where a wrapper inserted it. Names that do not exist (a `when` over a name the subject lacks, a protocol event
+  that is neither a callback nor a parameter, a method its bound lacks, `returning` after a count that is not one call)
+  are refused at build.
+- **Checked:** the names, as above, at build. The calls are checked by a generated wrapper around the argument where the
+  host allows one (it counts and records each call's arguments and result, and compares them with the clause's
+  condition and with the postcondition at return), and otherwise in CI by tests and replay. A protocol is a small
+  automaton over the wrapper's events, or the host's typestate where it has one. A clause that relies on a callback
+  result is checked after return, when the wrapper's record is complete.
+- **Harvested:** the count, condition and result of a callback from the body of the subject: the arm of a `match` or
+  `if` that calls the argument, and what the arm returns; a protocol from the sequence and loops of calls in a body, and
+  from documentation that says "calls … repeatedly", "at least once" or "left then right". For a library, from its
+  documentation and source.
+
+What stays outside: what a callback does to a value that lives on in a result (`Iterator::map` returns an adapter whose
+`next` calls `f`: that call belongs to another subject, so nothing about it can be said of `map` itself, and what the
+result yields is a sequence the language cannot state), a protocol whose next step depends on a value the calls
+returned (`next` is called until it returns none), and an order among calls of different arguments of several subjects.
 
 ---
 
@@ -1762,7 +1828,8 @@ clause        = "let" NAME "=" expr
               | "never fails runtime" | "never panics" | "result must be used"
               | qualifiable "given" condition { "and" condition }
               | "callback" NAME ":" ( "called" ( "exactly once" | "at most once" | "at least once" )
-                                      [ "before return" ]
+                                      [ "before return" ] [ "when" expr ]
+                                      [ "," "with" arg { "," arg } ] [ "," "returning" NAME ]
                                     | "conforms to" "interface" [ HOST ] STABLE )
               | "law" NAME ":" expr
               | "field" NAME ":" type
@@ -1780,6 +1847,7 @@ clause        = "let" NAME "=" expr
 qualifiable   = (* a clause of the form "ensure", "fails … when", "never panics", or a bound, including "terminates" *) ;
 condition     = "default" | "build" BUILD | NAME "." NAME { "," NAME "." NAME } ( "never panic" | "terminate" | "effects none" ) ;
 BUILD         = "overflow_checks" | "debug_assertions" | "panic=unwind" | "panic=abort" ;   (* the host profile's list, § 3.3 *)
+arg           = expr | NAME ;                       (* a new NAME names the argument for the clauses that follow; "with" and "returning" need "exactly once" or "at most once" *)
 payload       = "{" NAME ":" expr { "," NAME ":" expr } "}" ;
 generics      = "for" generic { "," generic } [ "where" bound_pred { "," bound_pred } ] ;
 generic       = LIFETIME | NAME [ ":" bounds ] ;
@@ -1805,7 +1873,7 @@ state         = "invariant" NAME ":" expr [ "holds" ( "at write" | "at commit" |
               | ( "faucet" | "sink" ) NAME [ "at most" expr ]
               | "states" path ":" transition { "," transition } | "initial" path ":" NAME ;
 transition    = NAME "->" NAME { "|" NAME } [ "when" expr ] ;
-protocol      = "protocol" regex_over_calls ;
+protocol      = "protocol" regex_over_calls ;   (* an event is a NAME of a callback or parameter of the subject, or NAME "." NAME, a method of a parameter's bound; "begin" and "end" are the call's own, § 6.13 *)
 temporal      = ( "always" | "never" | "eventually" ) NAME ":" expr
               | "after" event ":" expr "within" duration
               | ( "before" | "since" | "until" ) event ":" expr [ "within" duration ]

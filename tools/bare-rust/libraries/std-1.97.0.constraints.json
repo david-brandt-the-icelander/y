@@ -561,27 +561,21 @@
       "clauses": [
         {
           "kind": "callback",
-          "text": "callback default : called at most once before return",
-          "source": "1.97.0 core/src/option.rs:1272-1275, body: match self { Some(t) => f(t), None => default(), }",
-          "status": { "observed": "the body calls default in the None arm only, once" }
+          "text": "callback default : called exactly once when self is none, returning d",
+          "source": "1.97.0 core/src/option.rs:1232-1233, doc: \"Computes a default function result (if none), or applies a different function to the contained value (if any).\"; the body calls default() in the None arm only, option.rs:1272-1275",
+          "status": { "assumed": "documentation" }
         },
         {
           "kind": "callback",
-          "text": "callback f : called at most once before return",
+          "text": "callback f : called exactly once when exists self, with self, returning r",
+          "source": "1.97.0 core/src/option.rs:1232-1233, doc: \"Computes a default function result (if none), or applies a different function to the contained value (if any).\"; the body calls f(t) in the Some arm only, option.rs:1272-1275",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "ensure",
+          "text": "ensure from_callback : result == (if exists self then r else d)",
           "source": "1.97.0 core/src/option.rs:1272-1275, body: match self { Some(t) => f(t), None => default(), }",
-          "status": { "observed": "the body calls f in the Some arm only, once" }
-        },
-        {
-          "kind": "unexpressed",
-          "text": "default is called exactly when self is none, and f exactly when self is some; exactly one of the two is called.",
-          "source": "1.97.0 core/src/option.rs:1232-1233, doc: \"Computes a default function result (if none), or applies a different function to the contained value (if any).\"",
-          "reason": "callback clause has no condition: `callback` states how often an argument is called, with no `when`"
-        },
-        {
-          "kind": "unexpressed",
-          "text": "result is default() when self is none, and f(v) when self is Some(v).",
-          "source": "1.97.0 core/src/option.rs:1232-1233, doc: \"Computes a default function result (if none), or applies a different function to the contained value (if any).\"",
-          "reason": "no value of a callback result: a clause cannot call a function argument, which need not be pure, so it cannot relate a result to what the callback returns"
+          "status": { "observed": "from the body: each arm returns what its callback returned" }
         },
         {
           "kind": "unexpressed",
@@ -1330,11 +1324,9 @@
       "clauses": [
         {
           "kind": "callback",
-          "text": "callback f : called at most once before return",
-          "source": "1.97.0 std/src/collections/hash/map.rs:2621-2628, body: match self { Occupied(mut entry) => { f(entry.get_mut()); Occupied(entry) } Vacant(entry) => Vacant(entry), }",
-          "status": {
-            "observed": "the body calls f in the Occupied arm only, once, with a mutable reference to the value"
-          }
+          "text": "callback f : called exactly once when self is Occupied(e), with v",
+          "source": "1.97.0 std/src/collections/hash/map.rs:2596-2597, doc: \"Provides in-place mutable access to an occupied entry before any potential inserts into the map.\"; the body calls f(entry.get_mut()) in the Occupied arm only, map.rs:2621-2628",
+          "status": { "assumed": "documentation" }
         },
         {
           "kind": "ensure",
@@ -1343,16 +1335,12 @@
           "status": { "observed": "from the body: each arm returns an entry of its own variant" }
         },
         {
-          "kind": "unexpressed",
-          "text": "f is called exactly when the entry is occupied, with a mutable reference to its value, and never when it is vacant.",
-          "source": "1.97.0 std/src/collections/hash/map.rs:2596-2597, doc: \"Provides in-place mutable access to an occupied entry before any potential inserts into the map.\"",
-          "reason": "callback clause has no condition: `callback` states how often an argument is called, with no `when`"
-        },
-        {
-          "kind": "unexpressed",
-          "text": "The value of an occupied entry afterwards is whatever f made of it.",
-          "source": "1.97.0 std/src/collections/hash/map.rs:2596-2597, doc: \"Provides in-place mutable access to an occupied entry before any potential inserts into the map.\"",
-          "reason": "no value of a callback result: a clause cannot call a function argument, which need not be pure, so it cannot relate a result to what the callback returns"
+          "kind": "ensure",
+          "text": "ensure in_place : result is Occupied(r) implies same(current(r), v)",
+          "source": "1.97.0 std/src/collections/hash/map.rs:2621-2628, body: match self { Occupied(mut entry) => { f(entry.get_mut()); Occupied(entry) } Vacant(entry) => Vacant(entry), }",
+          "status": {
+            "observed": "from the body: f gets the entry's own value by mutable reference and the same entry is returned, so what the entry holds afterwards is what f left in it"
+          }
         }
       ]
     },
@@ -2014,10 +2002,10 @@
           "status": { "assumed": "documentation" }
         },
         {
-          "kind": "unexpressed",
-          "text": "next is called repeatedly, in order, until it returns None, and at least once even if the iterator has no elements, so its side effects all happen.",
-          "source": "1.97.0 core/src/iter/traits/iterator.rs:196-197, doc: \"Note that [`next`] has to be called at least once even if the iterator does not have any elements.\"",
-          "reason": "no order of calls: no clause states the order or the number of times a callback, a hasher or a formatter is called inside one call"
+          "kind": "protocol",
+          "text": "protocol self.next+",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:195-197, doc: \"This method will call [`next`] repeatedly until [`None`] is encountered, returning the number of times it saw [`Some`]. Note that [`next`] has to be called at least once even if the iterator does not have any elements.\"",
+          "status": { "assumed": "documentation" }
         }
       ]
     },
@@ -2218,13 +2206,13 @@
           "kind": "unexpressed",
           "text": "result yields f(x) for each item x of self, in order.",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:780-781, doc: \"Takes a closure and creates an iterator which calls that closure on each element.\"",
-          "reason": "no value of a callback result: a clause cannot call a function argument, which need not be pure, so it cannot relate a result to what the callback returns"
+          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`. Here: the items the result yields, each made by the callback, in order"
         },
         {
           "kind": "unexpressed",
           "text": "f is called once for each item, in order, and only when the result is advanced: map is lazy.",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:792-793, doc: \"However, as `map()` is lazy, it is best used when you're already working with other iterators.\"",
-          "reason": "no order of calls: no clause states the order or the number of times a callback, a hasher or a formatter is called inside one call"
+          "reason": "no promise about a result's later calls: the callback is called by `next` on the returned adapter, a call of another subject, so a `callback` or `protocol` on this function would be false: it calls nothing. Here: when and how often the callback is called: once for each item, in order, and only when the result is advanced"
         },
         {
           "kind": "effects",
@@ -2260,13 +2248,13 @@
           "kind": "unexpressed",
           "text": "result yields exactly the items x of self for which predicate(&x) is true, in order.",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:893, doc: \"Given an element the closure must return `true` or `false`.\"",
-          "reason": "no value of a callback result: a clause cannot call a function argument, which need not be pure, so it cannot relate a result to what the callback returns"
+          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`. Here: the items the result yields, each made by the callback, in order"
         },
         {
           "kind": "unexpressed",
           "text": "predicate is called once for each item, in order, and only when the result is advanced.",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:890-891, doc: \"Creates an iterator which uses a closure to determine if an element should be yielded.\"",
-          "reason": "no order of calls: no clause states the order or the number of times a callback, a hasher or a formatter is called inside one call"
+          "reason": "no promise about a result's later calls: the callback is called by `next` on the returned adapter, a call of another subject, so a `callback` or `protocol` on this function would be false: it calls nothing. Here: when and how often the callback is called: once for each item, in order, and only when the result is advanced"
         },
         {
           "kind": "effects",
@@ -2302,13 +2290,13 @@
           "kind": "unexpressed",
           "text": "result yields the items of self in order up to, and not including, the first one for which predicate returns false.",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:1190-1192, doc: \"It will call this closure on each element of the iterator, and yield elements while it returns `true`.\"",
-          "reason": "no value of a callback result: a clause cannot call a function argument, which need not be pure, so it cannot relate a result to what the callback returns"
+          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`. Here: the items the result yields, each made by the callback, in order"
         },
         {
           "kind": "unexpressed",
           "text": "The first item for which predicate returns false is consumed from self and not yielded or put back, so a caller that keeps the underlying iterator does not see it.",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:1254-1255, doc: \"The `3` is no longer there, because it was consumed in order to see if the iteration should stop, but wasn't placed back into the iterator.\"",
-          "reason": "no order of calls: no clause states the order or the number of times a callback, a hasher or a formatter is called inside one call"
+          "reason": "no promise about a result's later calls: the callback is called by `next` on the returned adapter, a call of another subject, so a `callback` or `protocol` on this function would be false: it calls nothing. Here: when and how often the callback is called: the item that ends the iteration is consumed from self by the result's `next`"
         },
         {
           "kind": "effects",
@@ -2339,7 +2327,7 @@
           "kind": "unexpressed",
           "text": "result yields the items of f(x) for each item x of self, one x after another, in order: it is map(f) followed by flatten.",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:1509-1510, doc: \"You can think of `flat_map(f)` as the semantic equivalent of [`map`]ping, and then [`flatten`]ing as in `map(f).flatten()`.\"",
-          "reason": "no value of a callback result: a clause cannot call a function argument, which need not be pure, so it cannot relate a result to what the callback returns. Here: so no count of the result can be stated"
+          "reason": "no sequence value: the language has no order, range or iteration over a collection's elements, only facts such as `count` and `in`. Here: the items the result yields, each made by the callback, in order; so no count of the result can be stated"
         },
         {
           "kind": "effects",
@@ -2668,7 +2656,7 @@
           "kind": "unexpressed",
           "text": "write need not behave as write_u8 repeated, or as calls merged or split at other places: no guarantee is given about how the write_* methods are defined.",
           "source": "1.97.0 core/src/hash/mod.rs:268-270, doc: \"This trait provides no guarantees about how the various `write_*` methods are defined and implementations of [`Hash`] should not assume that they work one way or another.\"",
-          "reason": "no order of calls: no clause states the order or the number of times a callback, a hasher or a formatter is called inside one call"
+          "reason": "no promise: the trait guarantees nothing about how the write_* methods are defined or merged, so there is nothing to state and nothing a `given` could qualify"
         }
       ]
     },
@@ -2765,10 +2753,16 @@
           "status": { "assumed": "documentation" }
         },
         {
-          "kind": "unexpressed",
-          "text": "max and min agree with cmp: max(a, b) == max_by(a, b, cmp) and min(a, b) == min_by(a, b, cmp), which the default bodies ensure; for clamp see its own docs. A violation of any of these requirements is a logic error, which unsafe code must not rely on being absent.",
-          "source": "1.97.0 core/src/cmp.rs:736-741, doc: \"Implementations must be consistent with the [`PartialOrd`] implementation, and ensure `max`, `min`, and `clamp` are consistent with `cmp`:\"; \"`max(a, b) == max_by(a, b, cmp)` (ensured by the default implementation).\"",
-          "reason": "no value of a callback result: a clause cannot call a function argument, which need not be pure, so it cannot relate a result to what the callback returns. Here: max_by and min_by take cmp as their callback"
+          "kind": "law",
+          "text": "law max_agrees_with_cmp : all a : Self : all b : Self : '<Self as std::cmp::Ord>::max'(a, b) == (if '<Self as std::cmp::Ord>::cmp'(a, b) is Greater then a else b)",
+          "source": "1.97.0 core/src/cmp.rs:736-741, doc: \"`max(a, b) == max_by(a, b, cmp)` (ensured by the default implementation).\"; \"`min(a, b) == min_by(a, b, cmp)` (ensured by the default implementation).\"; max_by is `if compare(&v1, &v2).is_gt() { v1 } else { v2 }` (cmp.rs:1712-1718) and min_by is `if compare(&v1, &v2).is_le() { v1 } else { v2 }` (cmp.rs:1605-1611), compare being cmp",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "law",
+          "text": "law min_agrees_with_cmp : all a : Self : all b : Self : '<Self as std::cmp::Ord>::min'(a, b) == (if '<Self as std::cmp::Ord>::cmp'(a, b) is Greater then b else a)",
+          "source": "1.97.0 core/src/cmp.rs:736-741, doc: \"`max(a, b) == max_by(a, b, cmp)` (ensured by the default implementation).\"; \"`min(a, b) == min_by(a, b, cmp)` (ensured by the default implementation).\"; max_by is `if compare(&v1, &v2).is_gt() { v1 } else { v2 }` (cmp.rs:1712-1718) and min_by is `if compare(&v1, &v2).is_le() { v1 } else { v2 }` (cmp.rs:1605-1611), compare being cmp",
+          "status": { "assumed": "documentation" }
         }
       ]
     },
@@ -3147,10 +3141,12 @@
           "reason": "what a function computes: the text a Debug or Display impl or a format string produces is the output of a function, which the language keeps out (language 16)"
         },
         {
-          "kind": "unexpressed",
-          "text": "Each argument expression is evaluated exactly once, left then right, and borrowed: neither value is moved.",
+          "kind": "protocol",
+          "text": "protocol left right",
           "source": "1.97.0 core/src/macros/mod.rs:44, body: match (&$left, &$right) {",
-          "reason": "no order of calls: no clause states the order or the number of times a callback, a hasher or a formatter is called inside one call"
+          "status": {
+            "observed": "from the body: the tuple evaluates left, then right, once each, and borrows both; the parameters are refs"
+          }
         }
       ]
     },

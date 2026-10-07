@@ -56,6 +56,7 @@ pub fn heads(kind: &str) -> &'static [&'static str] {
         ],
         "law" => &["law"],
         "callback" => &["callback"],
+        "protocol" => &["protocol"],
         "invariant" => &["invariant"],
         "access" => &[
             "access",
@@ -293,7 +294,7 @@ pub fn validate_with(file: &Value, text: Option<&str>, builds: &BTreeSet<String>
                 errs.push(format!("{at}: generic `{}` is declared twice", g["name"].as_str().unwrap_or("")));
             }
         }
-        let mut scope = Scope { names: variants.clone(), failures: failures.clone(), payload: payload.clone() };
+        let mut scope = Scope { names: variants.clone(), failures: failures.clone(), payload: payload.clone(), ..Scope::default() };
         scope.names.extend(all_views.iter().map(|v| v.0.clone()));
         if kind == "type" {
             scope.names.insert("Self".into());
@@ -322,6 +323,26 @@ pub fn validate_with(file: &Value, text: Option<&str>, builds: &BTreeSet<String>
                 errs.push(format!("{at}: `hold` is for the lifetime `{l}`, which the subject does not declare"));
             }
         }
+        // a protocol names the subject's parameters and callbacks, and the methods of a parameter's bounds; a callback's
+        // `with` and `returning` names are known to the subject's other clauses (language 6.13)
+        let clauses_of = || sub["clauses"].as_array().into_iter().flatten();
+        let generics_known = given_generics(sub, &subject_by_name, file);
+        for p in sub["params"].as_array().into_iter().flatten() {
+            let (n, ty) = (p["name"].as_str().unwrap_or(""), p["type"].as_str().unwrap_or(""));
+            scope.events.insert(n.to_string());
+            let g = ty.strip_prefix("ref<").and_then(|r| r.strip_suffix('>')).unwrap_or(ty);
+            if let Some(ms) = generics_known.get(g) {
+                scope.event_methods.insert(n.to_string(), ms.clone());
+            }
+        }
+        for c in clauses_of().filter(|c| c["kind"] == "callback") {
+            if let Some(n) = c["text"].as_str().and_then(|t| t.strip_prefix("callback ")).and_then(|t| t.split([' ', ':']).next()) {
+                scope.events.insert(n.to_string());
+            }
+        }
+        let before_callbacks = scope.clone();
+        let binds: Vec<String> = clauses_of().filter(|c| c["kind"] == "callback").filter_map(|c| c["text"].as_str()).flat_map(|t| crate::clause::callback_binds(t, &before_callbacks)).collect();
+        scope.names.extend(binds);
         for (j, c) in sub["clauses"].as_array().into_iter().flatten().enumerate() {
             let (k, t) = (c["kind"].as_str().unwrap_or(""), c["text"].as_str().unwrap_or(""));
             if k == "derive" {
@@ -335,13 +356,13 @@ pub fn validate_with(file: &Value, text: Option<&str>, builds: &BTreeSet<String>
                         errs.push(format!("{at}: clause {j}: a `{k}` clause is not qualified by `given` (only {})", GIVEN_KINDS.join(", ")));
                     }
                     let items: Vec<&str> = c["given"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
-                    let ctx = GivenCtx { generics: given_generics(sub, &subject_by_name, file), has_self: matches!(kind, "trait" | "impl" | "type") || sub["impl"].is_string() || !sub["trait"].is_null(), trait_method: kind == "function" && (!sub["trait"].is_null() || sub["impl"].is_string()), builds };
+                    let ctx = GivenCtx { generics: generics_known.clone(), has_self: matches!(kind, "trait" | "impl" | "type") || sub["impl"].is_string() || !sub["trait"].is_null(), trait_method: kind == "function" && (!sub["trait"].is_null() || sub["impl"].is_string()), builds };
                     errs.extend(lint_given(&items, &ctx).into_iter().map(|e| format!("{at}: clause {j}: {e}")));
                 }
                 if t.split_whitespace().any(|w| w == "given") {
                     errs.push(format!("{at}: clause {j}: `given` is the clause's `given` slot, not part of its text: `{t}`"));
                 }
-                errs.extend(lint(k, t, heads(k), &scope).into_iter().map(|e| format!("{at}: clause {j}: {e}")));
+                errs.extend(lint(k, t, heads(k), if k == "callback" { &before_callbacks } else { &scope }).into_iter().map(|e| format!("{at}: clause {j}: {e}")));
             }
         }
     }

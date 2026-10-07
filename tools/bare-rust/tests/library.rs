@@ -419,6 +419,7 @@ fn what_a_function_computes_is_not_a_gap_of_the_language() {
         assert!(!labels.contains(&gone), "{gone}");
     }
     assert_eq!(labels.iter().filter(|l| **l == "what a function computes").count(), 8);
+    assert_eq!(labels.len(), 114, "B3 took 121 to 114");
 }
 
 #[test]
@@ -861,4 +862,129 @@ fn libstats_counts_conditional_clauses_apart_and_the_profile_lists_the_build_set
     let names: Vec<&str> = p["build"].as_array().unwrap().iter().map(|b| b["setting"].as_str().unwrap()).collect();
     assert_eq!(names, ["overflow_checks", "debug_assertions", "panic=unwind", "panic=abort"]);
     assert_eq!(bare_rust::host::builds(Some(&p)).len(), 4);
+}
+
+// ---------- B3: callbacks, their arguments, results and conditions, and protocols over calls ----------
+
+/// `Option::map_or_else` and an `Iterator::count` as the plan writes them (language 6.13).
+fn with_callbacks() -> Value {
+    let mut f = exemplars_only();
+    f.as_object_mut().unwrap().remove("views");
+    let subjects = f["subjects"].as_array_mut().unwrap();
+    subjects.push(json!({"kind": "trait", "name": "std::iter::Iterator"}));
+    subjects.push(json!({"kind": "function", "name": "std::iter::Iterator::next", "params": [], "trait": "std::iter::Iterator"}));
+    subjects.push(json!({
+        "kind": "function", "name": "std::option::Option::map_or_else",
+        "generics": [{"name": "T", "bounds": []}, {"name": "U", "bounds": []}, {"name": "D", "bounds": ["FnOnce() -> U"]}, {"name": "F", "bounds": ["FnOnce(T) -> U"]}],
+        "params": [{"name": "self", "type": "T?"}, {"name": "default", "type": "D"}, {"name": "f", "type": "F"}], "result": {"type": "U"},
+        "clauses": [
+            {"kind": "callback", "text": "callback default : called exactly once when self is none, returning d", "source": "s"},
+            {"kind": "callback", "text": "callback f : called exactly once when exists self, with self, returning r", "source": "s"},
+            {"kind": "ensure", "text": "ensure from_callback : result == (if exists self then r else d)", "source": "s"}
+        ]
+    }));
+    subjects.push(json!({
+        "kind": "function", "name": "std::iter::Iterator::count", "generics": [{"name": "Self", "bounds": ["std::iter::Iterator"]}], "trait": "std::iter::Iterator",
+        "params": [{"name": "self", "type": "Self"}], "result": {"type": "u64 as 'usize'"},
+        "clauses": [{"kind": "protocol", "text": "protocol self.next+", "source": "s"}]
+    }));
+    f
+}
+
+#[test]
+fn a_callback_names_its_arguments_and_result_for_the_clauses_of_its_subject() {
+    let f = with_callbacks();
+    assert_eq!(errors(&f), "");
+    let clauses = |f: &mut Value| subject_mut(f, "std::option::Option::map_or_else")["clauses"].as_array_mut().unwrap().clone();
+    // the names `returning` binds are known to the ensure that follows, and to nothing else
+    let mut bad = f.clone();
+    subject_mut(&mut bad, "std::option::Option::map_or_else")["clauses"][2]["text"] = json!("ensure from_callback : result == (if exists self then r else e)");
+    assert!(errors(&bad).contains("unknown name `e`"), "{}", errors(&bad));
+    let mut bad = f.clone();
+    subject_mut(&mut bad, "std::option::Option::map_or_else")["clauses"].as_array_mut().unwrap().remove(1);
+    assert!(errors(&bad).contains("unknown name `r`"), "{}", errors(&bad));
+    // a `when` uses only the names the subject has, not what a callback returns
+    for (text, want) in [
+        ("callback default : called exactly once when nope is none, returning d", "unknown name `nope`"),
+        ("callback default : called exactly once when d is none, returning d", "unknown name `d`"),
+        ("callback default : called exactly once when self is none, with q, returning d", ""),
+        ("callback default : called exactly once when self is none, with nope(self), returning d", "unknown name `nope`"),
+        ("callback default : called at least once when self is none, returning d", "name the values of one call"),
+        ("callback default : called exactly once, returning d, with self", "`returning` names one result"),
+        ("callback default : called exactly once, returning", "`returning` names one result"),
+        ("callback default : called exactly once, returning d e", "`returning` names one result"),
+        ("callback default : called exactly once, with", "`with` names the call's arguments"),
+    ] {
+        let mut bad = f.clone();
+        subject_mut(&mut bad, "std::option::Option::map_or_else")["clauses"][0]["text"] = json!(text);
+        let e = errors(&bad);
+        if want.is_empty() {
+            assert_eq!(e, "", "{text}");
+        } else {
+            assert!(e.contains(want), "{text}: {e}");
+        }
+    }
+    // old callback clauses stay valid
+    let mut old = f.clone();
+    subject_mut(&mut old, "std::option::Option::map_or_else")["clauses"][0]["text"] = json!("callback default : called at most once before return");
+    subject_mut(&mut old, "std::option::Option::map_or_else")["clauses"][2]["text"] = json!("ensure x : result == result");
+    assert_eq!(errors(&old), "");
+    assert_eq!(clauses(&mut old).len(), 3);
+}
+
+#[test]
+fn a_protocol_names_callbacks_and_parameters() {
+    let f = with_callbacks();
+    for (text, want) in [
+        ("protocol (self.next)* self.next", ""),
+        ("protocol begin self.next+ end", ""),
+        ("protocol (self.nope)*", "`nope` is not a method of `self`'s bounds"),
+        ("protocol (other.next)*", "`other` is not a parameter of the subject"),
+        ("protocol (nope)*", "`nope` is not a callback or a parameter"),
+        ("protocol (self.next", "unclosed"),
+        ("protocol", "names at least one call"),
+        ("protocol self.next ; self.next", "calls joined by"),
+    ] {
+        let mut bad = f.clone();
+        subject_mut(&mut bad, "std::iter::Iterator::count")["clauses"][0]["text"] = json!(text);
+        let e = errors(&bad);
+        if want.is_empty() {
+            assert_eq!(e, "", "{text}");
+        } else {
+            assert!(e.contains(want), "{text}: {e}");
+        }
+    }
+    // a callback of the subject is an event too
+    let mut g = f.clone();
+    let m = subject_mut(&mut g, "std::option::Option::map_or_else");
+    m["clauses"].as_array_mut().unwrap().push(json!({"kind": "protocol", "text": "protocol (default | f)", "source": "s"}));
+    assert_eq!(errors(&g), "");
+}
+
+#[test]
+fn libstats_counts_callback_clauses_by_what_they_name_and_the_file_is_canonical() {
+    let f = with_callbacks();
+    let t = bare_rust::libstats::libstats(&f, None);
+    assert!(t.contains("callback clauses (2 on 1 subjects), and protocols over calls (1)"), "{t}");
+    let c = canonical(&f);
+    assert_eq!(canonical(&serde_json::from_str::<Value>(&c).unwrap()), c);
+    assert_eq!(validate(&f, Some(&c)), Vec::<String>::new());
+}
+
+#[test]
+fn b3_closed_the_callback_promises_and_relabelled_what_stays() {
+    let (file, _) = std_file();
+    let clauses: Vec<(&str, &Value)> = file["subjects"].as_array().unwrap().iter().flat_map(|s| s["clauses"].as_array().into_iter().flatten().map(move |c| (s["name"].as_str().unwrap(), c))).collect();
+    let labels: Vec<&str> = clauses.iter().filter(|(_, c)| c["kind"] == "unexpressed").map(|(_, c)| bare_rust::libstats::reason_label(c["reason"].as_str().unwrap())).collect();
+    assert_eq!(labels.len(), 114, "121 before B3: 7 closed");
+    for gone in ["no value of a callback result", "no order of calls", "callback clause has no condition"] {
+        assert!(!labels.contains(&gone), "{gone}");
+    }
+    let n = |l: &str| labels.iter().filter(|x| **x == l).count();
+    assert_eq!((n("no sequence value"), n("no promise about a result's later calls"), n("no promise")), (19, 4, 6));
+    let with = |w: &str| clauses.iter().filter(|(_, c)| c["kind"] == "callback" && c["text"].as_str().unwrap().contains(w)).count();
+    assert_eq!((with(" when "), with(", with "), with(", returning ")), (3, 2, 2));
+    let mut protocols: Vec<&str> = clauses.iter().filter(|(_, c)| c["kind"] == "protocol").map(|(s, _)| *s).collect();
+    protocols.sort();
+    assert_eq!(protocols, ["std::assert_eq!", "std::iter::Iterator::count"]);
 }

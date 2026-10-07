@@ -6,7 +6,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 /// What a clause may name besides the words of the language: the subject's own names and the file's.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Scope {
     /// Parameters, generics, `Self`, and the variants of the file's types.
     pub names: BTreeSet<String>,
@@ -14,6 +14,10 @@ pub struct Scope {
     pub failures: BTreeSet<String>,
     /// The payload fields each failure declares: `fails F { field: e } when p` may fill only these.
     pub payload: BTreeMap<String, BTreeSet<String>>,
+    /// What a `protocol` may name (language 6.13): the subject's parameters and callbacks.
+    pub events: BTreeSet<String>,
+    /// The methods a parameter's type is known to have, for `param.method` in a `protocol`; `None` when they cannot be checked.
+    pub event_methods: BTreeMap<String, Option<BTreeSet<String>>>,
 }
 
 /// Words of language 4 and 6, and of the clause forms that carry no expression.
@@ -30,6 +34,7 @@ fn kind_words(kind: &str) -> &'static [&'static str] {
     match kind {
         "budget" => &["allocates", "retains", "work", "bytes", "sent", "round_trips", "per", "call", "instance", "frame", "B", "KB", "MB", "O", "p50", "p99"],
         "layout" => &["c", "packed", "transparent", "align"],
+        "callback" => &["with", "returning"],
         _ => &[],
     }
 }
@@ -118,6 +123,116 @@ fn is_host_path(p: &str) -> bool {
     p.contains("::") && ["std::", "core::", "alloc::", "<"].iter().any(|r| p.starts_with(r))
 }
 
+/// The pieces of a callback clause, as token indices: the `with` items (ranges) and the name after `returning`.
+struct CallbackParts {
+    with: Vec<(usize, usize)>,
+    returning: Option<usize>,
+    errs: Vec<String>,
+}
+
+/// Split `callback f : called … [when p] [, with e, …] [, returning r]` (the tokens after `callback`) at its top-level
+/// `, with` and `, returning`; `with` takes expressions up to the `, returning` or the end.
+fn callback_parts(toks: &[Tok], text: &str) -> CallbackParts {
+    let mut parts = CallbackParts { with: vec![], returning: None, errs: vec![] };
+    let (mut depth, mut with_at, mut ret_comma): (i32, Option<usize>, Option<usize>) = (0, None, None);
+    for (i, t) in toks.iter().enumerate() {
+        match t {
+            Tok::Punct('(' | '[' | '{') => depth += 1,
+            Tok::Punct(')' | ']' | '}') => depth -= 1,
+            Tok::Word(w) if depth == 0 && i > 0 && toks[i - 1] == Tok::Punct(',') && w == "with" && with_at.is_none() && ret_comma.is_none() => with_at = Some(i + 1),
+            Tok::Word(w) if depth == 0 && i > 0 && toks[i - 1] == Tok::Punct(',') && w == "returning" && ret_comma.is_none() => ret_comma = Some(i - 1),
+            _ => {}
+        }
+    }
+    if let Some(c) = ret_comma {
+        match (toks.get(c + 2), toks.len() == c + 3) {
+            (Some(Tok::Word(_)), true) => parts.returning = Some(c + 2),
+            _ => parts.errs.push(format!("`returning` names one result and ends the clause: `{text}`")),
+        }
+    }
+    if let Some(a) = with_at {
+        let end = ret_comma.unwrap_or(toks.len());
+        let (mut depth, mut start) = (0, a);
+        for (i, t) in toks.iter().enumerate().take(end).skip(a) {
+            match t {
+                Tok::Punct('(' | '[' | '{') => depth += 1,
+                Tok::Punct(')' | ']' | '}') => depth -= 1,
+                Tok::Punct(',') if depth == 0 => {
+                    parts.with.push((start, i));
+                    start = i + 1;
+                }
+                _ => {}
+            }
+        }
+        parts.with.push((start, end));
+        if parts.with.iter().any(|(a, b)| a >= b) {
+            parts.errs.push(format!("`with` names the call's arguments, each an expression or a name, and none is empty: `{text}`"));
+        }
+    }
+    let once = toks.windows(2).any(|w| (is_word(Some(&w[0]), "exactly") || is_word(Some(&w[0]), "most")) && is_word(Some(&w[1]), "once"));
+    if (with_at.is_some() || ret_comma.is_some()) && !once {
+        parts.errs.push(format!("`with` and `returning` name the values of one call, so the clause says `called exactly once` or `called at most once`: `{text}`"));
+    }
+    parts
+}
+
+/// The token indices of a callback clause that bind a name: the one after `returning`, and each `with` item that is a
+/// single name nothing else in scope has (a name given to that argument).
+fn callback_binders(toks: &[Tok], parts: &CallbackParts, scope: &Scope) -> Vec<usize> {
+    let known = |w: &str| scope.names.contains(w) || WORDS.contains(&w) || kind_words("callback").contains(&w);
+    let mut out: Vec<usize> = parts.with.iter().filter(|(a, b)| b - a == 1).filter(|(a, _)| matches!(&toks[*a], Tok::Word(w) if !known(w) && !toks[..*a].iter().any(|t| matches!(t, Tok::Word(x) if x == w)))).map(|(a, _)| *a).collect();
+    out.extend(parts.returning);
+    out
+}
+
+/// The names a callback clause binds, for the subject's other clauses (language 6.13): `returning r`, and a name given to an
+/// argument by `with`. `scope` is what the subject names before any callback does.
+pub fn callback_binds(text: &str, scope: &Scope) -> Vec<String> {
+    let Some(rest) = text.strip_prefix("callback") else { return vec![] };
+    let Ok(toks) = lex(rest) else { return vec![] };
+    let parts = callback_parts(&toks, text);
+    callback_binders(&toks, &parts, scope).into_iter().filter_map(|i| if let Tok::Word(w) = &toks[i] { Some(w.clone()) } else { None }).collect()
+}
+
+/// A `protocol` is a regular expression over the calls of the subject: a callback, a parameter (a macro's argument is
+/// evaluated, a function's is passed), or a method of a parameter, `self.next`, with `begin` and `end` of the call.
+fn lint_protocol(toks: &[Tok], text: &str, scope: &Scope) -> Vec<String> {
+    let mut errs = vec![];
+    let mut events = 0;
+    for (i, t) in toks.iter().enumerate() {
+        match t {
+            Tok::Word(w) if i > 0 && toks[i - 1] == Tok::Punct('.') => {
+                let p = if i > 1 { if let Tok::Word(p) = &toks[i - 2] { p.as_str() } else { "" } } else { "" };
+                if let Some(Some(ms)) = scope.event_methods.get(p) {
+                    if !ms.contains(w) {
+                        errs.push(format!("`{w}` is not a method of `{p}`'s bounds (known: {}) in `{text}`", ms.iter().cloned().collect::<Vec<_>>().join(", ")));
+                    }
+                }
+                events += 1;
+            }
+            Tok::Word(w) if toks.get(i + 1) == Some(&Tok::Punct('.')) => {
+                if !scope.events.contains(w) {
+                    errs.push(format!("`{w}` is not a parameter of the subject in `{text}`"));
+                }
+            }
+            Tok::Word(w) if w == "begin" || w == "end" => {}
+            Tok::Word(w) => {
+                events += 1;
+                if !scope.events.contains(w) {
+                    errs.push(format!("`{w}` is not a callback or a parameter of the subject in `{text}`"));
+                }
+            }
+            Tok::Punct('(' | ')' | '*' | '+' | '?' | '|' | '.') => {}
+            _ => errs.push(format!("a `protocol` is calls joined by `(` `)` `*` `+` `?` `|`: `{text}`")),
+        }
+    }
+    if events == 0 {
+        errs.push(format!("a `protocol` names at least one call: `{text}`"));
+    }
+    errs.dedup();
+    errs
+}
+
 /// Everything wrong with one clause's text. `heads` are the keywords its kind may start with (none: no check).
 pub fn lint(kind: &str, text: &str, heads: &[&str], scope: &Scope) -> Vec<String> {
     let head = heads.iter().filter(|h| text == **h || text.starts_with(&format!("{h} ")) || text.starts_with(&format!("{h}:"))).max_by_key(|h| h.len());
@@ -129,7 +244,18 @@ pub fn lint(kind: &str, text: &str, heads: &[&str], scope: &Scope) -> Vec<String
         Ok(t) => t,
         Err(e) => return vec![e],
     };
+    if kind == "protocol" {
+        return lint_protocol(&toks, text, scope);
+    }
     let mut errs = vec![];
+    // a callback clause's `with` and `returning` (language 6.13)
+    let (binders, parts_errs) = if kind == "callback" {
+        let parts = callback_parts(&toks, text);
+        (callback_binders(&toks, &parts, scope), parts.errs)
+    } else {
+        (vec![], vec![])
+    };
+    errs.extend(parts_errs);
     // `fails F when p` names a declared failure; `fails panic when p` is the one the Rust host has
     let failure = if kind == "panics" { Some("panic") } else if kind == "fails" { Some(toks.first().map_or("", |t| if let Tok::Word(w) = t { w } else { "" })) } else { None };
     if let Some(f) = failure.filter(|f| !scope.failures.contains(*f)) {
@@ -167,6 +293,9 @@ pub fn lint(kind: &str, text: &str, heads: &[&str], scope: &Scope) -> Vec<String
     for (i, t) in toks.iter().enumerate() {
         match t {
             Tok::Lifetime(l) if !scope.names.contains(l) => errs.push(format!("unknown lifetime `'{l}` in `{text}`")),
+            Tok::Word(w) if binders.contains(&i) => {
+                bound.insert(w);
+            }
             Tok::Word(_) if assoc_clause && i > 0 && matches!(toks[i - 1], Tok::Punct('{' | ',')) && toks.get(i + 1) == Some(&Tok::Punct('=')) && toks.get(i + 2) != Some(&Tok::Punct('=')) => {}
             Tok::Quoted(p) if !is_host_path(p) => errs.push(format!("`'{p}'` is not a quoted host path (`'std::…'`)")),
             Tok::Word(w) => {
@@ -259,6 +388,7 @@ mod tests {
             names: ["k", "K", "V", "msg", "Self", "Less", "Greater", "Err", "Ok"].iter().map(|s| s.to_string()).collect(),
             failures: ["panic".to_string()].into(),
             payload: [("panic".to_string(), ["message".to_string(), "location".to_string()].into())].into(),
+            ..Scope::default()
         }
     }
 
@@ -324,6 +454,26 @@ mod tests {
         assert!(bad("ensure", "ensure", "ensure x : allocates == k").contains("unknown name `allocates`"));
         // a name bound by a quantifier or a pattern is known only after it
         assert!(bad("ensure", "ensure", "ensure x : e == k and (self is Err(e))").contains("unknown name `e`"));
+    }
+
+    #[test]
+    fn callbacks_bind_their_results_and_protocols_name_calls() {
+        let mut sc = scope();
+        sc.names.insert("self".into());
+        let cb = |t: &str| lint("callback", t, &["callback"], &sc).join("; ");
+        assert_eq!(cb("callback f : called exactly once when exists self, with self, returning r"), "");
+        assert_eq!(cb("callback f : called exactly once when self is Ok(x), with x, returning r"), "");
+        assert!(cb("callback f : called exactly once when r, returning r").contains("unknown name `r`"));
+        assert!(cb("callback f : called at least once, returning r").contains("one call"));
+        assert_eq!(callback_binds("callback f : called exactly once when self is Ok(x), with x, y, returning r", &sc), ["y", "r"]);
+        assert_eq!(callback_binds("callback f : called exactly once, with v, w, returning r", &sc), ["v", "w", "r"]);
+        assert_eq!(callback_binds("callback f : called at most once before return", &sc), Vec::<String>::new());
+        sc.events = ["self", "f"].map(String::from).into();
+        sc.event_methods.insert("self".into(), Some(["next".to_string()].into()));
+        let pr = |t: &str| lint("protocol", t, &["protocol"], &sc).join("; ");
+        assert_eq!(pr("protocol begin (f | self.next)* end"), "");
+        assert!(pr("protocol self.nope").contains("not a method"));
+        assert!(pr("protocol g").contains("not a callback or a parameter"));
     }
 
     #[test]

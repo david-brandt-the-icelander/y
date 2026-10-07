@@ -7,8 +7,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
 const KINDS: [&str; 10] = ["function", "type", "trait", "macro", "const", "impl", "alias", "static", "module", "use"];
-const CLAUSE_KINDS: [&str; 20] = [
-    "require", "ensure", "on failure", "fails", "fails only", "panics", "never panics", "result must be used", "effects", "law", "callback",
+const CLAUSE_KINDS: [&str; 21] = [
+    "require", "ensure", "on failure", "fails", "fails only", "panics", "never panics", "result must be used", "effects", "law", "callback", "protocol",
     "invariant", "budget", "layout", "derive", "access", "hold", "implements", "compat", "unexpressed",
 ];
 
@@ -95,6 +95,13 @@ pub fn libstats(file: &Value, sigs: Option<&SigReport>) -> String {
     }
     for (k, n) in &on {
         row(&mut out, &format!("on {k}"), *n, given.iter().map(|(_, c)| c["given"].as_array().map_or(0, Vec::len)).sum());
+    }
+    // callback clauses that name a call's condition, arguments or result (language 6.13), and protocols over calls
+    let callbacks: Vec<&(&Value, &Value)> = clauses.iter().filter(|(_, c)| c["kind"] == "callback").collect();
+    let has = |c: &Value, w: &str| c["text"].as_str().is_some_and(|t| t.contains(&format!(" {w} ")) || t.contains(&format!(", {w} ")) || t.ends_with(&format!(" {w}")));
+    let _ = writeln!(out, "\ncallback clauses ({} on {} subjects), and protocols over calls ({})", callbacks.len(), callbacks.iter().map(|(s, _)| s["name"].as_str().unwrap_or("")).collect::<BTreeSet<_>>().len(), clauses.iter().filter(|(_, c)| c["kind"] == "protocol").count());
+    for (label, word) in [("with a condition (`when`)", "when"), ("with the call's arguments (`with`)", "with"), ("with the call's result (`returning`)", "returning")] {
+        row(&mut out, label, callbacks.iter().filter(|(_, c)| has(c, word)).count(), callbacks.len());
     }
     let mut by_status: BTreeMap<String, usize> = BTreeMap::new();
     let mut by_source: BTreeMap<&str, usize> = BTreeMap::new();
@@ -236,6 +243,21 @@ mod tests {
         assert!(t.contains("no sequence value") && t.contains("2 clauses on 2 subjects"), "{t}");
         assert!(t.contains("assumed (documentation)"), "{t}");
         assert!(t.contains("conditional clauses, qualified by `given` (0 on 0 subjects)"), "{t}");
+        assert!(t.contains("callback clauses (0 on 0 subjects), and protocols over calls (0)"), "{t}");
+    }
+
+    #[test]
+    fn callback_clauses_are_counted_by_what_they_name() {
+        let f = json!({"crate": "std 1.97.0", "status": "lifted", "subjects": [
+            {"kind": "function", "name": "std::a", "clauses": [
+                {"kind": "callback", "text": "callback f : called at most once before return", "source": "s"},
+                {"kind": "callback", "text": "callback g : called exactly once when exists self, with self, returning r", "source": "s"},
+                {"kind": "callback", "text": "callback h : called exactly once when self is none, returning d", "source": "s"},
+                {"kind": "protocol", "text": "protocol self.next+", "source": "s"}]}]});
+        let t = libstats(&f, None);
+        assert!(t.contains("callback clauses (3 on 1 subjects), and protocols over calls (1)"), "{t}");
+        let line = |l: &str| t.lines().find(|x| x.contains(l)).unwrap_or("").split_whitespace().rev().nth(1).unwrap_or("").to_string();
+        assert_eq!((line("(`when`)"), line("(`with`)"), line("(`returning`)")), ("2".into(), "1".into(), "2".into()), "{t}");
     }
 
     #[test]

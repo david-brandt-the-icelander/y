@@ -11,28 +11,28 @@ crate (49 functions, 25 types, 19 traits, 11 macros, 1 const), and one more, `st
 
 | Entries | Count | | Clauses | Stated | `unexpressed` |
 | --- | ---: | --- | --- | ---: | ---: |
-| function (27 are trait methods) | 72 | | `ensure` | 65 | |
+| function (27 are trait methods) | 72 | | `ensure` | 67 | |
 | type | 27 | | `implements` | 140 | |
 | trait | 20 | | `effects` | 31 | |
 | macro | 11 | | `result must be used` | 18 | |
 | const | 1 | | `never panics` | 18 | |
-| impl | 129 | | `law` | 14 | |
+| impl | 129 | | `law` | 16 | |
 | | | | `fails panic`, `fails` | 10, 1 | |
-| | | | `hold`, `derive`, `callback` | 5, 6, 3 | |
+| | | | `hold`, `derive`, `callback`, `protocol` | 5, 6, 3, 2 | |
 | | | | `budget`, `layout`, `invariant`, `on failure` | 2, 1, 1, 1 | |
-| | | | `unexpressed` | | 121 |
+| | | | `unexpressed` | | 114 |
 
-437 clauses in all: 316 stated and 121 `unexpressed`, on 240 subjects. B1 (step 4 of `proposal/language-gaps.md` § 6)
-took `unexpressed` from 175 to 138 and added 129 impl subjects, each compiled against the real std; B2 took it from 138 to 121.
+436 clauses in all: 322 stated and 114 `unexpressed`, on 240 subjects. B1 (step 4 of `proposal/language-gaps.md` § 6)
+took `unexpressed` from 175 to 138 and added 129 impl subjects, each compiled against the real std; B2 took it from 138 to 121; B3 (callbacks) from 121 to 114.
 24 of the stated clauses are conditional, qualified by `given` (on 16 subjects): 15 on a bound's implementations, 15 on the
 default body, 2 on a build setting. Stated clauses by
-status: documentation 70, observed 205, `#[must_use]` lifted 26 (counted as lifted), hand-written 15.
+status: documentation 76, observed 205, `#[must_use]` lifted 26 (counted as lifted), hand-written 15.
 
 **Signatures**, compiled against rustc 1.97.0: 250 checked, 6 path-resolved only (`PartialEq`, `PartialOrd`, `From`, `TryFrom`,
 `Index`, `IndexMut`: a trait with generics), 4 unchecked (the bang macros `assert_eq!`, `panic!`, `vec!`, `write!`),
 0 mismatched. Of 188 type slots, 181 map to the type language (96%) and 7 are host text. Slices are no longer host text (below).
 
-## What the language lacked: the `unexpressed` promises (121)
+## What the language lacked: the `unexpressed` promises (114)
 
 Each reason in the file starts with its label. Class A took the file from 199 to 175; B1 (traits, implementations and
 associated types) from 175 to 138. Of B1's 52, 38 are closed outright and 14 stay under corrected labels; 6 of the
@@ -45,9 +45,43 @@ host-state ones stay (the vacant half of `Entry::or_insert` is all that moved).
   (`is_char_boundary`); no sequence value +1 (`collect`'s Result and String impls); no drop +1 (`vec::IntoIter`).
 - **Host state (6)**, unchanged: `Entry::or_insert` (the map after a vacant insert), `Formatter`, `TryFromIntError`,
   `Display::fmt`, `Hasher::write`, `Hash`.
-- **Others, untouched.** No const-ness 18; no sequence value 15; must-use on a type 14; what a function computes 8; no
-  value of a callback result 7; no identity of moved values 6; no order of calls 6; no drop 5; no positive effect 3; and
-  the smaller labels.
+- **Others, untouched.** No const-ness 18; must-use on a type 14; what a function computes 8; no identity of moved
+  values 6; no drop 5; no positive effect 3; and the smaller labels. B3 changed no sequence value (15 to 19), no promise
+  (5 to 6) and no promise about a result's later calls (1 to 4), and removed *no value of a callback result* (7), *no
+  order of calls* (6) and *callback clause has no condition* (2); see below.
+
+## Class B3: callbacks, their results, conditions and order
+
+B3's 15 `unexpressed` clauses (*no value of a callback result* 7, *callback clause has no condition* 2, *no order of
+calls* 6) are now 8: 7 are stated, and 8 stay under corrected labels. The new forms are language § 6.13's `callback c :
+called exactly once when p, with a, returning r`, whose `returning` and new `with` names the subject's other clauses may
+use, and `protocol`, a regular expression over the subject's callbacks, parameters and the methods of a parameter's
+bounds. `libcheck` lints every callback and protocol (`when` and `with` over the subject's names, protocol events that
+exist), and `libstats` counts callback clauses by what they name (3 callback clauses: 3 with `when`, 2 with `with`, 2
+with `returning`; 2 protocols).
+
+- **Stated (7).** `Option::map_or_else`: `callback default : called exactly once when self is none, returning d`,
+  `callback f : called exactly once when exists self, with self, returning r`, and `ensure from_callback : result == (if
+  exists self then r else d)` (option.rs:1272-1275), replacing two weaker `at most once` clauses and two `unexpressed`
+  ones. `Entry::and_modify`: `callback f : called exactly once when self is Occupied(e), with v` and `ensure in_place :
+  result is Occupied(r) implies same(current(r), v)`: `f` gets the entry's own value and the same entry is returned
+  (map.rs:2621-2628). `Ord`: `law max_agrees_with_cmp` and `law min_agrees_with_cmp`, which write out the `max_by` and
+  `min_by` the contract names, with `cmp` as `compare` (cmp.rs:1605-1611, 1712-1718; the default bodies, cmp.rs:1038 and
+  1077, are `other < self`, which `cmp` makes the same by duality). `Iterator::count`: `protocol self.next+`.
+  `assert_eq!`: `protocol left right`.
+- **Stay, relabelled (8).** *No sequence value* +4 (`map`, `filter`, `take_while` and `flat_map` yield the items of
+  `self` after the callback; `count(result)` is stated, the items are not); *no promise about a result's later calls* +3
+  (the callback of `map`, `filter` and `take_while` is called by `next` on the adapter, not by the function, so a
+  `callback` or `protocol` on the function would be false; `take_while`'s consumed item is the same); *no promise* +1
+  (`Hasher::write`: the documentation promises nothing about how the `write_*` methods relate).
+- **Unsure.** `count`'s protocol says `next` is called, and at least once, which is the documented side-effect
+  promise; "until it returns None" depends on a value the calls returned, so it is carried by `ensure counted` and not
+  by the protocol, and the clause is counted as closed. `Ord`'s laws drop the contract's sentence on `clamp` (a pointer
+  to its own docs) and "violating these is a logic error, which unsafe code must not rely on being absent", which is
+  what a law of the language means for a type that breaks it; `max_by` is written out, not called, because the language
+  has no function values. `and_modify`'s `same(current(r), v)` relies on `current` being the `OccupiedEntry::get` view
+  and on the returned entry being the one that was passed, which the body shows. `assert_eq!`'s protocol treats a
+  macro's parameter as the evaluation of its argument; the "borrowed, not moved" half is carried by the `ref` parameters.
 
 ## Class B2: `given`
 
@@ -150,7 +184,7 @@ Ten findings, each fixed in the file or in the tools; where the language cannot 
    associated type*. **Gap:** `Clone`'s "for a `Copy` type `y.clone()` equals `*y`" and `PartialEq`'s laws across two
    types need a law limited to the types that implement another trait; both are `unexpressed` (*requirement on bound
    implementations*, which fell from 8 to 6). `max_by` and `min_by` in `Ord`'s contract take `cmp` as a callback, so
-   that clause is *no value of a callback result*.
+   that clause was *no value of a callback result*; B3 states it as two laws that write out `max_by` and `min_by`.
 10. **`Chars`** carries the must-use of its type (iter.rs:28), like the other 11 iterator types.
 
 **The unstable allocator parameter** is left out of every generic list. `HashMap<K, V, S, A>`, `HashSet<T, S, A>`,
