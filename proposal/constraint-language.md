@@ -923,7 +923,7 @@ macro rust 'std::assert_eq!'(left: ref<T>, right: ref<U>)
   names that argument for the clauses that follow (`with v` above is the `&mut V` that `f` receives). `returning r`
   binds one name and ends the clause. `with` and `returning` need `exactly once` or `at most once`, because they name
   the values of one call. `r` and `v` exist only where the callback is called, so a clause that uses them says where
-  (`if exists self then r else d`, `result is Occupied(r) implies …`).
+  (`if exists self then r else d`, `result is Occupied(r) implies …`). `current(h)` is the value the handle `h` (an entry) stands for, read at the point of the clause.
 - **`protocol` over calls.** An event is a callback or a parameter of the subject (for a macro, a parameter is the
   evaluation of its argument, and for a function it is the passing of it), or `p.m`, the method `m` of the bounds of
   parameter `p` (`self.next` when `Self: Iterator`). `*`, `+`, `?`, `|` and brackets are as in § 6.5, and calls the
@@ -946,12 +946,11 @@ macro rust 'std::assert_eq!'(left: ref<T>, right: ref<U>)
   documentation and source.
 
 What stays outside: what a callback does to a value that lives on in a result (`Iterator::map` returns an adapter whose
-`next` calls `f`: that call belongs to another subject, so nothing about it can be said of `map` itself, and what the
-result yields is a sequence (§ 6.15), but of a closure, which is not a named function, `yields(result)` cannot be
-written), a protocol whose next step depends on a value the calls
+`next` calls `f`: that call belongs to another subject, so nothing about it can be said of `map` itself; what the result
+yields is a sequence (§ 6.15), but for a closure, which is not a named function, `yields(result)` cannot be written), a protocol whose next step depends on a value the calls
 returned (`next` is called until it returns none), and an order among calls of different arguments of several subjects.
 
-### 6.14 Eight small additions
+### 6.14 Nine small additions
 
 Each is a clause or an expression that extends a section already written, and is small enough to state on its own
 (language-gaps § 4.4). They are collected here because they share a form: one sentence of meaning, one line of syntax,
@@ -1034,8 +1033,8 @@ to a result or to a holder is a survival. For a reference parameter the entity i
 ```text
 function rust 'std::mem::swap'(x: ref<T>, y: ref<T>)
     lifetime x, y survive call
-function rust 'std::collections::hash_map::Entry::or_insert'(self: Entry<'a, K, V>, default: V) -> ref<V>
-    lifetime default ends in call when self is Occupied(e)
+function rust 'std::mem::drop'(v: T)
+    lifetime v ends in call              -- "disposes of a value"; with `when p` only where p holds
 ```
 
 - **Fails:** a drop that happens where `survive` says none, or does not happen where `ends` says it does, is a bug in
@@ -1142,7 +1141,8 @@ name, so `mutates only p[e]` has no collection to be about there.
 **Meaning.** A `list<T>` has an order: its elements stand at positions 0, 1, 2 and so on, and two lists are equal when
 they have the same elements at the same positions. A list may be finite, or infinite: the sequence a counter yields has
 no last element. `size`, `reverse` and `in` need the end; everything else below is defined for both. The operators are
-pure, total and deterministic, and each is defined here by its elements, so that every host compiles it identically
+pure and deterministic, total on every list for which they have a value (`size` and `reverse` have none for an infinite
+one, below), and each is defined here by its elements, so that every host compiles it identically
 (principle 2). Writing `xs[k]` for the element at position `k`:
 
 | Operator | Value | Defined by |

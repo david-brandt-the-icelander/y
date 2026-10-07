@@ -23,13 +23,15 @@ a few more.
     refinement or a named function, or the gap is in the library file's format, the host profile or the tool. **Done**
     (§ 3): 24 closed, 8 turned out to be what a function computes and stay out, and 6 need a host function that does
     not exist. `unexpressed` fell from 199 to 175, and slices and arrays no longer reach the bare file as host text.
-  - **B, an extension (158).** It needs a change to the language, in five groups.
+  - **B, an extension (158).** It needs a change to the language, in five groups. **Done** (§ 4): all five steps are
+    written, and the library file is rewritten under each. `unexpressed` fell from 175 to 138 (B1), 121 (B2), 114 (B3),
+    77 (B4) and 65 (B5): 110 of the 158 closed, and the other 48 stay under corrected labels (§ 6).
   - **C, kept out (3).** The language rules it out on purpose.
 - **Extend in five steps, largest first**, unless stage 3 says otherwise:
   1. Traits, implementations and associated types (52).
   2. Promises that hold unless an implementation does otherwise (30).
   3. Callbacks: their results, conditions and order (15).
-  4. Eight small additions (47).
+  4. Nine small additions (47).
   5. Sequences (14).
 
   Each step is one kind or a few related kinds, as language principle 8 requires: a paragraph of meaning, a consumer, a
@@ -39,9 +41,11 @@ a few more.
   extensions are worth building only where something checks or uses them. Then the order is set by which promises a
   checker or the compiler can use, not by count. If agents do worse, the order above stands.
 - **Each step is measured.** It is done when the library file is rewritten under the extension, `unexpressed` falls by
-  the expected count, and `libcheck` and the review pass.
-- **It is cheap to build; the cost is people's review.** Class A cost about $3. The agent work for the five steps left
-  is estimated at $40 to $80.
+  the expected count, and `libcheck` and the review pass. Measured: B1 closed 37 of an expected 52, B2 17 of 30, B3 7 of
+  15, B4 37 of 47 and B5 12 of 14; the rest were found,
+  on writing the entries, to be absent promises, closures, or unstable, and were relabelled.
+- **It is cheap to build; the cost is people's review.** Class A cost about $3. The agent work for the five steps was
+  estimated at $40 to $80.
   Every step is a language change that the language's owners must accept (§ 7).
 
 ---
@@ -279,7 +283,7 @@ nothing about its order (*no promise*). Still open: `count`'s protocol says `nex
 that the run ends at the first none, which depends on a value the calls returned; a callback on a result's `next`
 would need a field of the result to be a callback of its own subject. No compile check of the clauses against `std`.
 
-### 4.4 Eight small additions (47)
+### 4.4 Nine small additions (47)
 
 Each is a clause or an expression, small enough to add on its own:
 
@@ -323,8 +327,8 @@ as host text. `libstats` counts the nine forms. Old files stay valid. Rewrite: `
   `Option::map_or_else`, `slice::iter` are `rustc_const_unstable`: no release is bound to keep them const). *No identity
   of cloned values* 2 (`Clone::clone` and `vec![elem; n]`: `moved from` says a value moved, not what a clone shares) and *no
   identity of a stored key* 1 (`HashMap::insert` keeps the old key: `self[k]` looks up a value, and no expression names the
-  key the map holds). `Entry::or_insert`: the drop of `default` in the occupied arm is stated (`lifetime default ends in
-  call when self is Occupied(e)`), and the rest is *no effects of a destructor* (V's `Drop` is arbitrary code, so no
+  key the map holds). `Entry::or_insert`: the drop of `default` in the occupied arm is from the body and not documented, so
+  no `lifetime … ends` is stated; it stays under *no effects of a destructor* (V's `Drop` is arbitrary code, so no
   `never panics`), and the frame condition is *no host state*: the map the entry borrows is not a name, so `mutates only
   self[key]` has no collection to be about. `vec![expr; 0]` is *no arm of a macro in a clause* (`elem` and `n` are names of
   one arm of the host profile, not of the subject). `vec::IntoIter`'s drop of the elements not yielded is *no sequence
@@ -397,21 +401,26 @@ kinds are unchanged (the clauses are `ensure`). Old files stay valid. Rewrite: `
 
 ## 6. Order, and how each step lands
 
-| Step | Closes | Unexpressed after | First consumer | Wait for |
-| --- | --- | --- | --- | --- |
-| A, format and profile (done) | 24 | 175 | Agents, through better library files | — |
-| B1, traits and implementations | 52 | about 123 | `weave`, which carries `impl Trait`, `dyn Trait` and lifetime arguments only as Rust text | Nothing |
-| B4, the first two (`const`, must-use) | 32 | about 91 | `weave` (`const fn`); the compiler and lints | Nothing |
-| B2, `given` | 30 | about 61 | Discharge of generated checks | Trial stage 4 or later |
-| B4, the rest | 15 | about 46 | The memory clauses of language § 7 and § 8 | — |
-| B3, callbacks | 15 | about 31 | Agents writing iterator and option code | E5 |
-| B5, sequences | 14 | about 17 | Agents writing iterator code | E4 and E5 |
+| Step | Closes (expected) | Closed | Unexpressed after | First consumer | Wait for |
+| --- | --- | --- | --- | --- | --- |
+| A, format and profile (done) | 24 | 24 | 175 | Agents, through better library files | — |
+| B1, traits and implementations (done) | 52 | 37 | 138 | `weave`, which carries `impl Trait`, `dyn Trait` and lifetime arguments only as Rust text | Nothing |
+| B2, `given` (done) | 30 | 17 | 121 | Discharge of generated checks | Trial stage 4 or later |
+| B3, callbacks (done) | 15 | 7 | 114 | Agents writing iterator and option code | E5 |
+| B4, nine small additions (done) | 47 | 37 | 77 | `weave` (`const fn`, `#[must_use]`); the compiler and lints; the memory clauses of language § 7 and § 8 | — |
+| B5, sequences (done) | 14 | 12 | 65 | Agents writing iterator code | E4 and E5 |
 
-The 17 left are 11 of class C (3 positive effects, 8 computed texts) and the 6 host-state promises, unless B1's views
-cover them.
+The 65 left are, by what the language lacks (`bare-rust libstats`): what a function computes 8, no host state 7, no
+promise 6, no callback as a function 4, no promise about a result's later calls 4, no stable const-ness 4, no condition
+on an associated type's implementation 3, no elided lifetime in a trait argument 3, no positive effect 3, no trait items 3,
+no frame condition on a value held by a collection 2, no identity of cloned values 2, no negative impl 2, and 14 more with
+one clause each (no arm of a macro in a clause, no deref coercion, no effects of a destructor, no from_iter subject, no
+identity of a stored key, no law across several types' impls, no law limited to a second trait, no lifetime for the
+elements of a sequence, no mutable reference as an impl's self type, no promise of disorder, no successor of a type
+parameter, no unsized text as an associated type, no unstable or negative bound, no view of two arguments). None is planned to be closed by a further extension in this document.
 
-The counts are estimates: an extension may close fewer promises than its labels suggest, and a rewrite may find new
-ones. Each step lands in the same way:
+The expected counts were estimates, and every step closed fewer than its labels suggested: the rewrite found promises
+that std does not make, closures that no clause can name, and const items that are unstable. Each step lands in the same way:
 
 1. **The paragraph.** A section of the language, in the form of language § 6: meaning, syntax, how it fails, how it is
    checked, how it is harvested. The grammar of language § 15 is extended.
@@ -446,10 +455,10 @@ That review is the real cost, and it is not counted here. The agent work uses th
 | B3 | 1 and 1 | about 15 | $4 to $8 |
 | B4 | 2 and 1 | about 45 | $8 to $15 |
 | B5 | 2 and 1 | about 15 | $8 to $15 |
-| **B1 to B5, left** | | **about 155** | **$40 to $80** |
+| **B1 to B5 (done)** | | **about 155 estimated** | **$40 to $80 estimated** |
 
 Each range assumes short agents, as stage 1 ran; stage 2's single long agent cost twice the unit (trial § 14.1). At the
-Max 5x proxy of trial § 14.3, what is left is about 8 to 15% of a week.
+Max 5x proxy of trial § 14.3, the five steps were estimated at about 8 to 15% of a week.
 
 ---
 

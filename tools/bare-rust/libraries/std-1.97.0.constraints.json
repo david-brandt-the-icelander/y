@@ -1323,14 +1323,6 @@
           "reason": "no host state: no slot or expression names state a host object holds beyond its value: a capacity, a hasher's or formatter's state, an entry's hidden map. Here: the entry holds the map it came from, which is not a parameter, so nothing names the map after the call"
         },
         {
-          "kind": "hold",
-          "text": "lifetime default ends in call when self is Occupied(e)",
-          "source": "1.97.0 std/src/collections/hash/map.rs:2517-2520, body: match self { Occupied(entry) => entry.into_mut(), Vacant(entry) => entry.insert(default), }; hashbrown 0.17.1 src/rustc_entry.rs:574-578, body: self.table.insert_no_grow(self.hash, (self.key, value))",
-          "status": {
-            "observed": "from the body: the Occupied arm returns the entry's own value and moves default nowhere, so default is dropped when the call ends; the Vacant arm moves it into the map"
-          }
-        },
-        {
           "kind": "unexpressed",
           "text": "Inserting into a vacant entry adds the pair without growing the table (the room was reserved when entry made the vacant entry), so it cannot fail for want of room. The default of an occupied entry is dropped by V's destructor, which may run arbitrary code, so the call is not stated to never panic.",
           "source": "1.97.0 std/src/collections/hash/map.rs:2517-2520, body: match self { Occupied(entry) => entry.into_mut(), Vacant(entry) => entry.insert(default), }; hashbrown 0.17.1 src/rustc_entry.rs:574-578, body: self.table.insert_no_grow(self.hash, (self.key, value))",
