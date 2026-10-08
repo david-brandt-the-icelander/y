@@ -156,6 +156,18 @@ fn where_text(sub: &Value) -> String {
     }
 }
 
+/// A well-formed `#[must_use]` or `#[must_use = "…"]`, whitespace collapsed.
+pub fn is_must_use_attr(t: &str) -> bool {
+    t == "#[must_use]" || (t.starts_with("#[must_use = \"") && t.ends_with("\"]") && t.len() >= "#[must_use = \"\"]".len())
+}
+
+/// The attribute a `result must be used` clause of kind `text` stands for: the one its `source` cites, or the plain one.
+fn must_use_text(sub: &Value, text: &str) -> Option<String> {
+    let c = sub["clauses"].as_array()?.iter().find(|c| c["kind"] == "result must be used" && c["text"] == text)?;
+    let cited = c["source"].as_str().and_then(|s| s.strip_prefix("attribute ")).filter(|a| is_must_use_attr(a));
+    Some(format!("{} ", cited.unwrap_or("#[must_use]")))
+}
+
 fn vis_text(sub: &Value) -> R<String> {
     Ok(match sub["visible"].as_str() {
         None => String::new(),
@@ -314,6 +326,10 @@ impl<'a> Weaver<'a> {
         let name = n.child_by_field_name("name").unwrap();
         let sname = self.namer.unique(format!("{}::{}", sc.path, text(name, self.src)));
         let sub = self.find(&sname)?;
+        self.at(&sname, "clauses");
+        if let Some(a) = must_use_text(sub, "must be used") {
+            self.ins(n.start_byte(), a);
+        }
         self.at(&sname, "visible");
         self.ins(n.start_byte(), vis_text(sub)?);
         self.at(&sname, "generics");
@@ -336,6 +352,10 @@ impl<'a> Weaver<'a> {
         let name = n.child_by_field_name("name").unwrap();
         let sname = self.namer.unique(format!("{}::{}", sc.path, text(name, src)));
         let sub = self.find(&sname)?;
+        self.at(&sname, "clauses");
+        if let Some(a) = must_use_text(sub, "must be used") {
+            self.ins(n.start_byte(), a);
+        }
         self.at(&sname, "visible");
         self.ins(n.start_byte(), vis_text(sub)?);
         self.at(&sname, "generics");
@@ -401,6 +421,10 @@ impl<'a> Weaver<'a> {
         let name = n.child_by_field_name("name").unwrap();
         let sname = self.namer.unique(format!("{}::{}", sc.path, text(name, self.src)));
         let sub = self.find(&sname)?;
+        self.at(&sname, "clauses");
+        if let Some(a) = must_use_text(sub, "must be used") {
+            self.ins(n.start_byte(), a);
+        }
         self.at(&sname, "visible");
         self.ins(n.start_byte(), vis_text(sub)?);
         let mut t = generics_text(sub);
@@ -455,14 +479,25 @@ impl<'a> Weaver<'a> {
         // a clause that stands for host text: `#[must_use]` before the item, `const` after its visibility (language 6.14)
         let says = |kind: &str, t: &str| sub["clauses"].as_array().into_iter().flatten().any(|c| c["kind"] == kind && c["text"] == t);
         self.at(&sname, "clauses");
-        if says("result must be used", "result must be used") {
-            self.ins(f.start_byte(), "#[must_use] ".into());
+        if let Some(a) = must_use_text(sub, "result must be used") {
+            self.ins(f.start_byte(), a);
         }
         self.at(&sname, "visible");
         self.ins(f.start_byte(), vis_text(sub)?);
         self.at(&sname, "clauses");
         if says("effects", "evaluable at compile time") {
             self.ins(f.start_byte(), "const ".into());
+        }
+        if sub["clauses"].as_array().into_iter().flatten().any(|c| c["kind"] == "obliges") {
+            // `unsafe` follows `async` and comes before `extern`
+            let mods = all_children(f).into_iter().find(|c| c.kind() == "function_modifiers");
+            match mods {
+                Some(m) => match all_children(m).into_iter().find(|c| c.kind() == "extern_modifier") {
+                    Some(e) => self.ins(e.start_byte(), "unsafe ".into()),
+                    None => self.ins(m.end_byte(), " unsafe".into()),
+                },
+                None => self.ins(f.start_byte(), "unsafe ".into()),
+            }
         }
         self.at(&sname, "generics");
         self.ins(name_n.end_byte(), generics_text(sub));

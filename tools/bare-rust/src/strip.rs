@@ -695,6 +695,42 @@ impl<'a> Stripper<'a> {
         Ok(out)
     }
 
+    /// A `#[must_use]` or `#[must_use = "…"]` right before an item is a clause (language 6.14.2): the attribute is cut, and
+    /// the clause's `source` keeps its text, message included, so that `weave` can write it back.
+    fn must_use_clause(&mut self, n: Node, kind_text: &str) -> Option<Value> {
+        let a = n.prev_sibling().filter(|a| a.kind() == "attribute_item")?;
+        let t = collapse(text(a, self.src));
+        if !crate::weave::is_must_use_attr(&t) {
+            return None;
+        }
+        self.cuts.push((a.start_byte(), n.start_byte(), String::new()));
+        Some(json!({"kind": "result must be used", "text": kind_text, "source": format!("attribute {t}")}))
+    }
+
+    /// The `# Safety` section of the doc comment above an item, on one line; none where there is no such section.
+    fn safety_doc(&self, n: Node) -> Option<String> {
+        let mut lines: Vec<String> = vec![];
+        let mut at = n.prev_sibling();
+        while let Some(p) = at {
+            match p.kind() {
+                "line_comment" => {
+                    let t = text(p, self.src);
+                    if let Some(d) = t.strip_prefix("///").filter(|d| !d.starts_with('/')) {
+                        lines.push(d.trim().to_string());
+                    }
+                }
+                "attribute_item" | "block_comment" => {}
+                _ => break,
+            }
+            at = p.prev_sibling();
+        }
+        lines.reverse();
+        let start = lines.iter().position(|l| l.starts_with('#') && l.trim_start_matches('#').trim() == "Safety")?;
+        let body: Vec<&str> = lines[start + 1..].iter().take_while(|l| !l.starts_with('#')).map(String::as_str).filter(|l| !l.is_empty()).collect();
+        let t = body.join(" ").replace('"', "'");
+        (!t.is_empty()).then_some(t)
+    }
+
     fn strukt(&mut self, n: Node, sc: &Scope) -> R<()> {
         let name = n.child_by_field_name("name").unwrap();
         let sname = self.namer.unique(format!("{}::{}", sc.path, text(name, self.src)));
@@ -706,6 +742,9 @@ impl<'a> Stripper<'a> {
         let (gens, extra, names) = self.generics(n, name.end_byte(), true, &none)?;
         Self::put_generics(&mut sub, gens, extra);
         Self::put_hold_for(&mut sub);
+        if let Some(c) = self.must_use_clause(n, "must be used") {
+            sub.insert("clauses".into(), json!([c]));
+        }
         if let Some(body) = n.child_by_field_name("body") {
             let mut g = sc.generics.clone();
             g.extend(names);
@@ -728,6 +767,9 @@ impl<'a> Stripper<'a> {
         let (gens, extra, names) = self.generics(n, name.end_byte(), true, &none)?;
         Self::put_generics(&mut sub, gens, extra);
         Self::put_hold_for(&mut sub);
+        if let Some(c) = self.must_use_clause(n, "must be used") {
+            sub.insert("clauses".into(), json!([c]));
+        }
         let mut g = sc.generics.clone();
         g.extend(names);
         let mut variants = vec![];
@@ -800,6 +842,9 @@ impl<'a> Stripper<'a> {
         sub.insert("kind".into(), json!("trait"));
         sub.insert("name".into(), json!(sname));
         self.vis(n, &mut sub)?;
+        if let Some(c) = self.must_use_clause(n, "must be used") {
+            sub.insert("clauses".into(), json!([c]));
+        }
         let none = HashSet::new();
         let (gens, extra, names) = self.generics(n, name.end_byte(), true, &none)?;
         Self::put_generics(&mut sub, gens, extra);
@@ -923,9 +968,20 @@ impl<'a> Stripper<'a> {
                 clauses.push(json!({"kind": "effects", "text": "evaluable at compile time", "source": "const fn"}));
             }
         }
-        if let Some(a) = f.prev_sibling().filter(|a| a.kind() == "attribute_item" && collapse(text(*a, src)) == "#[must_use]") {
-            self.cuts.push((a.start_byte(), f.start_byte(), String::new()));
-            clauses.push(json!({"kind": "result must be used", "text": "result must be used", "source": "attribute #[must_use]"}));
+        if let Some(c) = self.must_use_clause(f, "result must be used") {
+            clauses.push(c);
+        }
+        // `unsafe fn` with a `# Safety` section is `obliges caller` (language 6.14.9); without one `unsafe` stays host text
+        if let (Some(mods), Some(why)) = (all_children(f).into_iter().find(|c| c.kind() == "function_modifiers"), self.safety_doc(f)) {
+            if let Some(kw) = all_children(mods).into_iter().find(|c| c.kind() == "unsafe") {
+                let next = kw.next_sibling().or_else(|| mods.next_sibling()).ok_or("parse-error: unsafe without fn")?;
+                self.cuts.push((kw.start_byte(), next.start_byte(), String::new()));
+                clauses.push(json!({
+                    "kind": "obliges",
+                    "text": format!("obliges caller : true because \"{why}\""),
+                    "source": "doc # Safety",
+                }));
+            }
         }
         let (gens, extra, names) = self.generics(f, name_n.end_byte(), true, &life.elide)?;
         Self::put_generics(&mut sub, gens, extra);

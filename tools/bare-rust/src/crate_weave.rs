@@ -193,7 +193,7 @@ impl CrateWeave {
 fn skip(rel: &Path, woven: &BTreeSet<PathBuf>) -> bool {
     let first = rel.components().next().and_then(|c| c.as_os_str().to_str()).unwrap_or("");
     let name = rel.file_name().and_then(|n| n.to_str()).unwrap_or("");
-    matches!(first, "target" | ".git" | "node_modules")
+    (first.starts_with("target") || matches!(first, ".git" | "node_modules"))
         || rel.starts_with("corpora/src") // linked in, not copied: see `link_corpora`
         || name == MARKER
         || (rel.parent().is_none_or(|p| p.as_os_str().is_empty()) && name == "refusals.json")

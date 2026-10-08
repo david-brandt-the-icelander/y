@@ -519,14 +519,102 @@ pub const fn g(a: u32) -> u32 {
 "#;
     let (b, j) = roundtrip(src);
     assert!(!b.contains("const fn") && !b.contains("const unsafe") && b.contains("unsafe fn raw"), "{b}");
-    assert!(b.contains("#[inline]") && b.contains("#[must_use = \"the message has no slot\"]") && !b.contains("#[must_use]"), "{b}");
+    assert!(b.contains("#[inline]") && !b.contains("must_use"), "{b}");
     let says = |n: &str| -> Vec<String> { subject(&j, n)["clauses"].as_array().map_or(vec![], |c| c.iter().map(|c| c["text"].as_str().unwrap().to_string()).collect()) };
     assert_eq!(says("demo::C::len"), ["evaluable at compile time", "result must be used"]);
     assert_eq!(says("demo::C::raw"), ["evaluable at compile time"]);
     assert_eq!(says("demo::plain"), ["result must be used"]);
     assert_eq!(says("demo::g"), ["evaluable at compile time"]);
-    assert!(says("demo::kept").is_empty(), "a message has no slot, so the attribute stays host text");
+    assert_eq!(says("demo::kept"), ["result must be used"]);
+    let kept = subject(&j, "demo::kept")["clauses"][0]["source"].as_str().unwrap().to_string();
+    assert_eq!(kept, "attribute #[must_use = \"the message has no slot\"]", "the message stays in `source`");
     // weave writes them back in place: the attribute before the visibility, `const` after it
     let w = weave(&b, &j).unwrap();
+    assert!(w.contains("#[must_use = \"the message has no slot\"] pub fn kept"), "{w}");
     assert!(w.contains("#[must_use] pub(crate) fn plain") && w.contains("pub const fn g") && w.contains("pub const unsafe fn raw"), "{w}");
+}
+
+#[test]
+fn must_use_on_types_and_traits_round_trips_with_its_message() {
+    let src = r#"
+#[must_use]
+pub struct Plain {
+    v: u8,
+}
+#[must_use = "iterators are lazy"]
+pub struct Lazy<'a> {
+    v: &'a u8,
+}
+#[derive(Debug)]
+#[must_use = "an enum"]
+pub enum E {
+    A,
+    B(u8),
+}
+#[must_use = "traits too"]
+pub trait T {
+    fn f(&self) -> u8;
+}
+pub struct Not {
+    v: u8,
+}
+"#;
+    let (b, j) = roundtrip(src);
+    assert!(!b.contains("must_use"), "{b}");
+    let clause = |n: &str| subject(&j, n)["clauses"].as_array().map(|c| (c[0]["kind"].as_str().unwrap().to_string(), c[0]["text"].as_str().unwrap().to_string(), c[0]["source"].as_str().unwrap().to_string()));
+    assert_eq!(clause("demo::Plain").unwrap(), ("result must be used".into(), "must be used".into(), "attribute #[must_use]".into()));
+    assert_eq!(clause("demo::Lazy").unwrap().2, "attribute #[must_use = \"iterators are lazy\"]");
+    assert_eq!(clause("demo::E").unwrap().2, "attribute #[must_use = \"an enum\"]");
+    assert_eq!(clause("demo::T").unwrap().2, "attribute #[must_use = \"traits too\"]");
+    assert!(clause("demo::Not").is_none());
+    let w = weave(&b, &j).unwrap();
+    assert!(w.contains("#[must_use = \"iterators are lazy\"]") && w.contains("#[must_use = \"traits too\"]"), "{w}");
+}
+
+#[test]
+fn unsafe_fn_with_a_safety_section_is_an_obligation() {
+    let src = r#"
+pub struct S {
+    v: Vec<u8>,
+}
+impl S {
+    /// Reads an element without a check.
+    ///
+    /// # Safety
+    ///
+    /// The index must be
+    /// less than the length.
+    ///
+    /// # Examples
+    ///
+    /// none
+    pub const unsafe fn get_unchecked(&self, i: usize) -> u8 {
+        0
+    }
+    /// No safety section here.
+    pub unsafe fn bare(&self) -> u8 {
+        0
+    }
+}
+/// # Safety
+/// The pointer is valid.
+pub async unsafe fn a(p: u8) -> u8 {
+    p
+}
+/// # Safety
+/// Call it on Tuesdays.
+pub unsafe extern "C" fn c(p: u8) -> u8 {
+    p
+}
+"#;
+    let (b, j) = roundtrip(src);
+    assert!(b.contains("unsafe fn bare") && !b.contains("unsafe fn get_unchecked") && !b.contains("unsafe fn a") && !b.contains("unsafe extern"), "{b}");
+    let ob = |n: &str| subject(&j, n)["clauses"].as_array().into_iter().flatten().find(|c| c["kind"] == "obliges").map(|c| c["text"].as_str().unwrap().to_string());
+    assert_eq!(ob("demo::S::get_unchecked").unwrap(), "obliges caller : true because \"The index must be less than the length.\"");
+    assert!(ob("demo::S::bare").is_none());
+    assert_eq!(ob("demo::a").unwrap(), "obliges caller : true because \"The pointer is valid.\"");
+    let w = weave(&b, &j).unwrap();
+    assert!(w.contains("pub const unsafe fn get_unchecked") && w.contains("pub async unsafe fn a") && w.contains("pub unsafe extern \"C\" fn c"), "{w}");
+    let l = bare_rust::clause::lint("obliges", &ob("demo::a").unwrap(), &["obliges caller"], &bare_rust::clause::Scope::default());
+    assert!(l.is_empty(), "{l:?}");
 }

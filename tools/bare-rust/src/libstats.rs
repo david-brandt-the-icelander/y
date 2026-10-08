@@ -7,8 +7,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
 const KINDS: [&str; 10] = ["function", "type", "trait", "macro", "const", "impl", "alias", "static", "module", "use"];
-const CLAUSE_KINDS: [&str; 22] = [
-    "require", "ensure", "on failure", "fails", "fails only", "panics", "never panics", "result must be used", "effects", "law", "callback", "protocol",
+const CLAUSE_KINDS: [&str; 23] = [
+    "require", "let", "ensure", "on failure", "fails", "fails only", "panics", "never panics", "result must be used", "effects", "law", "callback", "protocol",
     "obliges", "invariant", "budget", "layout", "derive", "access", "hold", "implements", "compat", "unexpressed",
 ];
 
@@ -144,7 +144,7 @@ pub fn libstats(file: &Value, sigs: Option<&SigReport>) -> String {
             }
         })
     };
-    let seq: [(&str, usize); 8] = [
+    let seq: [(&str, usize); 9] = [
         ("`yields(e)` (6.15)", texts.iter().filter(|(_, t)| has(t, "yields")).count()),
         ("indexing `xs[i]`", texts.iter().filter(|(_, t)| bracket(t, false)).count()),
         ("slices `xs[i..j]`", texts.iter().filter(|(_, t)| bracket(t, true)).count()),
@@ -153,10 +153,26 @@ pub fn libstats(file: &Value, sigs: Option<&SigReport>) -> String {
         ("`zip`, `enumerate`", texts.iter().filter(|(_, t)| has(t, "zip") || has(t, "enumerate")).count()),
         ("`map`, `filter` by a named function", texts.iter().filter(|(_, t)| has(t, "map") || has(t, "filter")).count()),
         ("`scalars`, `deref`", texts.iter().filter(|(_, t)| words(t, "scalars") || words(t, "deref")).count()),
+        ("`present`, `select`, `while_true`, `flatten`", texts.iter().filter(|(_, t)| ["present", "select", "while_true", "flatten"].iter().any(|w| has(t, w))).count()),
     ];
-    let seq_total = texts.iter().filter(|(_, t)| has(t, "yields") || t.contains("++") || bracket(t, true) || bracket(t, false) || ["reverse", "take", "skip", "zip", "enumerate", "map", "filter"].iter().any(|w| has(t, w)) || words(t, "scalars") || words(t, "deref")).count();
+    let seq_total = texts.iter().filter(|(_, t)| has(t, "yields") || t.contains("++") || bracket(t, true) || bracket(t, false) || ["reverse", "take", "skip", "zip", "enumerate", "map", "filter"].iter().any(|w| has(t, w)) || words(t, "scalars") || words(t, "deref") || ["present", "select", "while_true", "flatten"].iter().any(|w| has(t, w))).count();
     let _ = writeln!(out, "\nsequences of language 6.15 ({seq_total} clauses)");
     for (label, n) in seq {
+        row(&mut out, label, n, total);
+    }
+    // what a result's later calls, a handle and a sequence's elements take (language 4, 6.13, 7.3), counted by form
+    let before_when = |t: &str| t.split(" when ").next().unwrap_or("").to_string();
+    let later: [(&str, usize); 7] = [
+        ("`callback … called by P.m`, a log of later calls (6.13)", texts.iter().filter(|(k, t)| *k == "callback" && words(t, "called") && words(t, "by")).count()),
+        ("`fails F in P.m`, a failure of a later call (6.13)", texts.iter().filter(|(k, t)| (*k == "panics" || *k == "fails") && words(&before_when(t), "in")).count()),
+        ("`final(e)`, the state at the end of a run (6.13)", texts.iter().filter(|(_, t)| has(t, "final")).count()),
+        ("`current`, `owner`, `stored_key`, a handle's place (4)", texts.iter().filter(|(_, t)| ["current", "owner", "stored_key"].iter().any(|w| has(t, w))).count()),
+        ("`lifetime every item of`, a sequence's elements (7.3)", texts.iter().filter(|(k, t)| *k == "hold" && t.starts_with("lifetime every item of")).count()),
+        ("`let`, a name or a pattern `(a, b)` (4)", texts.iter().filter(|(k, _)| *k == "let").count()),
+        ("`present(xs, i)`, a position that exists (6.15)", texts.iter().filter(|(_, t)| has(t, "present")).count()),
+    ];
+    let _ = writeln!(out, "\nlater calls, handles and bindings ({} clauses)", later.iter().map(|(_, n)| n).sum::<usize>());
+    for (label, n) in later {
         row(&mut out, label, n, total);
     }
     let mut by_status: BTreeMap<String, usize> = BTreeMap::new();
@@ -314,6 +330,29 @@ mod tests {
         assert!(t.contains("callback clauses (3 on 1 subjects), and protocols over calls (1)"), "{t}");
         let line = |l: &str| t.lines().find(|x| x.contains(l)).unwrap_or("").split_whitespace().rev().nth(1).unwrap_or("").to_string();
         assert_eq!((line("(`when`)"), line("(`with`)"), line("(`returning`)")), ("2".into(), "1".into(), "2".into()), "{t}");
+    }
+
+    #[test]
+    fn later_calls_handles_and_bindings_are_counted_by_form() {
+        let c = |k: &str, t: &str| json!({"kind": k, "text": t, "source": "s"});
+        let f = json!({"crate": "std 1.97.0", "status": "lifted", "subjects": [
+            {"kind": "function", "name": "std::a", "clauses": [
+                c("callback", "callback f : called by result.next, at most once per call, with x, returning y"),
+                c("callback", "callback g : called exactly once, returning r"),
+                c("panics", "fails panic in result.next when n > 3"),
+                c("panics", "fails panic when n > 3 and old(count(self)) in x"),
+                c("ensure", "ensure a : final(yields(self)) == skip(size(y), old(yields(self)))"),
+                c("ensure", "ensure b : same(current(e), v) and present(xs, 0) and yields(result) == flatten(map(yields, y))"),
+                c("access", "mutates only owner(self)[key(self)]"),
+                c("hold", "lifetime every item of yields(self) ends with self"),
+                c("let", "let (a, b) = result")]}]});
+        let t = libstats(&f, None);
+        let n = |l: &str| t.lines().find(|x| x.contains(l)).unwrap_or("").split_whitespace().rev().nth(1).unwrap_or("").to_string();
+        assert!(t.contains("later calls, handles and bindings (8 clauses)"), "{t}");
+        let got: Vec<String> = ["called by P.m", "fails F in P.m", "final(e)", "`current`, `owner`", "every item of", "`let`, a name", "present(xs, i)"].iter().map(|l| n(l)).collect();
+        assert_eq!(got, ["1", "1", "1", "2", "1", "1", "1"], "{t}");
+        assert!(t.lines().any(|l| l.trim_start().starts_with("let ") && l.contains('1')), "{t}");
+        assert!(t.contains("`present`, `select`, `while_true`, `flatten`"), "{t}");
     }
 
     #[test]

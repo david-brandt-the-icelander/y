@@ -3,7 +3,9 @@
 //! path is quoted (language 15's `STABLE`) and looks like one; a failure named by `fails` is declared in the file; and
 //! every other name is a parameter, `result`, `self`, a generic, a variant of a subject of the file, a name the clause
 //! binds (`all x`, `is V(x)`), or a word of the expression language.
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
 
 /// What a clause may name besides the words of the language: the subject's own names and the file's.
 #[derive(Default, Clone)]
@@ -21,13 +23,26 @@ pub struct Scope {
     /// The named pure functions `map` and `filter` may take (language 6.15): the file's views. The language's own
     /// (`PURE_BUILTINS`) are always allowed.
     pub pure: BTreeSet<String>,
+    /// What clauses of one subject tell the clauses after them (language 4 "Narrowing follows order"): shared by every
+    /// clone of the scope, so the callback clauses, which are linted with a copy, still tell the others.
+    pub flow: Rc<RefCell<Flow>>,
 }
 
-/// The pure functions the language itself names (language 6.15): `scalars(text)` and `deref(ref)`.
-pub const PURE_BUILTINS: &[&str] = &["scalars", "deref"];
+/// What an earlier clause of a subject has established for the later ones.
+#[derive(Default, Debug)]
+pub struct Flow {
+    /// The names `let` has bound (language 4: a name is bound once).
+    pub lets: BTreeSet<String>,
+    /// A clause has spoken of a result's later calls (`called by`, `fails … in`), so `final(e)` has a run to read (language 6.13).
+    pub run: bool,
+}
+
+/// The pure functions the language itself names (language 6.15): `scalars(text)`, `deref(ref)` and `yields(it)`.
+pub const PURE_BUILTINS: &[&str] = &["scalars", "deref", "yields"];
 
 /// The operators of language 6.15 that take parentheses, and how many arguments each takes.
-pub const SEQUENCE_OPS: &[(&str, usize)] = &[("yields", 1), ("reverse", 1), ("enumerate", 1), ("scalars", 1), ("deref", 1), ("take", 2), ("skip", 2), ("zip", 2), ("map", 2), ("filter", 2)];
+pub const SEQUENCE_OPS: &[(&str, usize)] = &[("yields", 1), ("reverse", 1), ("enumerate", 1), ("scalars", 1), ("deref", 1), ("take", 2), ("skip", 2), ("zip", 2), ("map", 2), ("filter", 2),
+    ("present", 2), ("select", 2), ("while_true", 2), ("flatten", 1), ("final", 1), ("current", 1), ("owner", 1), ("stored_key", 2)];
 
 /// Words of language 4 and 6, and of the clause forms that carry no expression.
 const WORDS: &[&str] = &[
@@ -36,6 +51,7 @@ const WORDS: &[&str] = &[
     "max", "same", "approx", "total_order", "distinct", "sorted", "by", "subset", "view", "called", "exactly", "at", "most", "least",
     "once", "before", "return", "only", "on", "when", "sign_bit", "is_nan", "payload", "caller", "some", "implements", "borrows",
     "owns", "shares", "from", "for", "as", "moved", "yields", "reverse", "enumerate", "scalars", "deref", "take", "skip", "zip", "map", "filter",
+    "present", "select", "while_true", "flatten", "final", "current", "owner", "stored_key", "let",
 ];
 
 /// Words only a clause of one kind may use: what a `budget` bounds and what a `layout` states (language 6.7, 6.1).
@@ -43,8 +59,8 @@ fn kind_words(kind: &str) -> &'static [&'static str] {
     match kind {
         "budget" => &["allocates", "retains", "work", "bytes", "sent", "round_trips", "per", "call", "instance", "frame", "B", "KB", "MB", "O", "p50", "p99", "expected", "amortised"],
         "layout" => &["c", "packed", "transparent", "align"],
-        "callback" => &["with", "returning"],
-        "hold" => &["ends", "survive", "call"],
+        "callback" => &["with", "returning", "by", "per", "call"],
+        "hold" => &["ends", "survive", "call", "every", "item", "of", "with", "outlives", "within"],
         "obliges" => &["because"],
         _ => &[],
     }
@@ -181,10 +197,61 @@ fn callback_parts(toks: &[Tok], text: &str) -> CallbackParts {
         }
     }
     let once = toks.windows(2).any(|w| (is_word(Some(&w[0]), "exactly") || is_word(Some(&w[0]), "most")) && is_word(Some(&w[1]), "once"));
-    if (with_at.is_some() || ret_comma.is_some()) && !once {
+    let by = by_form(toks).is_some();
+    if (with_at.is_some() || ret_comma.is_some()) && !once && !by {
         parts.errs.push(format!("`with` and `returning` name the values of one call, so the clause says `called exactly once` or `called at most once`: `{text}`"));
     }
+    // a `called by` clause names the logs of the calls a result makes later: a name for each, never an expression
+    if by && parts.with.iter().any(|(a, b)| b - a != 1 || !matches!(toks[*a], Tok::Word(_))) {
+        parts.errs.push(format!("in a `called by` clause `with` gives a name to the list of each argument, not an expression: `{text}`"));
+    }
     parts
+}
+
+/// Where a `callback c : called by P.m …` clause (language 6.13) names the later calls, as the index of `P` in the tokens
+/// after `callback`: `called` then `by`.
+fn by_form(toks: &[Tok]) -> Option<usize> {
+    let i = toks.windows(2).position(|w| is_word(Some(&w[0]), "called") && is_word(Some(&w[1]), "by"))?;
+    Some(i + 2)
+}
+
+/// The path `P.m` of a later call, at token `at`: `result` or a parameter of the subject, a dot, a method; and, for a
+/// parameter whose bounds are known, a method that exists. Returns the index after it.
+fn later_call(toks: &[Tok], at: usize, text: &str, scope: &Scope, errs: &mut Vec<String>) -> usize {
+    match (toks.get(at), toks.get(at + 1), toks.get(at + 2)) {
+        (Some(Tok::Word(p)), Some(Tok::Punct('.')), Some(Tok::Word(m))) => {
+            if p != "result" && !scope.events.contains(p) {
+                errs.push(format!("`{p}` is neither `result` nor a parameter of the subject in `{text}`"));
+            } else if let Some(Some(ms)) = scope.event_methods.get(p) {
+                if !ms.contains(m) {
+                    errs.push(format!("`{m}` is not a method of `{p}`'s bounds (known: {}) in `{text}`", ms.iter().cloned().collect::<Vec<_>>().join(", ")));
+                }
+            }
+            scope.flow.borrow_mut().run = true;
+            at + 3
+        }
+        _ => {
+            errs.push(format!("a later call is `result.method` or `parameter.method`: `{text}`"));
+            at
+        }
+    }
+}
+
+/// `callback c : called by P.m [, exactly once | at most once per call] [, with a, …] [, returning r]`.
+fn lint_called_by(toks: &[Tok], text: &str, scope: &Scope) -> Vec<String> {
+    let mut errs = vec![];
+    let Some(at) = by_form(toks) else { return errs };
+    let end = later_call(toks, at, text, scope, &mut errs);
+    // up to the first top-level `, with` or `, returning`: nothing, or the count per call
+    let stop = (end..toks.len()).find(|&i| toks[i] == Tok::Punct(',') && (is_word(toks.get(i + 1), "with") || is_word(toks.get(i + 1), "returning"))).unwrap_or(toks.len());
+    let between: Vec<&str> = toks[end..stop].iter().map(|t| if let Tok::Word(w) = t { w.as_str() } else { "," }).collect();
+    if !matches!(between.as_slice(), [] | [",", "exactly", "once", "per", "call"] | [",", "at", "most", "once", "per", "call"]) {
+        errs.push(format!("a `called by` clause counts the calls per call of the method with `exactly once per call` or `at most once per call`, or not at all: `{text}`"));
+    }
+    if toks.iter().any(|t| is_word(Some(t), "when")) {
+        errs.push(format!("a `called by` clause has no `when`: the calls are those of a later run, not of the subject's entry: `{text}`"));
+    }
+    errs
 }
 
 /// The token indices of a callback clause that bind a name: the one after `returning`, and each `with` item that is a
@@ -269,7 +336,13 @@ fn lint_hold(head: &str, toks: &[Tok], text: &str, scope: &Scope) -> Vec<String>
             errs.push(format!("`moved from` names one path and ends a `hold` clause: `{text}`"));
         }
     }
-    if head == "lifetime" {
+    if head == "lifetime" && is_word(toks.first(), "every") && is_word(toks.get(1), "item") {
+        // `lifetime every item of e ends with p`: the many elements a sequence holds (language 7.3)
+        let ok = is_word(toks.get(2), "of") && toks.len() > 4 && toks.iter().any(|t| matches!(t, Tok::Word(w) if w == "ends" || w == "outlives" || w == "within"));
+        if !ok {
+            errs.push(format!("`lifetime every item of e ends with p` names a sequence and a predicate: `{text}`"));
+        }
+    } else if head == "lifetime" {
         let survive = toks.iter().position(|t| matches!(t, Tok::Word(w) if w == "survive"));
         let ends = toks.iter().position(|t| matches!(t, Tok::Word(w) if w == "ends"));
         if let Some(s) = survive {
@@ -310,6 +383,42 @@ fn pattern_binders(toks: &[Tok]) -> BTreeSet<usize> {
         }
     }
     out
+}
+
+/// `let name = e` and `let (a, b) = e`: the token indices of the names bound, which are known to the clauses after this one.
+/// A name is bound once (language 4), and `_` binds nothing.
+fn lint_let(toks: &[Tok], text: &str, scope: &Scope, errs: &mut Vec<String>) -> BTreeSet<usize> {
+    let mut at = BTreeSet::new();
+    if !is_word(toks.first(), "let") {
+        errs.push(format!("a `let` clause starts with `let`: `{text}`"));
+        return at;
+    }
+    let eq = toks.iter().position(|t| *t == Tok::Punct('=')).filter(|&e| e + 1 < toks.len() && toks.get(e + 1) != Some(&Tok::Punct('=')));
+    let Some(eq) = eq else {
+        errs.push(format!("`let` binds a name or a pattern `(a, b)` to an expression: `let p = e`: `{text}`"));
+        return at;
+    };
+    let pat = &toks[1..eq];
+    let names: Vec<usize> = match pat {
+        [Tok::Word(_)] => vec![1],
+        [Tok::Punct('('), inner @ .., Tok::Punct(')')] if !inner.is_empty() && inner.iter().enumerate().all(|(i, t)| if i % 2 == 0 { matches!(t, Tok::Word(_)) } else { *t == Tok::Punct(',') }) && inner.len() % 2 == 1 => (0..inner.len()).step_by(2).map(|i| i + 2).collect(),
+        _ => {
+            errs.push(format!("`let` binds a name or a tuple pattern `(a, b)` of names and `_`: `{text}`"));
+            return at;
+        }
+    };
+    let mut seen = BTreeSet::new();
+    for i in names {
+        let Tok::Word(w) = &toks[i] else { continue };
+        if w == "_" {
+            continue;
+        }
+        if !seen.insert(w.clone()) || scope.names.contains(w) || scope.flow.borrow().lets.contains(w) {
+            errs.push(format!("`{w}` is already bound: a name is bound once, in `{text}`"));
+        }
+        at.insert(i);
+    }
+    at
 }
 
 /// The sequence operators of language 6.15: each takes its arguments, and `map` and `filter` take a named pure function
@@ -379,7 +488,16 @@ pub fn lint(kind: &str, text: &str, heads: &[&str], scope: &Scope) -> Vec<String
     if kind == "obliges" {
         errs.extend(lint_obliges(&toks, text));
     }
+    if kind == "callback" {
+        errs.extend(lint_called_by(&toks, text, scope));
+    }
+    // `final(e)` reads the state at the end of a run, which an earlier clause must have named
+    if toks.windows(2).any(|w| is_word(Some(&w[0]), "final") && w[1] == Tok::Punct('(')) && !scope.flow.borrow().run {
+        errs.push(format!("`final(e)` is the state at the end of a later run: an earlier `callback … called by` or `fails … in` clause of the subject names it: `{text}`"));
+    }
     errs.extend(lint_sequences(&toks, text, scope));
+    // `let name = e` and `let (a, b) = e` bind for the clauses after them (language 4)
+    let lets = if kind == "let" { lint_let(&toks, text, scope, &mut errs) } else { BTreeSet::new() };
     let patterns = pattern_binders(&toks);
     // a callback clause's `with` and `returning` (language 6.13)
     let (binders, parts_errs) = if kind == "callback" {
@@ -393,6 +511,16 @@ pub fn lint(kind: &str, text: &str, heads: &[&str], scope: &Scope) -> Vec<String
     let failure = if kind == "panics" { Some("panic") } else if kind == "fails" { Some(toks.first().map_or("", |t| if let Tok::Word(w) = t { w } else { "" })) } else { None };
     if let Some(f) = failure.filter(|f| !scope.failures.contains(*f)) {
         errs.push(format!("failure `{f}` is not declared in the file's `failures`: `{text}`"));
+    }
+    // `fails F in P.m when p`: the failure is a later call's (language 6.13)
+    if kind == "fails" || kind == "panics" {
+        let at = usize::from(kind == "fails");
+        if is_word(toks.get(at), "in") {
+            let end = later_call(&toks, at + 1, text, scope, &mut errs);
+            if !is_word(toks.get(end), "when") {
+                errs.push(format!("`fails F in P.m` is followed by `when` and a condition: `{text}`"));
+            }
+        }
     }
     // `fails F { field: e, … } when p` fills the payload F declares: its field names are not expressions
     let mut skip: BTreeSet<usize> = BTreeSet::new();
@@ -429,6 +557,8 @@ pub fn lint(kind: &str, text: &str, heads: &[&str], scope: &Scope) -> Vec<String
             Tok::Word(w) if binders.contains(&i) || patterns.contains(&i) => {
                 bound.insert(w);
             }
+            Tok::Word(_) if lets.contains(&i) => {}
+            Tok::Word(w) if w == "_" => {}
             Tok::Word(_) if assoc_clause && i > 0 && matches!(toks[i - 1], Tok::Punct('{' | ',')) && toks.get(i + 1) == Some(&Tok::Punct('=')) && toks.get(i + 2) != Some(&Tok::Punct('=')) => {}
             Tok::Quoted(p) if !is_host_path(p) => errs.push(format!("`'{p}'` is not a quoted host path (`'std::…'`)")),
             Tok::Word(w) => {
@@ -438,11 +568,17 @@ pub fn lint(kind: &str, text: &str, heads: &[&str], scope: &Scope) -> Vec<String
                 }
                 let own = (named && i == 0) || (kind == "fails" && i == 0);
                 let field = i > 0 && toks[i - 1] == Tok::Punct('.');
-                if !(skip.contains(&i) || extra.contains(&w.as_str()) || WORDS.contains(&w.as_str()) || bound.contains(w.as_str()) || scope.names.contains(w) || own || field || (assoc_clause && (crate::types::is_prim(w) || TYPE_WORDS.contains(&w.as_str())))) {
+                if !(skip.contains(&i) || extra.contains(&w.as_str()) || WORDS.contains(&w.as_str()) || bound.contains(w.as_str()) || scope.names.contains(w) || scope.flow.borrow().lets.contains(w.as_str()) || own || field || (assoc_clause && (crate::types::is_prim(w) || TYPE_WORDS.contains(&w.as_str())))) {
                     errs.push(format!("unknown name `{w}` in `{text}`"));
                 }
             }
             _ => {}
+        }
+    }
+    // the names a `let` binds are known to the clauses after it, not to its own expression
+    for &i in &lets {
+        if let Tok::Word(w) = &toks[i] {
+            scope.flow.borrow_mut().lets.insert(w.clone());
         }
     }
     errs
@@ -654,6 +790,102 @@ mod tests {
         assert!(ens("ensure i : yields(result) == take(yields(self))").contains("takes 2 arguments"));
         assert!(ens("ensure j : yields(result, self) == []").contains("takes 1 argument"));
         assert!(ens("ensure k : yields() == []").contains("takes 1 argument"));
+    }
+
+    #[test]
+    fn a_result_s_later_calls_have_a_log_a_failure_and_an_end() {
+        let mut sc = scope();
+        sc.names.extend(["self", "f", "n"].map(String::from));
+        sc.events = ["self", "f"].map(String::from).into();
+        sc.event_methods.insert("self".into(), Some(["next".to_string()].into()));
+        let cb = |t: &str| lint("callback", t, &["callback"], &sc).join("; ");
+        assert_eq!(cb("callback f : called by result.next, at most once per call, with x, returning y"), "");
+        assert_eq!(cb("callback f : called by result.next, exactly once per call, returning y"), "");
+        assert_eq!(cb("callback f : called by result.next"), "");
+        assert_eq!(cb("callback f : called by self.next, with x"), "");
+        assert!(cb("callback f : called by self.nope").contains("not a method"));
+        assert!(cb("callback f : called by g.next").contains("neither `result` nor a parameter"));
+        assert!(cb("callback f : called by result").contains("`result.method`"));
+        assert!(cb("callback f : called by result.next, twice per call").contains("per call"));
+        assert!(cb("callback f : called by result.next, with x + 1").contains("gives a name"));
+        assert!(cb("callback f : called by result.next when n == 0").contains("no `when`"));
+        assert_eq!(callback_binds("callback f : called by result.next, at most once per call, with x, returning y", &sc), ["x", "y"]);
+        // a failure in a later call
+        let fl = |k: &str, h: &str, t: &str| lint(k, t, &[h], &sc).join("; ");
+        assert_eq!(fl("panics", "fails panic", "fails panic in result.next when n > 3"), "");
+        assert_eq!(fl("fails", "fails", "fails panic in self.next when n > 3"), "");
+        assert!(fl("panics", "fails panic", "fails panic in result.next n > 3").contains("followed by `when`"));
+        assert!(fl("panics", "fails panic", "fails panic in result when n > 3").contains("`result.method`"));
+        // `final(e)` needs a run named earlier in the subject, through any copy of the scope
+        let fresh = || {
+            let mut s = scope();
+            s.names.extend(["self", "x", "y"].map(String::from));
+            s.events = ["self", "f"].map(String::from).into();
+            s
+        };
+        let sc2 = fresh();
+        let ens = |s: &Scope, t: &str| lint("ensure", t, &["ensure"], s).join("; ");
+        assert!(ens(&sc2, "ensure e : final(yields(self)) == []").contains("names it"));
+        lint("callback", "callback f : called by result.next, with x", &["callback"], &sc2.clone());
+        assert_eq!(ens(&sc2, "ensure e : final(yields(self)) == skip(size(y), old(yields(self)))"), "");
+        assert_eq!(ens(&fresh(), "ensure e : present(old(yields(self)), 0) implies yields(self) == old(yields(self))[1..]"), "");
+        // the new operators of the sequences
+        let mut sc3 = fresh();
+        sc3.names.insert("p".into());
+        sc3.pure.insert("is_err".into());
+        sc3.names.insert("is_err".into());
+        for t in [
+            "ensure a : yields(result) == select(y, old(yields(self))) and yields(result) == while_true(y, old(yields(self)))",
+            "ensure b : yields(result) == flatten(map(yields, y)) and filter(is_err, yields(self))[0] == none",
+            "ensure c : same(current(p), x) and owner(p)[x] == y and same(stored_key(self, x), old(stored_key(self, x)))",
+        ] {
+            assert_eq!(ens(&sc3, t), "", "{t}");
+        }
+        assert!(ens(&sc3, "ensure d : select(y) == []").contains("takes 2 arguments"));
+        assert!(ens(&sc3, "ensure d : flatten(y, x) == []").contains("takes 1 argument"));
+        assert!(ens(&sc3, "ensure d : current() == []").contains("takes 1 argument"));
+        assert!(ens(&sc3, "ensure d : stored_key(self) == []").contains("takes 2 arguments"));
+        assert!(ens(&sc3, "ensure d : map(y, yields(self)) == []").contains("not a named pure function") || ens(&sc3, "ensure d : map(y, yields(self)) == []").contains("parameter or callback"));
+    }
+
+    #[test]
+    fn let_binds_a_name_or_a_pattern_for_the_clauses_after_it() {
+        let mut sc = scope();
+        sc.names.extend(["self", "mid"].map(String::from));
+        let l = |s: &Scope, t: &str| lint("let", t, &[], s).join("; ");
+        let ens = |s: &Scope, t: &str| lint("ensure", t, &["ensure"], s).join("; ");
+        assert!(ens(&sc, "ensure a : size(head) == mid").contains("unknown name `head`"));
+        assert_eq!(l(&sc, "let (head, tail) = result"), "");
+        assert_eq!(ens(&sc, "ensure a : size(head) == mid and size(tail) == 0"), "");
+        assert_eq!(l(&sc, "let n = size(head)"), "");
+        assert_eq!(l(&sc, "let (_, m) = result"), "");
+        assert_eq!(ens(&sc, "ensure b : n == m"), "");
+        // a name is bound once, a pattern is names and `_`, and the expression is checked
+        assert!(l(&sc, "let n = 1").contains("already bound"));
+        assert!(l(&sc, "let (a, a) = result").contains("already bound"));
+        assert!(l(&sc, "let mid = 1").contains("already bound"));
+        assert!(l(&sc, "let (a b) = result").contains("tuple pattern"));
+        assert!(l(&sc, "let () = result").contains("tuple pattern"));
+        assert!(l(&sc, "let z").contains("`let p = e`"));
+        assert!(l(&sc, "let z = nope").contains("unknown name `nope`"));
+        assert!(lint("let", "let z = (1", &[], &sc).join(";").contains("unclosed"));
+        assert!(lint("let", "x = 1", &[], &sc).join(";").contains("starts with `let`"));
+        // the right side does not see the names it binds
+        let fresh = Scope { names: sc.names.clone(), ..Scope::default() };
+        assert!(l(&fresh, "let q = q").contains("unknown name `q`"));
+    }
+
+    #[test]
+    fn the_many_elements_of_a_sequence_have_a_lifetime_together() {
+        let mut sc = scope();
+        sc.names.extend(["self", "Self"].map(String::from));
+        let hold = |t: &str| lint("hold", t, &["hold", "lifetime"], &sc).join("; ");
+        assert_eq!(hold("lifetime every item of yields(self) ends with self"), "");
+        assert_eq!(hold("lifetime every item of old(yields(self)) ends in call"), "");
+        assert!(hold("lifetime every item yields(self) ends with self").contains("names a sequence"));
+        assert!(hold("lifetime every item of yields(self)").contains("names a sequence"));
+        assert!(hold("lifetime every item of yields(zz) ends with self").contains("unknown name `zz`"));
+        assert_eq!(hold("lifetime self ends in call when true"), "");
     }
 
     #[test]

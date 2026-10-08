@@ -2,7 +2,7 @@
 
 `libraries/std-1.97.0.constraints.json` has a subject for each of the 105 external items of strsim, fnv and the golden
 crate (49 functions, 25 types, 19 traits, 11 macros, 1 const), and one more, `std::cmp::Ordering`, that the laws need
-(260 subjects: 106 entries for the corpora's items, `OccupiedEntry` for a view, 147 impls and impl methods of B1, and 5 trait methods and one trait that B2's `given` items name: `Hash::hash`, `PartialEq::eq`, `PartialOrd` with `lt`, `Ord::cmp`, `Ord::min`). `bare-rust libcheck` passes for all three: no item missing, schema ok, every clause's text well formed,
+(263 subjects: 106 entries for the corpora's items, `OccupiedEntry` for a view, 150 impls and impl methods of B1 and B6 (B6 adds the `FromIterator` impl of `String` and the `from_iter` methods of it and of `Result`), and 5 trait methods and one trait that B2's `given` items name: `Hash::hash`, `PartialEq::eq`, `PartialOrd` with `lt`, `Ord::cmp`, `Ord::min`). `bare-rust libcheck` passes for all three: no item missing, schema ok, every clause's text well formed,
 0 signatures mismatched. Strict library coverage is the default of `bare-rust check` (opt out with
 `--allow-missing-libraries`) and is asserted in `tests/corpora.rs`. The counts below are the output of
 `bare-rust libstats libraries/std-1.97.0.constraints.json`, which reads the file and compiles its signatures.
@@ -11,28 +11,28 @@ crate (49 functions, 25 types, 19 traits, 11 macros, 1 const), and one more, `st
 
 | Entries | Count | | Clauses | Stated | `unexpressed` |
 | --- | ---: | --- | --- | ---: | ---: |
-| function (27 are trait methods) | 72 | | `ensure` | 84 | |
-| type | 27 | | `implements` | 140 | |
+| function (27 are trait methods) | 74 | | `ensure` | 99 | |
+| type | 27 | | `implements` | 141 | |
 | trait | 20 | | `effects` | 45 | |
 | macro | 11 | | `result must be used` | 32 | |
 | const | 1 | | `never panics` | 20 | |
-| impl | 129 | | `law` | 16 | |
-| | | | `fails panic`, `fails` | 10, 1 | |
-| | | | `hold`, `derive`, `callback`, `protocol` | 10, 6, 3, 2 | |
-| | | | `budget`, `layout`, `invariant`, `on failure`, `access` | 4, 1, 1, 1, 1 | |
-| | | | `unexpressed` | | 65 |
+| impl | 130 | | `law` | 16 | |
+| | | | `fails panic`, `fails` | 11, 1 | |
+| | | | `hold`, `derive`, `callback`, `protocol`, `let` | 11, 6, 7, 2, 1 | |
+| | | | `budget`, `layout`, `invariant`, `on failure`, `access` | 4, 1, 1, 1, 2 | |
+| | | | `unexpressed` | | 52 |
 
-442 clauses in all: 377 stated and 65 `unexpressed`, on 240 subjects. B1 (step 4 of `proposal/language-gaps.md` § 6)
-took `unexpressed` from 175 to 138 and added 129 impl subjects, each compiled against the real std; B2 took it from 138 to 121; B3 (callbacks) from 121 to 114; B4 (eight small additions) from 114 to 77; B5 (sequences) from 77 to 65.
-25 of the stated clauses are conditional, qualified by `given` (on 18 subjects): 17 `given` items on a bound's implementations, 15 on the
-default body, 1 on a build setting. Stated clauses by
-status: documentation 100, observed 208, lifted 54 (the attributes `#[must_use]` and `rustc_const_stable`), hand-written 15.
+453 clauses in all: 401 stated and 52 `unexpressed`, on 243 subjects. B1 (step 4 of `proposal/language-gaps.md` § 6)
+took `unexpressed` from 175 to 138 and added 129 impl subjects, each compiled against the real std; B2 took it from 138 to 121; B3 (callbacks) from 121 to 114; B4 (eight small additions) from 114 to 77; B5 (sequences) from 77 to 65; B6 (the residuals of B3 to B5, below) from 65 to 52.
+27 of the stated clauses are conditional, qualified by `given` (on 18 subjects): 17 `given` items on a bound's implementations, 16 on the
+default body, 2 on a build setting. Stated clauses by
+status: documentation 115, observed 217, lifted 54 (the attributes `#[must_use]` and `rustc_const_stable`), hand-written 15.
 
-**Signatures**, compiled against rustc 1.97.0: 250 checked, 6 path-resolved only (`PartialEq`, `PartialOrd`, `From`, `TryFrom`,
+**Signatures**, compiled against rustc 1.97.0: 253 checked, 6 path-resolved only (`PartialEq`, `PartialOrd`, `From`, `TryFrom`,
 `Index`, `IndexMut`: a trait with generics), 4 unchecked (the bang macros `assert_eq!`, `panic!`, `vec!`, `write!`),
-0 mismatched. Of 188 type slots, 181 map to the type language (96%) and 7 are host text. Slices are no longer host text (below).
+0 mismatched. Of 192 type slots, 185 map to the type language (96%) and 7 are host text. Slices are no longer host text (below).
 
-## What the language lacked: the `unexpressed` promises (65)
+## What the language lacked: the `unexpressed` promises (52)
 
 Each reason in the file starts with its label. Class A took the file from 199 to 175; B1 (traits, implementations and
 associated types) from 175 to 138. Of B1's 52, 38 are closed outright and 14 stay under corrected labels; 6 of the
@@ -42,15 +42,71 @@ host-state ones stay (the vacant half of `Entry::or_insert` is all that moved).
   negative impl 2 (`Eq` and `Copy`); no elided lifetime in a trait argument 3 (`From<&str>`, `Index<&Q>`,
   `Extend<&T>`); no deref coercion 1; no mutable reference as an impl's self type 1; no unsized text as an associated
   type 1 (`Deref<Target = str>`); no unstable or negative bound 1 (`Step` for `Range`); no view of two arguments 1
-  (`is_char_boundary`); no sequence value +1 (`collect`'s Result and String impls); no drop +1 (`vec::IntoIter`). B5 relabelled the last two (below).
-- **Host state (6)**, unchanged: `Entry::or_insert` (the map after a vacant insert), `Formatter`, `TryFromIntError`,
-  `Display::fmt`, `Hasher::write`, `Hash`.
+  (`is_char_boundary`); no sequence value +1 (`collect`'s Result and String impls); no drop +1 (`vec::IntoIter`). B5 relabelled the last two (below), and B6 closed them.
+- **Host state (5)**: `Formatter`, `TryFromIntError`, `Display::fmt`, `Hasher::write`, `Hash`. `Entry::or_insert`'s two
+  (the map after a vacant insert, and the other keys) moved in B6, below.
 - **Others.** What a function computes 8; no positive effect 3; and the smaller labels. B3 changed no sequence value (15
   to 19), no promise (5 to 6) and no promise about a result's later calls (1 to 4), and removed *no value of a callback
   result* (7), *no order of calls* (6) and *callback clause has no condition* (2). B4 removed *no const-ness* (18),
   *must-use on a type* (14), *no identity of moved values* (6), *no drop* (5), *no resource exhaustion* (2), *no
   expected or amortised cost* (1), *no tuple parts* (1), *no frame condition on a collection* (1) and *no sufficient
   condition* (2). B5 removed *no sequence value* (20); see below.
+
+## Class B6: the residuals of B3 to B5
+
+B6 took 16 `unexpressed` clauses that B3 to B5 left on the language side: 13 are stated, and 3 stay, 2 of them under a
+label that now names the true blocker. The new forms are language § 6.13.1 (`callback c : called by P.m, at most once per
+call, with x, returning y`, whose `x` and `y` are the lists of the arguments and results of the calls in the run;
+`fails F in P.m when p`; `final(e)`), § 6.15 (`present`, `select`, `while_true`, `flatten`, and `yields` as a named
+function), § 4 (the handle: `current(h)`, `owner(h)`; `stored_key(m, k)`), § 7.3 (`lifetime every item of e ends with p`)
+and the clause kind `let` (`let (a, b) = e`). The file's other kinds are unchanged. `libcheck` lints each form (the
+later call is `result` or a parameter with a method its bounds have; `with` names only; no `when`; the count `per call`;
+`final` has a run named before it; `owner`, `current`, `stored_key`, `present`, `select`, `while_true` and `flatten` have
+their arities; `every item of` names a sequence and a predicate; `let` binds a name or a pattern once, for the clauses
+after it, and refuses a name already bound), and `libstats` prints the new forms (14 clauses: 4 `called by`, 1 `fails …
+in`, 1 `final`, 5 handle expressions, 1 `every item of`, 1 `let`, 1 `present`). None of the new clauses is compiled
+against `std`: the three new subjects (the `FromIterator` impl of `String`, and the `from_iter` methods of it and of
+`Result`) are, and the views `is_err`, `ok_value` and `key` resolve.
+
+- **Stated (13).** *Closures of adapters (8).* `map`, `filter`, `take_while`, `flat_map`: a `callback … called by
+  result.next` and the equations over its logs. `map`: `yields(result) == y`, `x == old(yields(self))`
+  (iterator.rs:780-785; the count, at most once per call, is the body of `Map::next`, map.rs:106-108). `filter`: `map(deref,
+  x) == old(yields(self))` and `yields(result) == select(keep, old(yields(self)))` (iterator.rs:890-895; `Filter::next` is
+  `find`, so the count per call is unconstrained). `take_while`: `yields(result) == while_true(keep, old(yields(self)))`,
+  `map(deref, x) == take(size(keep), old(yields(self)))` and `final(yields(self)) == skip(size(keep), old(yields(self)))`
+  (iterator.rs:1190-1195 and 1254-1255; take_while.rs:44-56). `flat_map`: `yields(result) == flatten(map(yields, y))` and
+  `x == old(yields(self))` (iterator.rs:1509-1514). `enumerate`: `fails panic in result.next when old(count(self)) >
+  18446744073709551615 given build overflow_checks` (iterator.rs:1018-1020, "enumerating more than `usize::MAX` elements
+  … If overflow checks are enabled, a panic is guaranteed"); what is promised without overflow checks is "wrong result or
+  panics", which is not stated. The *no promise about a result's later calls* of `map` and `filter` (laziness: called only as
+  the result is advanced) is `called by result.next`. *`Entry::or_insert` (2).* `ensure stored : self is Vacant(e) implies
+  owner(self)[old(key(self))] == default` (map.rs:2498-2499) and `mutates only owner(self)[old(key(self))]` (the body,
+  map.rs:2517-2520, and hashbrown's `insert_no_grow`); `key` is a view of `Entry`. *`HashMap::insert` (1).* `ensure
+  key_kept : exists old(self[k]) implies same(stored_key(self, k), old(stored_key(self, k)))` (map.rs:1310-1311) and
+  `lifetime k ends in call when exists old(self[k])` (the body never moves `k` in the found arm). *`vec::IntoIter` (1).*
+  `lifetime every item of yields(self) ends with self` (into_iter.rs:541-558). *`collect` (1).* `ensure delegates : result
+  == '<B as FromIterator<Item>>::from_iter'(old(self))` from the default body, and the impls it pointed to are subjects:
+  `String`'s `FromIterator<char>` (`scalars(result) == yields(iter)`, string.rs:2379-2385) and `Result`'s (`first_err` and
+  `all_ok`, result.rs:2113-2116). `Iterator::next`'s `advances` uses `present` and is no longer vacuous for an iterator
+  of options. `split_at_mut` binds `let (head, tail) = result` for its `part_sizes`.
+- **Stay (3).** *No successor of a type parameter* 1 (`Range<Idx>`: `Step` is an unstable trait no bound can name, and the
+  library has no integer-only range subject). *No promise* +1 (`Clone::clone`: the documentation gives no rule for what a
+  clone shares with the original, so it was never a gap of the language). *No arm of a macro in a clause* +1 (`vec![elem; n]`
+  "uses clone": the relation of `elem`, `n` and the elements needs the names of one arm of the host profile; the identity of
+  the clones is the element type's own).
+- **Unsure.** (1) `x == old(yields(self))` for `filter` and `flat_map` reads "uses a closure to determine if an element
+  should be yielded" and "returns an iterator for each element" as "every element is passed once, in order"; the
+  documentation says each element, and the order and the single pass are `next`'s. (2) `final(yields(self))` of
+  `take_while` assumes `self` is read through the result that holds it, or through the caller's `&mut I`, which is the
+  documentation's own example. (3) `owner(h)` has no host function: it is checked by the wrapper that made the entry,
+  and only the declaration of the handle (`hold : borrows`) makes it well formed. (4) `Result::from_iter` leaves
+  open that `from_iter` of the values is what `V` makes of an iterator of the right items; it states it as a call of
+  `V`'s own, with `ok_value` (`Result::ok`) as a view. (5) A host `Option<Option<U>>` loses the difference between
+  `Some(None)` and `None` in `T?`; `present` carries it where a clause needs it.
+- **Tool limits.** No sequence, log or handle clause is compiled against `std` by `libcheck`; the lint reads names,
+  arities and shapes. The state of the clauses of one subject, which `final` and `let` need, lives in the `Scope` of
+  `clause.rs` and is shared by its clones, because `libcheck` lints a callback with a copy. `libcheck`'s `heads` still
+  has no entry for `let` (the lint reads the whole text), and the schema's kind list gains `let`.
 
 ## Class B5: sequences
 
@@ -72,7 +128,7 @@ against `std`: only the lint reads them.
   `zip(…, …)`; `copied`: `map(deref, old(yields(self)))`; `IntoIterator::into_iter`: `yields(result) == yields(self)`;
   and `Vec`'s `into_iter`: `yields(result) == self` (vec/mod.rs:3948-3950, "from start to end"), which takes the claim from
   `vec::IntoIter`'s "yields the elements of the vector it was made from". Each cites the line the entry already cited.
-- **Stay, relabelled (8).** *No callback as a function* 4 (`map`, `filter`, `take_while`, `flat_map`: the argument is a
+- **Stay, relabelled (8; B6 above closed 6: the four closures, the elements of `IntoIter`, and `collect`).** *No callback as a function* 4 (`map`, `filter`, `take_while`, `flat_map`: the argument is a
   closure, not a named function, and `callback` states one call); *no promise of disorder* 1 (`HashMap`'s arbitrary
   iteration order); *no lifetime for the elements of a sequence* 1 (`vec::IntoIter`'s drop of the elements it has not
   yielded: `lifetime` names one entity of a call); *no successor of a type parameter* 1 (`Range<Idx>`, `Idx: Step`);

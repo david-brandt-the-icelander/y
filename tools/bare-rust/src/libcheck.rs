@@ -957,6 +957,8 @@ pub struct LibReport {
     pub host: Option<(PathBuf, usize)>,
     /// Derive clauses the library's `derive` lists expand to.
     pub expanded: usize,
+    /// Sampled runtime checks of callbacks, moves, ends, must-use and `yields` against the real std (`runcheck`).
+    pub runtime: Option<crate::runcheck::RuntimeReport>,
 }
 
 impl LibReport {
@@ -972,9 +974,13 @@ impl LibReport {
     pub fn sigs_ok(&self) -> bool {
         self.sigs.as_ref().is_none_or(|s| s.mismatches.is_empty())
     }
+    /// A run of the real std that contradicts a clause fails the check.
+    pub fn runtime_ok(&self) -> bool {
+        self.runtime.as_ref().is_none_or(|r| r.contradictions() == 0)
+    }
     /// Without `strict`, items still missing do not fail the check (the library is incomplete, not wrong).
     pub fn ok(&self, strict: bool) -> bool {
-        self.valid_ok() && self.sigs_ok() && (!strict || self.coverage_ok())
+        self.valid_ok() && self.sigs_ok() && self.runtime_ok() && (!strict || self.coverage_ok())
     }
 
     pub fn to_json(&self) -> Value {
@@ -994,6 +1000,7 @@ impl LibReport {
                 "views": { "resolved": s.views_checked, "unchecked": s.views_unchecked },
                 "mismatches": s.mismatches.iter().map(|(n, m)| json!({"subject": n, "error": m})).collect::<Vec<_>>(),
             })),
+            "runtime": self.runtime.as_ref().map(|r| r.to_json()),
         })
     }
 
@@ -1041,6 +1048,9 @@ impl LibReport {
                 println!("              mismatch {n}: {m}");
             }
         }
+        if let Some(r) = &self.runtime {
+            r.print();
+        }
     }
 }
 
@@ -1084,6 +1094,9 @@ pub fn libcheck(dir: &Path, libraries: &Path, work: &Path, target: &Path) -> R<L
         rep.host = Some((hp, arms));
     }
     rep.sigs = Some(check_signatures(&file, &work.join(&info.name), target)?);
+    if std::env::var_os("BARE_RUST_NO_RUNTIME").is_none() {
+        rep.runtime = Some(crate::runcheck::run(&file, &work.join(&info.name), target)?);
+    }
     Ok(rep)
 }
 

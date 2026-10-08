@@ -245,11 +245,23 @@ A host type maps onto these through its profile: T-SQL `INT` to `i32`, `NVARCHAR
   `5 ticks`, `30 s`, `2 frames`.
 - **Equality and identity:** `==` is structural on values; `same(a, b)` is identity of host references; rows compare by
   key; `p moved from q` is identity of a value that moved (§ 6.14.3).
+- **Handles:** a handle is a value that stands for a place in a collection, not for what is stored there: an entry, a
+  cursor. `current(h)` is the value at the place, read where the expression is evaluated (inside `old(…)`, at entry),
+  so a handle that has been consumed still names its place; `same(current(h), v)` asks whether the place holds the very
+  value `v`. A type is a handle when it borrows a collection (`hold : borrows`, § 7.2) and stands for one place of it; the views
+  its subject declares read the place (§ 3.2): `current`, the value there, and `key`, its key. `owner(h)` is the collection the handle borrows, which its `hold : borrows` clause (§ 7.2) already ties it to;
+  it has no host function, because the handle hides it, and the wrapper that made the handle checks it, since it knows
+  the collection it made the handle from. `owner(h)` is also the root of a path: `owner(h)[k]` is the element at key
+  `k`, and `mutates only owner(h)[k]` is the element frame of § 6.14.8. Both are refused at build for a value that is
+  not a handle.
+- **The key a map holds:** `m[k]` finds a value by `==` on keys, so it cannot tell which key entity the map holds.
+  `stored_key(m, k)` is the key the map holds for the key equal to `k`, or `none`; `same(stored_key(m, k), x)` asks
+  whether `x` is that very entity. It is pure and total, a view of the map and the key (Rust's `get_key_value`).
 - **Tuples:** `e.0`, `e.1` are the parts of a tuple, and a pattern `(a, b)` names them, in `let` and after `is` (§ 6.14.7).
 - **Collections:** `size`, `in`, `subset`, `distinct`, `sorted by`, `all x in c : p`, `any x in c : p`, `count`, `sum`.
   `min` and `max` return an optional value, absent for an empty collection. A `list<T>` has an order: `xs[i]`,
-  `xs[i..j]`, `xs ++ ys`, `reverse`, `take`, `skip`, `zip`, `enumerate`, and `map` and `filter` by a named function; and
-  `yields(it)` is the sequence an iterator gives (§ 6.15). In a `law` only, a quantifier may range over
+  `present(xs, i)`, `xs[i..j]`, `xs ++ ys`, `reverse`, `take`, `skip`, `zip`, `enumerate`, `select`, `while_true`,
+  `flatten`, and `map` and `filter` by a named function; and `yields(it)` is the sequence an iterator gives (§ 6.15). In a `law` only, a quantifier may range over
   a type, `all x : T : p`, because laws are checked on generated values and never at run time.
 - **Rows:** `T[key]` looks a row up and is optional; `T where p` selects rows. A selection in an enforced predicate must
   be served by an index, or the clause must be an invariant checked row by row as versions are written; the compiler
@@ -303,8 +315,8 @@ Clauses are of two sorts, and the difference decides how they are checked.
 | Compatibility and visibility | `version`, `compatible with`, `replaces`, `was`, `deprecated`, `stable`, `visible to` | What may change between versions, and who may refer to what | Checked at build | 6.10 |
 | Interfaces and implementations | `implements`, `assoc`, `for`, `some`, `any`, `hold … borrows for` | Which interfaces a type implements, what an implementation adds, and what a host subject is parameterised by | Checked at build | 6.11 |
 | Conditional promises | `given` | What a promise relies on: a bound's implementations, the default body, a build setting | Checked at build, as the promise is | 6.12 |
-| Callbacks and calls | `callback … when / with / returning`, `protocol` over calls | When a function argument is called, with what, what it returned, and in what order | Checked by wrappers or in CI | 6.13 |
-| Sequences | `yields(it)`, `xs[i]`, `xs[i..j]`, `++`, `reverse`, `take`, `skip`, `zip`, `enumerate`, `map`, `filter` | What an iterator yields, and the order of a list's elements | Expressions: predicates when finite, properties for infinite sequences | 6.15 |
+| Callbacks and calls | `callback … when / with / returning`, `callback … called by`, `fails … in`, `final(e)`, `protocol` over calls | When a function argument is called, with what, what it returned, in what order, and by the calls a result makes later | Checked by wrappers or in CI | 6.13 |
+| Sequences | `yields(it)`, `xs[i]`, `present`, `xs[i..j]`, `++`, `reverse`, `take`, `skip`, `zip`, `enumerate`, `select`, `while_true`, `flatten`, `map`, `filter` | What an iterator yields, and the order of a list's elements | Expressions: predicates when finite, properties for infinite sequences | 6.15 |
 | Small additions | `evaluable at compile time`, `must be used`, `moved from`, `ends in call`, `survive call`, `except exhausted`, `expected`, `amortised`, `result.0`, `mutates only p[e]`, `obliges caller` | Compile-time evaluation, must-use types, moves, drops, exhaustion, expected cost, tuple parts, an element frame, what a caller must establish | As the section each extends | 6.14 |
 | Lifetime | `hold`, `lifetime …`, `instances …`, `no strong cycle`, `model` | How long entities live and who keeps them | Property | 7 |
 | Mutability and aliasing | `access`, `readonly`, `immutable`, `frozen after`, `write once`, `append only`, `monotonic`, `mutates only`, `interior`, `unchanged`, `exclusive`, `sole`, `disjoint`, `shared readonly` | Who may change what, and through how many paths | Property; predicate for columns | 8 |
@@ -923,12 +935,12 @@ macro rust 'std::assert_eq!'(left: ref<T>, right: ref<U>)
   names that argument for the clauses that follow (`with v` above is the `&mut V` that `f` receives). `returning r`
   binds one name and ends the clause. `with` and `returning` need `exactly once` or `at most once`, because they name
   the values of one call. `r` and `v` exist only where the callback is called, so a clause that uses them says where
-  (`if exists self then r else d`, `result is Occupied(r) implies …`). `current(h)` is the value the handle `h` (an entry) stands for, read at the point of the clause.
+  (`if exists self then r else d`, `result is Occupied(r) implies …`). `current(h)` is the value the handle `h` (an entry) stands for (§ 4).
 - **`protocol` over calls.** An event is a callback or a parameter of the subject (for a macro, a parameter is the
   evaluation of its argument, and for a function it is the passing of it), or `p.m`, the method `m` of the bounds of
   parameter `p` (`self.next` when `Self: Iterator`). `*`, `+`, `?`, `|` and brackets are as in § 6.5, and calls the
   protocol does not name are unconstrained. A protocol over one call of the subject begins at its entry and ends at its
-  return; it does not reach into a result's later calls, which belong to another subject.
+  return; it does not reach into a result's later calls, which `called by` and `fails … in` state (§ 6.13.1).
 - **Fails:** a callback called when its condition does not hold, not called when it does, or called other than the clause
   counts, is a bug in the subject: the call is the subject's, and so is the promise. A postcondition that uses a name from
   a callback that was not called is a bug in the clause. A protocol that the calls do not follow is reported, or
@@ -945,10 +957,73 @@ macro rust 'std::assert_eq!'(left: ref<T>, right: ref<U>)
   from documentation that says "calls … repeatedly", "at least once" or "left then right". For a library, from its
   documentation and source.
 
-What stays outside: what a callback does to a value that lives on in a result (`Iterator::map` returns an adapter whose
-`next` calls `f`: that call belongs to another subject, so nothing about it can be said of `map` itself; what the result
-yields is a sequence (§ 6.15), but for a closure, which is not a named function, `yields(result)` cannot be written), a protocol whose next step depends on a value the calls
-returned (`next` is called until it returns none), and an order among calls of different arguments of several subjects.
+#### 6.13.1 Calls a result makes later
+
+**Meaning.** `Iterator::map` returns an adapter that holds the closure and calls it each time the adapter is advanced, so
+no call of `map` calls it. What those later calls do is still a promise of `map`, about its result, and a clause of the
+subject may state it. The later calls are the **run** of a method `m` of a path `P` (`result`, or a parameter): the
+calls of `P.m` made one after another from the subject's return until the first that returns `none`, which is the run
+that `yields(P)` describes (§ 6.15). Three forms speak of a run, and one expression reads its end.
+
+```text
+function rust 'std::iter::Iterator::map'(self: Self, f: F) -> 'std::iter::Map'
+    callback f : called by result.next, at most once per call, with x, returning y
+    ensure items     : yields(result) == y
+    ensure arguments : x == old(yields(self))
+
+function rust 'std::iter::Iterator::take_while'(self: Self, predicate: P) -> 'std::iter::TakeWhile'
+    callback predicate  : called by result.next, at most once per call, with x, returning keep
+    ensure items        : yields(result) == while_true(keep, old(yields(self)))
+    ensure consumed     : x == take(size(keep), old(yields(self)))
+    ensure not_put_back : final(yields(self)) == skip(size(keep), old(yields(self)))
+
+function rust 'std::iter::Iterator::enumerate'(self: Self) -> 'std::iter::Enumerate'
+    fails panic in result.next when old(count(self)) > 18446744073709551615   given build overflow_checks
+```
+
+- **`callback c : called by P.m [, exactly once per call | at most once per call] [, with a, …] [, returning r]`.** The
+  callback is called by the calls of `P.m` in the run, and by nothing else: not by the subject, and not by a method that
+  does not advance the result. The count per call of `P.m` is `exactly once`, `at most once` or, when it is not stated,
+  any number including none (`filter`'s predicate is called until an item passes). How many calls there are in all is
+  not stated here: it follows from the sequence equations, as `x == old(yields(self))` says that every item is passed.
+- **The logs.** In a `called by` clause `with a` and `returning r` bind lists, not values: `a` is the list of the
+  argument over the calls of the run, in order, and `r` the list of the results, so that `a[k]` and `r[k]` belong to
+  the `k`-th call and `size(r)` is the number of calls. `with` takes names only, because an expression has no value at
+  a call that has not happened; and the clause has no `when`, because a condition on the subject's entry says nothing
+  about calls made later (the equations state which calls there are). The names are in scope in the subject's other
+  clauses, which are about the run and not about the call of the subject, so `ensure items : yields(result) == y`
+  relates the result to whatever the callback returned.
+- **A value that crossed the boundary.** As in the first form of this section (principle 5) the clause never calls the
+  callback and does not fix what it returns. `yields(result) == y` holds for every behaviour the closure has, which is
+  how it can be stated for a closure that has no name, is not pure and is called later; the closure's effects happen
+  once per call of the run and only its results enter the clause.
+- **`yields` of an adapter.** § 6.15 gives `yields` to a type whose `next` is deterministic given its state. An
+  adapter over a closure has one as well, when the subject that makes it names the closure's logs: in that subject's
+  clauses `yields(result)` is the sequence of the run, a function of the logs (`yields(result) == y`). For the type
+  elsewhere it has none.
+- **`fails F in P.m when p`.** A call of the run fails with `F` when `p` holds; `p` is over the subject's entry (the
+  parameters' values at entry, as in `fails F when p`, and `old` is implicit), and the call of the subject does not fail.
+  `given` qualifies it as every failure clause (`given build overflow_checks`).
+- **`final(e)`.** The value `e` has at the end of the run; `old(e)` is its value at entry. It is for what a parameter
+  still holds: `final(yields(self))` is what is left of the iterator `self` once the run is over, read through the
+  result that holds it, or through the caller's own place when `self` is a `&mut I`, as it is in `iter.by_ref()
+  .take_while(…)`. A subject with no `called by` and no `fails … in` has no run, and `final` there is refused.
+- **Fails:** a run whose calls do not follow the clause (a callback called outside the run, more than once per call
+  where the clause says once, or a log that disagrees with an equation) is a bug in the subject. Refused at build: `P`
+  that is neither `result` nor a parameter, a method its bounds lack (known when `P`'s bounds are), `with` of an
+  expression, `when` in a `called by` clause, a count other than the two, and `final` without a run.
+- **Checked:** by a generated wrapper around the closure that records each call's arguments and result, and a copy of
+  the result (a `Clone`, or the same call run again where the host cannot copy) driven with `next` until `None` or a
+  bound of items (1,024 by default). The logs are the wrapper's record; each equation is compared on them; a run that
+  hits the bound is compared by prefix and the clause's status is `observed`, never `proven`. The count per call is
+  checked on the same record.
+- **Harvested:** from documentation that says "calls this closure on each element", "while it returns `true`" or "once
+  for each item", and from the body of the adapter's `next` (map: `self.iter.next().map(&mut self.f)`, which is
+  at most once per call, with the item taken and what `f` returned).
+
+What stays outside: a protocol whose next step depends on a value the calls returned (`next` is called until it returns
+none), an order among calls of different arguments of several subjects, and the calls a result makes from a method that
+does not advance it (a type that runs its closure from `size_hint` would be stated with that method as `P.m`).
 
 ### 6.14 Nine small additions
 
@@ -1095,7 +1170,16 @@ function rust 'std::primitive::slice::split_at_mut'(self: ref<list<T> as 'std::p
     ensure sizes : size(result.0) == mid and size(result.1) == old(size(self)) - mid
     disjoint result.0, result.1
     ensure same_sizes : result is (head, tail) implies size(head) + size(tail) == old(size(self))
+
+function rust 'std::primitive::slice::split_at_mut'(self: ref<list<T> as 'std::primitive::slice'>, mid: u64 as 'usize')
+        -> (ref<list<T> as 'std::primitive::slice'>, ref<list<T> as 'std::primitive::slice'>)
+    let (head, tail) = result
+    ensure sizes : size(head) == mid and size(tail) == old(size(self)) - mid
 ```
+
+A `let` clause binds for the clauses after it, once: a name that is already bound (a parameter, an earlier `let`, a
+generic) is refused, `_` binds nothing, and the expression sees only the names bound before the clause. In a library file
+`let` is a clause kind of its own; a tool that reads the file binds the names as it reads the clauses in order.
 
 - **Fails:** a component the tuple lacks (`.2` of a pair) and a pattern of the wrong length are refused at build.
 - **Checked:** at build, by the type of `e`. **Harvested:** from the documentation of the parts of a pair.
@@ -1112,7 +1196,18 @@ function rust 'std::collections::HashMap::insert'(self: ref<map<K, V, S>>, k: K,
     mutates only self[k]
 ```
 
-- **Checked:** as `mutates only` (§ 8.2), by comparing the collection before and after on generated calls.
+A handle (§ 4) hides the collection it borrows, so the collection is named with `owner`: `mutates only owner(self)[key(self)]`
+says that a call that consumes an entry changes the element of the entry's key and no other, and `owner(self)[old(key(self))]`
+is that element afterwards. `key` is a view the entry's type declares (`Entry::key`).
+
+```text
+function rust 'std::collections::hash_map::Entry::or_insert'(self: Entry<'a, K, V>, default: V) -> ref<V>
+    ensure stored : self is Vacant(e) implies owner(self)[old(key(self))] == default
+    mutates only owner(self)[old(key(self))]
+```
+
+- **Checked:** as `mutates only` (§ 8.2), by comparing the collection before and after on generated calls; for
+  `owner(h)`, by the wrapper that made the handle from a collection it holds.
   **Harvested:** from documentation that says "no other key changes".
 
 #### 6.14.9 Obligations on callers (extends § 10.2)
@@ -1133,8 +1228,8 @@ function rust 'std::primitive::slice::get_unchecked'(self: ref<list<T> as 'std::
 
 What stays outside: whether a `const` body is evaluated at compile time (the host may, and need not); a drop by a body
 the subject cannot name (a value of a type parameter is dropped by its own destructor, whose effects `given` names no
-method of); the identity of what a clone shares with its original; the map that an entry handle borrows, which is not a
-name, so `mutates only p[e]` has no collection to be about there.
+method of); the identity of what a clone shares with its original (`Clone` promises none: each type's `clone` decides, and a clause
+cannot state the absence of a promise); and a macro's arm, whose parameters a clause of the macro cannot name.
 
 ### 6.15 Sequences: order, positions, and what an iterator yields
 
@@ -1147,32 +1242,43 @@ one, below), and each is defined here by its elements, so that every host compil
 
 | Operator | Value | Defined by |
 | --- | --- | --- |
-| `xs[i]` | `T?` | The element at position `i`; `none` when `i < 0` or `i >= size(xs)` (for an infinite `xs`, when `i < 0`). It never fails. |
+| `xs[i]` | `T?` | The element at position `i`; `none` when `i < 0` or `i >= size(xs)` (for an infinite `xs`, when `i < 0`). It never fails. For an optional `T` it is flat, below. |
+| `present(xs, i)` | `bool` | `i >= 0` and (`xs` is infinite or `i < size(xs)`): position `i` holds an element, whether or not that element is `none`. |
 | `take(n, xs)` | `list<T>` | The first `n` elements, or all of them if there are fewer; empty when `n <= 0`. `take(n, xs)[k] == xs[k]` for `0 <= k < n`. |
 | `skip(n, xs)` | `list<T>` | `xs` without its first `n` elements; `xs` when `n <= 0`, empty when `n >= size(xs)`. `skip(n, xs)[k] == xs[k + n]`. |
-| `xs[i..j]`, `xs[i..]`, `xs[..j]` | `list<T>` | `take(j - i, skip(i, xs))`, `skip(i, xs)` and `take(j, xs)`. Positions outside the list are not elements, so a slice never fails: `xs[2..9]` of three elements has one. |
+| `xs[i..j]`, `xs[i..]`, `xs[..j]` | `list<T>` | `take(j - max(i, 0), skip(max(i, 0), xs))`, `skip(i, xs)` and `take(j, xs)`, where `skip` and `take` of a negative count are `skip`/`take` of 0. Positions outside the list are not elements, so a slice never fails: `xs[2..9]` of three elements has one. |
 | `xs ++ ys` | `list<T>` | For a finite `xs`, `size(xs) + size(ys)` elements: `xs[k]` for `k < size(xs)`, then `ys[k - size(xs)]`. For an infinite `xs`, `xs`. It is associative, and `[]` is its unit. |
 | `reverse(xs)` | `list<T>` | For a finite `xs`: `reverse(xs)[k] == xs[size(xs) - 1 - k]`. |
 | `map(f, xs)` | `list<U>` | `f` is a named pure function (below). Same size as `xs`; `map(f, xs)[k] == f(xs[k])`. |
 | `filter(p, xs)` | `list<T>` | `p` is a named pure predicate. `filter(p, []) == []`, and `filter(p, [x] ++ r) == (if p(x) then [x] else []) ++ filter(p, r)`: the elements for which `p` holds, in their order. |
+| `select(bs, xs)` | `list<T>` | `bs` is a list of booleans. The elements `xs[k]` at the positions `k` where `bs[k] == true`, in order, for the positions both lists have. `select([b] ++ r, [x] ++ s) == (if b then [x] else []) ++ select(r, s)`, and `filter(p, xs) == select(map(p, xs), xs)`. |
+| `while_true(bs, xs)` | `list<T>` | `take(n, xs)`, with `n` the position of the first `false` in `bs`, or `size(bs)` when there is none (`xs` when `bs` is infinite and has none): the elements before the first verdict that fails. |
+| `flatten(xss)` | `list<T>` | `xss` is a list of lists (or of values that implement `IntoIterator`, read as their `yields`). `flatten([]) == []` and `flatten([xs] ++ r) == xs ++ flatten(r)`: with an infinite `xss[k]`, the elements after it are never reached. |
 | `zip(xs, ys)` | `list<(T, U)>` | `zip(xs, ys)[k] == (xs[k], ys[k])` while both exist: as many pairs as the shorter list has. |
 | `enumerate(xs)` | `list<(int, T)>` | `enumerate(xs)[k] == (k, xs[k])`. |
 | `scalars(s)` | `list<char>` | The Unicode scalar values of the text `s`, in order (§ 4): `size(scalars(s)) == length(s)`. |
 | `deref(r)` | `T` | For a `ref<T>`, the value it refers to. `map(deref, xs)` reads a list of references as the list of values. |
 
 A list literal `[a, b]` is the list of its elements, and `[]` the empty list. A `ref<list<T>>` is read as the list it
-refers to wherever a list is expected, as `size(self)` has always been. If the element type is optional, `xs[i]` cannot
-tell an absent position from an element that is `none`; a clause over such a list says `i < size(xs)` to say the position
-exists.
+refers to wherever a list is expected, as `size(self)` has always been. If the element type is optional, `xs[i]` is flat
+like every optional (§ 4: absence is one value): it is `none` both beyond the ends and for an element that is `none`, and
+`xs[i] == none` does not tell the two apart. `present(xs, i)` does, and so does the slice `xs[i..i + 1]`, which is `[]`
+or a list of one element and cannot be mistaken because a list does not flatten. A host `Option<Option<U>>` read at the
+boundary is `U?` and loses the same distinction, so a clause that needs it says `present`. None of the clauses with
+`xs[i]` is false under the flat reading: `Iterator::next`'s `head` stays true, and its `advances` is `present(old(yields(self)),
+0) implies yields(self) == old(yields(self))[1..]`, which holds and says as much for an iterator of options as for any other,
+where `exists result implies …` would say nothing when `next` returned `Some(None)`.
 
 **A named function.** `map` and `filter` take the name of a function, not a value: a function is never an argument,
 a variable or a result of an expression, which is what keeps every expression pure and total. The name is a language
-function (`scalars`, `deref`), a view of the catalog or of the file (§ 4's "Functions": total, deterministic, free of
-effects), and no parameter of the subject. In particular, a closure the subject receives (`Iterator::map`'s `f`) is not a
+function (`scalars`, `deref`, `yields`), a view of the catalog or of the file (§ 4's "Functions": total, deterministic,
+free of effects), and no parameter of the subject. `map(yields, xss)` is the list of the sequences of a list of
+collections, which `flatten` joins. In particular, a closure the subject receives (`Iterator::map`'s `f`) is not a
 named function: it may do anything, it is called later and a number of times the clause does not control, and it has no
-name in the catalog. A clause cannot say `yields(result) == map(f, yields(self))` for it, and a `callback` clause (§ 6.13)
-states one call's arguments and result, not the calls that a result makes afterwards. What an adapter that holds a closure
-yields stays outside.
+name in the catalog. A clause cannot say `yields(result) == map(f, yields(self))` for it. What such an adapter yields is
+stated through the closure's logs instead (§ 6.13.1): `callback f : called by result.next, with x, returning y` and
+`yields(result) == y`, with `select` and `while_true` taking the verdicts of a predicate (`yields(result) ==
+select(keep, old(yields(self)))`), so the closure is never called by the clause and never named as a function.
 
 **What an iterator yields.** `yields(it)` is a view of any value `it` of a type that implements an iterator: the
 sequence of items that calling `next` on it would return, in order, from its present state and up to but not including the
@@ -1184,7 +1290,8 @@ value that is not an iterator but a collection (it implements `IntoIterator`), `
 gives `reverse(yields(it))`, and the `DoubleEndedIterator` an `implements` clause states needs no clause of its own about
 order. After a `None`, a host iterator that is not fused may resume; `yields` is defined from the state at the time of
 the view, so it describes what is left from there and says nothing about the resumption. A type whose `next` is not
-deterministic given its state, or has an effect that matters (it runs a closure, reads a clock), has no `yields`.
+deterministic given its state, or has an effect that matters (it reads a clock), has no `yields`; one that runs a closure
+has it only in the clauses of a subject that names the closure's logs (§ 6.13.1).
 
 ```text
 function rust 'std::primitive::str::chars'(self: ref<text>) -> 'std::str::Chars'
@@ -1196,7 +1303,7 @@ function rust 'std::primitive::slice::split_at_mut'(self: ref<list<T> as 'std::p
 
 function rust 'std::iter::Iterator::next'(self: ref<Self>) -> Self::Item?
     ensure head     : result == old(yields(self))[0]
-    ensure advances : exists result implies yields(self) == old(yields(self))[1..]
+    ensure advances : present(old(yields(self)), 0) implies yields(self) == old(yields(self))[1..]
 
 function rust 'std::iter::Iterator::chain'(self: Self, other: U) -> 'std::iter::Chain'
     ensure items : yields(result) == old(yields(self)) ++ old(yields('<U as std::iter::IntoIterator>::into_iter'(other)))
@@ -1219,7 +1326,8 @@ says something of the first `n` elements for every `n`, which is how a promise a
   `fails … when` of its own (`fails panic when mid > size(self)`); Rust's slicing panics there, and a clause that claims
   the same is a `fails`, not the slice. Refused at build: `yields` of a type that has no `next`; `map` or `filter` given a
   parameter, a callback, a generic closure or an expression instead of a named function; a named function that does not
-  exist in the catalog or the file; the wrong number of arguments; and `size` or `reverse` of a sequence that `yields`
+  exist in the catalog or the file; the wrong number of arguments; `select` or `while_true` whose first argument is not a list of booleans, and `flatten` of
+something that is not a list of lists or collections; and `size` or `reverse` of a sequence that `yields`
   proves infinite (a type that is `Iterator` and not `ExactSizeIterator` is not proven either way, and the clause is
   decided where it ends).
 - **Checked:** every operator by its definition above. A conformance suite holds each equation with generated lists
@@ -1228,7 +1336,8 @@ says something of the first `n` elements for every `n`, which is how a promise a
   running a copy of `it` (a `Clone`, or the same call run again where the host cannot copy) with `next` until it returns
   `None` or until a bound of items (1,024 by default) is reached: the sequence is compared whole when it ends within the
   bound and by prefix when it does not, and the clause's status is `observed`, never `proven`, in the second case. A clause
-  with a closure inside the iterator is not checked by this and has no `yields`. In the library tools, `libcheck` lints the
+  with a closure inside the iterator is checked as § 6.13.1 says, with the closure's calls recorded, and has no `yields`
+  elsewhere. In the library tools, `libcheck` lints the
   operators (names, arguments, that `map` and `filter` are given a view of the file or `scalars` or `deref`), and `libstats`
   counts them; neither compiles a sequence clause against `std`.
 - **Harvested:** `yields` from documentation that says an iterator "yields", "returns the items", "in order" or "from the
@@ -1238,13 +1347,14 @@ says something of the first `n` elements for every `n`, which is how a promise a
   ("the first `n` items", "after the first `n`", "in step"); `map` and `filter` from a call of a named function in a body,
   and from a documentation line that names a function. For a library, from its documentation and source.
 
-What stays outside: what a closure yields (the closure is not a named function), and the calls that an adapter makes of
-it later; that an order is arbitrary (std's `HashMap` documents that iteration order may differ between maps and runs:
-nothing is promised, and a clause states what holds, not that something may differ); the lifetime of the elements an
-iterator has not yet given, which `lifetime` (§ 7.3) states of one entity and not of the many elements `yields` holds; a
-range of a generic `Step` type (`start..end` yields the successor of `start`, which `Step` defines and the language does
-not), as against a range of integers; and `collect`, whose result is any `FromIterator` and promises nothing of the
-items by itself.
+What stays outside: that an order is arbitrary (std's `HashMap` documents that iteration order may differ between maps and
+runs: nothing is promised, and a clause states what holds, not that something may differ); a range of a generic `Step`
+type (`start..end` yields the successor of `start`, which `Step` defines, and `Step` is an unstable trait no bound can
+name: the language has no successor of a type parameter, and a range of integers is the refinement `T in a..b`, not a
+value of `Range`); and `collect`, whose result is any `FromIterator` and promises nothing of the items by itself (the
+impls of `Result` and `String` state theirs, as subjects of their own). The lifetime of the elements an iterator has not
+yet given is stated by `lifetime every item of yields(it) ends with it` (§ 7.3); the calls an adapter makes of its closure
+by `called by` (§ 6.13.1).
 
 ---
 
@@ -1338,6 +1448,10 @@ Each predicate is defined over the core; § 7.4 and § 7.5 give its meaning unde
   either fails or invalidates them.
 - **`lifetime e stable address [while held by p]`:** `e` does not move while the named paths refer to it, as Rust's
   `Pin` or a pinned handle in a moving collector; needed at boundaries with foreign code.
+- **`lifetime every item of e ends with p`:** the same predicate over the many entities a sequence holds, read at the
+  moment the predicate's event happens: the items `e` has then, each an entity. `lifetime every item of yields(self)
+  ends with self` says that the elements an iterator has not yet given end when the iterator does, which is what
+  dropping a `vec::IntoIter` does to them; the elements already given are not in `yields(self)` and moved out.
 - **`lifetime every ref<T> [obtained from p] within s`:** the same predicate over every reference of a type, or every
   reference obtained through a path; this is how a rule for a whole interface is written.
 - **`no strong cycle [through f, g]`:** no cycle of `owns` and `shares` references through the named fields, which under
@@ -2136,13 +2250,15 @@ clause        = "let" ( NAME | pattern ) "=" expr
               | "require" [ NAME ":" ] expr [ "else" NAME [ payload ] ]
               | "ensure" [ NAME ":" ] expr
               | "on failure" ( "unchanged" | NAME "ensure" NAME ":" expr )
-              | "fails" NAME "when" expr | "fails only" NAME { "," NAME } [ "open" ]
+              | "fails" NAME [ "in" later ] "when" expr | "fails only" NAME { "," NAME } [ "open" ]
               | "never fails runtime" | "never panics" [ "except exhausted" ]
               | "result must be used" | "must be used" | "obliges caller" ":" expr "because" STRING
               | qualifiable "given" condition { "and" condition }
               | "callback" NAME ":" ( "called" ( "exactly once" | "at most once" | "at least once" )
                                       [ "before return" ] [ "when" expr ]
                                       [ "," "with" arg { "," arg } ] [ "," "returning" NAME ]
+                                    | "called by" later [ "," ( "exactly once" | "at most once" ) "per call" ]
+                                      [ "," "with" NAME { "," NAME } ] [ "," "returning" NAME ]
                                     | "conforms to" "interface" [ HOST ] STABLE )
               | "law" NAME ":" expr
               | "field" NAME ":" type
@@ -2161,7 +2277,8 @@ qualifiable   = (* a clause of the form "ensure", "fails … when", "never panic
 condition     = "default" | "build" BUILD | NAME "." NAME { "," NAME "." NAME } ( "never panic" | "terminate" | "effects none" ) ;
 BUILD         = "overflow_checks" | "debug_assertions" | "panic=unwind" | "panic=abort" ;   (* the host profile's list, § 3.3 *)
 pattern       = "(" ( NAME | "_" ) { "," ( NAME | "_" ) } ")" ;   (* a tuple's parts, also after "is": e is (a, b) *)
-arg           = expr | NAME ;                       (* a new NAME names the argument for the clauses that follow; "with" and "returning" need "exactly once" or "at most once" *)
+later         = ( "result" | NAME ) "." NAME ;      (* the run of a method of the result or of a parameter, § 6.13.1 *)
+arg           = expr | NAME ;                       (* a new NAME names the argument for the clauses that follow; "with" and "returning" need "exactly once" or "at most once"; after "called by" a NAME is a list, one item per call *)
 payload       = "{" NAME ":" expr { "," NAME ":" expr } "}" ;
 generics      = "for" generic { "," generic } [ "where" bound_pred { "," bound_pred } ] ;
 generic       = LIFETIME | NAME [ ":" bounds ] ;
@@ -2215,7 +2332,7 @@ memory        = "hold" [ path ] ":" ( "owns" | "shares" | "borrows" [ "from" pat
               | "instances" [ "per" scope_ref ] "at most" NUMBER
               | "instances attributed to" scope_ref "are none within" duration "after" event
               | "no strong cycle" [ "through" path_list ] ;
-target        = path | "every ref<" type ">" [ "obtained from" path ] | "rows" ;
+target        = path | "every ref<" type ">" [ "obtained from" path ] | "every item of" expr | "rows" ;
 lifetime_pred = "outlives" path | "within" scope_ref | "ends with" path | "ends in call" [ "when" expr ]
               | "does not escape" [ scope_ref ]
               | "escapes only to" path_list | "ends within" duration "after" event
@@ -2231,7 +2348,9 @@ access        = "access" path ":" ( "identify" | "read" | "write" ) ( "exclusive
               | "mutates only" path_list | "interior" path | "unchanged" "view(" path ")" [ "=" expr ]
               | "exclusive" path | "sole" path | "disjoint" path "," path { "," path } | "shared readonly" path ;
 
-path          = NAME { "." ( NAME | NUMBER ) | "[" expr "]" } [ ".*" ] | STABLE ;   (* NUMBER: a tuple's part, result.0; "[" expr "]" in "mutates only" is one element *)
+path          = ( NAME | "owner" "(" path ")" ) { "." ( NAME | NUMBER ) | "[" expr "]" } [ ".*" ] | STABLE ;
+                                                       (* NUMBER: a tuple's part, result.0; "[" expr "]" in "mutates only" is one element;
+                                                          owner(h) is the collection a handle borrows, § 4 *)
 path_list     = path { "," path } ;
 event         = ( "begin" | "end" | "released" ) "(" path ")" | "call" QNAME | "return" QNAME
               | ( "insert" | "update" | "delete" ) QNAME | "emit" NAME | "construct" | "publish"
@@ -2252,26 +2371,31 @@ MODEL         = "ownership" | "tracing" | "counting" | "tracked" | "region" | "m
 
 expr          = (* literals, paths, T[key], T where p, calls of named pure functions, not/and/or/implies/iff,
                    comparisons, arithmetic, if-then-else, exists, is, in, matches, fits, finite, approx,
-                   all/any/count/sum/min/max over collections, old(e), result, same(a, b), p moved from q, view(e), e.0, sequences (§ 6.15);
+                   all/any/count/sum/min/max over collections, old(e), result, same(a, b), p moved from q, view(e), e.0, current(h), owner(h), stored_key(m, k), final(e), sequences (§ 6.15);
                    defined in § 4 *) ;
 seq_expr      = "yields" "(" expr ")"                      (* the items an iterator gives from now to its first None *)
               | expr "[" expr "]"                          (* position: the element, or none beyond the ends *)
-              | expr "[" [ expr ] ".." [ expr ] "]"        (* slice: take(j - i, skip(i, xs)); never fails *)
+              | expr "[" [ expr ] ".." [ expr ] "]"        (* slice: take(j - max(i, 0), skip(max(i, 0), xs)); never fails *)
               | expr "++" expr                             (* concatenation; an infinite left operand is the result *)
               | "[" [ expr { "," expr } ] "]"              (* list literal *)
               | ( "reverse" | "enumerate" ) "(" expr ")"
-              | ( "take" | "skip" | "zip" ) "(" expr "," expr ")"
+              | ( "take" | "skip" | "zip" | "present" | "select" | "while_true" ) "(" expr "," expr ")"
+              | "flatten" "(" expr ")"
               | ( "map" | "filter" ) "(" fname "," expr ")"
               | "scalars" "(" expr ")" | "deref" "(" expr ")" ;
-fname         = NAME ;                                     (* a language function (scalars, deref) or a view; never a parameter or a callback, § 6.15 *)
+fname         = NAME ;                                     (* a language function (scalars, deref, yields) or a view; never a parameter or a callback, § 6.15 *)
+handle_expr   = "current" "(" expr ")"                     (* the value at the place a handle stands for, read where the expression is evaluated, § 4 *)
+              | "owner" "(" expr ")"                       (* the collection a handle borrows; also a path root *)
+              | "stored_key" "(" expr "," expr ")"         (* the key a map holds for the key equal to the second argument, or none *)
+              | "final" "(" expr ")" ;                     (* the value at the end of a result's run; needs a "called by" or "fails … in", § 6.13.1 *)
 ```
 
 ---
 
 ## 16. What the language cannot say
 
-- **Closures as values.** A function is named, never passed: `map` and `filter` take the name of a pure function, so what
-  an adapter over a closure yields is not stated (§ 6.15).
+- **Closures as values.** A function is named, never passed: `map` and `filter` take the name of a pure function. An
+  adapter over a closure is stated by the logs of its calls (`called by`, § 6.13.1), not by calling the closure.
 - **What a function computes,** in general. Formulas are reference functions compared by output; laws and postconditions
   can pin properties of them, never the whole.
 - **Anything about a body's intermediate values.** A rule over one becomes a named pure function, or stays in the code;

@@ -758,8 +758,14 @@
           "status": { "assumed": "documentation" }
         },
         {
+          "kind": "let",
+          "text": "let (head, tail) = result",
+          "source": "1.97.0 core/src/slice/mod.rs:1960, doc: \"Divides one mutable slice into two at an index.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
           "kind": "ensure",
-          "text": "ensure part_sizes : size(result.0) == mid and size(result.1) == old(size(self)) - mid",
+          "text": "ensure part_sizes : size(head) == mid and size(tail) == old(size(self)) - mid",
           "source": "1.97.0 core/src/slice/mod.rs:1962-1964, doc: \"The first will contain all indices from `[0, mid)` (excluding the index `mid` itself) and the second will contain all indices from `[mid, len)` (excluding the index `len` itself).\"",
           "status": { "assumed": "documentation" }
         },
@@ -1161,16 +1167,24 @@
           }
         },
         {
+          "kind": "ensure",
+          "text": "ensure key_kept : exists old(self[k]) implies same(stored_key(self, k), old(stored_key(self, k)))",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1310-1311, doc: \"The key is not updated, though; this matters for types that can be `==` without being identical.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "hold",
+          "text": "lifetime k ends in call when exists old(self[k])",
+          "source": "1.97.0 std/src/collections/hash/map.rs:1334, body: self.base.insert(k, v); hashbrown 0.17.1 src/map.rs:1814-1816, body: Ok(bucket) => Some(mem::replace(unsafe { &mut bucket.as_mut().1 }, v)), which does not move k",
+          "status": {
+            "observed": "from the body: when the table already has an equal key only the value is replaced, and k is dropped at the end of the call; when it has none, k is moved into the table"
+          }
+        },
+        {
           "kind": "budget",
           "text": "budget work expected amortised O(1)",
           "source": "1.97.0 std/src/collections/mod.rs:88, doc: \"Operations which have an *amortized* cost are suffixed with a `*`.\"; 1.97.0 std/src/collections/mod.rs:89, doc: \"Operations with an *expected* cost are suffixed with a `~`.\"; 1.97.0 std/src/collections/mod.rs:117, doc: \"| [`HashMap`]    | *O*(1)~                | *O*(1)~*                | *O*(1)~ \"",
           "status": { "assumed": "documentation" }
-        },
-        {
-          "kind": "unexpressed",
-          "text": "The key is not updated: when the map already has a key equal to k, it keeps that key and drops k.",
-          "source": "1.97.0 std/src/collections/hash/map.rs:1310-1311, doc: \"The key is not updated, though; this matters for types that can be `==` without being identical.\"",
-          "reason": "no identity of a stored key: `self[k]` looks a value up by key, so no expression names the key the map holds, which is what the promise is about: the key already in the map stays, and the new one is dropped"
         },
         {
           "kind": "never panics",
@@ -1243,6 +1257,7 @@
       ]
     },
     {
+      "views": [{ "name": "key", "host": "'std::collections::hash_map::Entry::key'" }],
       "kind": "type",
       "name": "std::collections::hash_map::Entry",
       "visible": "public",
@@ -1317,22 +1332,24 @@
           }
         },
         {
-          "kind": "unexpressed",
-          "text": "When the entry is vacant, default is inserted into the map first, so the map then holds it under the entry's key.",
+          "kind": "ensure",
+          "text": "ensure stored : self is Vacant(e) implies owner(self)[old(key(self))] == default",
           "source": "1.97.0 std/src/collections/hash/map.rs:2498-2499, doc: \"Ensures a value is in the entry by inserting the default if empty, and returns a mutable reference to the value in the entry.\"",
-          "reason": "no host state: no slot or expression names state a host object holds beyond its value: a capacity, a hasher's or formatter's state, an entry's hidden map. Here: the entry holds the map it came from, which is not a parameter, so nothing names the map after the call"
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "access",
+          "text": "mutates only owner(self)[old(key(self))]",
+          "source": "1.97.0 std/src/collections/hash/map.rs:2517-2520, body: match self { Occupied(entry) => entry.into_mut(), Vacant(entry) => entry.insert(default), }; hashbrown 0.17.1 src/rustc_entry.rs:574-578, body: self.table.insert_no_grow(self.hash, (self.key, value))",
+          "status": {
+            "observed": "from the body: the Occupied arm only takes a reference to the value, and the Vacant arm inserts one pair at the entry's key without growing the table, so no other element of the map changes"
+          }
         },
         {
           "kind": "unexpressed",
           "text": "Inserting into a vacant entry adds the pair without growing the table (the room was reserved when entry made the vacant entry), so it cannot fail for want of room. The default of an occupied entry is dropped by V's destructor, which may run arbitrary code, so the call is not stated to never panic.",
           "source": "1.97.0 std/src/collections/hash/map.rs:2517-2520, body: match self { Occupied(entry) => entry.into_mut(), Vacant(entry) => entry.insert(default), }; hashbrown 0.17.1 src/rustc_entry.rs:574-578, body: self.table.insert_no_grow(self.hash, (self.key, value))",
           "reason": "no effects of a destructor: V's Drop runs inside the call and is arbitrary code, so no `never panics`, `effects none` or `terminates` can be stated for the call, and no `given` item names a destructor"
-        },
-        {
-          "kind": "unexpressed",
-          "text": "No other key of the map changes.",
-          "source": "1.97.0 std/src/collections/hash/map.rs:2498-2499, doc: \"Ensures a value is in the entry by inserting the default if empty, and returns a mutable reference to the value in the entry.\"",
-          "reason": "no host state: no slot or expression names state a host object holds beyond its value: a capacity, a hasher's or formatter's state, an entry's hidden map. Here: the map the entry holds is not a parameter, so `mutates only self[key]` has no collection to be about"
         }
       ]
     },
@@ -1700,10 +1717,12 @@
           "status": { "observed": "from the impl blocks" }
         },
         {
-          "kind": "unexpressed",
-          "text": "Dropping an IntoIter drops the elements it has not yielded.",
-          "source": "1.97.0 alloc/src/vec/into_iter.rs:541, body: unsafe impl<#[may_dangle] T, A: Allocator> Drop for IntoIter<T, A>: drops the remaining elements and frees the buffer",
-          "reason": "no lifetime for the elements of a sequence: `lifetime v ends in call` names one entity of a call, and the elements `yields(self)` has not yet given are many, dropped by a type's `Drop`. Here: the elements the iterator has not yielded, which its drop drops"
+          "kind": "hold",
+          "text": "lifetime every item of yields(self) ends with self",
+          "source": "1.97.0 alloc/src/vec/into_iter.rs:541-558, body: unsafe impl Drop for IntoIter: ptr::drop_in_place(guard.0.as_raw_mut_slice()), \"destroy the remaining elements\"",
+          "status": {
+            "observed": "from the body of Drop::drop: the remaining elements, the ones yields(self) still holds, are dropped in place, and then the buffer is freed"
+          }
         }
       ]
     },
@@ -1721,7 +1740,7 @@
           "kind": "unexpressed",
           "text": "start..end contains all values with start <= x < end, and is empty if start >= end; when Idx: Step it is an iterator that yields start, start + 1 and so on, up to but not including end, and is a DoubleEndedIterator.",
           "source": "1.97.0 core/src/ops/range.rs:56-57, doc: \"The range `start..end` contains all values with `start <= x < end`. It is empty if `start >= end`.\"",
-          "reason": "no successor of a type parameter: for an integer `yields(self)` would be `start`, `start + 1` and so on up to `end`, but `Idx` is any `Step` type, whose successor is a method and not `+ 1`, and the language has no range of a generic `Idx`. Here: a range of integers is a refinement `T in a..b` in the language, but a value of this type is not"
+          "reason": "no successor of a type parameter: for an integer `yields(self)` would be `start`, `start + 1` and so on up to `end`, but `Idx` is any `Step` type, whose successor is a method of an unstable trait that no bound can name, and the library has no subject for a range of integers (that is a refinement `T in a..b` in the language, not a value of this type). Here: the iteration of a range of any Step type"
         },
         {
           "kind": "unexpressed",
@@ -1847,6 +1866,10 @@
       ]
     },
     {
+      "views": [
+        { "name": "is_err", "host": "'std::result::Result::is_err'" },
+        { "name": "ok_value", "host": "'std::result::Result::ok'" }
+      ],
       "kind": "type",
       "name": "std::result::Result",
       "visible": "public",
@@ -1997,7 +2020,7 @@
         },
         {
           "kind": "ensure",
-          "text": "ensure advances : exists result implies yields(self) == old(yields(self))[1..]",
+          "text": "ensure advances : present(old(yields(self)), 0) implies yields(self) == old(yields(self))[1..]",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:50-53, doc: \"Returns [`None`] when iteration is finished. Individual iterator implementations may choose to resume iteration, and so calling `next()` again may or may not eventually start returning [`Some(Item)`] again at some point.\" (what the iterator does after a None is the implementation's, so nothing is stated when result is none)",
           "status": { "assumed": "documentation" }
         },
@@ -2061,10 +2084,11 @@
           "status": { "assumed": "documentation" }
         },
         {
-          "kind": "unexpressed",
-          "text": "The returned iterator might panic if the index would overflow a usize, and with overflow checks enabled a panic is guaranteed.",
-          "source": "1.97.0 core/src/iter/traits/iterator.rs:1024-1025, doc: \"The returned iterator might panic if the to-be-returned index would overflow a [`usize`].\"",
-          "reason": "no promise about a result's later calls: the panic is that of `next` on the returned Enumerate, a call of another subject, so `fails` on `enumerate` would be false, and the iterator has no subject of its own to state it on. Here: the index overflowing usize, with overflow checks a panic is guaranteed"
+          "kind": "panics",
+          "text": "fails panic in result.next when old(count(self)) > 18446744073709551615",
+          "given": ["build overflow_checks"],
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:1018-1020, doc: \"The method does no guarding against overflows, so enumerating more than [`usize::MAX`] elements either produces the wrong result or panics. If overflow checks are enabled, a panic is guaranteed.\"",
+          "status": { "assumed": "documentation" }
         },
         {
           "kind": "effects",
@@ -2233,16 +2257,24 @@
           "status": { "assumed": "documentation" }
         },
         {
-          "kind": "unexpressed",
-          "text": "result yields f(x) for each item x of self, in order.",
-          "source": "1.97.0 core/src/iter/traits/iterator.rs:780-781, doc: \"Takes a closure and creates an iterator which calls that closure on each element.\"",
-          "reason": "no callback as a function: `map(f, xs)` and `filter(p, xs)` take a named pure function (language 6.15), a view of the file or a function of the language, and the parameter here is a closure, which is neither named nor pure and is called later by the result's `next`, so a `callback` clause (one call's arguments and result) does not state it either. Here: the items the result yields, each made by the callback, in order"
+          "kind": "callback",
+          "text": "callback f : called by result.next, at most once per call, with x, returning y",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:792-793, doc: \"However, as `map()` is lazy, it is best used when you're already working with other iterators.\"; 1.97.0 core/src/iter/adapters/map.rs:106-108, body: self.iter.next().map(&mut self.f)",
+          "status": {
+            "observed": "from the doc: map is lazy, so f is called as the result is advanced; and from the body of Map::next: one call of next calls f once on the item it took, and not at all when there is none"
+          }
         },
         {
-          "kind": "unexpressed",
-          "text": "f is called once for each item, in order, and only when the result is advanced: map is lazy.",
-          "source": "1.97.0 core/src/iter/traits/iterator.rs:792-793, doc: \"However, as `map()` is lazy, it is best used when you're already working with other iterators.\"",
-          "reason": "no promise about a result's later calls: the callback is called by `next` on the returned adapter, a call of another subject, so a `callback` or `protocol` on this function would be false: it calls nothing. Here: when and how often the callback is called: once for each item, in order, and only when the result is advanced"
+          "kind": "ensure",
+          "text": "ensure items : yields(result) == y",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:780-781, doc: \"Takes a closure and creates an iterator which calls that closure on each element.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "ensure",
+          "text": "ensure arguments : x == old(yields(self))",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:784-785, doc: \"It produces a new iterator which calls this closure on each element of the original iterator.\"",
+          "status": { "assumed": "documentation" }
         },
         {
           "kind": "effects",
@@ -2275,16 +2307,24 @@
           "status": { "assumed": "documentation" }
         },
         {
-          "kind": "unexpressed",
-          "text": "result yields exactly the items x of self for which predicate(&x) is true, in order.",
-          "source": "1.97.0 core/src/iter/traits/iterator.rs:893, doc: \"Given an element the closure must return `true` or `false`.\"",
-          "reason": "no callback as a function: `map(f, xs)` and `filter(p, xs)` take a named pure function (language 6.15), a view of the file or a function of the language, and the parameter here is a closure, which is neither named nor pure and is called later by the result's `next`, so a `callback` clause (one call's arguments and result) does not state it either. Here: the items the result yields, each made by the callback, in order"
+          "kind": "callback",
+          "text": "callback predicate : called by result.next, with x, returning keep",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:890-891, doc: \"Creates an iterator which uses a closure to determine if an element should be yielded.\"; 1.97.0 core/src/iter/adapters/filter.rs:97-99, body: self.iter.find(&mut self.predicate)",
+          "status": {
+            "observed": "from the doc: the closure decides for each element; and from the body of Filter::next: find calls the predicate on one item after another until one passes, so any number of times per call of next"
+          }
         },
         {
-          "kind": "unexpressed",
-          "text": "predicate is called once for each item, in order, and only when the result is advanced.",
+          "kind": "ensure",
+          "text": "ensure examined : map(deref, x) == old(yields(self))",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:890-891, doc: \"Creates an iterator which uses a closure to determine if an element should be yielded.\"",
-          "reason": "no promise about a result's later calls: the callback is called by `next` on the returned adapter, a call of another subject, so a `callback` or `protocol` on this function would be false: it calls nothing. Here: when and how often the callback is called: once for each item, in order, and only when the result is advanced"
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "ensure",
+          "text": "ensure items : yields(result) == select(keep, old(yields(self)))",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:893-895, doc: \"Given an element the closure must return `true` or `false`. The returned iterator will yield only the elements for which the closure returns `true`.\"",
+          "status": { "assumed": "documentation" }
         },
         {
           "kind": "effects",
@@ -2317,16 +2357,30 @@
           "status": { "assumed": "documentation" }
         },
         {
-          "kind": "unexpressed",
-          "text": "result yields the items of self in order up to, and not including, the first one for which predicate returns false.",
-          "source": "1.97.0 core/src/iter/traits/iterator.rs:1190-1192, doc: \"It will call this closure on each element of the iterator, and yield elements while it returns `true`.\"",
-          "reason": "no callback as a function: `map(f, xs)` and `filter(p, xs)` take a named pure function (language 6.15), a view of the file or a function of the language, and the parameter here is a closure, which is neither named nor pure and is called later by the result's `next`, so a `callback` clause (one call's arguments and result) does not state it either. Here: the items the result yields, each made by the callback, in order"
+          "kind": "callback",
+          "text": "callback predicate : called by result.next, at most once per call, with x, returning keep",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:1190-1192, doc: \"It will call this closure on each element of the iterator, and yield elements while it returns `true`.\"; 1.97.0 core/src/iter/adapters/take_while.rs:44-56, body: if self.flag { None } else { let x = self.iter.next()?; if (self.predicate)(&x) { Some(x) } else { self.flag = true; None } }",
+          "status": {
+            "observed": "from the doc: the closure is called on each element; and from the body of TakeWhile::next: one call of next calls the predicate at most once, on the item it took, and not at all after a false"
+          }
         },
         {
-          "kind": "unexpressed",
-          "text": "The first item for which predicate returns false is consumed from self and not yielded or put back, so a caller that keeps the underlying iterator does not see it.",
+          "kind": "ensure",
+          "text": "ensure items : yields(result) == while_true(keep, old(yields(self)))",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:1190-1195, doc: \"It will call this closure on each element of the iterator, and yield elements while it returns `true`.\"; \"After `false` is returned, `take_while()`'s job is over, and the rest of the elements are ignored.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "ensure",
+          "text": "ensure consumed : map(deref, x) == take(size(keep), old(yields(self)))",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:1190-1195, doc: \"It will call this closure on each element of the iterator, and yield elements while it returns `true`.\"; \"After `false` is returned, `take_while()`'s job is over, and the rest of the elements are ignored.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "ensure",
+          "text": "ensure not_put_back : final(yields(self)) == skip(size(keep), old(yields(self)))",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:1254-1255, doc: \"The `3` is no longer there, because it was consumed in order to see if the iteration should stop, but wasn't placed back into the iterator.\"",
-          "reason": "no promise about a result's later calls: the callback is called by `next` on the returned adapter, a call of another subject, so a `callback` or `protocol` on this function would be false: it calls nothing. Here: when and how often the callback is called: the item that ends the iteration is consumed from self by the result's `next`"
+          "status": { "assumed": "documentation" }
         },
         {
           "kind": "effects",
@@ -2354,10 +2408,24 @@
       "result": { "type": "std::iter::FlatMap<Self, U, F>" },
       "clauses": [
         {
-          "kind": "unexpressed",
-          "text": "result yields the items of f(x) for each item x of self, one x after another, in order: it is map(f) followed by flatten.",
+          "kind": "callback",
+          "text": "callback f : called by result.next, with x, returning y",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:1512-1514, doc: \"`flat_map()`'s closure returns an iterator for each element.\"",
+          "status": {
+            "observed": "from the doc: the closure is called on each element, and returns an iterator for it; the number of calls per call of next is not stated, because an empty iterator makes next ask for the next element"
+          }
+        },
+        {
+          "kind": "ensure",
+          "text": "ensure arguments : x == old(yields(self))",
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:1512-1514, doc: \"`flat_map()`'s closure returns an iterator for each element.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "ensure",
+          "text": "ensure items : yields(result) == flatten(map(yields, y))",
           "source": "1.97.0 core/src/iter/traits/iterator.rs:1509-1510, doc: \"You can think of `flat_map(f)` as the semantic equivalent of [`map`]ping, and then [`flatten`]ing as in `map(f).flatten()`.\"",
-          "reason": "no callback as a function: `map(f, xs)` and `filter(p, xs)` take a named pure function (language 6.15), a view of the file or a function of the language, and the parameter here is a closure, which is neither named nor pure and is called later by the result's `next`, so a `callback` clause (one call's arguments and result) does not state it either; and no `flatten`. Here: the items the result yields, each made by the callback, in order; so no count of the result can be stated"
+          "status": { "assumed": "documentation" }
         },
         {
           "kind": "effects",
@@ -2426,10 +2494,13 @@
           "status": { "lifted": "core/src/iter/traits/iterator.rs: #[must_use] on the item" }
         },
         {
-          "kind": "unexpressed",
-          "text": "A Result<V, E> collects an iterator of Result items into Result<V, E>, stopping at the first Err; a String collects chars. The FromIterator impls are stated as impl subjects of Result and of String; what each holds of the items is a statement about their order.",
-          "source": "1.97.0 core/src/iter/traits/iterator.rs:1974-1975, doc: \"`collect()` can also create instances of types that are not typical collections.\"",
-          "reason": "no from_iter subject: `collect` returns any `B: FromIterator<Item>`, which promises nothing about the items; what Result and String do with the sequence is a promise of their `from_iter`, which this file has no subject for"
+          "kind": "ensure",
+          "text": "ensure delegates : result == '<B as std::iter::FromIterator<Item>>::from_iter'(old(self))",
+          "given": ["default"],
+          "source": "1.97.0 core/src/iter/traits/iterator.rs:2090, body: FromIterator::from_iter(self); 1.97.0 core/src/iter/traits/iterator.rs:1974-1975, doc: \"`collect()` can also create instances of types that are not typical collections.\"",
+          "status": {
+            "observed": "from the default body: collect hands self to B's from_iter, and what each FromIterator does with the items is that impl's own promise (the impls of Result and String are subjects of this file)"
+          }
         },
         {
           "kind": "never panics",
@@ -2541,7 +2612,7 @@
           "kind": "unexpressed",
           "text": "Returns a duplicate of the value; what duplicate means varies by type: a deep, independent copy for most types, and another reference to the same data for references, Rc and Arc.",
           "source": "1.97.0 core/src/clone.rs:195, doc: \"Returns a duplicate of the value.\"",
-          "reason": "no identity of cloned values: `moved from` says a value moved, not what a clone shares with its original; whether the duplicate is an independent copy or the same data is each type's own, and the trait states no rule"
+          "reason": "no promise: `clone` returns a duplicate, and whether it is an independent copy or the same data (an Rc) is each type's own; the trait states no rule about what a clone shares with its original, so there is nothing to state"
         },
         {
           "kind": "law",
@@ -3209,7 +3280,7 @@
           "kind": "unexpressed",
           "text": "vec![elem; n] uses clone to duplicate elem, so vec![Rc::new(1); 5] holds five references to the same value, not five independent values.",
           "source": "1.97.0 alloc/src/macros.rs:26-27, doc: \"This will use `clone` to duplicate an expression, so one should be careful using this with types having a nonstandard `Clone` implementation.\"",
-          "reason": "no identity of cloned values: `moved from` says a value moved, not what the clones share with the original; whether the elements are independent or the same data (Rc) is the element type's own Clone"
+          "reason": "no arm of a macro in a clause: that the elements are clones of `elem` is a relation of `elem`, `n` and the result, which are the parameters of one arm in the host profile (`vec![elem; n]`), and the entry has none; what the clones share is the element type's own Clone, which promises nothing"
         },
         {
           "kind": "unexpressed",
@@ -5084,6 +5155,29 @@
       ]
     },
     {
+      "kind": "function",
+      "name": "std::result::Result as std::iter::FromIterator::from_iter",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": ["std::iter::IntoIterator<Item = std::result::Result<A, E>>"] }],
+      "impl": "std::result::Result as std::iter::FromIterator",
+      "params": [{ "name": "iter", "type": "I" }],
+      "result": { "type": "std::result::Result<V, E>" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure first_err : filter(is_err, yields(iter))[0] is Err(e) implies (result is Err(g) and g == e)",
+          "source": "1.97.0 core/src/result.rs:2113-2115, doc: \"Takes each element in the `Iterator`: if it is an `Err`, no further elements are taken, and the `Err` is returned.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "ensure",
+          "text": "ensure all_ok : not (any x in yields(iter) : x is Err(g)) implies (result is Ok(v) and v == '<V as std::iter::FromIterator<A>>::from_iter'(map(ok_value, yields(iter))))",
+          "source": "1.97.0 core/src/result.rs:2113-2116, doc: \"Should no `Err` occur, a container with the values of each `Result` is returned.\"",
+          "status": { "assumed": "documentation" }
+        }
+      ]
+    },
+    {
       "kind": "impl",
       "name": "std::string::String as std::ops::Index",
       "visible": "public",
@@ -5453,6 +5547,41 @@
           "text": "ensure itself : result == self",
           "source": "1.97.0 core/src/iter/traits/collect.rs:317-325, body: fn into_iter(self) -> I { self }",
           "status": { "observed": "from the body" }
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "std::string::String from char as std::iter::FromIterator",
+      "visible": "public",
+      "generics": [],
+      "trait": "std::iter::FromIterator<char>",
+      "self": "text as 'String'",
+      "clauses": [
+        {
+          "kind": "implements",
+          "text": "implements 'std::iter::FromIterator<char>'",
+          "source": "1.97.0 alloc/src/string.rs:2379, impls: FromIterator<char>",
+          "status": { "observed": "from the impl blocks" }
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::string::String from char as std::iter::FromIterator::from_iter",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": ["std::iter::IntoIterator<Item = char>"] }],
+      "impl": "std::string::String from char as std::iter::FromIterator",
+      "params": [{ "name": "iter", "type": "I" }],
+      "result": { "type": "text as 'String'" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure chars : scalars(result) == yields(iter)",
+          "source": "1.97.0 alloc/src/string.rs:2379-2385, body: let mut buf = String::new(); buf.extend(iter); buf; alloc/src/string.rs:2481-2486, body: iterator.for_each(move |c| self.push(c))",
+          "status": {
+            "observed": "from the body: the new string is extended with each char of iter in order, and nothing else"
+          }
         }
       ]
     },
