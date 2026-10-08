@@ -1,0 +1,87 @@
+{
+  "format": "y-constraints/0",
+  "host": "rust",
+  "crate": "interpolate 0.0.0",
+  "module": "src/lib.rs",
+  "status": "lifted",
+  "subjects": [
+    {
+      "kind": "function",
+      "name": "interpolate::interpolate",
+      "visible": "public",
+      "generics": [
+        { "name": "A", "bounds": [], "where": ["FnMut(usize, &mut Vec<u8>)"] },
+        { "name": "N", "bounds": [], "where": ["FnMut(&str) -> Option<usize>"] }
+      ],
+      "params": [
+        {
+          "name": "replacement",
+          "type": "ref<list<u8> as 'std::primitive::slice'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "append", "type": "A" },
+        { "name": "name_to_index", "type": "N" },
+        {
+          "name": "dst",
+          "type": "ref<list<u8> as 'Vec'>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "interpolate::CaptureRef",
+      "generics": [{ "name": "'a", "bounds": [] }],
+      "fields": [
+        { "name": "cap", "type": "Ref<'a>", "hold": { "kind": "owns" } },
+        { "name": "end", "type": "u64 as 'usize'", "hold": { "kind": "owns" } }
+      ],
+      "hold": { "kind": "borrows", "for": ["'a"] }
+    },
+    {
+      "kind": "type",
+      "name": "interpolate::Ref",
+      "generics": [{ "name": "'a", "bounds": [] }],
+      "variants": [
+        {
+          "name": "Named",
+          "fields": [
+            {
+              "type": "ref<text>",
+              "access": { "rights": "read", "guarantee": "readers" },
+              "hold": { "kind": "borrows", "lifetime": "'a" }
+            }
+          ]
+        },
+        { "name": "Number", "fields": [{ "type": "u64 as 'usize'", "hold": { "kind": "owns" } }] }
+      ],
+      "hold": { "kind": "borrows", "for": ["'a"] }
+    },
+    {
+      "kind": "function",
+      "name": "interpolate::find_cap_ref",
+      "params": [
+        {
+          "name": "replacement",
+          "type": "ref<list<u8> as 'std::primitive::slice'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "CaptureRef<'_>?" }
+    },
+    {
+      "kind": "function",
+      "name": "interpolate::is_valid_cap_letter",
+      "params": [{ "name": "b", "type": "ref<u8>", "access": { "rights": "read", "guarantee": "readers" } }],
+      "result": { "type": "bool" }
+    }
+  ],
+  "holes": {
+    "interpolate::find_cap_ref": {
+      "hints": [
+        { "kind": "targ", "n": 0, "type": "u32" },
+        { "kind": "cast", "n": 0, "type": "u64 as 'usize'" }
+      ]
+    }
+  }
+}
