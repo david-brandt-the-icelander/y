@@ -144,6 +144,23 @@ fn committed_externals_lists_are_current() {
 }
 
 #[test]
+fn externals_record_the_impl_each_call_resolves_to() {
+    let (_, e) = externals(&corpus("strsim"), true).unwrap();
+    let impls = |p: &str| e.items[&(Kind::Function, p.to_string())].impls.iter().cloned().collect::<Vec<_>>();
+    // a trait method names the impl of the trait for the head of the self type, a method of the type its own impl
+    assert!(impls("std::iter::Iterator::zip").contains(&"impl std::iter::Iterator for std::str::Chars".to_string()), "{:?}", impls("std::iter::Iterator::zip"));
+    assert_eq!(impls("std::collections::HashMap::with_capacity"), vec!["impl std::collections::HashMap".to_string()]);
+    assert_eq!(impls("std::primitive::char::is_whitespace"), vec!["impl char".to_string()]);
+    // a free function has none, and the committed list carries them
+    assert!(e.items[&(Kind::Function, "std::cmp::min".to_string())].impls.is_empty());
+    let (_, fnv) = externals(&corpus("fnv"), true).unwrap();
+    assert_eq!(fnv.items[&(Kind::Function, "std::convert::From::from".to_string())].impls.iter().next().map(String::as_str), Some("impl std::convert::From<u8> for u64"));
+    let committed: Value = serde_json::from_str(&fs::read_to_string(libraries().join("externals/fnv.json")).unwrap()).unwrap();
+    let from = committed["items"].as_array().unwrap().iter().find(|i| i["path"] == "std::convert::From::from").unwrap();
+    assert_eq!(from["impls"], json!(["impl std::convert::From<u8> for u64"]));
+}
+
+#[test]
 fn without_all_targets_test_code_is_left_out() {
     let (_, lib_only) = externals(&corpus("strsim"), false).unwrap();
     let (_, all) = externals(&corpus("strsim"), true).unwrap();
@@ -166,7 +183,9 @@ fn the_library_file_is_valid_and_canonical() {
     for n in EXEMPLARS {
         assert!(names.contains(&n), "{n}");
     }
-    assert_eq!(names.len(), 106, "49 functions, 26 types, 19 traits, 11 macros and 1 const: the 105 external items, and Ordering for the laws");
+    // the impls of B1, and the methods of those impls, are subjects of their own beside the entries for the external items
+    let own = file["subjects"].as_array().unwrap().iter().filter(|s| s["kind"] != "impl" && s["impl"].is_null()).count();
+    assert_eq!(own, 113, "49 functions, 27 types, 19 traits, 11 macros and 1 const: the 105 external items, Ordering for the laws, and OccupiedEntry for a view; and for B2's `given` items the trait methods Hash::hash, PartialEq::eq, PartialOrd::lt, Ord::cmp, Ord::min and the trait PartialOrd");
 }
 
 #[test]
@@ -291,7 +310,7 @@ fn a_view_is_declared_bound_to_a_host_function_and_usable_in_clauses() {
     // the host path resolves in rustc: 3 views, none unchecked; a path that is not a method is a mismatch
     let (file, _) = std_file();
     let r = check_signatures(&file, &work("views-ok"), &target()).unwrap();
-    assert_eq!((r.views_checked, r.views_unchecked.len(), r.mismatches.len()), (3, 0, 0), "{:?}", r.mismatches);
+    assert_eq!((r.views_checked, r.views_unchecked.len(), r.mismatches.len()), (7, 0, 0), "{:?}", r.mismatches);
     let mut f = file.clone();
     f["views"][1]["host"] = json!("'std::vec::Vec::capacitee'");
     let r = check_signatures(&f, &work("views-bad"), &target()).unwrap();
@@ -400,6 +419,7 @@ fn what_a_function_computes_is_not_a_gap_of_the_language() {
         assert!(!labels.contains(&gone), "{gone}");
     }
     assert_eq!(labels.iter().filter(|l| **l == "what a function computes").count(), 8);
+    assert_eq!(labels.len(), 52, "B3 took 121 to 114, B4 to 77, B5 to 65, and the residuals to 52");
 }
 
 #[test]
@@ -413,8 +433,8 @@ fn the_whole_file_compiles_against_the_real_std() {
     // what the checker cannot do is the bang macros, and a trait with generics is only found by its path
     assert_eq!(r.unchecked.keys().collect::<Vec<_>>(), vec!["macro"]);
     assert_eq!(r.unchecked["macro"].len(), 4, "{:?}", r.unchecked);
-    assert_eq!(r.resolved.len(), 5, "{:?}", r.resolved);
-    assert_eq!(r.checked.len() + r.resolved.len() + r.unchecked_total(), 106);
+    assert_eq!(r.resolved.len(), 6, "{:?}", r.resolved);
+    assert_eq!(r.checked.len() + r.resolved.len() + r.unchecked_total(), file["subjects"].as_array().unwrap().len());
 }
 
 #[test]
@@ -556,8 +576,1048 @@ fn libstats_counts_what_the_file_holds() {
     let (file, _) = std_file();
     let r = check_signatures(&file, &work("stats-sigs"), &target()).unwrap();
     let t = bare_rust::libstats::libstats(&file, Some(&r));
-    for want in ["library std 1.97.0 (106 subjects)", "function (22 are trait methods)", "unexpressed", "no sequence value", "path-resolved only: std::cmp::PartialEq", "type slots (139); 126 map to the type language and 13 are host text"] {
+    for want in ["library std 1.97.0 (263 subjects)", "function (27 are trait methods)", "unexpressed", "no arm of a macro in a clause", "sequences of language 6.15 (28 clauses)", "later calls, handles and bindings (14 clauses)", "path-resolved only: std::cmp::PartialEq", "type slots (192); 185 map to the type language and 7 are host text"] {
         assert!(t.contains(want), "{want}: {t}");
     }
     assert!(!t.contains("reasons carry no label"), "{t}");
+}
+
+// ---------- B1: implementations, implements, existential types, lifetimes and generics ----------
+
+const CHAR: &str = "text where length(value) == 1 as 'char'";
+
+/// `Chars<'a>` as the plan writes it: it holds a borrow for `'a` and implements `Iterator { Item = char }` and `Clone`; the
+/// impl of `Iterator` is a subject of its own, with its method `next`.
+fn chars_with_its_impl() -> Value {
+    let mut f = exemplars_only();
+    f.as_object_mut().unwrap().remove("views");
+    let chars = subject_mut(&mut f, "std::str::Chars");
+    chars["hold"] = json!({"kind": "borrows", "for": ["'a"]});
+    chars["implements"] = json!([
+        {"trait": "std::iter::Iterator", "assoc": {"Item": CHAR}, "impl": "std::str::Chars as std::iter::Iterator"},
+        {"trait": "std::clone::Clone"}
+    ]);
+    chars["clauses"].as_array_mut().unwrap().push(json!({
+        "kind": "implements", "text": "implements 'std::iter::Iterator' { Item = char }", "source": "1.97.0 core/src/str/iter.rs:35, impls: Iterator 35",
+        "status": {"assumed": "documentation"}
+    }));
+    chars["clauses"].as_array_mut().unwrap().push(json!({
+        "kind": "hold", "text": "hold : borrows for 'a", "source": "1.97.0 core/src/str/iter.rs:30, body: struct Chars<'a>", "status": {"observed": "from the declaration"}
+    }));
+    let subjects = f["subjects"].as_array_mut().unwrap();
+    subjects.push(json!({
+        "kind": "impl", "name": "std::str::Chars as std::iter::Iterator", "generics": [{"name": "'a", "bounds": []}],
+        "self": "std::str::Chars<'a>", "trait": "std::iter::Iterator", "assoc": {"Item": CHAR},
+        "clauses": [{"kind": "effects", "text": "no io", "source": "1.97.0 core/src/str/iter.rs:35, body: next", "status": {"observed": "body"}}]
+    }));
+    subjects.push(json!({
+        "kind": "function", "name": "std::str::Chars as std::iter::Iterator::next", "impl": "std::str::Chars as std::iter::Iterator",
+        "params": [{"name": "self", "type": "ref<std::str::Chars<'a>>", "access": {"rights": "write", "guarantee": "exclusive"}}],
+        "result": {"type": format!("{CHAR}?")}
+    }));
+    f
+}
+
+#[test]
+fn an_impl_is_a_subject_and_a_type_declares_what_it_implements() {
+    let f = chars_with_its_impl();
+    assert_eq!(errors(&f), "");
+    // the clause forms are accepted: `implements`, `hold : borrows for 'a`, the associated type's name and type
+    let mut bad = f.clone();
+    // the clauses are found by kind, since the library file's own Chars entry carries them too
+    let cl = |f: &mut Value, kind: &str, t: &str| {
+        let cs = subject_mut(f, "std::str::Chars")["clauses"].as_array_mut().unwrap();
+        for c in cs.iter_mut().filter(|c| c["kind"] == kind) {
+            c["text"] = json!(t);
+        }
+    };
+    cl(&mut bad, "implements", "implements 'std::iter::Iterator' { Item = nope }");
+    cl(&mut bad, "hold", "hold : borrows for 'zz");
+    let e = errors(&bad);
+    assert!(e.contains("unknown name `nope`") && e.contains("unknown lifetime `'zz`"), "{e}");
+    // an impl names its trait and its self type, and is named by them; an implements entry names a real impl of its trait
+    let mut bad = f.clone();
+    let imp = subject_mut(&mut bad, "std::str::Chars as std::iter::Iterator");
+    imp.as_object_mut().unwrap().remove("self");
+    imp["name"] = json!("std::str::Chars as std::clone::Clone");
+    subject_mut(&mut bad, "std::str::Chars")["implements"][0]["impl"] = json!("std::str::Chars as std::nowhere");
+    subject_mut(&mut bad, "std::str::Chars")["hold"]["for"] = json!(["'b"]);
+    let e = errors(&bad);
+    for want in ["names its `trait` and the `self` type", "ending in its trait `std::iter::Iterator`", "is not a subject of the file", "does not declare"] {
+        assert!(e.contains(want), "{want}: {e}");
+    }
+    // an associated type is parsed like any other type, and `assoc` belongs to an impl
+    let mut bad = f.clone();
+    subject_mut(&mut bad, "std::str::Chars")["implements"][0]["assoc"]["Item"] = json!("list<");
+    subject_mut(&mut bad, "std::str::Chars")["assoc"] = json!({"Item": "u8"});
+    let e = errors(&bad);
+    assert!(e.contains("implements 0: associated type `Item`") && e.contains("`assoc` is for an impl"), "{e}");
+    // an implements clause is a clause kind, and the schema takes the old files unchanged
+    let (file, text) = std_file();
+    assert_eq!(validate(&file, Some(&text)), Vec::<String>::new());
+}
+
+#[test]
+fn an_impl_and_its_methods_compile_against_the_real_std_impl() {
+    let f = chars_with_its_impl();
+    let r = check_signatures(&f, &work("sig-impl"), &target()).unwrap();
+    assert_eq!(r.mismatches, vec![], "{:?}", r.mismatches);
+    for n in ["std::str::Chars as std::iter::Iterator", "std::str::Chars as std::iter::Iterator::next", "std::str::Chars"] {
+        assert!(r.checked.contains(&n.to_string()), "{n}: checked {:?}, unchecked {:?}", r.checked, r.unchecked);
+    }
+    assert_eq!(r.by_kind["impl"], (1, 0));
+    // the wrong associated type, an impl the real type does not have, a method that is not the real one
+    let mut f = chars_with_its_impl();
+    subject_mut(&mut f, "std::str::Chars as std::iter::Iterator")["assoc"]["Item"] = json!("u8");
+    subject_mut(&mut f, "std::str::Chars")["implements"][0]["assoc"]["Item"] = json!("u8");
+    subject_mut(&mut f, "std::str::Chars")["implements"][1]["trait"] = json!("std::marker::Copy");
+    subject_mut(&mut f, "std::str::Chars as std::iter::Iterator::next")["result"]["type"] = json!("u8?");
+    let r = check_signatures(&f, &work("sig-impl-wrong"), &target()).unwrap();
+    let by: std::collections::BTreeMap<&str, &str> = r.mismatches.iter().map(|(n, m)| (n.as_str(), m.as_str())).collect();
+    assert!(by["std::str::Chars as std::iter::Iterator"].starts_with("E0271"), "{by:?}");
+    assert!(by["std::str::Chars"].starts_with("E0271") || by["std::str::Chars"].starts_with("E0277"), "{by:?}");
+    assert!(by["std::str::Chars as std::iter::Iterator::next"].starts_with("E0308"), "{by:?}");
+    // an impl that is not there at all
+    let mut f = chars_with_its_impl();
+    f["subjects"].as_array_mut().unwrap().push(json!({
+        "kind": "impl", "name": "std::str::Chars as std::marker::Copy", "generics": [{"name": "'a", "bounds": []}],
+        "self": "std::str::Chars<'a>", "trait": "std::marker::Copy"
+    }));
+    let r = check_signatures(&f, &work("sig-impl-absent"), &target()).unwrap();
+    assert_eq!(r.mismatches.len(), 1, "{:?}", r.mismatches);
+    assert!(r.mismatches[0].0 == "std::str::Chars as std::marker::Copy" && r.mismatches[0].1.starts_with("E0277"), "{:?}", r.mismatches);
+}
+
+#[test]
+fn some_and_any_are_checked_as_the_real_function_takes_and_returns_them() {
+    let mut f = exemplars_only();
+    f.as_object_mut().unwrap().remove("views");
+    let subjects = f["subjects"].as_array_mut().unwrap();
+    // `some I` as a parameter is a generic with the bound; `any I as 'Box'` is `Box<dyn I>`
+    subjects.push(json!({
+        "kind": "function", "name": "std::fs::write",
+        "params": [{"name": "path", "type": "some std::convert::AsRef<std::path::Path>"},
+                   {"name": "contents", "type": "some std::convert::AsRef<list<u8> as 'std::primitive::slice'>"}],
+        "result": {"type": "()", "fails": "std::io::Error"}
+    }));
+    subjects.push(json!({
+        "kind": "function", "name": "std::io::Error::new",
+        "params": [{"name": "kind", "type": "std::io::ErrorKind"},
+                   {"name": "error", "type": "some std::convert::Into<any std::error::Error + Send + Sync as 'std::boxed::Box'>"}],
+        "result": {"type": "std::io::Error"}
+    }));
+    // `some I` as the result: the real result type implements `I`, with the associated types
+    subjects.push(json!({
+        "kind": "function", "name": "std::iter::repeat", "generics": [{"name": "T", "bounds": ["std::clone::Clone"]}],
+        "params": [{"name": "elt", "type": "T"}],
+        "result": {"type": "some std::iter::Iterator { Item = T }"}
+    }));
+    // a borrow inside a bound is shared and unnamed, and the result borrows from the one reference it is given
+    subjects.push(json!({
+        "kind": "function", "name": "std::primitive::str::split_whitespace",
+        "params": [{"name": "self", "type": "ref<text>", "access": {"rights": "read", "guarantee": "readers"}}],
+        "result": {"type": "some std::iter::Iterator { Item = ref<text> }", "hold": {"kind": "borrows", "from": "self"}}
+    }));
+    assert_eq!(errors(&f), "");
+    let r = check_signatures(&f, &work("sig-exist"), &target()).unwrap();
+    assert_eq!(r.mismatches, vec![], "{:?}", r.mismatches);
+    for n in ["std::fs::write", "std::io::Error::new", "std::iter::repeat", "std::primitive::str::split_whitespace"] {
+        assert!(r.checked.contains(&n.to_string()), "{n}: checked {:?}, unchecked {:?}", r.checked, r.unchecked);
+    }
+    // a bound the real function does not meet is a mismatch
+    subject_mut(&mut f, "std::iter::repeat")["result"]["type"] = json!("some std::iter::Iterator { Item = u8 }");
+    subject_mut(&mut f, "std::fs::write")["params"][1]["type"] = json!("some std::fmt::Display");
+    let r = check_signatures(&f, &work("sig-exist-wrong"), &target()).unwrap();
+    let by: std::collections::BTreeMap<&str, &str> = r.mismatches.iter().map(|(n, m)| (n.as_str(), m.as_str())).collect();
+    assert!(by["std::iter::repeat"].starts_with("E0271"), "{by:?}");
+    assert!(by["std::fs::write"].starts_with("E0277"), "{by:?}");
+    assert_eq!(r.mismatches.len(), 2, "{by:?}");
+    // what is not at the top of a result cannot be checked this way, and is said so
+    let mut f = exemplars_only();
+    f["subjects"].as_array_mut().unwrap().push(json!({
+        "kind": "function", "name": "std::iter::repeat", "generics": [{"name": "T", "bounds": []}], "params": [{"name": "elt", "type": "T"}],
+        "result": {"type": "some std::iter::Iterator { Item = T }", "fails": "std::io::Error"}
+    }));
+    let r = check_signatures(&f, &work("sig-exist-unchecked"), &target()).unwrap();
+    assert!(r.unchecked.contains_key("a `some` result that fails"), "{:?}", r.unchecked);
+}
+
+#[test]
+fn generics_and_lifetimes_on_host_subjects_are_checked() {
+    // `for 'a`, `for T where T: Bound` on a type, a function and an impl, against the real items
+    let mut f = exemplars_only();
+    f.as_object_mut().unwrap().remove("views");
+    let subjects = f["subjects"].as_array_mut().unwrap();
+    subjects.push(json!({
+        "kind": "type", "name": "std::slice::Iter", "generics": [{"name": "'a", "bounds": []}, {"name": "T", "bounds": ["'a"]}],
+        "hold": {"kind": "borrows", "for": ["'a"]},
+        "implements": [{"trait": "std::iter::Iterator", "assoc": {"Item": "ref<T>"}}]
+    }));
+    subjects.push(json!({
+        "kind": "impl", "name": "std::vec::Vec as std::clone::Clone", "generics": [{"name": "T", "bounds": ["std::clone::Clone"]}],
+        "self": "list<T> as 'std::vec::Vec'", "trait": "std::clone::Clone"
+    }));
+    subjects.push(json!({
+        "kind": "impl", "name": "std::vec::Vec as std::iter::IntoIterator", "generics": [{"name": "T", "bounds": []}],
+        "self": "list<T> as 'std::vec::Vec'", "trait": "std::iter::IntoIterator", "assoc": {"Item": "T"}
+    }));
+    assert_eq!(errors(&f), "");
+    let r = check_signatures(&f, &work("sig-generics"), &target()).unwrap();
+    // `Item = &'a T` needs a lifetime a bound can name, and the type has `'a`
+    assert_eq!(r.mismatches, vec![], "{:?}", r.mismatches);
+    for n in ["std::slice::Iter", "std::vec::Vec as std::clone::Clone", "std::vec::Vec as std::iter::IntoIterator"] {
+        assert!(r.checked.contains(&n.to_string()), "{n}: {:?} {:?}", r.checked, r.unchecked);
+    }
+    // the bound of the impl is the real one's: without `T: Clone` the impl does not exist
+    subject_mut(&mut f, "std::vec::Vec as std::clone::Clone")["generics"][0]["bounds"] = json!([]);
+    let r = check_signatures(&f, &work("sig-generics-wrong"), &target()).unwrap();
+    assert!(r.mismatches.iter().any(|(n, m)| n == "std::vec::Vec as std::clone::Clone" && m.starts_with("E0277")), "{:?}", r.mismatches);
+}
+
+// ---------- B2: `given`, promises that hold unless an implementation does otherwise ----------
+
+/// `HashMap::get` as the plan writes it: it never panics given what `Q`'s `Hash` and `Eq` do, and counts only given the
+/// build. The file has the bound's methods as subjects, so a method name can be checked.
+fn get_with_given() -> Value {
+    let mut f = exemplars_only();
+    f.as_object_mut().unwrap().remove("views");
+    let subjects = f["subjects"].as_array_mut().unwrap();
+    subjects.push(json!({"kind": "trait", "name": "std::hash::Hash"}));
+    subjects.push(json!({"kind": "function", "name": "std::hash::Hash::hash", "params": [], "trait": "std::hash::Hash"}));
+    subjects.push(json!({"kind": "trait", "name": "std::cmp::Eq"}));
+    subjects.push(json!({"kind": "function", "name": "std::cmp::Eq::eq", "params": [], "trait": "std::cmp::Eq"}));
+    let get = subject_mut(&mut f, "std::collections::HashMap::get");
+    let cl = get["clauses"].as_array_mut().unwrap();
+    cl.clear();
+    cl.push(json!({"kind": "never panics", "text": "never panics", "given": ["Q.hash, Q.eq never panic"], "source": "s", "status": {"assumed": "documentation"}}));
+    cl.push(json!({"kind": "effects", "text": "effects none", "given": ["Q.hash, Q.eq effects none", "build panic=unwind"], "source": "s"}));
+    cl.push(json!({"kind": "ensure", "text": "ensure same : result == self[k]", "given": ["build overflow_checks"], "source": "s"}));
+    f
+}
+
+#[test]
+fn a_given_names_generics_methods_defaults_and_build_settings() {
+    let f = get_with_given();
+    assert_eq!(errors(&f), "");
+    fn get(f: &mut Value) -> &mut Value {
+        subject_mut(f, "std::collections::HashMap::get")
+    }
+    // each way a `given` can be wrong is reported against the clause
+    for (given, want) in [
+        ("Z.hash never panic", "`Z` is not a generic type parameter"),
+        ("Q.nope never panic", "`nope` is not a method of a bound of `Q`"),
+        ("build opt_level", "not a build setting of the host profile"),
+        ("default", "not a method of a trait"),
+        ("Q.hash", "a `given` item is"),
+    ] {
+        let mut bad = f.clone();
+        get(&mut bad)["clauses"][1]["given"] = json!([given]);
+        let e = errors(&bad);
+        assert!(e.contains(want) && e.contains("clause 1"), "{given}: {e}");
+    }
+    // `given` is the slot's, not the text's; it qualifies only the promises that depend on an implementation; an empty list is the schema's
+    let mut bad = f.clone();
+    get(&mut bad)["clauses"][0]["text"] = json!("never panics given Q.hash never panic");
+    let e = errors(&bad);
+    assert!(e.contains("the clause's `given` slot"), "{e}");
+    let mut bad = f.clone();
+    get(&mut bad)["clauses"][1]["given"] = json!([]);
+    assert!(errors(&bad).contains("schema:"), "{}", errors(&bad));
+    let mut bad = f.clone();
+    get(&mut bad)["clauses"].as_array_mut().unwrap().push(json!({"kind": "unexpressed", "text": "t", "reason": "r", "given": ["default"], "source": "s"}));
+    assert!(errors(&bad).contains("schema:"));
+    let mut bad = f.clone();
+    get(&mut bad)["clauses"].as_array_mut().unwrap().push(json!({"kind": "invariant", "text": "invariant i : true", "given": ["default"], "source": "s"}));
+    assert!(errors(&bad).contains("`invariant` clause is not qualified by `given`"), "{}", errors(&bad));
+}
+
+#[test]
+fn the_default_body_is_named_by_a_trait_method_and_a_checkable_method_is_known_to_its_bound() {
+    let mut f = get_with_given();
+    f["subjects"].as_array_mut().unwrap().push(json!({
+        "kind": "function", "name": "std::cmp::Ord::max", "params": [], "trait": "std::cmp::Ord",
+        "clauses": [{"kind": "never panics", "text": "never panics", "given": ["default", "Self.cmp never panic"], "source": "s"}]
+    }));
+    assert_eq!(errors(&f), "");
+    // `K` has a bound the file has no methods of (`Borrow`): its methods cannot be checked, so any name passes; `Q`'s are checked
+    let get = subject_mut(&mut f, "std::collections::HashMap::get");
+    get["clauses"][1]["given"] = json!(["K.anything never panic"]);
+    assert_eq!(errors(&f), "");
+    // a file with `given` is canonical when libfmt prints it, with `given` after `text`; one without it is valid unchanged
+    let f = get_with_given();
+    let c = canonical(&f);
+    assert!(c.contains("\"text\": \"never panics\",\n") && c.find("\"given\"").unwrap() > c.find("\"text\": \"never panics\"").unwrap());
+    assert_eq!(canonical(&serde_json::from_str::<Value>(&c).unwrap()), c);
+    assert_eq!(validate(&f, Some(&c)), Vec::<String>::new());
+}
+
+#[test]
+fn libstats_counts_conditional_clauses_apart_and_the_profile_lists_the_build_settings() {
+    let f = get_with_given();
+    let t = bare_rust::libstats::libstats(&f, None);
+    // the three of `get` above, and the two `given T.max` clauses of the exemplar `cmp::max`
+    assert!(t.contains("conditional clauses, qualified by `given` (5 on 2 subjects)"), "{t}");
+    assert!(t.contains("on a build setting") && t.contains("on a bound's implementations"), "{t}");
+    let p: Value = serde_json::from_str(&fs::read_to_string(libraries().join("host-rust-1.97.0.json")).unwrap()).unwrap();
+    let names: Vec<&str> = p["build"].as_array().unwrap().iter().map(|b| b["setting"].as_str().unwrap()).collect();
+    assert_eq!(names, ["overflow_checks", "debug_assertions", "panic=unwind", "panic=abort"]);
+    assert_eq!(bare_rust::host::builds(Some(&p)).len(), 4);
+}
+
+// ---------- B3: callbacks, their arguments, results and conditions, and protocols over calls ----------
+
+/// `Option::map_or_else` and an `Iterator::count` as the plan writes them (language 6.13).
+fn with_callbacks() -> Value {
+    let mut f = exemplars_only();
+    f.as_object_mut().unwrap().remove("views");
+    let subjects = f["subjects"].as_array_mut().unwrap();
+    subjects.push(json!({"kind": "trait", "name": "std::iter::Iterator"}));
+    subjects.push(json!({"kind": "function", "name": "std::iter::Iterator::next", "params": [], "trait": "std::iter::Iterator"}));
+    subjects.push(json!({
+        "kind": "function", "name": "std::option::Option::map_or_else",
+        "generics": [{"name": "T", "bounds": []}, {"name": "U", "bounds": []}, {"name": "D", "bounds": ["FnOnce() -> U"]}, {"name": "F", "bounds": ["FnOnce(T) -> U"]}],
+        "params": [{"name": "self", "type": "T?"}, {"name": "default", "type": "D"}, {"name": "f", "type": "F"}], "result": {"type": "U"},
+        "clauses": [
+            {"kind": "callback", "text": "callback default : called exactly once when self is none, returning d", "source": "s"},
+            {"kind": "callback", "text": "callback f : called exactly once when exists self, with self, returning r", "source": "s"},
+            {"kind": "ensure", "text": "ensure from_callback : result == (if exists self then r else d)", "source": "s"}
+        ]
+    }));
+    subjects.push(json!({
+        "kind": "function", "name": "std::iter::Iterator::count", "generics": [{"name": "Self", "bounds": ["std::iter::Iterator"]}], "trait": "std::iter::Iterator",
+        "params": [{"name": "self", "type": "Self"}], "result": {"type": "u64 as 'usize'"},
+        "clauses": [{"kind": "protocol", "text": "protocol self.next+", "source": "s"}]
+    }));
+    f
+}
+
+#[test]
+fn a_callback_names_its_arguments_and_result_for_the_clauses_of_its_subject() {
+    let f = with_callbacks();
+    assert_eq!(errors(&f), "");
+    let clauses = |f: &mut Value| subject_mut(f, "std::option::Option::map_or_else")["clauses"].as_array_mut().unwrap().clone();
+    // the names `returning` binds are known to the ensure that follows, and to nothing else
+    let mut bad = f.clone();
+    subject_mut(&mut bad, "std::option::Option::map_or_else")["clauses"][2]["text"] = json!("ensure from_callback : result == (if exists self then r else e)");
+    assert!(errors(&bad).contains("unknown name `e`"), "{}", errors(&bad));
+    let mut bad = f.clone();
+    subject_mut(&mut bad, "std::option::Option::map_or_else")["clauses"].as_array_mut().unwrap().remove(1);
+    assert!(errors(&bad).contains("unknown name `r`"), "{}", errors(&bad));
+    // a `when` uses only the names the subject has, not what a callback returns
+    for (text, want) in [
+        ("callback default : called exactly once when nope is none, returning d", "unknown name `nope`"),
+        ("callback default : called exactly once when d is none, returning d", "unknown name `d`"),
+        ("callback default : called exactly once when self is none, with q, returning d", ""),
+        ("callback default : called exactly once when self is none, with nope(self), returning d", "unknown name `nope`"),
+        ("callback default : called at least once when self is none, returning d", "name the values of one call"),
+        ("callback default : called exactly once, returning d, with self", "`returning` names one result"),
+        ("callback default : called exactly once, returning", "`returning` names one result"),
+        ("callback default : called exactly once, returning d e", "`returning` names one result"),
+        ("callback default : called exactly once, with", "`with` names the call's arguments"),
+    ] {
+        let mut bad = f.clone();
+        subject_mut(&mut bad, "std::option::Option::map_or_else")["clauses"][0]["text"] = json!(text);
+        let e = errors(&bad);
+        if want.is_empty() {
+            assert_eq!(e, "", "{text}");
+        } else {
+            assert!(e.contains(want), "{text}: {e}");
+        }
+    }
+    // old callback clauses stay valid
+    let mut old = f.clone();
+    subject_mut(&mut old, "std::option::Option::map_or_else")["clauses"][0]["text"] = json!("callback default : called at most once before return");
+    subject_mut(&mut old, "std::option::Option::map_or_else")["clauses"][2]["text"] = json!("ensure x : result == result");
+    assert_eq!(errors(&old), "");
+    assert_eq!(clauses(&mut old).len(), 3);
+}
+
+#[test]
+fn a_protocol_names_callbacks_and_parameters() {
+    let f = with_callbacks();
+    for (text, want) in [
+        ("protocol (self.next)* self.next", ""),
+        ("protocol begin self.next+ end", ""),
+        ("protocol (self.nope)*", "`nope` is not a method of `self`'s bounds"),
+        ("protocol (other.next)*", "`other` is not a parameter of the subject"),
+        ("protocol (nope)*", "`nope` is not a callback or a parameter"),
+        ("protocol (self.next", "unclosed"),
+        ("protocol", "names at least one call"),
+        ("protocol self.next ; self.next", "calls joined by"),
+    ] {
+        let mut bad = f.clone();
+        subject_mut(&mut bad, "std::iter::Iterator::count")["clauses"][0]["text"] = json!(text);
+        let e = errors(&bad);
+        if want.is_empty() {
+            assert_eq!(e, "", "{text}");
+        } else {
+            assert!(e.contains(want), "{text}: {e}");
+        }
+    }
+    // a callback of the subject is an event too
+    let mut g = f.clone();
+    let m = subject_mut(&mut g, "std::option::Option::map_or_else");
+    m["clauses"].as_array_mut().unwrap().push(json!({"kind": "protocol", "text": "protocol (default | f)", "source": "s"}));
+    assert_eq!(errors(&g), "");
+}
+
+#[test]
+fn libstats_counts_callback_clauses_by_what_they_name_and_the_file_is_canonical() {
+    let f = with_callbacks();
+    let t = bare_rust::libstats::libstats(&f, None);
+    assert!(t.contains("callback clauses (2 on 1 subjects), and protocols over calls (1)"), "{t}");
+    let c = canonical(&f);
+    assert_eq!(canonical(&serde_json::from_str::<Value>(&c).unwrap()), c);
+    assert_eq!(validate(&f, Some(&c)), Vec::<String>::new());
+}
+
+#[test]
+fn b3_closed_the_callback_promises_and_relabelled_what_stays() {
+    let (file, _) = std_file();
+    let clauses: Vec<(&str, &Value)> = file["subjects"].as_array().unwrap().iter().flat_map(|s| s["clauses"].as_array().into_iter().flatten().map(move |c| (s["name"].as_str().unwrap(), c))).collect();
+    let labels: Vec<&str> = clauses.iter().filter(|(_, c)| c["kind"] == "unexpressed").map(|(_, c)| bare_rust::libstats::reason_label(c["reason"].as_str().unwrap())).collect();
+    assert_eq!(labels.len(), 52, "121 before B3: 7 closed; B4 closed 37 more, B5 12 more, the residuals 13");
+    for gone in ["no value of a callback result", "no order of calls", "callback clause has no condition"] {
+        assert!(!labels.contains(&gone), "{gone}");
+    }
+    let n = |l: &str| labels.iter().filter(|x| **x == l).count();
+    assert_eq!((n("no sequence value"), n("no promise about a result's later calls"), n("no promise")), (0, 0, 7));
+    let with = |w: &str| clauses.iter().filter(|(_, c)| c["kind"] == "callback" && c["text"].as_str().unwrap().contains(w)).count();
+    assert_eq!((with(" when "), with(", with "), with(", returning ")), (3, 6, 6));
+    let mut protocols: Vec<&str> = clauses.iter().filter(|(_, c)| c["kind"] == "protocol").map(|(s, _)| *s).collect();
+    protocols.sort();
+    assert_eq!(protocols, ["std::assert_eq!", "std::iter::Iterator::count"]);
+}
+
+// ---------- B4: eight small additions (language 6.14) ----------
+
+/// The subjects the small additions are written on: `slice::len`, `mem::replace`, `slice::split_at_mut`, and the exemplar `Chars`.
+fn small_additions() -> Value {
+    let mut f = exemplars_only();
+    f.as_object_mut().unwrap().remove("views");
+    let slice = "ref<list<T> as 'std::primitive::slice'>";
+    let subjects = f["subjects"].as_array_mut().unwrap();
+    subjects.push(json!({
+        "kind": "function", "name": "std::primitive::slice::len", "generics": [{"name": "T", "bounds": []}],
+        "params": [{"name": "self", "type": slice, "access": {"rights": "read", "guarantee": "readers"}}], "result": {"type": "u64 as 'usize'"},
+        "clauses": [{"kind": "effects", "text": "evaluable at compile time", "source": "s", "status": {"lifted": "s"}}]
+    }));
+    subjects.push(json!({
+        "kind": "function", "name": "std::mem::replace", "generics": [{"name": "T", "bounds": []}],
+        "params": [{"name": "dest", "type": "ref<T>", "access": {"rights": "write", "guarantee": "exclusive"}}, {"name": "src", "type": "T"}], "result": {"type": "T"},
+        "clauses": [
+            {"kind": "hold", "text": "lifetime dest, src survive call", "source": "s", "status": {"assumed": "documentation"}},
+            {"kind": "hold", "text": "hold dest : moved from src", "source": "s", "status": {"assumed": "documentation"}},
+            {"kind": "hold", "text": "hold result : moved from dest", "source": "s", "status": {"assumed": "documentation"}},
+            {"kind": "ensure", "text": "ensure moved : dest == src implies result moved from src", "source": "s", "status": {"assumed": "documentation"}},
+            {"kind": "never panics", "text": "never panics except exhausted", "source": "s", "status": {"assumed": "documentation"}},
+            {"kind": "budget", "text": "budget work expected amortised O(1)", "source": "s", "status": {"assumed": "documentation"}}
+        ]
+    }));
+    subjects.push(json!({
+        "kind": "function", "name": "std::primitive::slice::split_at_mut", "generics": [{"name": "T", "bounds": []}],
+        "params": [{"name": "self", "type": slice, "access": {"rights": "write", "guarantee": "exclusive"}}, {"name": "mid", "type": "u64 as 'usize'"}],
+        "result": {"type": format!("({slice}, {slice})"), "access": {"rights": "write", "guarantee": "exclusive"}, "hold": {"kind": "borrows", "from": "self"}},
+        "clauses": [
+            {"kind": "ensure", "text": "ensure part_sizes : size(result.0) == mid and size(result.1) == old(size(self)) - mid", "source": "s", "status": {"assumed": "documentation"}},
+            {"kind": "ensure", "text": "ensure pair : result is (head, tail) implies size(head) + size(tail) == old(size(self))", "source": "s", "status": {"assumed": "documentation"}},
+            {"kind": "access", "text": "disjoint result.0, result.1", "source": "s", "status": {"assumed": "documentation"}}
+        ]
+    }));
+    subject_mut(&mut f, "std::str::Chars")["clauses"] = json!([{"kind": "result must be used", "text": "must be used", "source": "s", "status": {"lifted": "s"}}]);
+    f
+}
+
+/// The errors after the clause `n` of a subject becomes `kind` and `text` (or is added, past the end).
+fn with_clause(f: &Value, subject: &str, n: usize, kind: &str, text: &str) -> String {
+    let mut g = f.clone();
+    let cl = subject_mut(&mut g, subject)["clauses"].as_array_mut().unwrap();
+    let c = json!({"kind": kind, "text": text, "source": "s", "status": {"assumed": "documentation"}});
+    if n < cl.len() {
+        cl[n] = c;
+    } else {
+        cl.push(c);
+    }
+    errors(&g)
+}
+
+#[test]
+fn the_small_additions_validate_and_old_clauses_stay_valid() {
+    let f = small_additions();
+    assert_eq!(errors(&f), "");
+    let c = canonical(&f);
+    assert_eq!(validate(&f, Some(&c)), Vec::<String>::new());
+    // the older forms of the same kinds are still the same clauses
+    let r = "std::mem::replace";
+    for (n, kind, text) in [(4, "never panics", "never panics"), (5, "budget", "budget work O(size(dest))"), (1, "hold", "hold dest : owns")] {
+        assert_eq!(with_clause(&f, r, n, kind, text), "", "{text}");
+    }
+}
+
+#[test]
+fn evaluable_at_compile_time_is_a_bound_on_a_function() {
+    let f = small_additions();
+    assert_eq!(with_clause(&f, "std::mem::replace", 9, "effects", "evaluable at compile time"), "");
+    let e = with_clause(&f, "std::str::Chars", 9, "effects", "evaluable at compile time");
+    assert!(e.contains("is for a function"), "{e}");
+    let e = with_clause(&f, "std::mem::replace", 9, "effects", "evaluable at compile time now");
+    assert!(e.contains("unknown name `now`"), "{e}");
+    let e = with_clause(&f, "std::mem::replace", 9, "effects", "evaluable at run time");
+    assert!(e.contains("starts with"), "{e}");
+}
+
+#[test]
+fn must_be_used_is_for_a_type_and_result_must_be_used_for_a_function() {
+    let f = small_additions();
+    let e = with_clause(&f, "std::str::Chars", 0, "result must be used", "result must be used");
+    assert!(e.contains("`must be used` is for a type or a trait"), "{e}");
+    let e = with_clause(&f, "std::mem::replace", 9, "result must be used", "must be used");
+    assert!(e.contains("`must be used` is for a type or a trait"), "{e}");
+    assert_eq!(with_clause(&f, "std::mem::replace", 9, "result must be used", "result must be used"), "");
+    // a trait can be must-use too (Iterator)
+    let mut g = f.clone();
+    g["subjects"].as_array_mut().unwrap().push(json!({"kind": "trait", "name": "std::iter::Iterator", "clauses": [{"kind": "result must be used", "text": "must be used", "source": "s", "status": {"lifted": "s"}}]}));
+    assert_eq!(errors(&g), "");
+}
+
+#[test]
+fn a_move_names_one_path_and_an_end_names_the_call() {
+    let f = small_additions();
+    let r = "std::mem::replace";
+    for (kind, text, want) in [
+        ("hold", "hold result : moved from dest", ""),
+        ("hold", "hold dest : moved from src", ""),
+        ("hold", "hold nope : moved from src", "`nope` is not a parameter of the subject"),
+        ("hold", "hold result : moved from nope", "unknown name `nope`"),
+        ("hold", "hold result : moved from", "`moved from` names one path"),
+        ("hold", "hold result : moved from dest src", "`moved from` names one path"),
+        ("hold", "hold result : moved from dest.0", ""),
+        ("hold", "lifetime src ends in call", ""),
+        ("hold", "lifetime src ends in call when src == dest", ""),
+        ("hold", "lifetime src ends in call when", "`lifetime v ends in call`"),
+        ("hold", "lifetime src, dest ends in call", "`lifetime v ends in call`"),
+        ("hold", "lifetime src survive call", ""),
+        ("hold", "lifetime dest, src survive call", ""),
+        ("hold", "lifetime dest, survive call", "`lifetime a, b survive call`"),
+        ("hold", "lifetime dest src survive call", "`lifetime a, b survive call`"),
+        ("hold", "lifetime dest survive call now", "`lifetime a, b survive call`"),
+        ("hold", "lifetime nope survive call", "unknown name `nope`"),
+        ("ensure", "ensure m : result moved from src", ""),
+        ("ensure", "ensure m : result moved from nope", "unknown name `nope`"),
+    ] {
+        let e = with_clause(&f, r, 1, kind, text);
+        if want.is_empty() {
+            assert_eq!(e, "", "{text}");
+        } else {
+            assert!(e.contains(want), "{text}: {e}");
+        }
+    }
+}
+
+#[test]
+fn exhaustion_cost_and_obligations_have_forms_of_their_own() {
+    let f = small_additions();
+    let r = "std::mem::replace";
+    for (n, kind, text, want) in [
+        (4, "never panics", "never panics except exhausted", ""),
+        (4, "never panics", "never panics except broke", "unknown name `broke`"),
+        (4, "never panics", "never panics except", "unknown name `except`"),
+        (5, "budget", "budget work expected O(1)", ""),
+        (5, "budget", "budget work amortised O(size(dest))", ""),
+        (5, "budget", "budget work sometimes O(1)", "unknown name `sometimes`"),
+        (9, "obliges", "obliges caller : src == dest because \"the two must be told apart\"", ""),
+        (9, "obliges", "obliges caller : src == dest", "states a condition and the reason"),
+        (9, "obliges", "obliges caller : src == dest because src", "states a condition and the reason"),
+        (9, "obliges", "obliges caller : because \"x\"", "states a condition and the reason"),
+        (9, "obliges", "obliges caller : nope because \"x\"", "unknown name `nope`"),
+        (9, "obliges", "assume caller : src because \"x\"", "starts with `obliges caller`"),
+    ] {
+        let e = with_clause(&f, r, n, kind, text);
+        if want.is_empty() {
+            assert_eq!(e, "", "{text}");
+        } else {
+            assert!(e.contains(want), "{text}: {e}");
+        }
+    }
+    let e = with_clause(&f, "std::str::Chars", 9, "obliges", "obliges caller : true because \"x\"");
+    assert!(e.contains("`obliges caller` is for a function"), "{e}");
+}
+
+#[test]
+fn tuple_parts_and_element_frames_name_what_the_subject_has() {
+    let f = small_additions();
+    let s = "std::primitive::slice::split_at_mut";
+    for (n, kind, text, want) in [
+        (0, "ensure", "ensure p : size(result.0) == mid and size(result.1) == mid", ""),
+        (0, "ensure", "ensure p : result.1 == result.0", ""),
+        (1, "ensure", "ensure p : result is (a, _) implies size(a) == mid", ""),
+        (1, "ensure", "ensure p : result is (a, b) implies size(c) == 1", "unknown name `c`"),
+        (1, "ensure", "ensure p : size(a) == 1", "unknown name `a`"),
+        (2, "access", "disjoint result.0, result.1", ""),
+        (2, "access", "disjoint result.0, other", "unknown name `other`"),
+        (2, "access", "mutates only self[mid]", ""),
+        (2, "access", "mutates only self[mid], result.0", ""),
+        (2, "access", "mutates only self[kee]", "unknown name `kee`"),
+    ] {
+        let e = with_clause(&f, s, n, kind, text);
+        if want.is_empty() {
+            assert_eq!(e, "", "{text}");
+        } else {
+            assert!(e.contains(want), "{text}: {e}");
+        }
+    }
+}
+
+#[test]
+fn a_const_claim_is_checked_by_calling_the_item_in_a_const_context() {
+    let mut f = small_additions();
+    let r = check_signatures(&f, &work("sig-const"), &target()).unwrap();
+    assert_eq!(r.mismatches, vec![], "{:?}", r.mismatches);
+    assert!(r.checked.contains(&"std::primitive::slice::len".to_string()));
+    // `cmp::max` is a `const fn` whose const-ness is unstable: calling it where a constant is needed does not compile
+    subject_mut(&mut f, "std::cmp::max")["clauses"] = json!([{"kind": "effects", "text": "evaluable at compile time", "source": "s", "status": {"lifted": "s"}}]);
+    // so is a function that is not const at all
+    subject_mut(&mut f, "std::mem::replace")["clauses"].as_array_mut().unwrap().push(json!({"kind": "effects", "text": "evaluable at compile time", "source": "s", "status": {"lifted": "s"}}));
+    subject_mut(&mut f, "std::primitive::str::chars")["clauses"] = json!([{"kind": "effects", "text": "evaluable at compile time", "source": "s", "status": {"lifted": "s"}}]);
+    let r = check_signatures(&f, &work("sig-const-bad"), &target()).unwrap();
+    let by: std::collections::BTreeMap<&str, &str> = r.mismatches.iter().map(|(n, m)| (n.as_str(), m.as_str())).collect();
+    assert!(by["std::cmp::max"].starts_with("E0658"), "unstable const-ness: {by:?}");
+    assert!(by["std::primitive::str::chars"].starts_with("E0015"), "{by:?}");
+    assert!(!by.contains_key("std::mem::replace") && !by.contains_key("std::primitive::slice::len"), "a const fn passes: {by:?}");
+    assert_eq!(r.mismatches.len(), 2, "{by:?}");
+}
+
+#[test]
+fn libstats_counts_the_small_additions() {
+    // the exemplars carry `cmp::max`'s tie and `HashMap::get`'s expected cost
+    let f = small_additions();
+    let t = bare_rust::libstats::libstats(&f, None);
+    assert!(t.contains("small additions of language 6.14 (13 clauses)"), "{t}");
+    let line = |l: &str| t.lines().find(|x| x.contains(l)).unwrap_or("").split_whitespace().rev().nth(1).unwrap_or("").to_string();
+    assert_eq!(
+        [line("(6.14.1)"), line("(6.14.2)"), line("(6.14.3)"), line("(6.14.4)"), line("(6.14.5)"), line("(6.14.6)"), line("(6.14.7)"), line("(6.14.8)"), line("(6.14.9)")],
+        ["1", "1", "4", "1", "1", "2", "3", "0", "0"].map(String::from),
+        "{t}"
+    );
+}
+
+#[test]
+fn b4_closed_the_small_additions_and_relabelled_what_stays() {
+    let (file, _) = std_file();
+    let clauses: Vec<(&str, &Value)> = file["subjects"].as_array().unwrap().iter().flat_map(|s| s["clauses"].as_array().into_iter().flatten().map(move |c| (s["name"].as_str().unwrap(), c))).collect();
+    let labels: Vec<&str> = clauses.iter().filter(|(_, c)| c["kind"] == "unexpressed").map(|(_, c)| bare_rust::libstats::reason_label(c["reason"].as_str().unwrap())).collect();
+    assert_eq!(labels.len(), 52, "114 before B4: 37 closed, then B5: 12 closed, the residuals 13");
+    for gone in ["no const-ness", "must-use on a type", "no drop", "no identity of moved values", "no resource exhaustion", "no expected or amortised cost", "no tuple parts", "no frame condition on a collection", "no sufficient condition"] {
+        assert!(!labels.contains(&gone), "{gone}");
+    }
+    let n = |l: &str| labels.iter().filter(|x| **x == l).count();
+    assert_eq!(
+        (n("no stable const-ness"), n("no identity of cloned values"), n("no identity of a stored key"), n("no effects of a destructor"), n("no arm of a macro in a clause"), n("no condition on an associated type's implementation"), n("no host state")),
+        (4, 0, 0, 1, 2, 3, 5)
+    );
+    assert_eq!(n("no sequence value"), 0, "B5 gave every one a sequence or a label of its own");
+    let with = |k: &str, t: &str| clauses.iter().filter(|(_, c)| c["kind"] == k && c["text"].as_str().unwrap().starts_with(t)).count();
+    assert_eq!((with("effects", "evaluable at compile time"), with("result must be used", "must be used"), with("never panics", "never panics except exhausted"), with("budget", "budget work expected")), (14, 14, 2, 2));
+    // every const claim of the file is an item the host promises to keep const
+    for (s, c) in clauses.iter().filter(|(_, c)| c["text"] == "evaluable at compile time") {
+        assert!(c["source"].as_str().unwrap().contains("rustc_const_stable"), "{s}");
+    }
+    // each type that carries `#[must_use]` says so, and the iterator adapters cite their attribute
+    for (s, c) in clauses.iter().filter(|(_, c)| c["kind"] == "result must be used" && c["text"] == "must be used") {
+        assert!(c["source"].as_str().unwrap().contains("attribute #[must_use"), "{s}");
+    }
+}
+
+// ---------- B5: sequences (language 6.15) ----------
+
+/// The exemplars of the small additions, with a view for `map` to name.
+fn sequences() -> Value {
+    let mut f = small_additions();
+    subject_mut(&mut f, "std::str::Chars")["views"] = json!([{"name": "widen", "host": "'std::str::Chars::as_str'"}]);
+    f
+}
+
+#[test]
+fn sequences_take_the_operators_of_language_6_15_and_old_clauses_stay_valid() {
+    let f = sequences();
+    assert_eq!(errors(&f), "");
+    let s = "std::primitive::slice::split_at_mut";
+    for (kind, text, want) in [
+        ("ensure", "ensure e : result.0 == old(self)[..mid] and result.1 == old(self)[mid..]", ""),
+        ("ensure", "ensure e : old(self)[mid] == none or old(self)[0 .. mid] == old(self)[..mid]", ""),
+        ("ensure", "ensure e : yields(result.0) ++ yields(result.1) == old(yields(self))", ""),
+        ("ensure", "ensure e : reverse(reverse(old(self))) == old(self) and take(mid, skip(1, old(self))) == old(self)[1..mid]", ""),
+        ("ensure", "ensure e : zip(old(self), enumerate(old(self))) == [] and map(deref, old(self)) == filter(widen, old(self))", ""),
+        ("ensure", "ensure e : map(scalars, old(self)) == old(self)", ""),
+        ("ensure", "ensure e : map(f, old(self)) == old(self)", "unknown name `f`"),
+        ("ensure", "ensure e : map(mid, old(self)) == old(self)", "is a parameter or callback, not a named pure function"),
+        ("ensure", "ensure e : filter('std::primitive::slice::is_empty', old(self)) == old(self)", "takes the name of a pure function first"),
+        ("ensure", "ensure e : map(deref) == old(self)", "`map` takes 2 arguments"),
+        ("ensure", "ensure e : yields() == old(self)", "`yields` takes 1 argument"),
+        ("ensure", "ensure e : take(1, 2, 3) == old(self)", "`take` takes 2 arguments"),
+        ("ensure", "ensure e : old(self)[mid == 1", "unclosed `[`"),
+        ("ensure", "ensure e : old(self)[zz..] == []", "unknown name `zz`"),
+        ("ensure", "ensure e : old(self)[1..2] == yields(zz)", "unknown name `zz`"),
+        // the older forms of the same clauses
+        ("ensure", "ensure e : size(result.0) == mid and (all x in result.1 : x == x)", ""),
+    ] {
+        let e = with_clause(&f, s, 0, kind, text);
+        if want.is_empty() {
+            assert_eq!(e, "", "{text}");
+        } else {
+            assert!(e.contains(want), "{text}: {e}");
+        }
+    }
+    let c = canonical(&f);
+    assert_eq!(validate(&f, Some(&c)), Vec::<String>::new());
+}
+
+#[test]
+fn libstats_counts_the_sequences() {
+    let mut f = sequences();
+    let line = |t: &str, l: &str| t.lines().find(|x| x.contains(l)).unwrap_or("").split_whitespace().rev().nth(1).unwrap_or("0").parse::<usize>().unwrap_or(0);
+    let rows = ["`yields(e)`", "indexing `xs[i]`", "slices `xs[i..j]`", "`++`", "`reverse`, `take`, `skip`", "`zip`, `enumerate`", "`map`, `filter`", "`scalars`, `deref`"];
+    let before_t = bare_rust::libstats::libstats(&f, None);
+    let before: Vec<usize> = rows.iter().map(|r| line(&before_t, r)).collect();
+    let s = "std::primitive::slice::split_at_mut";
+    let cl = subject_mut(&mut f, s)["clauses"].as_array_mut().unwrap();
+    for t in [
+        "ensure a : yields(result.0) ++ yields(result.1) == old(yields(self))",
+        "ensure b : result.0 == old(self)[..mid]",
+        "ensure c : old(self)[0] == none",
+        "ensure d : reverse(take(mid, skip(1, old(self)))) == []",
+        "ensure e : zip(old(self), enumerate(old(self))) == []",
+        "ensure f : map(deref, old(self)) == old(self)",
+    ] {
+        cl.push(json!({"kind": "ensure", "text": t, "source": "s", "status": {"assumed": "documentation"}}));
+    }
+    let t = bare_rust::libstats::libstats(&f, None);
+    let total = |t: &str| t.lines().find(|x| x.starts_with("sequences of language 6.15")).unwrap().to_string();
+    assert_eq!(total(&t), format!("sequences of language 6.15 ({} clauses)", total(&before_t).split('(').nth(1).unwrap().split(' ').next().unwrap().parse::<usize>().unwrap() + 6), "{t}");
+    let after: Vec<usize> = rows.iter().map(|r| line(&t, r)).collect();
+    // a: yields and `++`; b: a slice; c: an index; d: reverse, take, skip; e: zip, enumerate; f: map and deref
+    let delta: Vec<usize> = after.iter().zip(&before).map(|(a, b)| a - b).collect();
+    assert_eq!(delta, [1, 1, 1, 1, 1, 1, 1, 1], "{t}");
+}
+
+#[test]
+fn b5_stated_what_the_sequences_state_and_relabelled_what_stays() {
+    let (file, _) = std_file();
+    let clauses: Vec<(&str, &Value)> = file["subjects"].as_array().unwrap().iter().flat_map(|s| s["clauses"].as_array().into_iter().flatten().map(move |c| (s["name"].as_str().unwrap(), c))).collect();
+    let labels: Vec<&str> = clauses.iter().filter(|(_, c)| c["kind"] == "unexpressed").map(|(_, c)| bare_rust::libstats::reason_label(c["reason"].as_str().unwrap())).collect();
+    assert_eq!(labels.len(), 52, "77 before B5: 12 closed, then the residuals: 13");
+    assert!(!labels.contains(&"no sequence value"));
+    let n = |l: &str| labels.iter().filter(|x| **x == l).count();
+    assert_eq!(
+        (n("no callback as a function"), n("no promise about a result's later calls"), n("no promise of disorder"), n("no lifetime for the elements of a sequence"), n("no successor of a type parameter"), n("no from_iter subject")),
+        (0, 0, 1, 0, 1, 0)
+    );
+    // the twelve that now state a sequence, by subject
+    let says = |subject: &str, text: &str| clauses.iter().any(|(s, c)| *s == subject && c["kind"] == "ensure" && c["text"].as_str().unwrap() == text);
+    for (s, t) in [
+        ("std::primitive::str::chars", "ensure scalars : yields(result) == scalars(self)"),
+        ("std::primitive::slice::iter", "ensure in_order : map(deref, yields(result)) == self"),
+        ("std::primitive::slice::split_at_mut", "ensure part_elements : result.0 == old(self)[..mid] and result.1 == old(self)[mid..]"),
+        ("std::iter::Iterator::next", "ensure head : result == old(yields(self))[0]"),
+        ("std::iter::Iterator::next", "ensure advances : present(old(yields(self)), 0) implies yields(self) == old(yields(self))[1..]"),
+        ("std::iter::Iterator::enumerate", "ensure pairs : yields(result) == enumerate(old(yields(self)))"),
+        ("std::iter::Iterator::skip", "ensure after_n : yields(result) == skip(n, old(yields(self)))"),
+        ("std::iter::Iterator::take", "ensure first_items : yields(result) == take(n, old(yields(self)))"),
+        ("std::iter::Iterator::copied", "ensure copies : yields(result) == map(deref, old(yields(self)))"),
+        ("std::iter::IntoIterator::into_iter", "ensure same_items : yields(result) == yields(self)"),
+        ("std::vec::Vec as std::iter::IntoIterator::into_iter", "ensure in_order : yields(result) == self"),
+    ] {
+        assert!(says(s, t), "{s}: {t}");
+    }
+    // an adapter's closure is not a named function, and its yields are stated through the logs of its calls (B6)
+    for s in ["map", "filter", "take_while", "flat_map"] {
+        let name = format!("std::iter::Iterator::{s}");
+        assert!(clauses.iter().any(|(n, c)| *n == name && c["kind"] == "callback" && c["text"].as_str().unwrap().contains(": called by result.next")), "{s}");
+        assert!(!clauses.iter().any(|(n, c)| *n == name && (c["text"].as_str().unwrap().contains("map(f,") || c["text"].as_str().unwrap().contains("filter(predicate,"))), "{s}: a closure is not a named function");
+    }
+}
+
+// ---------- B6: the residuals of B3 to B5 (language 4, 6.13.1, 6.15, 7.3) ----------
+
+/// The index of the first clause of `subject` whose text starts with `prefix`.
+fn at(f: &Value, subject: &str, prefix: &str) -> usize {
+    f["subjects"].as_array().unwrap().iter().find(|s| s["name"] == subject).unwrap()["clauses"].as_array().unwrap().iter().position(|c| c["text"].as_str().unwrap().starts_with(prefix)).unwrap_or_else(|| panic!("{subject}: {prefix}"))
+}
+
+fn expect(f: &Value, subject: &str, cases: &[(&str, usize, &str, &str)]) {
+    for (kind, i, text, want) in cases {
+        let e = with_clause(f, subject, *i, kind, text);
+        if want.is_empty() {
+            assert_eq!(e, "", "{text}");
+        } else {
+            assert!(e.contains(want), "{text}: {e}");
+        }
+    }
+}
+
+#[test]
+fn a_result_s_later_calls_have_logs_failures_and_an_end_that_the_lint_reads() {
+    let (f, _) = std_file();
+    assert_eq!(errors(&f), "");
+    let map = "std::iter::Iterator::map";
+    let cb = at(&f, map, "callback f");
+    expect(
+        &f,
+        map,
+        &[
+            ("callback", cb, "callback f : called by result.next, at most once per call, with x, returning y", ""),
+            // without `returning y` the ensures that use `y` have no such name
+            ("callback", cb, "callback f : called by result.next, with x", "unknown name `y`"),
+            ("callback", cb, "callback f : called by result.next, exactly once per call, with x, returning y", ""),
+            ("callback", cb, "callback f : called by result.next, with x + 1, returning y", "gives a name"),
+            ("callback", cb, "callback f : called by g.next, with x, returning y", "neither `result` nor a parameter"),
+            ("callback", cb, "callback f : called by result, with x, returning y", "`result.method`"),
+            ("callback", cb, "callback f : called by self.nope, with x, returning y", "not a method of `self`'s bounds"),
+            ("callback", cb, "callback f : called by result.next, twice per call, with x", "per call"),
+            ("callback", cb, "callback f : called by result.next when true, with x", "no `when`"),
+            ("callback", cb, "callback f : called by result.next, with x, returning y z", "`returning` names one result"),
+        ],
+    );
+    // the logs are known to the clauses of the subject, and to nothing else
+    let items = at(&f, map, "ensure items");
+    expect(
+        &f,
+        map,
+        &[
+            ("ensure", items, "ensure items : yields(result) == z", "unknown name `z`"),
+            ("ensure", items, "ensure items : size(y) == size(x) and yields(result)[0] == y[0]", ""),
+        ],
+    );
+    // `final(e)` is the end of a run an earlier clause names
+    let skip = "std::iter::Iterator::skip";
+    let n = f["subjects"].as_array().unwrap().iter().find(|s| s["name"] == skip).unwrap()["clauses"].as_array().unwrap().len();
+    expect(&f, skip, &[("ensure", n, "ensure e : final(yields(self)) == []", "names it"), ("ensure", n, "ensure e : final(yields(self), self) == []", "takes 1 argument")]);
+    let tw = "std::iter::Iterator::take_while";
+    expect(&f, tw, &[("ensure", at(&f, tw, "ensure not_put_back"), "ensure not_put_back : final(yields(self)) == []", "")]);
+    // a failure in a later call
+    let en = "std::iter::Iterator::enumerate";
+    let p = at(&f, en, "fails panic");
+    expect(
+        &f,
+        en,
+        &[
+            ("panics", p, "fails panic in result.next when old(count(self)) > 0", ""),
+            ("panics", p, "fails panic in self.next when old(count(self)) > 0", ""),
+            ("panics", p, "fails panic in result.next old(count(self)) > 0", "followed by `when`"),
+            ("panics", p, "fails panic in result when old(count(self)) > 0", "`result.method`"),
+            ("panics", p, "fails panic in g.next when true", "neither `result` nor a parameter"),
+        ],
+    );
+    // `given` still qualifies it
+    let c = &f["subjects"].as_array().unwrap().iter().find(|s| s["name"] == en).unwrap()["clauses"][p];
+    assert_eq!(c["given"], json!(["build overflow_checks"]));
+    let mut g = f.clone();
+    subject_mut(&mut g, en)["clauses"][p]["given"] = json!(["build opt_level"]);
+    assert!(errors(&g).contains("not a build setting"), "{}", errors(&g));
+}
+
+#[test]
+fn the_adapters_of_iterator_state_their_yields_through_the_logs_of_their_closures() {
+    let (file, _) = std_file();
+    let clauses: Vec<(&str, &Value)> = file["subjects"].as_array().unwrap().iter().flat_map(|s| s["clauses"].as_array().into_iter().flatten().map(move |c| (s["name"].as_str().unwrap(), c))).collect();
+    let says = |subject: &str, text: &str| clauses.iter().any(|(s, c)| *s == subject && c["text"].as_str().unwrap() == text);
+    for (s, t) in [
+        ("std::iter::Iterator::map", "callback f : called by result.next, at most once per call, with x, returning y"),
+        ("std::iter::Iterator::map", "ensure items : yields(result) == y"),
+        ("std::iter::Iterator::map", "ensure arguments : x == old(yields(self))"),
+        ("std::iter::Iterator::filter", "callback predicate : called by result.next, with x, returning keep"),
+        ("std::iter::Iterator::filter", "ensure items : yields(result) == select(keep, old(yields(self)))"),
+        ("std::iter::Iterator::take_while", "callback predicate : called by result.next, at most once per call, with x, returning keep"),
+        ("std::iter::Iterator::take_while", "ensure items : yields(result) == while_true(keep, old(yields(self)))"),
+        ("std::iter::Iterator::take_while", "ensure not_put_back : final(yields(self)) == skip(size(keep), old(yields(self)))"),
+        ("std::iter::Iterator::flat_map", "callback f : called by result.next, with x, returning y"),
+        ("std::iter::Iterator::flat_map", "ensure items : yields(result) == flatten(map(yields, y))"),
+        ("std::iter::Iterator::enumerate", "fails panic in result.next when old(count(self)) > 18446744073709551615"),
+    ] {
+        assert!(says(s, t), "{s}: {t}");
+    }
+    // each callback of a result is observed: half from the documentation, half from the body of the adapter's `next`
+    for (s, c) in clauses.iter().filter(|(_, c)| c["kind"] == "callback" && c["text"].as_str().unwrap().contains("called by")) {
+        assert!(c["status"].get("observed").is_some(), "{s}");
+        assert!(c["source"].as_str().unwrap().contains("doc: "), "{s}");
+    }
+    // the closure's own name is never a function in a sequence: `map(f, …)` is refused for the parameter
+    let map = "std::iter::Iterator::map";
+    let items = at(&file, map, "ensure items");
+    assert!(with_clause(&file, map, items, "ensure", "ensure items : yields(result) == map(f, old(yields(self)))").contains("parameter or callback, not a named pure function"));
+    // the new operators have their arities
+    expect(
+        &file,
+        map,
+        &[
+            ("ensure", items, "ensure e : select(y) == []", "`select` takes 2 arguments"),
+            ("ensure", items, "ensure e : while_true(y, x, x) == []", "`while_true` takes 2 arguments"),
+            ("ensure", items, "ensure e : flatten(y, x) == []", "`flatten` takes 1 argument"),
+            ("ensure", items, "ensure e : present(y) == true", "`present` takes 2 arguments"),
+            ("ensure", items, "ensure e : flatten(map(yields, y)) == select(y, x) ++ while_true(y, x)", ""),
+        ],
+    );
+}
+
+#[test]
+fn an_optional_element_is_told_from_an_absent_position_by_present() {
+    let (f, _) = std_file();
+    let next = "std::iter::Iterator::next";
+    let a = at(&f, next, "ensure advances");
+    expect(
+        &f,
+        next,
+        &[
+            ("ensure", a, "ensure advances : present(old(yields(self)), 0) implies yields(self) == old(yields(self))[1..]", ""),
+            ("ensure", a, "ensure advances : not present(old(yields(self)), 1) implies old(yields(self))[1..2] == []", ""),
+            ("ensure", a, "ensure advances : present(old(yields(self))) implies true", "`present` takes 2 arguments"),
+        ],
+    );
+    assert!(!canonical(&f).contains("ensure advances : exists result"));
+}
+
+#[test]
+fn a_handle_names_its_place_its_collection_and_its_key() {
+    let (f, _) = std_file();
+    let o = "std::collections::hash_map::Entry::or_insert";
+    let st = at(&f, o, "ensure stored");
+    let ma = at(&f, o, "mutates only");
+    expect(
+        &f,
+        o,
+        &[
+            ("ensure", st, "ensure stored : self is Vacant(e) implies owner(self)[old(key(self))] == default", ""),
+            ("ensure", st, "ensure stored : owner(self, default) == default", "`owner` takes 1 argument"),
+            ("ensure", st, "ensure stored : same(current(self), default)", ""),
+            ("ensure", st, "ensure stored : current() == default", "`current` takes 1 argument"),
+            ("access", ma, "mutates only owner(self)[old(key(self))]", ""),
+            ("access", ma, "mutates only owner(self)[old(kee(self))]", "unknown name `kee`"),
+        ],
+    );
+    // `key` is a view of the entry, declared in the file: without it the name is unknown
+    let mut g = f.clone();
+    subject_mut(&mut g, "std::collections::hash_map::Entry").as_object_mut().unwrap().remove("views");
+    assert!(errors(&g).contains("unknown name `key`"), "{}", errors(&g));
+    // the key a map holds
+    let ins = "std::collections::HashMap::insert";
+    let kk = at(&f, ins, "ensure key_kept");
+    let l = at(&f, ins, "lifetime k ends in call");
+    expect(
+        &f,
+        ins,
+        &[
+            ("ensure", kk, "ensure key_kept : same(stored_key(self, k), old(stored_key(self, k)))", ""),
+            ("ensure", kk, "ensure key_kept : same(stored_key(k), k)", "`stored_key` takes 2 arguments"),
+            ("hold", l, "lifetime k ends in call when exists old(self[k])", ""),
+            ("hold", l, "lifetime k, v ends in call", "names one entity"),
+        ],
+    );
+}
+
+#[test]
+fn the_elements_a_sequence_holds_end_together_and_a_collect_has_subjects() {
+    let (f, _) = std_file();
+    let ii = "std::vec::IntoIter";
+    let l = at(&f, ii, "lifetime every item of");
+    expect(
+        &f,
+        ii,
+        &[
+            ("hold", l, "lifetime every item of yields(self) ends with self", ""),
+            ("hold", l, "lifetime every item of yields(self) outlives self", ""),
+            ("hold", l, "lifetime every item yields(self) ends with self", "names a sequence"),
+            ("hold", l, "lifetime every item of yields(self)", "names a sequence"),
+            ("hold", l, "lifetime every item of yields(zz) ends with self", "unknown name `zz`"),
+        ],
+    );
+    // `collect` hands the items to B's from_iter, and the impls of Result and String state theirs
+    let col = "std::iter::Iterator::collect";
+    let d = at(&f, col, "ensure delegates");
+    expect(&f, col, &[("ensure", d, "ensure delegates : result == '<B as std::iter::FromIterator<Item>>::from_iter'(old(self))", ""), ("ensure", d, "ensure delegates : result == '<B>'(old(self))", "not a quoted host path")]);
+    let names: Vec<&str> = f["subjects"].as_array().unwrap().iter().map(|s| s["name"].as_str().unwrap()).collect();
+    for n in ["std::result::Result as std::iter::FromIterator::from_iter", "std::string::String from char as std::iter::FromIterator", "std::string::String from char as std::iter::FromIterator::from_iter"] {
+        assert!(names.contains(&n), "{n}");
+    }
+    let r = "std::result::Result as std::iter::FromIterator::from_iter";
+    let first = at(&f, r, "ensure first_err");
+    expect(
+        &f,
+        r,
+        &[
+            ("ensure", first, "ensure first_err : filter(is_ok, yields(iter))[0] is Err(e) implies result is Err(e)", "unknown name `is_ok`"),
+            ("ensure", first, "ensure first_err : filter(iter, yields(iter))[0] is Err(e) implies result is Err(e)", "parameter or callback"),
+        ],
+    );
+}
+
+#[test]
+fn let_binds_a_pattern_for_the_clauses_after_it_in_the_library_file() {
+    let (f, _) = std_file();
+    let s = "std::primitive::slice::split_at_mut";
+    let l = at(&f, s, "let ");
+    let sizes = at(&f, s, "ensure part_sizes");
+    assert!(l < sizes);
+    expect(
+        &f,
+        s,
+        &[
+            ("let", l, "let (head, tail) = result", ""),
+            ("let", l, "let (head, tail) = nope", "unknown name `nope`"),
+            ("let", l, "let (head, head) = result", "already bound"),
+            ("let", l, "let (mid, tail) = result", "already bound"),
+            ("let", l, "let (head tail) = result", "tuple pattern"),
+            ("let", l, "let head result", "`let p = e`"),
+            // `_` binds nothing, so the clause after it does not know `tail`; a single name binds the whole
+            ("let", l, "let (head, _) = result", "unknown name `tail`"),
+            ("let", l, "let both = result", "unknown name `head`"),
+            ("ensure", sizes, "ensure part_sizes : size(rest) == mid", "unknown name `rest`"),
+        ],
+    );
+    // a name is known only after its `let`
+    let mut g = f.clone();
+    let cl = subject_mut(&mut g, s)["clauses"].as_array_mut().unwrap();
+    let c = cl.remove(l);
+    cl.insert(sizes, c);
+    assert!(errors(&g).contains("unknown name `head`"), "{}", errors(&g));
+    let c = canonical(&f);
+    assert_eq!(validate(&f, Some(&c)), Vec::<String>::new());
+}
+
+#[test]
+fn libstats_counts_the_forms_of_the_residuals() {
+    let (f, _) = std_file();
+    let t = bare_rust::libstats::libstats(&f, None);
+    let n = |l: &str| t.lines().find(|x| x.contains(l)).unwrap_or("").split_whitespace().rev().nth(1).unwrap_or("").parse::<usize>().unwrap_or(0);
+    assert_eq!(n("called by P.m"), 4, "{t}");
+    assert_eq!(n("fails F in P.m"), 1);
+    assert_eq!(n("final(e)"), 1);
+    assert_eq!(n("`current`, `owner`, `stored_key`"), 5, "{t}");
+    assert_eq!(n("`lifetime every item of`"), 1);
+    assert_eq!(n("`let`, a name or a pattern"), 1);
+    assert_eq!(n("`present(xs, i)`"), 1);
+    assert_eq!(n("`present`, `select`, `while_true`, `flatten`"), 4, "{t}");
+    assert!(t.lines().any(|l| l.trim_start().starts_with("let ") && l.contains('1')), "{t}");
+}
+
+#[test]
+fn b6_closed_the_residuals_of_b3_to_b5_and_kept_what_std_does_not_promise() {
+    let (file, _) = std_file();
+    let clauses: Vec<(&str, &Value)> = file["subjects"].as_array().unwrap().iter().flat_map(|s| s["clauses"].as_array().into_iter().flatten().map(move |c| (s["name"].as_str().unwrap(), c))).collect();
+    let un: Vec<(&str, &str)> = clauses.iter().filter(|(_, c)| c["kind"] == "unexpressed").map(|(s, c)| (*s, bare_rust::libstats::reason_label(c["reason"].as_str().unwrap()))).collect();
+    assert_eq!(un.len(), 52, "65 before B6: 13 closed");
+    let n = |l: &str| un.iter().filter(|(_, x)| *x == l).count();
+    for gone in ["no callback as a function", "no promise about a result's later calls", "no lifetime for the elements of a sequence", "no from_iter subject", "no identity of cloned values", "no identity of a stored key"] {
+        assert_eq!(n(gone), 0, "{gone}");
+    }
+    assert_eq!((n("no successor of a type parameter"), n("no promise of disorder"), n("no effects of a destructor"), n("no host state"), n("no promise"), n("no arm of a macro in a clause")), (1, 1, 1, 5, 7, 2));
+    assert!(un.iter().any(|(s, l)| *s == "std::clone::Clone::clone" && *l == "no promise"));
+    assert!(un.iter().any(|(s, l)| *s == "std::vec!" && *l == "no arm of a macro in a clause"));
+    assert_eq!(un.iter().filter(|(s, _)| *s == "std::collections::hash_map::Entry::or_insert").map(|(_, l)| *l).collect::<Vec<_>>(), ["no effects of a destructor"]);
+    // the new subjects compile against the real std with the rest of the file
+    let r = check_signatures(&file, &work("b6-sigs"), &target()).unwrap();
+    assert!(r.mismatches.is_empty(), "{:?}", r.mismatches);
+    for n in ["std::result::Result as std::iter::FromIterator::from_iter", "std::string::String from char as std::iter::FromIterator", "std::string::String from char as std::iter::FromIterator::from_iter"] {
+        assert!(r.checked.iter().any(|c| c == n), "{n} is checked");
+    }
+    assert_eq!(r.views_checked, 7);
 }

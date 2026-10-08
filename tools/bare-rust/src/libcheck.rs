@@ -2,10 +2,10 @@
 //! and its signatures are the real ones, by coercing the real `std` item to the function-pointer type printed from
 //! the entry's slots and compiling the lot in a scratch crate.
 use crate::cargo;
-use crate::clause::{lint, Scope};
+use crate::clause::{lint, lint_given, GivenCtx, Scope};
 use crate::externals::{self, Kind};
 use crate::json::canonical;
-use crate::types::Ty;
+use crate::types::{Lower, Ty};
 use crate::{first_error, parse_rust, R};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
@@ -34,8 +34,9 @@ pub fn heads(kind: &str) -> &'static [&'static str] {
         "budget" => &["budget"],
         "layout" => &["layout", "size", "align"],
         "derive" => &["derive"],
-        "never panics" => &["never panics"],
-        "result must be used" => &["result must be used"],
+        "never panics" => &["never panics except exhausted", "never panics"],
+        "result must be used" => &["result must be used", "must be used"],
+        "obliges" => &["obliges caller"],
         "effects" => &[
             "effects none",
             "effects only",
@@ -48,6 +49,7 @@ pub fn heads(kind: &str) -> &'static [&'static str] {
             "commutes with",
             "depends only on",
             "terminates",
+            "evaluable at compile time",
             "reads only",
             "writes only",
             "emits only",
@@ -56,6 +58,7 @@ pub fn heads(kind: &str) -> &'static [&'static str] {
         ],
         "law" => &["law"],
         "callback" => &["callback"],
+        "protocol" => &["protocol"],
         "invariant" => &["invariant"],
         "access" => &[
             "access",
@@ -73,7 +76,8 @@ pub fn heads(kind: &str) -> &'static [&'static str] {
             "disjoint",
             "shared readonly",
         ],
-        "hold" => &["hold"],
+        "hold" => &["hold", "lifetime"],
+        "implements" => &["implements"],
         "compat" => &["version", "compatible with", "replaces", "was", "deprecated", "stable", "visible to"],
         _ => &[],
     }
@@ -87,6 +91,17 @@ fn type_strings(sub: &Value) -> Vec<(String, String)> {
         }
     };
     add("type".into(), &sub["type"]);
+    add("trait".into(), &sub["trait"]);
+    add("self".into(), &sub["self"]);
+    for (n, t) in sub["assoc"].as_object().into_iter().flatten() {
+        add(format!("associated type `{n}`"), t);
+    }
+    for (i, e) in sub["implements"].as_array().into_iter().flatten().enumerate() {
+        add(format!("implements {i}"), &e["trait"]);
+        for (n, t) in e["assoc"].as_object().into_iter().flatten() {
+            add(format!("implements {i}: associated type `{n}`"), t);
+        }
+    }
     for p in sub["params"].as_array().into_iter().flatten() {
         add(format!("param `{}`", p["name"].as_str().unwrap_or("?")), &p["type"]);
     }
@@ -120,6 +135,61 @@ fn is_host_path(p: &str) -> bool {
 /// Everything that is wrong with a library file's content: the schema, the rules the schema cannot say, and the
 /// canonical layout of `text`.
 pub fn validate(file: &Value, text: Option<&str>) -> Vec<String> {
+    validate_with(file, text, &crate::host::builds(None))
+}
+
+/// The clause kinds a `given` may qualify: the promises that depend on what an implementation does (language 6.12).
+const GIVEN_KINDS: [&str; 5] = ["never panics", "effects", "ensure", "fails", "panics"];
+
+/// A bound's methods the file knows, with those of its supertraits: the functions named `<trait>::m`. `None` when the
+/// file has no trait subject by that name, or no method of it, so that a method name cannot be checked.
+fn bound_methods(by_name: &BTreeMap<&str, &Value>, file: &Value, bound: &str, depth: usize) -> Option<BTreeSet<String>> {
+    let head = bound.split('<').next().unwrap_or("").trim();
+    let tr = by_name.get(head).filter(|t| t["kind"] == "trait")?;
+    let prefix = format!("{head}::");
+    let mut ms: BTreeSet<String> = file["subjects"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|s| s["kind"] == "function")
+        .filter_map(|s| s["name"].as_str()?.strip_prefix(&prefix).filter(|m| !m.contains("::")).map(str::to_string))
+        .collect();
+    if depth < 8 {
+        for sup in tr["bounds"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+            ms.extend(bound_methods(by_name, file, sup, depth + 1).unwrap_or_default());
+        }
+    }
+    (!ms.is_empty()).then_some(ms)
+}
+
+/// The generic type parameters of a subject, each with the methods of its bounds when every bound is known to the file.
+fn given_generics(sub: &Value, by_name: &BTreeMap<&str, &Value>, file: &Value) -> BTreeMap<String, Option<BTreeSet<String>>> {
+    let mut out = BTreeMap::new();
+    for g in sub["generics"].as_array().into_iter().flatten() {
+        let name = g["name"].as_str().unwrap_or("");
+        if name.starts_with('\'') {
+            continue;
+        }
+        let strs = |v: &Value| -> Vec<String> { v.as_array().into_iter().flatten().filter_map(Value::as_str).map(str::to_string).collect() };
+        let mut bounds: Vec<String> = strs(&g["bounds"]).into_iter().chain(strs(&g["where"])).collect();
+        for w in sub["where"].as_array().into_iter().flatten().filter(|w| w["for"].as_str() == Some(name)) {
+            bounds.extend(strs(&w["bounds"]));
+        }
+        bounds.retain(|b| !b.starts_with('\'') && !b.starts_with('?'));
+        let mut all = Some(BTreeSet::new());
+        for b in &bounds {
+            match (bound_methods(by_name, file, b, 0), all.as_mut()) {
+                (Some(ms), Some(a)) => a.extend(ms),
+                _ => all = None,
+            }
+        }
+        out.insert(name.to_string(), all.filter(|a| !a.is_empty()));
+    }
+    out
+}
+
+/// `validate`, with the build settings a `given build` may name taken from the host profile.
+pub fn validate_with(file: &Value, text: Option<&str>, builds: &BTreeSet<String>) -> Vec<String> {
     let mut errs = vec![];
     let schema: Value = serde_json::from_str(SCHEMA).expect("schema");
     match jsonschema::validator_for(&schema) {
@@ -153,6 +223,7 @@ pub fn validate(file: &Value, text: Option<&str>) -> Vec<String> {
             errs.push(format!("view `{name}`: `{host}` is not a host path under `{of}`"));
         }
     }
+    let subject_by_name: BTreeMap<&str, &Value> = file["subjects"].as_array().into_iter().flatten().filter_map(|s| Some((s["name"].as_str()?, s))).collect();
     let variants: BTreeSet<String> = file["subjects"]
         .as_array()
         .into_iter()
@@ -183,14 +254,51 @@ pub fn validate(file: &Value, text: Option<&str>) -> Vec<String> {
                 errs.push(format!("{at}: {what}: {e}"));
             }
         }
+        let head = |t: &Value| -> String {
+            let s = t.as_str().unwrap_or("");
+            s.split(['<', ' ']).next().unwrap_or("").to_string()
+        };
+        if kind == "impl" {
+            if sub["trait"].is_null() || sub["self"].is_null() {
+                errs.push(format!("{at}: an impl names its `trait` and the `self` type it is for"));
+            }
+            if !name.ends_with(&format!(" as {}", head(&sub["trait"]))) {
+                errs.push(format!("{at}: an impl is named `<type> as <trait>`, ending in its trait `{}`", head(&sub["trait"])));
+            }
+        } else {
+            if !sub["assoc"].is_null() {
+                errs.push(format!("{at}: `assoc` is for an impl"));
+            }
+            if !sub["self"].is_null() {
+                errs.push(format!("{at}: `self` is for an impl"));
+            }
+        }
+        if !sub["implements"].is_null() && kind != "type" {
+            errs.push(format!("{at}: `implements` is for a type"));
+        }
+        for (j, e) in sub["implements"].as_array().into_iter().flatten().enumerate() {
+            if let Some(i) = e["impl"].as_str() {
+                match subject_by_name.get(i) {
+                    Some(t) if t["kind"] == "impl" && head(&t["trait"]) == head(&e["trait"]) => {}
+                    Some(_) => errs.push(format!("{at}: implements {j}: `{i}` is not an impl of `{}`", head(&e["trait"]))),
+                    None => errs.push(format!("{at}: implements {j}: `{i}` is not a subject of the file")),
+                }
+            }
+        }
+        if let Some(i) = sub["impl"].as_str() {
+            if kind != "function" || !subject_by_name.get(i).is_some_and(|t| t["kind"] == "impl") {
+                errs.push(format!("{at}: `impl` is for a function, and names an impl subject of the file: `{i}`"));
+            }
+        }
         let mut names = BTreeSet::new();
         for g in sub["generics"].as_array().into_iter().flatten() {
             if !names.insert(g["name"].as_str().unwrap_or("").to_string()) {
                 errs.push(format!("{at}: generic `{}` is declared twice", g["name"].as_str().unwrap_or("")));
             }
         }
-        let mut scope = Scope { names: variants.clone(), failures: failures.clone(), payload: payload.clone() };
+        let mut scope = Scope { names: variants.clone(), failures: failures.clone(), payload: payload.clone(), ..Scope::default() };
         scope.names.extend(all_views.iter().map(|v| v.0.clone()));
+        scope.pure.extend(all_views.iter().map(|v| v.0.clone()));
         if kind == "type" {
             scope.names.insert("Self".into());
             scope.names.insert("other".into());
@@ -209,9 +317,35 @@ pub fn validate(file: &Value, text: Option<&str>) -> Vec<String> {
         for n in sub["generics"].as_array().into_iter().flatten().filter_map(|g| g["name"].as_str()) {
             scope.names.insert(n.trim_start_matches('\'').to_string());
         }
-        if kind == "trait" {
+        if matches!(kind, "trait" | "impl") || sub["impl"].is_string() {
             scope.names.insert("Self".into());
         }
+        scope.names.extend(sub["assoc"].as_object().into_iter().flatten().map(|(n, _)| n.clone()));
+        for l in sub["hold"]["for"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+            if !sub["generics"].as_array().into_iter().flatten().any(|g| g["name"].as_str() == Some(l)) {
+                errs.push(format!("{at}: `hold` is for the lifetime `{l}`, which the subject does not declare"));
+            }
+        }
+        // a protocol names the subject's parameters and callbacks, and the methods of a parameter's bounds; a callback's
+        // `with` and `returning` names are known to the subject's other clauses (language 6.13)
+        let clauses_of = || sub["clauses"].as_array().into_iter().flatten();
+        let generics_known = given_generics(sub, &subject_by_name, file);
+        for p in sub["params"].as_array().into_iter().flatten() {
+            let (n, ty) = (p["name"].as_str().unwrap_or(""), p["type"].as_str().unwrap_or(""));
+            scope.events.insert(n.to_string());
+            let g = ty.strip_prefix("ref<").and_then(|r| r.strip_suffix('>')).unwrap_or(ty);
+            if let Some(ms) = generics_known.get(g) {
+                scope.event_methods.insert(n.to_string(), ms.clone());
+            }
+        }
+        for c in clauses_of().filter(|c| c["kind"] == "callback") {
+            if let Some(n) = c["text"].as_str().and_then(|t| t.strip_prefix("callback ")).and_then(|t| t.split([' ', ':']).next()) {
+                scope.events.insert(n.to_string());
+            }
+        }
+        let before_callbacks = scope.clone();
+        let binds: Vec<String> = clauses_of().filter(|c| c["kind"] == "callback").filter_map(|c| c["text"].as_str()).flat_map(|t| crate::clause::callback_binds(t, &before_callbacks)).collect();
+        scope.names.extend(binds);
         for (j, c) in sub["clauses"].as_array().into_iter().flatten().enumerate() {
             let (k, t) = (c["kind"].as_str().unwrap_or(""), c["text"].as_str().unwrap_or(""));
             if k == "derive" {
@@ -220,7 +354,27 @@ pub fn validate(file: &Value, text: Option<&str>) -> Vec<String> {
                     errs.push(format!("{at}: clause {j}: `{t}` names a template that is not this derive's"));
                 }
             } else if k != "unexpressed" {
-                errs.extend(lint(k, t, heads(k), &scope).into_iter().map(|e| format!("{at}: clause {j}: {e}")));
+                if !c["given"].is_null() {
+                    if !GIVEN_KINDS.contains(&k) {
+                        errs.push(format!("{at}: clause {j}: a `{k}` clause is not qualified by `given` (only {})", GIVEN_KINDS.join(", ")));
+                    }
+                    let items: Vec<&str> = c["given"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
+                    let ctx = GivenCtx { generics: generics_known.clone(), has_self: matches!(kind, "trait" | "impl" | "type") || sub["impl"].is_string() || !sub["trait"].is_null(), trait_method: kind == "function" && (!sub["trait"].is_null() || sub["impl"].is_string()), builds };
+                    errs.extend(lint_given(&items, &ctx).into_iter().map(|e| format!("{at}: clause {j}: {e}")));
+                }
+                if t.split_whitespace().any(|w| w == "given") {
+                    errs.push(format!("{at}: clause {j}: `given` is the clause's `given` slot, not part of its text: `{t}`"));
+                }
+                // language 6.14: `must be used` is for a type or a trait, `result must be used` for a subject with a result;
+                // `evaluable at compile time` and `obliges caller` are for a function
+                let on_type = matches!(kind, "type" | "trait");
+                if k == "result must be used" && on_type != t.starts_with("must be used") {
+                    errs.push(format!("{at}: clause {j}: `must be used` is for a type or a trait and `result must be used` for a function or macro: `{t}`"));
+                }
+                if (t == "evaluable at compile time" || k == "obliges") && kind != "function" {
+                    errs.push(format!("{at}: clause {j}: `{}` is for a function: `{t}`", if k == "obliges" { "obliges caller" } else { "evaluable at compile time" }));
+                }
+                errs.extend(lint(k, t, heads(k), if k == "callback" { &before_callbacks } else { &scope }).into_iter().map(|e| format!("{at}: clause {j}: {e}")));
             }
         }
     }
@@ -319,6 +473,44 @@ fn ty_rust(v: &Value, access: &Value, lt: Option<&str>) -> Result<String, String
     Ty::parse(s)?.rust(access["rights"] == "write", lt)
 }
 
+/// The same, with each `some I` turned into a generic parameter: a function pointer type cannot hold `impl Trait`.
+fn ty_rust_lowered(v: &Value, access: &Value, lt: Option<&str>, lower: &mut Lower) -> Result<String, String> {
+    match v.as_str() {
+        Some(s) => Ty::parse(s)?.rust_lowered(access["rights"] == "write", lt, lower),
+        None => ty_rust(v, access, lt),
+    }
+}
+
+/// An impl's self type, its trait, and its trait with the associated types it fixes (a bound; a path cannot hold them).
+fn impl_parts(imp: &Value) -> Result<(String, String, String), String> {
+    let self_t = ty_rust(&imp["self"], &Value::Null, None)?;
+    Ok((self_t, ty_rust(&imp["trait"], &Value::Null, None)?, trait_with_assoc(&imp["trait"], &imp["assoc"], imp)?))
+}
+
+/// `std::iter::Iterator<Item = char>`: the trait of an impl or of an `implements` entry, with the associated types
+/// it fixes. A borrow in an associated type needs a lifetime a bound can name: the subject's only one.
+fn trait_with_assoc(tr: &Value, assoc: &Value, owner: &Value) -> Result<String, String> {
+    let t = ty_rust(tr, &Value::Null, None)?;
+    let lts: Vec<&str> = owner["generics"].as_array().into_iter().flatten().filter_map(|g| g["name"].as_str()).filter(|n| n.starts_with('\'')).collect();
+    let mut parts = vec![];
+    for (n, v) in assoc.as_object().into_iter().flatten() {
+        let lt = if has_ref(v) {
+            match lts.as_slice() {
+                [one] => Some(*one),
+                _ => return Err("an associated type borrows, and the subject has not exactly one lifetime to name".into()),
+            }
+        } else {
+            None
+        };
+        parts.push(format!("{n} = {}", ty_rust(v, &Value::Null, lt)?));
+    }
+    Ok(match (parts.is_empty(), t.strip_suffix('>')) {
+        (true, _) => t,
+        (false, Some(open)) => format!("{open}, {}>", parts.join(", ")),
+        (false, None) => format!("{t}<{}>", parts.join(", ")),
+    })
+}
+
 fn bounds_of(g: &Value) -> Vec<String> {
     let mut b: Vec<String> = vec![];
     for k in ["bounds", "where"] {
@@ -327,8 +519,9 @@ fn bounds_of(g: &Value) -> Vec<String> {
     b
 }
 
-/// `<T: A + B, 'a>` and the where clause, of a subject's generics. A generic named `Self` becomes `Self_`.
-fn generics_of(sub: &Value) -> (String, String) {
+/// The generic parameters (`T: A + B`, `'a`), lifetimes first, and the where clause of a subject's generics. A generic
+/// named `Self` becomes `Self_`.
+fn generics_parts(sub: &Value) -> (Vec<String>, String) {
     let mut params = vec![];
     for g in sub["generics"].as_array().into_iter().flatten() {
         let n = g["name"].as_str().unwrap_or("");
@@ -336,7 +529,6 @@ fn generics_of(sub: &Value) -> (String, String) {
         let b = bounds_of(g).join(" + ");
         params.push(if b.is_empty() { n.to_string() } else { format!("{n}: {b}") });
     }
-    // lifetimes first
     params.sort_by_key(|p| !p.starts_with('\''));
     let preds: Vec<String> = sub["where"]
         .as_array()
@@ -347,9 +539,22 @@ fn generics_of(sub: &Value) -> (String, String) {
             format!("{}: {}", w["for"].as_str().unwrap_or("_"), b.join(" + "))
         })
         .collect();
-    let g = if params.is_empty() { String::new() } else { format!("<{}>", params.join(", ")) };
     let w = if preds.is_empty() { String::new() } else { format!(" where {}", preds.join(", ")) };
-    (g, w)
+    (params, w)
+}
+
+fn angle(params: &[String]) -> String {
+    if params.is_empty() {
+        String::new()
+    } else {
+        format!("<{}>", params.join(", "))
+    }
+}
+
+/// `<T: A + B, 'a>` and the where clause, of a subject's generics.
+fn generics_of(sub: &Value) -> (String, String) {
+    let (p, w) = generics_parts(sub);
+    (angle(&p), w)
 }
 
 /// The Rust expression for a function subject's path, or why there is none.
@@ -372,10 +577,18 @@ fn fn_path(sub: &Value) -> Result<String, String> {
     Ok(name.to_string())
 }
 
-fn gen_function(sub: &Value) -> Gen {
+/// The check of a function. `path` is its Rust path when the name is not (a method of an impl).
+///
+/// A function pointer cannot hold `impl Trait`, so a `some` in a parameter becomes a generic parameter with its bound, and
+/// the function is coerced as before. A `some` result is checked another way: the function is called, on values that
+/// are never made (`loop {}`), inside a closure whose result must meet the bound.
+fn gen_function(sub: &Value, path: Option<String>) -> Gen {
     let go = || -> Result<String, String> {
-        let (g, mut w) = generics_of(sub);
-        let path = fn_path(sub)?;
+        let (mut gp, mut w) = generics_parts(sub);
+        let path = match path {
+            Some(p) => p,
+            None => fn_path(sub)?,
+        };
         // a trait method can only be called on a `Self` that implements the trait: not something an entry restates
         if let Some(tr) = path.strip_prefix("<Self_ as ").and_then(|p| p.rsplit_once(">::")).map(|(t, _)| t) {
             w = if w.is_empty() { format!(" where Self_: {tr}") } else { format!("{w}, Self_: {tr}") };
@@ -383,15 +596,17 @@ fn gen_function(sub: &Value) -> Gen {
         let params = sub["params"].as_array().ok_or("no params")?;
         let (mut binder, mut ps) = (vec![], vec![]);
         let mut lt_of: BTreeMap<String, String> = BTreeMap::new();
+        let mut lower = Lower { inner: "'__e".into(), params: vec![] };
         for (i, p) in params.iter().enumerate() {
             let lt = has_ref(&p["type"]).then(|| format!("'p{i}"));
             if let Some(l) = &lt {
                 binder.push(l.clone());
                 lt_of.insert(p["name"].as_str().unwrap_or("").to_string(), l.clone());
             }
-            ps.push(ty_rust(&p["type"], &p["access"], lt.as_deref())?);
+            ps.push(ty_rust_lowered(&p["type"], &p["access"], lt.as_deref(), &mut lower)?);
         }
         let mut ret = String::new();
+        let mut some_result: Option<String> = None;
         if !sub["result"].is_null() {
             let r = &sub["result"];
             let lt = if has_ref(&r["type"]) || has_ref(&r["fails"]) {
@@ -408,6 +623,15 @@ fn gen_function(sub: &Value) -> Gen {
             } else {
                 None
             };
+            let rt = r["type"].as_str().map(Ty::parse).transpose()?;
+            if let Some(b) = rt.as_ref().and_then(|t| t.bounds_rust("'__e")) {
+                if !r["fails"].is_null() {
+                    return Err("a `some` result that fails".into());
+                }
+                some_result = Some(b?);
+            } else if rt.as_ref().is_some_and(Ty::has_some) || r["fails"].as_str().and_then(|f| Ty::parse(f).ok()).is_some_and(|t| t.has_some()) {
+                return Err("a `some` below the top of the result".into());
+            }
             let t = ty_rust(&r["type"], &r["access"], lt.as_deref())?;
             ret = if r["fails"].is_null() {
                 format!(" -> {t}")
@@ -415,9 +639,54 @@ fn gen_function(sub: &Value) -> Gen {
                 format!(" -> std::result::Result<{t}, {}>", ty_rust(&r["fails"], &Value::Null, lt.as_deref())?)
             };
         }
-        let hr = if binder.is_empty() { String::new() } else { format!("for<{}> ", binder.join(", ")) };
-        let body = format!("let _: {hr}fn({}){ret} = {path};", ps.join(", "));
-        Ok(format!("fn {{id}}{g}(){w} {{ {} }}", word_replace(&body, "Self", "Self_")))
+        let mut helper = String::new();
+        // `evaluable at compile time` (language 6.14.1): a `const fn` that only calls the item, with its arguments moved in
+        let const_claim = sub["clauses"].as_array().into_iter().flatten().any(|c| c["kind"] == "effects" && c["text"] == "evaluable at compile time");
+        let const_fn = if const_claim && some_result.is_none() {
+            let mut cg = binder.clone();
+            cg.extend(gp.iter().cloned());
+            cg.sort_by_key(|p| !p.starts_with('\''));
+            let params: Vec<String> = ps.iter().enumerate().map(|(i, t)| format!("a{i}: {t}")).collect();
+            let args: Vec<String> = (0..ps.len()).map(|i| format!("a{i}")).collect();
+            Some((cg, params.join(", "), format!("{path}({})", args.join(", "))))
+        } else {
+            None
+        };
+        let body = if let Some(bound) = some_result {
+            // lifetimes are early-bound here: the values are made by `loop {}`, not coerced from a pointer
+            gp.splice(0..0, binder.drain(..));
+            let args: Vec<String> = (0..ps.len()).map(|i| format!("a{i}")).collect();
+            let lets: Vec<String> = ps.iter().enumerate().map(|(i, t)| format!("let a{i}: {t} = loop {{}};")).collect();
+            // the bound is in an item of its own, which takes the generics again: a function inside another cannot use them
+            let mut hp = gp.clone();
+            if bound.contains("'__e") {
+                hp.insert(0, "'__e".into());
+            }
+            hp.push(format!("R: {bound}"));
+            hp.push("F: FnOnce() -> R".into());
+            let names: Vec<String> = gp.iter().filter(|p| !p.starts_with('\'')).map(|p| p.split(':').next().unwrap_or("").to_string()).collect();
+            let turbofish = names.iter().cloned().chain(["_".to_string(), "_".to_string()]).collect::<Vec<_>>().join(", ");
+            helper = format!("fn {{id}}_need{}(_: F){w} {{}}\n", angle(&hp));
+            format!("{{id}}_need::<{turbofish}>(|| {{ {} {path}({}) }});", lets.join(" "), args.join(", "))
+        } else {
+            let hr = if binder.is_empty() { String::new() } else { format!("for<{}> ", binder.join(", ")) };
+            format!("let _: {hr}fn({}){ret} = {path};", ps.join(", "))
+        };
+        if !lower.params.is_empty() {
+            gp.extend(lower.params.iter().cloned());
+            gp.insert(0, "'__e".into());
+        }
+        gp.sort_by_key(|p| !p.starts_with('\''));
+        let mut code = format!("{}fn {{id}}{}(){w} {{ {} }}", word_replace(&helper, "Self", "Self_"), angle(&gp), word_replace(&body, "Self", "Self_"));
+        if let Some((mut cg, params, call)) = const_fn {
+            cg.extend(lower.params.iter().cloned());
+            if !lower.params.is_empty() {
+                cg.insert(0, "'__e".into());
+            }
+            cg.sort_by_key(|p| !p.starts_with('\''));
+            code += &word_replace(&format!("\nconst fn {{id}}_const{}({params}){ret}{w} {{ {call} }}", angle(&cg)), "Self", "Self_");
+        }
+        Ok(code)
     };
     match go() {
         Ok(s) => Gen::Checked(s),
@@ -425,11 +694,77 @@ fn gen_function(sub: &Value) -> Gen {
     }
 }
 
+/// The two items that prove `self_t: tr` under a subject's generics: a function that holds the bound, with the generics
+/// and one more parameter for the type, and a function that names it. The bound is in an item of its own because a
+/// function inside another cannot use the other's generics.
+fn proves(sub: &Value, suffix: &str, self_t: &str, tr: &str) -> String {
+    let (mut params, w) = generics_parts(sub);
+    let names: Vec<String> = params.iter().filter(|p| !p.starts_with('\'')).map(|p| p.split(':').next().unwrap_or("").to_string()).collect();
+    params.push(format!("X: ?Sized + {tr}"));
+    let turbofish = names.iter().cloned().chain([self_t.to_string()]).collect::<Vec<_>>().join(", ");
+    let (g, _) = generics_of(sub);
+    format!("fn {{id}}{suffix}_need{}(){w} {{}}\nfn {{id}}{suffix}{g}(){w} {{ {{id}}{suffix}_need::<{turbofish}>(); }}", angle(&params))
+}
+
+/// An impl: its self type implements its trait, with the associated types it fixes.
+fn gen_impl(sub: &Value) -> Gen {
+    let go = || -> Result<String, String> {
+        let (self_t, _, tr) = impl_parts(sub)?;
+        Ok(proves(sub, "", &self_t, &tr))
+    };
+    go().map_or_else(Gen::Unchecked, Gen::Checked)
+}
+
+/// What a type declares it implements, each entry checked as an impl is, with the type's own generics.
+fn implements_checks(sub: &Value, id_suffix: &str) -> Result<Vec<String>, String> {
+    let name = sub["name"].as_str().unwrap_or("");
+    let mut args: Vec<&str> = sub["generics"].as_array().into_iter().flatten().filter_map(|g| g["name"].as_str()).collect();
+    args.sort_by_key(|p| !p.starts_with('\''));
+    let a = if args.is_empty() { String::new() } else { format!("<{}>", args.join(", ")) };
+    let mut out = vec![];
+    for (i, e) in sub["implements"].as_array().into_iter().flatten().enumerate() {
+        let tr = trait_with_assoc(&e["trait"], &e["assoc"], sub)?;
+        out.push(proves(sub, &format!("{id_suffix}{i}"), &format!("{name}{a}"), &tr));
+    }
+    Ok(out)
+}
+
 /// The check for one subject, with `{id}` where its function name goes.
 pub fn generate(sub: &Value) -> Gen {
+    generate_in(sub, &Value::Null)
+}
+
+/// The same, for a subject of `file`: a method of an impl is checked through the impl's self type and trait.
+pub fn generate_in(sub: &Value, file: &Value) -> Gen {
+    if let Some(i) = sub["impl"].as_str() {
+        let imp = file["subjects"].as_array().into_iter().flatten().find(|s| s["name"].as_str() == Some(i) && s["kind"] == "impl");
+        let Some(imp) = imp else { return Gen::Unchecked(format!("impl `{i}` is not a subject of the file")) };
+        let go = || -> Result<(Value, String), String> {
+            let (self_t, tr, _) = impl_parts(imp)?;
+            let method = sub["name"].as_str().unwrap_or("").rsplit("::").next().unwrap_or("");
+            // the impl's generics come first, then the method's
+            let mut merged = sub.clone();
+            for k in ["generics", "where"] {
+                let all: Vec<Value> = imp[k].as_array().into_iter().flatten().chain(sub[k].as_array().into_iter().flatten()).cloned().collect();
+                if !all.is_empty() {
+                    merged[k] = Value::Array(all);
+                }
+            }
+            Ok((merged, format!("<{self_t} as {tr}>::{method}")))
+        };
+        return match go() {
+            Ok((m, path)) => gen_function(&m, Some(path)),
+            Err(e) => Gen::Unchecked(e),
+        };
+    }
+    generate_plain(sub)
+}
+
+fn generate_plain(sub: &Value) -> Gen {
     let (kind, name) = (sub["kind"].as_str().unwrap_or(""), sub["name"].as_str().unwrap_or(""));
     match kind {
-        "function" => gen_function(sub),
+        "function" => gen_function(sub, None),
+        "impl" => gen_impl(sub),
         "const" | "static" => {
             let go = || -> Result<String, String> {
                 let t = ty_rust(&sub["type"], &Value::Null, Some("'static"))?;
@@ -443,7 +778,12 @@ pub fn generate(sub: &Value) -> Gen {
             let mut args = args;
             args.sort_by_key(|p| !p.starts_with('\''));
             let a = if args.is_empty() { String::new() } else { format!("<{}>", args.join(", ")) };
-            Gen::Checked(format!("fn {{id}}{g}(){w} {{ let _: Option<*const {name}{a}> = None; }}"))
+            let mut code = format!("fn {{id}}{g}(){w} {{ let _: Option<*const {name}{a}> = None; }}");
+            match implements_checks(sub, "_impl") {
+                Ok(more) => more.iter().for_each(|m| code += &format!("\n{m}")),
+                Err(e) => return Gen::Unchecked(e),
+            }
+            Gen::Checked(code)
         }
         "trait" => {
             if sub["generics"].as_array().is_none_or(Vec::is_empty) {
@@ -504,7 +844,7 @@ pub fn check_signatures(file: &Value, work: &Path, target: &Path) -> R<SigReport
     for (i, sub) in file["subjects"].as_array().into_iter().flatten().enumerate() {
         let (kind, name) = (sub["kind"].as_str().unwrap_or("").to_string(), sub["name"].as_str().unwrap_or("").to_string());
         let id = format!("_c{i}");
-        let (code, resolved) = match generate(sub) {
+        let (code, resolved) = match generate_in(sub, file) {
             Gen::Checked(c) => (c, false),
             Gen::Resolved(c) => (c, true),
             Gen::Unchecked(why) => {
@@ -617,6 +957,8 @@ pub struct LibReport {
     pub host: Option<(PathBuf, usize)>,
     /// Derive clauses the library's `derive` lists expand to.
     pub expanded: usize,
+    /// Sampled runtime checks of callbacks, moves, ends, must-use and `yields` against the real std (`runcheck`).
+    pub runtime: Option<crate::runcheck::RuntimeReport>,
 }
 
 impl LibReport {
@@ -632,9 +974,13 @@ impl LibReport {
     pub fn sigs_ok(&self) -> bool {
         self.sigs.as_ref().is_none_or(|s| s.mismatches.is_empty())
     }
+    /// A run of the real std that contradicts a clause fails the check.
+    pub fn runtime_ok(&self) -> bool {
+        self.runtime.as_ref().is_none_or(|r| r.contradictions() == 0)
+    }
     /// Without `strict`, items still missing do not fail the check (the library is incomplete, not wrong).
     pub fn ok(&self, strict: bool) -> bool {
-        self.valid_ok() && self.sigs_ok() && (!strict || self.coverage_ok())
+        self.valid_ok() && self.sigs_ok() && self.runtime_ok() && (!strict || self.coverage_ok())
     }
 
     pub fn to_json(&self) -> Value {
@@ -654,6 +1000,7 @@ impl LibReport {
                 "views": { "resolved": s.views_checked, "unchecked": s.views_unchecked },
                 "mismatches": s.mismatches.iter().map(|(n, m)| json!({"subject": n, "error": m})).collect::<Vec<_>>(),
             })),
+            "runtime": self.runtime.as_ref().map(|r| r.to_json()),
         })
     }
 
@@ -701,6 +1048,9 @@ impl LibReport {
                 println!("              mismatch {n}: {m}");
             }
         }
+        if let Some(r) = &self.runtime {
+            r.print();
+        }
     }
 }
 
@@ -728,19 +1078,25 @@ pub fn libcheck(dir: &Path, libraries: &Path, work: &Path, target: &Path) -> R<L
     rep.library = Some(path);
     rep.subjects = file["subjects"].as_array().map_or(0, Vec::len);
     rep.missing = missing(&items, &file);
-    rep.invalid = validate(&file, Some(&text));
+    let hp = crate::host::host_path(libraries, file["host"].as_str().unwrap_or("rust"), &version);
+    let profile: Option<(String, Value)> = match fs::read_to_string(&hp) {
+        Ok(t) => Some((t.clone(), serde_json::from_str(&t).map_err(|e| format!("{}: {e}", hp.display()))?)),
+        Err(_) => None,
+    };
+    rep.invalid = validate_with(&file, Some(&text), &crate::host::builds(profile.as_ref().map(|p| &p.1)));
     if file["crate"].as_str() != Some(&format!("std {version}")) {
         rep.invalid.push(format!("crate is {:?}, but the toolchain is std {version}", file["crate"]));
     }
     rep.expanded = file["subjects"].as_array().into_iter().flatten().map(|s| crate::derive::expand(s).len()).sum();
-    let hp = crate::host::host_path(libraries, file["host"].as_str().unwrap_or("rust"), &version);
-    if let Ok(t) = fs::read_to_string(&hp) {
-        let p: Value = serde_json::from_str(&t).map_err(|e| format!("{}: {e}", hp.display()))?;
-        let (arms, errs) = crate::host::validate(&p, &file, Some(&t));
+    if let Some((t, p)) = &profile {
+        let (arms, errs) = crate::host::validate(p, &file, Some(t));
         rep.invalid.extend(errs);
         rep.host = Some((hp, arms));
     }
     rep.sigs = Some(check_signatures(&file, &work.join(&info.name), target)?);
+    if std::env::var_os("BARE_RUST_NO_RUNTIME").is_none() {
+        rep.runtime = Some(crate::runcheck::run(&file, &work.join(&info.name), target)?);
+    }
     Ok(rep)
 }
 

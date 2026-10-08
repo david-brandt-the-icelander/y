@@ -100,7 +100,7 @@
   },
   "$defs": {
     "type": {
-      "description": "A type string (`u64 as 'usize'`, `ref<Entry>?`, `map<K, V> as 'std::collections::HashMap'`), or host text for a type the language has no form for.",
+      "description": "A type string (`u64 as 'usize'`, `ref<Entry>?`, `map<K, V> as 'std::collections::HashMap'`, `Chars<'a>`, `some std::iter::Iterator { Item = u8 }`, `any std::error::Error as 'std::boxed::Box'`), or host text for a type the language has no form for.",
       "oneOf": [
         {
           "type": "string",
@@ -168,6 +168,14 @@
         "lifetime": {
           "type": "string",
           "description": "A lifetime that elision cannot express, as written."
+        },
+        "for": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "description": "On a `type`: the lifetime parameters the type borrows for, `hold : borrows for 'a`. Each is a lifetime of the subject's `generics`."
         }
       }
     },
@@ -371,6 +379,24 @@
         "hold": {
           "$ref": "#/$defs/hold"
         },
+        "implements": {
+          "type": "array",
+          "description": "The interfaces a `type` declares it implements (language 6.11): the interface with its arguments, the associated types the implementation fixes, and, when the implementation is a subject of the file, its name. A library file writes them; `strip` writes one for each `impl Trait for T` whose `T` is a type of the file.",
+          "items": {
+            "$ref": "#/$defs/implements"
+          }
+        },
+        "assoc": {
+          "type": "object",
+          "description": "For an `impl`: its associated types, `Item` to the type it is.",
+          "additionalProperties": {
+            "$ref": "#/$defs/type"
+          }
+        },
+        "impl": {
+          "type": "string",
+          "description": "For a function in a library file: the `impl` subject whose method it is. The function is checked as `<Self as Trait>::name`, with the impl's generics."
+        },
         "fields": {
           "type": "array",
           "items": {
@@ -568,11 +594,12 @@
         "source"
       ],
       "additionalProperties": false,
-      "description": "A clause the signature slots cannot say. `kind` names the family and `text` is the clause in the syntax of language 15, keyword included (`ensure found : result == self[k]`); `panics` is `fails panic when p`, `panic` being the Rust host's runtime failure. `unexpressed` is a promise the language cannot state: `text` is free text and `reason` says why the language cannot say it. Those are the gaps that feed proposal 12.",
+      "description": "A clause the signature slots cannot say. `kind` names the family and `text` is the clause in the syntax of language 15, keyword included (`ensure found : result == self[k]`); `panics` is `fails panic when p`, `panic` being the Rust host's runtime failure. A `callback` clause may name the call's arguments and result (`callback f : called exactly once when exists self, with self, returning r`; the names `with` gives and `returning` binds are in scope in the subject's other clauses, language 6.13), and a `protocol` is a regular expression over the subject's calls (`protocol self.next+`). Language 6.14 adds clauses to existing kinds: `effects` `evaluable at compile time`, `result must be used` with `must be used` on a type or trait, `hold` `hold result : moved from v` and `lifetime v ends in call when p` and `lifetime a, b survive call`, `never panics except exhausted`, `budget work expected amortised O(1)`, `access` `mutates only self[key]`, and `result.0` and `is (a, b)` in expressions; and the kind `obliges`, `obliges caller : p because \"…\"`. Language 6.13 and 6.15 add the calls a result makes later and the sequences of a callback: `callback f : called by result.next, at most once per call, with x, returning y` (`x` and `y` are the lists of the arguments and results of the calls of f in the run), `fails panic in result.next when p`, `final(e)`, and `present`, `select`, `while_true`, `flatten`; language 4 adds `current(h)`, `owner(h)` and `stored_key(m, k)`, and 7.3 `lifetime every item of yields(self) ends with self`. The kind `let` binds a name or a pattern for the clauses after it: `let (head, tail) = result`. `unexpressed` is a promise the language cannot state: `text` is free text and `reason` says why the language cannot say it. Those are the gaps that feed proposal 12.",
       "properties": {
         "kind": {
           "enum": [
             "require",
+            "let",
             "ensure",
             "on failure",
             "fails",
@@ -583,9 +610,12 @@
             "effects",
             "law",
             "callback",
+            "protocol",
+            "obliges",
             "invariant",
             "access",
             "hold",
+            "implements",
             "budget",
             "layout",
             "derive",
@@ -596,6 +626,15 @@
         "text": {
           "type": "string",
           "minLength": 1
+        },
+        "given": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Conditions the promise relies on (language 6.12): the clause holds whenever all of them hold, and says nothing otherwise. Each is `default` (the default body of a trait method is not overridden), `build SETTING` (a setting of the host profile: overflow_checks, debug_assertions, panic=unwind, panic=abort), or `P.m, P.n never panic | terminate | effects none` (the named methods of the bound implementations of the generic parameter `P`). The clause `text` stays the unconditional form; the language form is `text given item and item`. Allowed on never panics, effects, ensure, fails and panics clauses."
         },
         "source": {
           "type": "string",
@@ -622,7 +661,12 @@
       "then": {
         "required": [
           "reason"
-        ]
+        ],
+        "not": {
+          "required": [
+            "given"
+          ]
+        }
       },
       "else": {
         "not": {
@@ -651,6 +695,30 @@
         "host": {
           "type": "string",
           "description": "The pure host function the view is bound to, quoted and under `of`: `'std::vec::Vec::capacity'`. A clause calls the view by name: `capacity(self)`."
+        }
+      }
+    },
+    "implements": {
+      "type": "object",
+      "required": [
+        "trait"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "trait": {
+          "$ref": "#/$defs/type",
+          "description": "The interface, with its arguments: `std::iter::Iterator`, `std::convert::From<u8>`."
+        },
+        "assoc": {
+          "type": "object",
+          "description": "The associated types this implementation fixes: `{ \"Item\": \"char\" }`.",
+          "additionalProperties": {
+            "$ref": "#/$defs/type"
+          }
+        },
+        "impl": {
+          "type": "string",
+          "description": "The name of the `impl` subject that carries this implementation's generics, `where` and clauses."
         }
       }
     }

@@ -20,6 +20,9 @@
       "kind": "function",
       "path": "std::convert::From::from",
       "trait": "std::convert::From",
+      "impls": [
+        "impl std::convert::From<u8> for u64"
+      ],
       "uses": 1,
       "files": {
         "lib.rs": 1
@@ -35,6 +38,9 @@
       "kind": "function",
       "path": "std::default::Default::default",
       "trait": "std::default::Default",
+      "impls": [
+        "impl std::default::Default for FnvHasher"
+      ],
       "uses": 2,
       "files": {
         "lib.rs": 2
@@ -52,6 +58,9 @@
       "kind": "function",
       "path": "std::hash::Hasher::finish",
       "trait": "std::hash::Hasher",
+      "impls": [
+        "impl std::hash::Hasher for FnvHasher"
+      ],
       "uses": 2,
       "files": {
         "lib.rs": 2
@@ -69,6 +78,9 @@
       "kind": "function",
       "path": "std::hash::Hasher::write",
       "trait": "std::hash::Hasher",
+      "impls": [
+        "impl std::hash::Hasher for FnvHasher"
+      ],
       "uses": 2,
       "files": {
         "lib.rs": 2
@@ -86,6 +98,9 @@
       "kind": "function",
       "path": "std::iter::IntoIterator::into_iter",
       "trait": "std::iter::IntoIterator",
+      "impls": [
+        "impl std::iter::IntoIterator for &[u8]"
+      ],
       "uses": 1,
       "files": {
         "lib.rs": 1
@@ -101,6 +116,9 @@
       "kind": "function",
       "path": "std::iter::Iterator::collect",
       "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for std::iter::FlatMap"
+      ],
       "uses": 2,
       "files": {
         "lib.rs": 2
@@ -116,6 +134,9 @@
       "kind": "function",
       "path": "std::iter::Iterator::copied",
       "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for std::slice::Iter"
+      ],
       "uses": 2,
       "files": {
         "lib.rs": 2
@@ -131,6 +152,9 @@
       "kind": "function",
       "path": "std::iter::Iterator::flat_map",
       "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for std::ops::Range"
+      ],
       "uses": 2,
       "files": {
         "lib.rs": 2
@@ -146,6 +170,9 @@
       "kind": "function",
       "path": "std::iter::Iterator::next",
       "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for std::slice::Iter"
+      ],
       "uses": 1,
       "files": {
         "lib.rs": 1
@@ -160,6 +187,9 @@
     {
       "kind": "function",
       "path": "std::primitive::slice::iter",
+      "impls": [
+        "impl [u8]"
+      ],
       "uses": 2,
       "files": {
         "lib.rs": 2
@@ -174,6 +204,9 @@
     {
       "kind": "function",
       "path": "std::primitive::slice::len",
+      "impls": [
+        "impl [u8]"
+      ],
       "uses": 1,
       "files": {
         "lib.rs": 1
@@ -188,6 +221,9 @@
     {
       "kind": "function",
       "path": "std::primitive::u64::wrapping_mul",
+      "impls": [
+        "impl u64"
+      ],
       "uses": 2,
       "files": {
         "lib.rs": 2

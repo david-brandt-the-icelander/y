@@ -94,5 +94,27 @@
         }
       ]
     }
-  }
+  },
+  "build": [
+    {
+      "default": "on in a debug build, off in a release build; arithmetic that overflows panics when on and wraps when off",
+      "setting": "overflow_checks",
+      "source": "1.97.0 std/src/primitive_docs.rs and core/src/num/mod.rs, doc: \"overflow-checks\" of the Rust reference (`-C overflow-checks`, default is the value of debug-assertions)"
+    },
+    {
+      "default": "on in a debug build, off in a release build; `debug_assert!` and `cfg(debug_assertions)` are active when on",
+      "setting": "debug_assertions",
+      "source": "1.97.0 core/src/macros/mod.rs, doc: \"Unlike [`assert!`], `debug_assert!` statements are only enabled in non optimized builds by default.\""
+    },
+    {
+      "default": "the default strategy: a panic unwinds the stack and runs destructors",
+      "setting": "panic=unwind",
+      "source": "1.97.0 core/src/macros/panic.md:15-18, doc: the panic strategy `-C panic=unwind`"
+    },
+    {
+      "default": "not the default: a panic aborts the process and runs no destructors",
+      "setting": "panic=abort",
+      "source": "1.97.0 core/src/macros/panic.md:15-18, doc: the panic strategy `-C panic=abort`"
+    }
+  ]
 }

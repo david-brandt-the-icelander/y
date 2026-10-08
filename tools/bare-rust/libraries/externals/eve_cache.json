@@ -19,6 +19,9 @@
     {
       "kind": "function",
       "path": "std::collections::HashMap::get",
+      "impls": [
+        "impl std::collections::HashMap"
+      ],
       "uses": 1,
       "files": {
         "src/lib.rs": 1
@@ -33,6 +36,9 @@
     {
       "kind": "function",
       "path": "std::collections::HashMap::insert",
+      "impls": [
+        "impl std::collections::HashMap"
+      ],
       "uses": 1,
       "files": {
         "src/lib.rs": 1

@@ -39,6 +39,9 @@ fn form(s: &str) -> String {
         Ok(Ty::Refined(t, _)) => form(&t.show()),
         Ok(Ty::Opt(_)) => "option".into(),
         Ok(Ty::Tuple(_)) => "tuple".into(),
+        Ok(Ty::Some(_)) => "some".into(),
+        Ok(Ty::Any(_)) => "any".into(),
+        Ok(Ty::Lifetime(_)) => "lifetime".into(),
         Ok(Ty::Coll(k, _)) => k,
         Ok(Ty::As(t, w)) => match (&*t, w.as_str()) {
             (_, "usize" | "isize") => w,

@@ -1,6 +1,6 @@
 //! strip: Rust source into a bare body and a constraint file (proposal 5).
 use crate::life::{self, SK};
-use crate::types::{Ty, RESERVED};
+use crate::types::{Bound, Ty, RESERVED};
 use crate::{
     all_children, apply, collapse, first_error, is_comment, is_item_kind, module_path, named_children, parse_bare,
     parse_rust, text, Edit, Namer, R,
@@ -28,10 +28,15 @@ struct Slot {
     raw: Option<String>,
     lifetime: Option<String>,
     has_ref: bool,
+    /// A reference inside the bounds of an existential, which the value borrows through.
+    bound_ref: bool,
     shares: bool,
 }
 
 struct Cx<'a> {
+    /// The type parameters in scope. `T::Item` is an associated type whether or not `T` is one, so nothing reads this
+    /// yet; a form that must tell a parameter from a path will.
+    #[allow(dead_code)]
     generics: &'a [String],
     elide: &'a HashSet<String>,
 }
@@ -42,6 +47,8 @@ struct Stripper<'a> {
     subjects: Vec<Value>,
     holes: Obj,
     namer: Namer,
+    /// (type subject, entry): the impls of a trait whose self type is a type of this file, attached at the end.
+    implements: Vec<(String, Value)>,
 }
 
 fn access(mutable: bool) -> Value {
@@ -90,9 +97,9 @@ impl<'a> Stripper<'a> {
                 t => Ok(Ty::Name(t.into())),
             },
             "scoped_type_identifier" => {
+                // `Self::Item` and `T::Output` name the associated type that the implements slot or a bound fixes
                 let t = collapse(text(n, src));
-                let first = t.split("::").next().unwrap_or("");
-                if first == "Self" || first.starts_with('<') || cx.generics.iter().any(|g| g == first) {
+                if t.starts_with('<') {
                     Err("assoc".into())
                 } else {
                     Ok(Ty::Name(t))
@@ -119,7 +126,7 @@ impl<'a> Stripper<'a> {
                 let mut args = vec![];
                 for a in real_kids(args_n) {
                     match a.kind() {
-                        "lifetime" => return Err("lifetime_args".into()),
+                        "lifetime" => args.push(Ty::Lifetime(text(a, src).to_string())),
                         "type_binding" => return Err("assoc_binding".into()),
                         k if is_literal(k) => return Err("const_args".into()),
                         _ => args.push(self.to_ty(a, cx, refs)?),
@@ -136,6 +143,14 @@ impl<'a> Stripper<'a> {
                     ("Box" | "Rc" | "Arc", 1) => Ty::As(one(&mut args), path),
                     _ => Ty::App(path, args),
                 })
+            }
+            // `(dyn A + B)`: a parenthesised bound list is not a one-tuple
+            "tuple_type"
+                if real_kids(n).len() == 1
+                    && !all_children(n).iter().any(|c| c.kind() == ",")
+                    && matches!(real_kids(n)[0].kind(), "bounded_type" | "dynamic_type" | "abstract_type") =>
+            {
+                self.to_ty(real_kids(n)[0], cx, refs)
             }
             "tuple_type" => {
                 let v: Result<Vec<Ty>, String> = real_kids(n).into_iter().map(|c| self.to_ty(c, cx, refs)).collect();
@@ -154,15 +169,81 @@ impl<'a> Stripper<'a> {
                     ),
                 })
             }
-            "abstract_type" => Err("impl_trait".into()),
-            "dynamic_type" => Err("dyn".into()),
+            "abstract_type" | "dynamic_type" | "bounded_type" => self.exist(n, cx),
             "function_type" => Err("fn_ptr".into()),
             "pointer_type" => Err("pointer".into()),
             "never_type" => Err("never".into()),
-            "bounded_type" => Err("bounded".into()),
             "macro_invocation" => Err("macro".into()),
             k => Err(format!("other_{k}")),
         }
+    }
+
+    /// `impl Trait` and `dyn Trait`, with the bounds that follow a `+`: `some` and `any`. The references inside the
+    /// bounds are shared and unnamed, which is all the bounds of the type language can say.
+    fn exist(&self, n: Node, cx: &Cx) -> Result<Ty, String> {
+        fn flat<'t>(n: Node<'t>, out: &mut Vec<Node<'t>>) {
+            if n.kind() == "bounded_type" {
+                for c in real_kids(n) {
+                    flat(c, out);
+                }
+            } else {
+                out.push(n);
+            }
+        }
+        let mut parts = vec![];
+        flat(n, &mut parts);
+        let (any, form) = match parts[0].kind() {
+            "abstract_type" => (false, "impl_trait"),
+            "dynamic_type" => (true, "dyn"),
+            _ => return Err("bounded".into()),
+        };
+        let mut inner = vec![];
+        let mut bounds = vec![];
+        for (i, p) in parts.iter().enumerate() {
+            if i == 0 && real_kids(*p).iter().any(|c| matches!(c.kind(), "for_lifetimes" | "type_parameters")) {
+                return Err(form.into());
+            }
+            let t = if i == 0 { p.child_by_field_name("trait").ok_or(form)? } else { *p };
+            bounds.push(match t.kind() {
+                "lifetime" => Bound::Lifetime(text(t, self.src).to_string()),
+                "type_identifier" | "scoped_type_identifier" => {
+                    Bound::Iface { path: collapse(text(t, self.src)), args: vec![], assoc: vec![], call: None }
+                }
+                "generic_type" => {
+                    let head = t.child_by_field_name("type").ok_or(form)?;
+                    let (mut args, mut assoc) = (vec![], vec![]);
+                    for a in real_kids(t.child_by_field_name("type_arguments").ok_or(form)?) {
+                        match a.kind() {
+                            "lifetime" => args.push(Ty::Lifetime(text(a, self.src).to_string())),
+                            "type_binding" => {
+                                let name = text(a.child_by_field_name("name").ok_or(form)?, self.src).to_string();
+                                assoc.push((name, self.to_ty(a.child_by_field_name("type").ok_or(form)?, cx, &mut inner)?));
+                            }
+                            k if is_literal(k) => return Err(form.into()),
+                            _ => args.push(self.to_ty(a, cx, &mut inner)?),
+                        }
+                    }
+                    Bound::Iface { path: collapse(text(head, self.src)), args, assoc, call: None }
+                }
+                "function_type" => {
+                    let head = t.child_by_field_name("trait").ok_or(form)?;
+                    let mut args = vec![];
+                    for a in real_kids(t.child_by_field_name("parameters").ok_or(form)?) {
+                        args.push(self.to_ty(a, cx, &mut inner)?);
+                    }
+                    let ret = match t.child_by_field_name("return_type") {
+                        Some(r) => Some(Box::new(self.to_ty(r, cx, &mut inner)?)),
+                        None => None,
+                    };
+                    Bound::Iface { path: collapse(text(head, self.src)), args: vec![], assoc: vec![], call: Some((args, ret)) }
+                }
+                _ => return Err(form.into()),
+            });
+        }
+        if inner.iter().any(|(m, l)| *m || l.is_some()) {
+            return Err(form.into());
+        }
+        Ok(if any { Ty::Any(bounds) } else { Ty::Some(bounds) })
     }
 
     /// The text of a node with the lifetimes that are elided cut out of its references.
@@ -196,6 +277,7 @@ impl<'a> Stripper<'a> {
             raw: None,
             lifetime: None,
             has_ref: false,
+            bound_ref: false,
             shares: false,
         };
         let ty = match self.to_ty(n, cx, &mut refs) {
@@ -214,6 +296,7 @@ impl<'a> Stripper<'a> {
             raw,
             lifetime,
             has_ref: !refs.is_empty(),
+            bound_ref: ty.bound_borrows(),
             shares: ty.shares(),
         }
     }
@@ -342,6 +425,20 @@ impl<'a> Stripper<'a> {
             })
             .collect();
         Ok((gens, extra, names))
+    }
+
+    /// A type with lifetime parameters holds a borrow for each: `hold : borrows for 'a` (language 6.11).
+    fn put_hold_for(sub: &mut Obj) {
+        let lts: Vec<Value> = sub
+            .get("generics")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|g| g["name"].as_str().filter(|n| n.starts_with('\'')).map(|n| json!(n)))
+            .collect();
+        if !lts.is_empty() {
+            sub.insert("hold".into(), json!({"kind": "borrows", "for": lts}));
+        }
     }
 
     fn put_generics(sub: &mut Obj, gens: Vec<Value>, extra: Vec<Value>) {
@@ -598,6 +695,42 @@ impl<'a> Stripper<'a> {
         Ok(out)
     }
 
+    /// A `#[must_use]` or `#[must_use = "…"]` right before an item is a clause (language 6.14.2): the attribute is cut, and
+    /// the clause's `source` keeps its text, message included, so that `weave` can write it back.
+    fn must_use_clause(&mut self, n: Node, kind_text: &str) -> Option<Value> {
+        let a = n.prev_sibling().filter(|a| a.kind() == "attribute_item")?;
+        let t = collapse(text(a, self.src));
+        if !crate::weave::is_must_use_attr(&t) {
+            return None;
+        }
+        self.cuts.push((a.start_byte(), n.start_byte(), String::new()));
+        Some(json!({"kind": "result must be used", "text": kind_text, "source": format!("attribute {t}")}))
+    }
+
+    /// The `# Safety` section of the doc comment above an item, on one line; none where there is no such section.
+    fn safety_doc(&self, n: Node) -> Option<String> {
+        let mut lines: Vec<String> = vec![];
+        let mut at = n.prev_sibling();
+        while let Some(p) = at {
+            match p.kind() {
+                "line_comment" => {
+                    let t = text(p, self.src);
+                    if let Some(d) = t.strip_prefix("///").filter(|d| !d.starts_with('/')) {
+                        lines.push(d.trim().to_string());
+                    }
+                }
+                "attribute_item" | "block_comment" => {}
+                _ => break,
+            }
+            at = p.prev_sibling();
+        }
+        lines.reverse();
+        let start = lines.iter().position(|l| l.starts_with('#') && l.trim_start_matches('#').trim() == "Safety")?;
+        let body: Vec<&str> = lines[start + 1..].iter().take_while(|l| !l.starts_with('#')).map(String::as_str).filter(|l| !l.is_empty()).collect();
+        let t = body.join(" ").replace('"', "'");
+        (!t.is_empty()).then_some(t)
+    }
+
     fn strukt(&mut self, n: Node, sc: &Scope) -> R<()> {
         let name = n.child_by_field_name("name").unwrap();
         let sname = self.namer.unique(format!("{}::{}", sc.path, text(name, self.src)));
@@ -608,6 +741,10 @@ impl<'a> Stripper<'a> {
         let none = HashSet::new();
         let (gens, extra, names) = self.generics(n, name.end_byte(), true, &none)?;
         Self::put_generics(&mut sub, gens, extra);
+        Self::put_hold_for(&mut sub);
+        if let Some(c) = self.must_use_clause(n, "must be used") {
+            sub.insert("clauses".into(), json!([c]));
+        }
         if let Some(body) = n.child_by_field_name("body") {
             let mut g = sc.generics.clone();
             g.extend(names);
@@ -629,6 +766,10 @@ impl<'a> Stripper<'a> {
         let none = HashSet::new();
         let (gens, extra, names) = self.generics(n, name.end_byte(), true, &none)?;
         Self::put_generics(&mut sub, gens, extra);
+        Self::put_hold_for(&mut sub);
+        if let Some(c) = self.must_use_clause(n, "must be used") {
+            sub.insert("clauses".into(), json!([c]));
+        }
         let mut g = sc.generics.clone();
         g.extend(names);
         let mut variants = vec![];
@@ -701,6 +842,9 @@ impl<'a> Stripper<'a> {
         sub.insert("kind".into(), json!("trait"));
         sub.insert("name".into(), json!(sname));
         self.vis(n, &mut sub)?;
+        if let Some(c) = self.must_use_clause(n, "must be used") {
+            sub.insert("clauses".into(), json!([c]));
+        }
         let none = HashSet::new();
         let (gens, extra, names) = self.generics(n, name.end_byte(), true, &none)?;
         Self::put_generics(&mut sub, gens, extra);
@@ -759,7 +903,9 @@ impl<'a> Stripper<'a> {
         let mut self_ty = ty_head.clone();
         if ty_complex {
             let slot = self.map_type(ty_n, &cx);
-            let v = if slot.has_ref { self.host(ty_n, "ref_self".into(), &none) } else { slot.ty };
+            // a shared, unnamed reference is the type's own `ref`; a `&mut` or a named lifetime has no slot here
+            let hosted = slot.has_ref && (slot.lifetime.is_some() || slot.access.as_ref().is_some_and(|a| a["rights"] == "write"));
+            let v = if hosted { self.host(ty_n, "ref_self".into(), &none) } else { slot.ty };
             if let Some(s) = v.as_str() {
                 self_ty = s.to_string();
             } else {
@@ -778,12 +924,28 @@ impl<'a> Stripper<'a> {
         if emit {
             self.subjects.push(Value::Object(sub));
         }
+        // the type declares what it implements, with the associated types this impl fixes (language 6.11)
+        if let (Some((t, (th, complex))), false) = (&tr, ty_n.kind() == "reference_type") {
+            let tv = if *complex { self.map_type(*t, &cx).ty } else { json!(th) };
+            let mut e = Obj::new();
+            e.insert("trait".into(), tv);
+            let mut assoc = Obj::new();
+            for it in named_children(body).into_iter().filter(|c| c.kind() == "type_item") {
+                if let (Some(nm), Some(ty)) = (it.child_by_field_name("name"), it.child_by_field_name("type")) {
+                    assoc.insert(text(nm, src).to_string(), self.loose(ty, &g));
+                }
+            }
+            if !assoc.is_empty() {
+                e.insert("assoc".into(), Value::Object(assoc));
+            }
+            e.insert("impl".into(), json!(sname));
+            self.implements.push((format!("{}::{ty_head}", sc.path), Value::Object(e)));
+        }
         let inner = Scope {
             path: if tr.is_some() { sname } else { format!("{}::{ty_head}", sc.path) },
             generics: g,
             self_ty,
         };
-        let _ = src;
         self.items_in(body, &inner)
     }
 
@@ -796,6 +958,31 @@ impl<'a> Stripper<'a> {
         sub.insert("kind".into(), json!("function"));
         sub.insert("name".into(), json!(sname));
         self.vis(f, &mut sub)?;
+        // `const fn` and a plain `#[must_use]` are clauses, not host text (language 6.14.1, 6.14.2); a `#[must_use = "…"]`
+        // keeps its message, which has no slot, and stays in the body
+        let mut clauses = vec![];
+        if let Some(mods) = all_children(f).into_iter().find(|c| c.kind() == "function_modifiers") {
+            if let Some(kw) = all_children(mods).into_iter().find(|c| c.kind() == "const") {
+                let next = kw.next_sibling().or_else(|| mods.next_sibling()).ok_or("parse-error: const without fn")?;
+                self.cuts.push((kw.start_byte(), next.start_byte(), String::new()));
+                clauses.push(json!({"kind": "effects", "text": "evaluable at compile time", "source": "const fn"}));
+            }
+        }
+        if let Some(c) = self.must_use_clause(f, "result must be used") {
+            clauses.push(c);
+        }
+        // `unsafe fn` with a `# Safety` section is `obliges caller` (language 6.14.9); without one `unsafe` stays host text
+        if let (Some(mods), Some(why)) = (all_children(f).into_iter().find(|c| c.kind() == "function_modifiers"), self.safety_doc(f)) {
+            if let Some(kw) = all_children(mods).into_iter().find(|c| c.kind() == "unsafe") {
+                let next = kw.next_sibling().or_else(|| mods.next_sibling()).ok_or("parse-error: unsafe without fn")?;
+                self.cuts.push((kw.start_byte(), next.start_byte(), String::new()));
+                clauses.push(json!({
+                    "kind": "obliges",
+                    "text": format!("obliges caller : true because \"{why}\""),
+                    "source": "doc # Safety",
+                }));
+            }
+        }
         let (gens, extra, names) = self.generics(f, name_n.end_byte(), true, &life.elide)?;
         Self::put_generics(&mut sub, gens, extra);
         let mut g = sc.generics.clone();
@@ -884,7 +1071,7 @@ impl<'a> Stripper<'a> {
             if res.get("access").is_some_and(|a| a["rights"] == "read") {
                 res.remove("access");
             }
-            if slot.has_ref {
+            if slot.has_ref || slot.bound_ref {
                 let e = if self_ref {
                     Some("self".to_string())
                 } else {
@@ -908,6 +1095,9 @@ impl<'a> Stripper<'a> {
             }
             sub.insert("result".into(), Value::Object(res));
             self.cuts.push((params_n.end_byte(), rt.end_byte(), String::new()));
+        }
+        if !clauses.is_empty() {
+            sub.insert("clauses".into(), Value::Array(clauses));
         }
         self.subjects.push(Value::Object(sub));
         if let Some(body) = f.child_by_field_name("body") {
@@ -947,9 +1137,15 @@ pub fn strip(src: &str, krate: &str, module: &str) -> R<(String, Value)> {
         subjects: vec![],
         holes: Obj::new(),
         namer: Namer::default(),
+        implements: vec![],
     };
     let sc = Scope { path: path.join("::"), generics: vec![], self_ty: "Self".into() };
     st.items_in(tree.root_node(), &sc)?;
+    for (ty, entry) in std::mem::take(&mut st.implements) {
+        let Some(sub) = st.subjects.iter_mut().find(|s| s["kind"] == "type" && s["name"] == ty.as_str()) else { continue };
+        let list = sub.as_object_mut().unwrap().entry("implements").or_insert_with(|| json!([]));
+        list.as_array_mut().unwrap().push(entry);
+    }
     // A comment inside a span that strip cuts would be dropped: refuse the file (proposal 2.6, 2.7).
     let mut comments = vec![];
     collect_comments(tree.root_node(), &mut comments);

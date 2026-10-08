@@ -23,13 +23,16 @@ a few more.
     refinement or a named function, or the gap is in the library file's format, the host profile or the tool. **Done**
     (§ 3): 24 closed, 8 turned out to be what a function computes and stay out, and 6 need a host function that does
     not exist. `unexpressed` fell from 199 to 175, and slices and arrays no longer reach the bare file as host text.
-  - **B, an extension (158).** It needs a change to the language, in five groups.
+  - **B, an extension (158).** It needs a change to the language, in five groups. **Done** (§ 4): all five steps are
+    written, and the library file is rewritten under each. `unexpressed` fell from 175 to 138 (B1), 121 (B2), 114 (B3),
+    77 (B4) and 65 (B5): 110 of the 158 closed, and the other 48 stay under corrected labels (§ 6). A sixth pass (B6)
+    closed the residuals the last three left on the language side, the calls a result makes later among them: 65 to 52.
   - **C, kept out (3).** The language rules it out on purpose.
 - **Extend in five steps, largest first**, unless stage 3 says otherwise:
   1. Traits, implementations and associated types (52).
   2. Promises that hold unless an implementation does otherwise (30).
   3. Callbacks: their results, conditions and order (15).
-  4. Eight small additions (47).
+  4. Nine small additions (47).
   5. Sequences (14).
 
   Each step is one kind or a few related kinds, as language principle 8 requires: a paragraph of meaning, a consumer, a
@@ -39,9 +42,11 @@ a few more.
   extensions are worth building only where something checks or uses them. Then the order is set by which promises a
   checker or the compiler can use, not by count. If agents do worse, the order above stands.
 - **Each step is measured.** It is done when the library file is rewritten under the extension, `unexpressed` falls by
-  the expected count, and `libcheck` and the review pass.
-- **It is cheap to build; the cost is people's review.** Class A cost about $3. The agent work for the five steps left
-  is estimated at $40 to $80.
+  the expected count, and `libcheck` and the review pass. Measured: B1 closed 37 of an expected 52, B2 17 of 30, B3 7 of
+  15, B4 37 of 47 and B5 12 of 14, and B6 13 of the 16 residuals of B3 to B5; the rest were found,
+  on writing the entries, to be absent promises, or unstable, and were relabelled.
+- **It is cheap to build; the cost is people's review.** Class A cost about $3. The agent work for the five steps was
+  estimated at $40 to $80.
   Every step is a language change that the language's owners must accept (§ 7).
 
 ---
@@ -181,6 +186,17 @@ function rust 'eve_cache::Cache::keys'(self: ref<Cache>) -> some 'std::iter::Ite
 - **Consumer.** The weaver, which carries 33 of stage 1's 78 host-text types only as Rust text. Agents, who are
   told what an iterator yields. Every host with interfaces: C#, Java, Kotlin, Swift and TypeScript all need it.
 
+**Done: the paragraph, the format and the tool; the library file is not rewritten yet.** Language § 6.11 and § 15 state
+the meaning and the grammar. The JSON gains an `implements` slot on a type (`{trait, assoc, impl}`), `assoc` and
+`trait`/`self` on an `impl` subject, `impl` on a method of one, `hold.for` on a type, and, in type strings, `some I {..}`,
+`any I`, lifetime arguments (`Chars<'a>`) and `Self::Item`. `strip` maps `impl Trait`, `dyn Trait`, lifetime arguments,
+associated types and the self types of impls into them, and `weave` prints them back; `libcheck` lints the new clause forms
+and compiles impls, `implements` entries, impl methods and existential types against the real `std`; `externals` records, for
+each function, the impls its calls resolve to (read from the `<T as Trait>::f` paths of the MIR it already reads; a call
+through a type parameter says so, by a heuristic on the name). On the corpora, host-text types fall from 39 to 3 (strsim 5 to
+0; the tool's own source 34 to 3: a pointer and two references with a lifetime in a hole). What is left as host text is in
+§ 6.11. Step 4, the rewrite of the 52 promises, and step 5's measure wait for it.
+
 ### 4.2 Promises that hold unless an implementation does otherwise (30)
 
 **What is missing.** `never panics`, `terminates` and the bounds on effects are unconditional. Most of what `std`
@@ -201,7 +217,8 @@ function rust 'std::collections::HashMap::get'(self: ref<HashMap<K, V>>, k: ref<
     law borrow_agrees : all k : K : hash(k) == hash(borrow(k))     -- the caller's types must satisfy it
 
 function rust 'std::iter::Iterator::count'(self: Self) -> u64 as 'usize'
-    ensure counted : result == old(count(self))   given build overflow_checks
+    ensure counted : old(count(self)) <= 18446744073709551615 implies result == old(count(self))
+    fails panic when old(count(self)) > 18446744073709551615   given build overflow_checks
 ```
 
 - **Closes** the 22 conditional promises, the 6 requirements on bound implementations, and the 2 that depend on the
@@ -210,6 +227,19 @@ function rust 'std::iter::Iterator::count'(self: Self) -> u64 as 'usize'
   A law on a generic parameter is checked in CI for each type the code instantiates it with, as laws are now (§ 6.2).
 - **Consumer.** Any discharge of a generated check by a library promise (trial § 7.3): almost no `std` promise is
   unconditional, so without `given` nothing can be discharged.
+
+**Done: the paragraph, the format and the lint; the library file is not rewritten yet.** Language § 6.12 and § 15 state
+the meaning and the grammar. A clause of the library file gains an optional `given`, a list of conditions joined by `and`
+(`"Q.hash, Q.eq never panic"`, `"default"`, `"build overflow_checks"`); `text` stays the unconditional clause, and the
+language form is `text given …`. It is allowed on `never panics`, `effects`, `ensure`, `fails` and `panics` clauses, not on
+`unexpressed` or `law` (a law over a generic parameter is a requirement on the caller's type, and stays a `law`). Files
+without it stay valid. `libcheck` lints each condition: the parameter is a generic of the subject, the method exists on one
+of its bounds when the file knows the bound's methods (it knows a bound only through trait subjects and `Trait::m`
+functions, so a bound it has none of passes unchecked), `default` needs a trait method, and a build setting is one the host
+profile `libraries/host-rust-1.97.0.json` lists in its new `build` (`overflow_checks`, `debug_assertions`, `panic=unwind`,
+`panic=abort`; the fixed list is in `src/host.rs`). `libstats` reports conditional clauses as a count of their own, by
+what they are given, and `libfmt` prints `given` after `text`. No compile check of a condition against `std` yet. The
+rewrite of the 30 promises, and step 5's measure, wait for it.
 
 ### 4.3 Callbacks: their results, conditions and order (15)
 
@@ -234,7 +264,41 @@ function rust 'std::iter::Iterator::count'(self: Self) -> u64 as 'usize'
 - **Closes** the callback-result promises (7), the conditional callbacks (2), and the order of calls (6).
 - **Checked** by generated wrappers around the argument, where the host allows one, and in CI otherwise.
 
-### 4.4 Eight small additions (47)
+**Done: the paragraph, the format, the lint and the rewrite; 7 of the 15 are closed.** Language § 6.13 and § 15 state the
+meaning and the grammar: `callback c : called exactly once when p, with a, b, returning r`, where `when` is a condition
+on the subject's own names, `with` lists the call's arguments (an expression, or a new name for that argument) and
+`returning` binds the result; `with` and `returning` need `exactly once` or `at most once`; `protocol` is § 6.5's
+regular expression over the subject's callbacks, its parameters and the methods of a parameter's bounds (`self.next`).
+The library file keeps the clause in `text` (no new slot), and gains the clause kind `protocol`. `libcheck` lints a
+callback's `when` and `with` against the subject's names, `returning` and the new `with` names are in scope in the
+subject's other clauses and in no callback's `when`, a protocol names callbacks, parameters and methods of known
+bounds, and `libstats` counts callback clauses by what they name. Old files stay valid. Rewrite: `unexpressed` 121 to
+114. Closed: `Option::map_or_else` (2: a conditional callback each, and `ensure` on the result), `Entry::and_modify` (2:
+the condition, and the identity of the value `f` receives and the entry holds), `Ord` (1: `max` and `min` as laws over
+`cmp`, which unfolds the `max_by` and `min_by` that the contract names), `Iterator::count` (1: `protocol self.next+`)
+and `assert_eq!` (1: `protocol left right`). Not closed, and relabelled (8): the callback of `map`, `filter` and
+`take_while` is called by `next` on the returned adapter, a call of another subject, so none of what the proposal
+expected for them can be said of the function itself (*no promise about a result's later calls* 3, with `enumerate`'s
+4), nor what the adapter yields (*no sequence value*, +4 with `flat_map`, which needs B5); `Hasher::write` promises
+nothing about its order (*no promise*). Still open: `count`'s protocol says `next` is called and at least once, not
+that the run ends at the first none, which depends on a value the calls returned. No compile check of the clauses
+against `std`.
+
+**B6, the calls a result makes later (language § 6.13.1): 8 more closed.** The callback of `map`, `filter`,
+`take_while` and `flat_map` is called by `next` on the adapter, so the subject states it as a promise about its result:
+`callback f : called by result.next, at most once per call, with x, returning y`, where in this form `x` and `y` are the
+lists of the arguments and results of the calls of the run (the calls of `next` from the return up to the first `None`),
+`yields(result) == y` and `x == old(yields(self))`. `fails panic in result.next when p` is the failure of a later call
+(`enumerate`'s overflow, with the same `given build overflow_checks` as `count`), and `final(e)` the state at the end of
+the run (`take_while`: the item that ended it is consumed and not put back, `final(yields(self)) == skip(size(keep),
+old(yields(self)))`). The closure is never called by a clause and never a named function: its results are a log the
+equations relate to the sequence. The count per call is what the body of the adapter's `next` shows (`map`, `take_while`
+at most once; `filter` and `flat_map` any number). Closed: *no promise about a result's later calls* 4 (`map` and `filter`
+laziness, `take_while`'s consumed item, `enumerate`'s overflow) and, with § 6.15, *no callback as a function* 4. `libcheck`
+lints the form (`result` or a parameter and a method it has, names only after `with`, no `when`, a count that is `per
+call`), `fails … in`, and that `final` has a run named before it.
+
+### 4.4 Nine small additions (47)
 
 Each is a clause or an expression, small enough to add on its own:
 
@@ -252,6 +316,56 @@ Each is a clause or an expression, small enough to add on its own:
 
 The first two close 32 promises with almost no new meaning: `const` restricts effects, which bounds already do, and
 must-use extends an existing clause from a subject to a type.
+
+**Done: the paragraphs, the format, the lint, strip and weave for two, and the rewrite; 37 of the 47 are closed.**
+Language § 6.14 states the nine additions in the form of § 6 (one subsection each), extends § 4, § 6.2, § 6.3, § 6.7, § 7.2,
+§ 7.3, § 8.2 and § 10.2 with a pointer, and § 15 with the grammar: `evaluable at compile time`; `must be used` on a type or
+trait; `hold result : moved from v` and the expression `result moved from v`; `lifetime v ends in call [when p]` and
+`lifetime a, b survive call`; `never panics except exhausted`; `budget work expected amortised O(1)`; `result.0`, and the
+patterns `let (a, b)` and `e is (a, b)`; `mutates only self[key]`; and `obliges caller : p because "…"`. The library file
+keeps each in the kind it extends (`effects`, `result must be used`, `hold`, `never panics`, `budget`, `ensure`,
+`access`), with one new kind, `obliges`. `libcheck` lints the forms (`moved from` names one path, `ends in call` and
+`survive call` have their shape, the `because` of an `obliges` is a quoted reason, `is (a, b)` binds its names, and
+`must be used` is for a type or trait, `evaluable at compile time` and `obliges` for a function), and compiles each
+`const` claim by calling the item from a `const fn`. `strip` turns `const fn` and a plain `#[must_use]` into clauses and
+`weave` writes them back (`#[must_use]` before the visibility, `const` after it); a `#[must_use = "…"]` keeps its message
+as host text. `libstats` counts the nine forms. Old files stay valid. Rewrite: `unexpressed` 114 to 77.
+
+- **Closed (37).** `const` 14 (the items with `rustc_const_stable`); must-use 14 (11 iterator types, `Result`, the
+  `Iterator` trait, `Chars`); moves 3 (`cmp::max`, `cmp::min`, `Ord::max`: on a tie the second or first argument comes
+  back); ends 2 (`mem::swap`: `lifetime x, y survive call`; `mem::replace`: `lifetime dest, src survive call`, with the two
+  `hold … moved from` its documentation states); exhaustion 2 (`HashMap::insert` and `entry`: `never panics except
+  exhausted given K.hash, K.eq, S.hash_one never panic`); cost 1 (`HashMap::get`: `budget work expected O(1)`, from std's
+  table of collection costs, which the entry had called absent; `insert` gains `expected amortised`); tuple parts 1
+  (`split_at_mut`: the sizes of `result.0` and `result.1`, and `disjoint`).
+- **Stay under corrected labels (10 of the 47, and 3 more).** *No stable const-ness* 4 (`cmp::max`, `cmp::min`,
+  `Option::map_or_else`, `slice::iter` are `rustc_const_unstable`: no release is bound to keep them const). *No identity
+  of cloned values* 2 (`Clone::clone` and `vec![elem; n]`: `moved from` says a value moved, not what a clone shares) and *no
+  identity of a stored key* 1 (`HashMap::insert` keeps the old key: `self[k]` looks up a value, and no expression names the
+  key the map holds): B6 closed the key and relabelled the clones (below). `Entry::or_insert`: the drop of `default` in the occupied arm is from the body and not documented, so
+  no `lifetime … ends` is stated; it stays under *no effects of a destructor* (V's `Drop` is arbitrary code, so no
+  `never panics`), and the frame condition is *no host state*: the map the entry borrows is not a name, so `mutates only
+  self[key]` has no collection to be about. `vec![expr; 0]` is *no arm of a macro in a clause* (`elem` and `n` are names of
+  one arm of the host profile, not of the subject). `vec::IntoIter`'s drop of the elements not yielded is *no sequence
+  value*. `insert` and `entry`'s *no sufficient condition* (2) is now *no condition on an associated type's
+  implementation*, the hasher's own `write` and `finish`, as `get`'s.
+- **Still open or unsure.** The tie rules of `max`, `min` and `Ord::max` are stated as moves; that the loser is dropped
+  follows from ownership and is not stated (the `ends` of a generic value that a provided method may override has no `given`).
+  `never panics except exhausted` for `insert` leaves out the destructor of the replaced key, as every `never panics`
+  of the file leaves out the drop of a type parameter. No compile check of moves, drops, exhaustion or must-use, and `strip`
+  reads only functions: `#[must_use]` on a type, `unsafe fn` as `obliges`, and `let (a, b)` have no library use yet (the
+  corpora have no `unsafe fn`). B6 gave a library `let` its clause kind (`split_at_mut` binds `let (head, tail) = result`).
+
+**B6, the residuals of this step (3 closed, 2 relabelled).** *`Entry::or_insert`* (2 closed: the map after a vacant insert,
+and the frame condition): a handle (language § 4) is a value that stands for a place of a collection it borrows, and
+`owner(h)` is that collection, the root of a path: `ensure stored : self is Vacant(e) implies owner(self)[old(key(self))]
+== default` and `mutates only owner(self)[old(key(self))]`, with `key` a view of `Entry` (`Entry::key`). It keeps the
+destructor of `V` (*no effects of a destructor*), which no `given` can name. *`HashMap::insert`'s stored key* (closed):
+`stored_key(m, k)` is the key a map holds for the key equal to `k`; `ensure key_kept : exists old(self[k]) implies
+same(stored_key(self, k), old(stored_key(self, k)))`, and `lifetime k ends in call when exists old(self[k])` (the key
+dropped: from the body, which never moves it). *Cloned values* (relabelled, not closed): `Clone::clone` promises no rule for
+what a clone shares, so it is *no promise*, and `vec![elem; n]`'s "uses clone" is *no arm of a macro in a clause*, the real
+blocker (`elem` and `n` are the names of one arm of the host profile).
 
 ### 4.5 Sequences (14)
 
@@ -273,6 +387,48 @@ function rust 'std::primitive::str::chars'(self: ref<text>) -> some 'std::iter::
 - **It waits for evidence.** It is worth building if E4 or E5 shows agents getting iterator code wrong in ways these
   promises would have prevented.
 
+**Done: the paragraph, the format, the lint and the rewrite; 12 of the 20 are closed.** Language § 6.15 defines each
+operator by its elements: `xs[i]` (optional: `none` beyond the ends, so it never fails), `xs[i..j]` (never fails; it is
+`take(j - i, skip(i, xs))`), `++`, `reverse`, `take`, `skip`, `zip`, `enumerate`, `map` and `filter` by a named pure
+function, `scalars` and `deref`; the view `yields(it)` for a finite or infinite iterator (an infinite equality is of
+every prefix, and `size`, `count` and `reverse` are decided where the sequence is finite). § 4, § 5, § 6.13's pointer, § 15's
+grammar (`seq_expr`) and § 16 are extended. `libcheck` lints the operators' arguments and that `map` and `filter` are
+given a view of the file or `scalars` or `deref`, never a parameter or callback; `libstats` counts them. The file's
+kinds are unchanged (the clauses are `ensure`). Old files stay valid. Rewrite: `unexpressed` 77 to 65.
+
+- **Closed (12).** `str::chars` (`yields(result) == scalars(self)`), `slice::iter` (`map(deref, yields(result)) ==
+  self`), `split_at_mut` (`result.0 == old(self)[..mid]`, `result.1 == old(self)[mid..]`), `Iterator::next` (`head` and
+  `advances`), `enumerate`, `skip`, `take`, `chain` (`++`), `zip`, `copied` (`map(deref, …)`), `IntoIterator::into_iter`
+  and `Vec`'s `into_iter` (which takes the claim from `vec::IntoIter`'s "yields the elements of the vector it was made
+  from").
+- **Stay under corrected labels, as B5 left them (8 of the 20, and 4 later calls); B6 closed all but three of them, below.** *No callback as a function* 4 (`map`, `filter`,
+  `take_while`, `flat_map`: the argument is a closure, and `map` takes a named function, which is what keeps expressions
+  pure); *no promise of disorder* 1 (`HashMap`'s iteration order: nothing is promised); *no lifetime for the elements of a
+  sequence* 1 (`IntoIter`'s drop); *no successor of a type parameter* 1 (`Range<Idx>` for a generic `Step`); *no from_iter
+  subject* 1 (`collect`: Result's and String's `from_iter` have no subject in the file). The four *no promise about a
+  result's later calls* (`enumerate`'s overflow, `map`'s and `filter`'s laziness, `take_while`'s consumed item) are the
+  calls of a returned adapter, which sequences do not name.
+- **Still open or unsure.** `IntoIterator::into_iter`'s `yields(result) == yields(self)` is the definition of the order a
+  collection has, so it states little beyond what it names; `next`'s `head` and `advances` hold of the state and say nothing
+  of an iterator that resumes after a `None`, and `Option<Option<T>>` items make `xs[0]` ambiguous (resolved by B6,
+  below). No compile check of sequence clauses, and no conformance suite exists yet: the equations are the definition.
+
+**B6, the residuals of this step (language § 6.15, § 7.3, § 4): 2 more closed, besides the 8 of § 4.3.** *Closures*: § 6.13.1 above, with three
+operators for the logs, `select(bs, xs)` (the elements whose verdict is true: `filter`), `while_true(bs, xs)` (up to the
+first false: `take_while`) and `flatten(xss)` (`flat_map`), and `yields` as a named function (`map(yields, y)`). *The
+elements of a sequence* (closed, `vec::IntoIter`'s drop): `lifetime every item of yields(self) ends with self`, the
+`lifetime` predicates over the many items a sequence holds when its event happens. *`collect`* (closed): `ensure delegates
+: result == '<B as FromIterator<Item>>::from_iter'(old(self))` from the default body, with two new subjects for the impls
+the entry named: `String`'s `FromIterator<char>` (`scalars(result) == yields(iter)`) and `Result`'s (the first `Err` wins;
+no `Err` gives an `Ok` of `V::from_iter` of the values, written with views `is_err` and `ok_value` of `Result`).
+*`Option<Option<T>>` items*: `xs[i]` stays flat, as every optional is (absence is one value), and the new total
+`present(xs, i)` (position `i` holds an element, whether or not it is `none`) tells an element that is `none` from a
+position beyond the end; `Iterator::next`'s `advances` now says `present(old(yields(self)), 0) implies …`, true and not
+vacuous for `Some(None)`. *`current(h)`* has its definition in § 4 (the value a handle stands for, read where the
+expression is evaluated) and in the grammar. Stay: *no successor of a type parameter* (`Range<Idx>`: `Step` is an
+unstable trait no bound can name, and the library has no integer-only range), *no promise of disorder* (the absence of a
+promise is not a clause).
+
 ---
 
 ## 5. Class C: kept out (3)
@@ -287,21 +443,29 @@ function rust 'std::primitive::str::chars'(self: ref<text>) -> some 'std::iter::
 
 ## 6. Order, and how each step lands
 
-| Step | Closes | Unexpressed after | First consumer | Wait for |
-| --- | --- | --- | --- | --- |
-| A, format and profile (done) | 24 | 175 | Agents, through better library files | — |
-| B1, traits and implementations | 52 | about 123 | `weave`, which carries `impl Trait`, `dyn Trait` and lifetime arguments only as Rust text | Nothing |
-| B4, the first two (`const`, must-use) | 32 | about 91 | `weave` (`const fn`); the compiler and lints | Nothing |
-| B2, `given` | 30 | about 61 | Discharge of generated checks | Trial stage 4 or later |
-| B4, the rest | 15 | about 46 | The memory clauses of language § 7 and § 8 | — |
-| B3, callbacks | 15 | about 31 | Agents writing iterator and option code | E5 |
-| B5, sequences | 14 | about 17 | Agents writing iterator code | E4 and E5 |
+| Step | Closes (expected) | Closed | Unexpressed after | First consumer | Wait for |
+| --- | --- | --- | --- | --- | --- |
+| A, format and profile (done) | 24 | 24 | 175 | Agents, through better library files | — |
+| B1, traits and implementations (done) | 52 | 37 | 138 | `weave`, which carries `impl Trait`, `dyn Trait` and lifetime arguments only as Rust text | Nothing |
+| B2, `given` (done) | 30 | 17 | 121 | Discharge of generated checks | Trial stage 4 or later |
+| B3, callbacks (done) | 15 | 7 | 114 | Agents writing iterator and option code | E5 |
+| B4, nine small additions (done) | 47 | 37 | 77 | `weave` (`const fn`, `#[must_use]`); the compiler and lints; the memory clauses of language § 7 and § 8 | — |
+| B5, sequences (done) | 14 | 12 | 65 | Agents writing iterator code | E4 and E5 |
+| B6, residuals of B3 to B5 (done) | 16 | 13 | 52 | Agents writing iterator and entry code; the lint of `let` | — |
 
-The 17 left are 11 of class C (3 positive effects, 8 computed texts) and the 6 host-state promises, unless B1's views
-cover them.
+The 52 left are, by what the language lacks (`bare-rust libstats`): what a function computes 8, no promise 7, no host
+state 5, no stable const-ness 4, no condition on an associated type's implementation 3, no elided lifetime in a trait
+argument 3, no positive effect 3, no trait items 3, no frame condition on a value held by a collection 2, no negative impl 2,
+no arm of a macro in a clause 2, and 10 more with one clause each (no deref coercion, no effects of a destructor, no law
+across several types' impls, no law limited to a second trait, no mutable reference as an impl's self type, no promise of
+disorder, no successor of a type parameter, no unsized text as an associated type, no unstable or negative bound, no view
+of two arguments). None is planned to be closed by a further extension in this document. B6 took *no callback as a
+function* 4, *no promise about a result's later calls* 4, *no identity of a stored key*, *no from_iter subject* and *no
+lifetime for the elements of a sequence* (1 each) to 0, two of *no host state* (`Entry::or_insert`) closed, and moved the
+two *no identity of cloned values* to *no promise* (`Clone::clone`) and *no arm of a macro in a clause* (`vec!`).
 
-The counts are estimates: an extension may close fewer promises than its labels suggest, and a rewrite may find new
-ones. Each step lands in the same way:
+The expected counts were estimates, and every step closed fewer than its labels suggested: the rewrite found promises
+that std does not make, closures that no clause can name, and const items that are unstable. Each step lands in the same way:
 
 1. **The paragraph.** A section of the language, in the form of language § 6: meaning, syntax, how it fails, how it is
    checked, how it is harvested. The grammar of language § 15 is extended.
@@ -336,10 +500,10 @@ That review is the real cost, and it is not counted here. The agent work uses th
 | B3 | 1 and 1 | about 15 | $4 to $8 |
 | B4 | 2 and 1 | about 45 | $8 to $15 |
 | B5 | 2 and 1 | about 15 | $8 to $15 |
-| **B1 to B5, left** | | **about 155** | **$40 to $80** |
+| **B1 to B5 (done)** | | **about 155 estimated** | **$40 to $80 estimated** |
 
 Each range assumes short agents, as stage 1 ran; stage 2's single long agent cost twice the unit (trial § 14.1). At the
-Max 5x proxy of trial § 14.3, what is left is about 8 to 15% of a week.
+Max 5x proxy of trial § 14.3, the five steps were estimated at about 8 to 15% of a week.
 
 ---
 

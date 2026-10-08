@@ -53,6 +53,11 @@ pub struct Item {
     pub roles: BTreeSet<String>,
     /// For a trait method: the trait.
     pub trait_path: Option<String>,
+    /// For a function: the impls its calls resolve to, as rustc prints them in MIR: `impl Iterator for Chars<'_>` for a
+    /// trait method, `impl HashMap` (the inherent impl of the type, its arguments left out) for an inherent one. A
+    /// trait method called through a type parameter (a short upper-case name, by a heuristic) resolves to no impl yet,
+    /// and says so. A crate's own types are printed by their bare names.
+    pub impls: BTreeSet<String>,
     /// For a macro: `bang` or `derive`.
     pub form: Option<String>,
     /// Where the item was seen: `mir`, `syntax`.
@@ -91,6 +96,12 @@ impl Externals {
         }
     }
 
+    fn add_impl(&mut self, path: &str, resolves: Option<String>) {
+        if let (Some(r), Some(it)) = (resolves, self.items.get_mut(&(Kind::Function, path.to_string()))) {
+            it.impls.insert(r);
+        }
+    }
+
     pub fn count(&self, kind: Kind) -> usize {
         self.items.keys().filter(|(k, _)| *k == kind).count()
     }
@@ -120,6 +131,9 @@ impl Externals {
                 }
                 if let Some(f) = &it.form {
                     o.insert("form".into(), json!(f));
+                }
+                if !it.impls.is_empty() {
+                    o.insert("impls".into(), json!(it.impls));
                 }
                 o.insert("uses".into(), json!(it.uses()));
                 let files: serde_json::Map<String, Value> = it.sites.iter().map(|(f, s)| (f.clone(), json!(s.len()))).collect();
@@ -339,6 +353,53 @@ fn prim_of(impl_seg: &str) -> Option<String> {
     })
 }
 
+/// `core::x::Y<alloc::z::W>` as `std::x::Y<std::z::W>`: every path root that is not a public `std` one.
+fn fold_roots(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < s.len() {
+        let at_start = i == 0 || !(is_ident_byte(b[i - 1]) || b[i - 1] == b':');
+        if at_start && (s[i..].starts_with("core::") || s[i..].starts_with("alloc::")) {
+            out.push_str("std::");
+            i += s[i..].find("::").map_or(0, |p| p + 2);
+            continue;
+        }
+        let ch = s[i..].chars().next().unwrap_or(' ');
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    out
+}
+
+/// The head of an impl's self type: `std::iter::Filter<I, {closure@src/lib.rs:7:3: 7:9}>` is the impl for `std::iter::Filter`,
+/// whatever it was instantiated with. A type that does not start with a path (`&[u8]`, `[T; 3]`, `<I as X>::Y`) is kept,
+/// with its closures unnamed.
+fn self_head(t: &str) -> String {
+    let t = fold_roots(t.trim());
+    if !t.starts_with(|c: char| c.is_alphabetic()) {
+        // a closure is `{closure@file:l:c: l:c}`: where it is says nothing about the impl
+        let mut out = String::new();
+        let mut rest = t.as_str();
+        while let Some(i) = rest.find("{closure@") {
+            out.push_str(&rest[..i]);
+            let end = rest[i..].find('}').map_or(rest.len(), |e| i + e + 1);
+            out.push_str("{closure}");
+            rest = &rest[end..];
+        }
+        out.push_str(rest);
+        return out;
+    }
+    std_root(&read_path(&t, 0))
+}
+
+/// Whether the self type of a trait call is a type parameter of a generic function, which MIR names where a call goes
+/// through a bound (`<I as Iterator>::next`). MIR prints a crate's own types by their bare names too, so this is a
+/// heuristic: a parameter is `Self` or a short upper-case name (`T`, `I`, `K2`).
+fn is_type_param(t: &str) -> bool {
+    t == "Self" || (t.len() <= 2 && t.bytes().all(is_ident_byte) && t.chars().next().is_some_and(char::is_uppercase))
+}
+
 /// Split at the first ` as ` that is not inside `<>`.
 fn split_as(s: &str) -> Option<(&str, &str)> {
     let b = s.as_bytes();
@@ -363,6 +424,8 @@ pub struct FnPath {
     pub trait_path: Option<String>,
     /// `core` or `alloc` was the root: not a public `std` path.
     pub internal: bool,
+    /// The impl the call resolves to, when the path says: see `Item::impls`.
+    pub resolves: Option<String>,
 }
 
 /// Canonical form of the function MIR names, or `None` when it is not an item of the standard library.
@@ -377,19 +440,25 @@ pub fn parse_fn_path(s: &str) -> Option<FnPath> {
         }
         let _ = rest;
         return match split_as(inner) {
-            Some((_, tr)) => {
+            Some((self_ty, tr)) => {
                 let segs = read_path(tr.trim(), 0);
                 if !segs.first().is_some_and(|r| ROOTS.contains(&r.as_str())) {
                     return None;
                 }
                 let internal = segs[0] != "std";
                 let t = std_root(&segs);
-                Some(FnPath { path: format!("{t}::{method}"), trait_path: Some(t), internal })
+                let (self_ty, tr) = (self_ty.trim(), fold_roots(tr.trim()));
+                let resolves = if is_type_param(self_ty) {
+                    format!("impl {tr} for a type parameter `{self_ty}`")
+                } else {
+                    format!("impl {tr} for {}", self_head(self_ty))
+                };
+                Some(FnPath { path: format!("{t}::{method}"), trait_path: Some(t), internal, resolves: Some(resolves) })
             }
             None => {
                 // `<[T]>::len`, `<str>::chars`
                 let p = prim_of(&format!("<impl {}>", inner.trim()))?;
-                Some(FnPath { path: format!("std::primitive::{p}::{method}"), trait_path: None, internal: false })
+                Some(FnPath { path: format!("std::primitive::{p}::{method}"), trait_path: None, internal: false, resolves: Some(format!("impl {}", self_head(inner))) })
             }
         };
     }
@@ -400,9 +469,12 @@ pub fn parse_fn_path(s: &str) -> Option<FnPath> {
     if let Some(i) = segs.iter().position(|x| x.starts_with("<impl ")) {
         let p = prim_of(&segs[i])?;
         let rest = segs[i + 1..].join("::");
-        return Some(FnPath { path: format!("std::primitive::{p}::{rest}"), trait_path: None, internal: false });
+        let ty = segs[i].strip_prefix("<impl ").and_then(|t| t.strip_suffix('>')).unwrap_or("").trim();
+        return Some(FnPath { path: format!("std::primitive::{p}::{rest}"), trait_path: None, internal: false, resolves: Some(format!("impl {}", self_head(ty))) });
     }
-    Some(FnPath { internal: segs[0] != "std", path: std_root(&segs), trait_path: None })
+    // `Type::method` is an inherent method: the impl is the type's own
+    let resolves = (segs.len() >= 3 && upper(&segs[segs.len() - 2])).then(|| format!("impl {}", std_root(&segs[..segs.len() - 1])));
+    Some(FnPath { internal: segs[0] != "std", path: std_root(&segs), trait_path: None, resolves })
 }
 
 /// A constant path as MIR prints it: `std::char::MAX` is the associated constant of the primitive.
@@ -510,9 +582,13 @@ fn record_fn(out: &mut Externals, f: FnPath, at: &Pos) {
         }
         Some(t) => {
             out.add(Kind::Trait, t.clone(), "method", "mir", at, None, None);
-            out.add(Kind::Function, f.path, "call", "mir", at, Some(t), None);
+            out.add(Kind::Function, f.path.clone(), "call", "mir", at, Some(t), None);
+            out.add_impl(&f.path, f.resolves);
         }
-        None => out.add(Kind::Function, f.path, "call", "mir", at, None, None),
+        None => {
+            out.add(Kind::Function, f.path.clone(), "call", "mir", at, None, None);
+            out.add_impl(&f.path, f.resolves);
+        }
     }
 }
 
@@ -1081,6 +1157,7 @@ fn absorb(e: &mut Item, it: Item) {
     if it.form.is_some() {
         e.form = it.form;
     }
+    e.impls.extend(it.impls);
 }
 
 /// The summary of an externals list.
@@ -1108,6 +1185,28 @@ mod tests {
         let f = parse_fn_path("std::collections::HashMap::<Elem, usize>::insert").unwrap();
         assert_eq!(f.path, "std::collections::HashMap::insert");
         assert_eq!(f.trait_path, None);
+    }
+
+    #[test]
+    fn a_call_names_the_impl_it_resolves_to() {
+        let at = |p: &str| parse_fn_path(p).unwrap().resolves.unwrap();
+        // a trait method: the impl is the trait with its arguments for the head of the self type
+        assert_eq!(at("<core::str::iter::Chars<'_> as core::iter::Iterator>::next"), "impl std::iter::Iterator for std::str::iter::Chars");
+        assert_eq!(at("<std::vec::Vec<usize> as std::ops::Index<usize>>::index"), "impl std::ops::Index<usize> for std::vec::Vec");
+        assert_eq!(at("<u64 as std::convert::From<u8>>::from"), "impl std::convert::From<u8> for u64");
+        assert_eq!(at("<&[u8] as std::iter::IntoIterator>::into_iter"), "impl std::iter::IntoIterator for &[u8]");
+        // a closure's position says nothing about the impl
+        assert_eq!(at("<<&Iter1 as std::iter::IntoIterator>::IntoIter as std::iter::Iterator>::next"), "impl std::iter::Iterator for <&Iter1 as std::iter::IntoIterator>::IntoIter");
+        // through a type parameter there is no impl yet
+        assert_eq!(at("<I as std::iter::Iterator>::next"), "impl std::iter::Iterator for a type parameter `I`");
+        // an inherent method: the type's own impl; a primitive's
+        assert_eq!(at("std::collections::HashMap::<Elem, usize>::insert"), "impl std::collections::HashMap");
+        assert_eq!(at("core::str::<impl str>::len"), "impl str");
+        assert_eq!(at("<str>::chars"), "impl str");
+        // a free function resolves to none
+        assert_eq!(parse_fn_path("std::cmp::max::<u8>").unwrap().resolves, None);
+        assert_eq!(self_head("std::iter::Filter<I, {closure@src/lib.rs:7:3: 7:9}>"), "std::iter::Filter");
+        assert_eq!(self_head("(u8, {closure@src/lib.rs:7:3: 7:9})"), "(u8, {closure})");
     }
 
     #[test]

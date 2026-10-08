@@ -24,6 +24,10 @@
       "kind": "function",
       "path": "std::clone::Clone::clone",
       "trait": "std::clone::Clone",
+      "impls": [
+        "impl std::clone::Clone for Elem",
+        "impl std::clone::Clone for Iter2"
+      ],
       "uses": 2,
       "files": {
         "src/lib.rs": 2
@@ -39,6 +43,9 @@
       "kind": "function",
       "path": "std::cmp::Ord::max",
       "trait": "std::cmp::Ord",
+      "impls": [
+        "impl std::cmp::Ord for usize"
+      ],
       "uses": 1,
       "files": {
         "src/lib.rs": 1
@@ -81,6 +88,9 @@
     {
       "kind": "function",
       "path": "std::collections::HashMap::entry",
+      "impls": [
+        "impl std::collections::HashMap"
+      ],
       "uses": 2,
       "files": {
         "src/lib.rs": 2
@@ -95,6 +105,9 @@
     {
       "kind": "function",
       "path": "std::collections::HashMap::get",
+      "impls": [
+        "impl std::collections::HashMap"
+      ],
       "uses": 1,
       "files": {
         "src/lib.rs": 1
@@ -109,6 +122,9 @@
     {
       "kind": "function",
       "path": "std::collections::HashMap::insert",
+      "impls": [
+        "impl std::collections::HashMap"
+      ],
       "uses": 1,
       "files": {
         "src/lib.rs": 1
@@ -123,6 +139,9 @@
     {
       "kind": "function",
       "path": "std::collections::HashMap::new",
+      "impls": [
+        "impl std::collections::HashMap"
+      ],
       "uses": 1,
       "files": {
         "src/lib.rs": 1
@@ -137,6 +156,9 @@
     {
       "kind": "function",
       "path": "std::collections::HashMap::with_capacity",
+      "impls": [
+        "impl std::collections::HashMap"
+      ],
       "uses": 1,
       "files": {
         "src/lib.rs": 1
@@ -151,6 +173,9 @@
     {
       "kind": "function",
       "path": "std::collections::hash_map::Entry::and_modify",
+      "impls": [
+        "impl std::collections::hash_map::Entry"
+      ],
       "uses": 1,
       "files": {
         "src/lib.rs": 1
@@ -165,6 +190,9 @@
     {
       "kind": "function",
       "path": "std::collections::hash_map::Entry::or_insert",
+      "impls": [
+        "impl std::collections::hash_map::Entry"
+      ],
       "uses": 1,
       "files": {
         "src/lib.rs": 1
@@ -180,6 +208,11 @@
       "kind": "function",
       "path": "std::convert::From::from",
       "trait": "std::convert::From",
+      "impls": [
+        "impl std::convert::From<bool> for isize",
+        "impl std::convert::From<bool> for usize",
+        "impl std::convert::From<u8> for usize"
+      ],
       "uses": 5,
       "files": {
         "src/lib.rs": 5
@@ -195,6 +228,9 @@
       "kind": "function",
       "path": "std::convert::TryFrom::try_from",
       "trait": "std::convert::TryFrom",
+      "impls": [
+        "impl std::convert::TryFrom<u32> for u8"
+      ],
       "uses": 2,
       "files": {
         "src/lib.rs": 2
@@ -210,6 +246,12 @@
       "kind": "function",
       "path": "std::default::Default::default",
       "trait": "std::default::Default",
+      "impls": [
+        "impl std::default::Default for GrowingHashmapChar",
+        "impl std::default::Default for GrowingHashmapMapElemChar",
+        "impl std::default::Default for HybridGrowingHashmapChar",
+        "impl std::default::Default for ValueType"
+      ],
       "uses": 13,
       "files": {
         "src/lib.rs": 13
@@ -242,6 +284,18 @@
       "kind": "function",
       "path": "std::iter::IntoIterator::into_iter",
       "trait": "std::iter::IntoIterator",
+      "impls": [
+        "impl std::iter::IntoIterator for &Iter1",
+        "impl std::iter::IntoIterator for &Iter2",
+        "impl std::iter::IntoIterator for Iter1",
+        "impl std::iter::IntoIterator for Iter2",
+        "impl std::iter::IntoIterator for std::iter::Enumerate",
+        "impl std::iter::IntoIterator for std::iter::Map",
+        "impl std::iter::IntoIterator for std::iter::Take",
+        "impl std::iter::IntoIterator for std::iter::Zip",
+        "impl std::iter::IntoIterator for std::ops::Range",
+        "impl std::iter::IntoIterator for std::vec::Vec"
+      ],
       "uses": 27,
       "files": {
         "src/lib.rs": 27
@@ -259,6 +313,9 @@
       "kind": "function",
       "path": "std::iter::Iterator::chain",
       "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for std::ops::Range"
+      ],
       "uses": 1,
       "files": {
         "src/lib.rs": 1
@@ -274,6 +331,11 @@
       "kind": "function",
       "path": "std::iter::Iterator::collect",
       "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for std::iter::Chain",
+        "impl std::iter::Iterator for std::iter::Filter",
+        "impl std::iter::Iterator for std::ops::Range"
+      ],
       "uses": 6,
       "files": {
         "src/lib.rs": 6
@@ -289,6 +351,12 @@
       "kind": "function",
       "path": "std::iter::Iterator::count",
       "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for <&Iter1 as std::iter::IntoIterator>::IntoIter",
+        "impl std::iter::Iterator for <&Iter2 as std::iter::IntoIterator>::IntoIter",
+        "impl std::iter::Iterator for std::iter::TakeWhile",
+        "impl std::iter::Iterator for std::str::Chars"
+      ],
       "uses": 11,
       "files": {
         "src/lib.rs": 11
@@ -304,6 +372,13 @@
       "kind": "function",
       "path": "std::iter::Iterator::enumerate",
       "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for <&Iter1 as std::iter::IntoIterator>::IntoIter",
+        "impl std::iter::Iterator for <&Iter2 as std::iter::IntoIterator>::IntoIter",
+        "impl std::iter::Iterator for Iter1",
+        "impl std::iter::Iterator for Iter2",
+        "impl std::iter::Iterator for std::str::Chars"
+      ],
       "uses": 8,
       "files": {
         "src/lib.rs": 8
@@ -319,6 +394,9 @@
       "kind": "function",
       "path": "std::iter::Iterator::filter",
       "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for std::str::Chars"
+      ],
       "uses": 2,
       "files": {
         "src/lib.rs": 2
@@ -334,6 +412,9 @@
       "kind": "function",
       "path": "std::iter::Iterator::map",
       "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for std::iter::Enumerate"
+      ],
       "uses": 2,
       "files": {
         "src/lib.rs": 2
@@ -349,6 +430,16 @@
       "kind": "function",
       "path": "std::iter::Iterator::next",
       "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for <Iter1 as std::iter::IntoIterator>::IntoIter",
+        "impl std::iter::Iterator for <Iter2 as std::iter::IntoIterator>::IntoIter",
+        "impl std::iter::Iterator for std::iter::Enumerate",
+        "impl std::iter::Iterator for std::iter::Map",
+        "impl std::iter::Iterator for std::iter::Take",
+        "impl std::iter::Iterator for std::iter::Zip",
+        "impl std::iter::Iterator for std::ops::Range",
+        "impl std::iter::Iterator for std::vec::IntoIter"
+      ],
       "uses": 24,
       "files": {
         "src/lib.rs": 24
@@ -364,6 +455,9 @@
       "kind": "function",
       "path": "std::iter::Iterator::skip",
       "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for std::str::Chars"
+      ],
       "uses": 1,
       "files": {
         "src/lib.rs": 1
@@ -379,6 +473,10 @@
       "kind": "function",
       "path": "std::iter::Iterator::take",
       "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for <&Iter1 as std::iter::IntoIterator>::IntoIter",
+        "impl std::iter::Iterator for std::iter::Enumerate"
+      ],
       "uses": 2,
       "files": {
         "src/lib.rs": 2
@@ -394,6 +492,9 @@
       "kind": "function",
       "path": "std::iter::Iterator::take_while",
       "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for std::iter::Zip"
+      ],
       "uses": 1,
       "files": {
         "src/lib.rs": 1
@@ -409,6 +510,11 @@
       "kind": "function",
       "path": "std::iter::Iterator::zip",
       "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for std::iter::Take",
+        "impl std::iter::Iterator for std::slice::Iter",
+        "impl std::iter::Iterator for std::str::Chars"
+      ],
       "uses": 4,
       "files": {
         "src/lib.rs": 4
@@ -451,6 +557,9 @@
     {
       "kind": "function",
       "path": "std::option::Option::as_mut",
+      "impls": [
+        "impl std::option::Option"
+      ],
       "uses": 3,
       "files": {
         "src/lib.rs": 3
@@ -465,6 +574,9 @@
     {
       "kind": "function",
       "path": "std::option::Option::as_ref",
+      "impls": [
+        "impl std::option::Option"
+      ],
       "uses": 3,
       "files": {
         "src/lib.rs": 3
@@ -479,6 +591,9 @@
     {
       "kind": "function",
       "path": "std::option::Option::expect",
+      "impls": [
+        "impl std::option::Option"
+      ],
       "uses": 5,
       "files": {
         "src/lib.rs": 5
@@ -493,6 +608,9 @@
     {
       "kind": "function",
       "path": "std::option::Option::is_none",
+      "impls": [
+        "impl std::option::Option"
+      ],
       "uses": 1,
       "files": {
         "src/lib.rs": 1
@@ -507,6 +625,9 @@
     {
       "kind": "function",
       "path": "std::option::Option::map_or_else",
+      "impls": [
+        "impl std::option::Option"
+      ],
       "uses": 1,
       "files": {
         "src/lib.rs": 1
@@ -521,6 +642,9 @@
     {
       "kind": "function",
       "path": "std::primitive::char::is_whitespace",
+      "impls": [
+        "impl char"
+      ],
       "uses": 2,
       "files": {
         "src/lib.rs": 2
@@ -535,6 +659,9 @@
     {
       "kind": "function",
       "path": "std::primitive::f64::abs",
+      "impls": [
+        "impl f64"
+      ],
       "uses": 2,
       "files": {
         "src/lib.rs": 1,
@@ -550,6 +677,9 @@
     {
       "kind": "function",
       "path": "std::primitive::slice::iter",
+      "impls": [
+        "impl [bool]"
+      ],
       "uses": 2,
       "files": {
         "src/lib.rs": 2
@@ -564,6 +694,9 @@
     {
       "kind": "function",
       "path": "std::primitive::slice::len",
+      "impls": [
+        "impl [Elem]"
+      ],
       "uses": 2,
       "files": {
         "src/lib.rs": 2
@@ -578,6 +711,9 @@
     {
       "kind": "function",
       "path": "std::primitive::slice::split_at_mut",
+      "impls": [
+        "impl [bool]"
+      ],
       "uses": 1,
       "files": {
         "src/lib.rs": 1
@@ -592,6 +728,9 @@
     {
       "kind": "function",
       "path": "std::primitive::str::chars",
+      "impls": [
+        "impl str"
+      ],
       "uses": 22,
       "files": {
         "src/lib.rs": 22
@@ -606,6 +745,9 @@
     {
       "kind": "function",
       "path": "std::primitive::str::is_empty",
+      "impls": [
+        "impl str"
+      ],
       "uses": 4,
       "files": {
         "src/lib.rs": 4
@@ -620,6 +762,9 @@
     {
       "kind": "function",
       "path": "std::primitive::usize::saturating_sub",
+      "impls": [
+        "impl usize"
+      ],
       "uses": 2,
       "files": {
         "src/lib.rs": 2
@@ -634,6 +779,9 @@
     {
       "kind": "function",
       "path": "std::result::Result::expect",
+      "impls": [
+        "impl std::result::Result"
+      ],
       "uses": 2,
       "files": {
         "src/lib.rs": 2
@@ -648,6 +796,9 @@
     {
       "kind": "function",
       "path": "std::string::String::len",
+      "impls": [
+        "impl std::string::String"
+      ],
       "uses": 4,
       "files": {
         "src/lib.rs": 4

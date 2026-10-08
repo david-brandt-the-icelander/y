@@ -7,10 +7,16 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
 const KINDS: [&str; 10] = ["function", "type", "trait", "macro", "const", "impl", "alias", "static", "module", "use"];
-const CLAUSE_KINDS: [&str; 19] = [
-    "require", "ensure", "on failure", "fails", "fails only", "panics", "never panics", "result must be used", "effects", "law", "callback",
-    "invariant", "budget", "layout", "derive", "access", "hold", "compat", "unexpressed",
+const CLAUSE_KINDS: [&str; 23] = [
+    "require", "let", "ensure", "on failure", "fails", "fails only", "panics", "never panics", "result must be used", "effects", "law", "callback", "protocol",
+    "obliges", "invariant", "budget", "layout", "derive", "access", "hold", "implements", "compat", "unexpressed",
 ];
+
+/// Whether a clause text takes a part of a tuple, `result.0`: a digit after a dot that follows a name, and not a number.
+fn tuple_part(t: &str) -> bool {
+    let cs: Vec<char> = t.chars().collect();
+    (1..cs.len().saturating_sub(1)).any(|i| cs[i] == '.' && cs[i + 1].is_ascii_digit() && (cs[i - 1].is_alphabetic() || cs[i - 1] == '_' || cs[i - 1] == ')') && !cs.get(i + 2).is_some_and(|c| c.is_alphanumeric() || *c == '.'))
+}
 
 /// What a clause's `reason` says the language lacks: the text before the first `: `.
 pub fn reason_label(reason: &str) -> &str {
@@ -77,6 +83,97 @@ pub fn libstats(file: &Value, sigs: Option<&SigReport>) -> String {
         if n > 0 {
             row(&mut out, k, n, total);
         }
+    }
+    // clauses qualified by `given` hold only when what they name holds: counted apart from the unconditional ones
+    let given: Vec<&(&Value, &Value)> = clauses.iter().filter(|(_, c)| c["given"].as_array().is_some_and(|g| !g.is_empty())).collect();
+    let _ = writeln!(out, "\nconditional clauses, qualified by `given` ({} on {} subjects)", given.len(), given.iter().map(|(s, _)| s["name"].as_str().unwrap_or("")).collect::<BTreeSet<_>>().len());
+    for k in CLAUSE_KINDS {
+        let n = given.iter().filter(|(_, c)| c["kind"] == k).count();
+        if n > 0 {
+            row(&mut out, k, n, given.len());
+        }
+    }
+    let mut on: BTreeMap<&str, usize> = BTreeMap::new();
+    for (_, c) in &given {
+        for g in c["given"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+            *on.entry(if g == "default" { "the default body" } else if g.starts_with("build ") { "a build setting" } else { "a bound's implementations" }).or_default() += 1;
+        }
+    }
+    for (k, n) in &on {
+        row(&mut out, &format!("on {k}"), *n, given.iter().map(|(_, c)| c["given"].as_array().map_or(0, Vec::len)).sum());
+    }
+    // callback clauses that name a call's condition, arguments or result (language 6.13), and protocols over calls
+    let callbacks: Vec<&(&Value, &Value)> = clauses.iter().filter(|(_, c)| c["kind"] == "callback").collect();
+    let has = |c: &Value, w: &str| c["text"].as_str().is_some_and(|t| t.contains(&format!(" {w} ")) || t.contains(&format!(", {w} ")) || t.ends_with(&format!(" {w}")));
+    let _ = writeln!(out, "\ncallback clauses ({} on {} subjects), and protocols over calls ({})", callbacks.len(), callbacks.iter().map(|(s, _)| s["name"].as_str().unwrap_or("")).collect::<BTreeSet<_>>().len(), clauses.iter().filter(|(_, c)| c["kind"] == "protocol").count());
+    for (label, word) in [("with a condition (`when`)", "when"), ("with the call's arguments (`with`)", "with"), ("with the call's result (`returning`)", "returning")] {
+        row(&mut out, label, callbacks.iter().filter(|(_, c)| has(c, word)).count(), callbacks.len());
+    }
+    // the small additions of language 6.14, counted by the form that carries them
+    let stated_text = |c: &Value| c["kind"] != "unexpressed" && c["kind"] != "derive";
+    let texts: Vec<(&str, &str)> = clauses.iter().filter(|(_, c)| stated_text(c)).map(|(_, c)| (c["kind"].as_str().unwrap_or(""), c["text"].as_str().unwrap_or(""))).collect();
+    let words = |t: &str, w: &str| t.split(|ch: char| !(ch.is_alphanumeric() || ch == '_')).any(|x| x == w);
+    let small: [(&str, usize); 9] = [
+        ("`evaluable at compile time` (6.14.1)", texts.iter().filter(|(k, t)| *k == "effects" && *t == "evaluable at compile time").count()),
+        ("`must be used` on a type or trait (6.14.2)", texts.iter().filter(|(k, t)| *k == "result must be used" && t.starts_with("must be used")).count()),
+        ("`moved from` (6.14.3)", texts.iter().filter(|(_, t)| words(t, "moved")).count()),
+        ("`ends in call`, `survive call` (6.14.4)", texts.iter().filter(|(k, t)| *k == "hold" && t.starts_with("lifetime") && (t.ends_with("survive call") || t.contains(" ends in call"))).count()),
+        ("`never panics except exhausted` (6.14.5)", texts.iter().filter(|(k, t)| *k == "never panics" && t.starts_with("never panics except exhausted")).count()),
+        ("`expected`, `amortised` cost (6.14.6)", texts.iter().filter(|(k, t)| *k == "budget" && (words(t, "expected") || words(t, "amortised"))).count()),
+        ("tuple parts, `result.0`, `is (a, b)` (6.14.7)", texts.iter().filter(|(_, t)| tuple_part(t) || t.contains(" is (")).count()),
+        ("element frame, `mutates only p[e]` (6.14.8)", texts.iter().filter(|(k, t)| *k == "access" && t.starts_with("mutates only") && t.contains('[')).count()),
+        ("`obliges caller` (6.14.9)", texts.iter().filter(|(k, _)| *k == "obliges").count()),
+    ];
+    let _ = writeln!(out, "\nsmall additions of language 6.14 ({} clauses)", small.iter().map(|(_, n)| n).sum::<usize>());
+    for (label, n) in small {
+        row(&mut out, label, n, total);
+    }
+    // the sequences of language 6.15, counted by the operator that carries them
+    let has = |t: &str, w: &str| words(t, w) && t.contains(&format!("{w}("));
+    // a `[` that follows a name, `)` or `]`: a slice when it holds `..`; an index when it follows `)` or `]` or holds a number
+    // (`self[k]` with a name alone is a map's lookup, which is not a sequence)
+    let bracket = |t: &str, slice: bool| {
+        let cs: Vec<char> = t.chars().collect();
+        (1..cs.len()).filter(|&i| cs[i] == '[' && (cs[i - 1].is_alphanumeric() || matches!(cs[i - 1], '_' | ')' | ']'))).any(|i| {
+            let inner: String = cs[i + 1..].iter().take_while(|c| **c != ']').collect();
+            let inner = inner.trim();
+            if slice {
+                inner.contains("..")
+            } else {
+                !inner.contains("..") && (matches!(cs[i - 1], ')' | ']') || inner.starts_with(|c: char| c.is_ascii_digit()))
+            }
+        })
+    };
+    let seq: [(&str, usize); 9] = [
+        ("`yields(e)` (6.15)", texts.iter().filter(|(_, t)| has(t, "yields")).count()),
+        ("indexing `xs[i]`", texts.iter().filter(|(_, t)| bracket(t, false)).count()),
+        ("slices `xs[i..j]`", texts.iter().filter(|(_, t)| bracket(t, true)).count()),
+        ("`++`", texts.iter().filter(|(_, t)| t.contains("++")).count()),
+        ("`reverse`, `take`, `skip`", texts.iter().filter(|(_, t)| ["reverse", "take", "skip"].iter().any(|w| has(t, w))).count()),
+        ("`zip`, `enumerate`", texts.iter().filter(|(_, t)| has(t, "zip") || has(t, "enumerate")).count()),
+        ("`map`, `filter` by a named function", texts.iter().filter(|(_, t)| has(t, "map") || has(t, "filter")).count()),
+        ("`scalars`, `deref`", texts.iter().filter(|(_, t)| words(t, "scalars") || words(t, "deref")).count()),
+        ("`present`, `select`, `while_true`, `flatten`", texts.iter().filter(|(_, t)| ["present", "select", "while_true", "flatten"].iter().any(|w| has(t, w))).count()),
+    ];
+    let seq_total = texts.iter().filter(|(_, t)| has(t, "yields") || t.contains("++") || bracket(t, true) || bracket(t, false) || ["reverse", "take", "skip", "zip", "enumerate", "map", "filter"].iter().any(|w| has(t, w)) || words(t, "scalars") || words(t, "deref") || ["present", "select", "while_true", "flatten"].iter().any(|w| has(t, w))).count();
+    let _ = writeln!(out, "\nsequences of language 6.15 ({seq_total} clauses)");
+    for (label, n) in seq {
+        row(&mut out, label, n, total);
+    }
+    // what a result's later calls, a handle and a sequence's elements take (language 4, 6.13, 7.3), counted by form
+    let before_when = |t: &str| t.split(" when ").next().unwrap_or("").to_string();
+    let later: [(&str, usize); 7] = [
+        ("`callback … called by P.m`, a log of later calls (6.13)", texts.iter().filter(|(k, t)| *k == "callback" && words(t, "called") && words(t, "by")).count()),
+        ("`fails F in P.m`, a failure of a later call (6.13)", texts.iter().filter(|(k, t)| (*k == "panics" || *k == "fails") && words(&before_when(t), "in")).count()),
+        ("`final(e)`, the state at the end of a run (6.13)", texts.iter().filter(|(_, t)| has(t, "final")).count()),
+        ("`current`, `owner`, `stored_key`, a handle's place (4)", texts.iter().filter(|(_, t)| ["current", "owner", "stored_key"].iter().any(|w| has(t, w))).count()),
+        ("`lifetime every item of`, a sequence's elements (7.3)", texts.iter().filter(|(k, t)| *k == "hold" && t.starts_with("lifetime every item of")).count()),
+        ("`let`, a name or a pattern `(a, b)` (4)", texts.iter().filter(|(k, _)| *k == "let").count()),
+        ("`present(xs, i)`, a position that exists (6.15)", texts.iter().filter(|(_, t)| has(t, "present")).count()),
+    ];
+    let _ = writeln!(out, "\nlater calls, handles and bindings ({} clauses)", later.iter().map(|(_, n)| n).sum::<usize>());
+    for (label, n) in later {
+        row(&mut out, label, n, total);
     }
     let mut by_status: BTreeMap<String, usize> = BTreeMap::new();
     let mut by_source: BTreeMap<&str, usize> = BTreeMap::new();
@@ -217,5 +314,56 @@ mod tests {
         assert!(t.contains("function") && t.contains("type"), "{t}");
         assert!(t.contains("no sequence value") && t.contains("2 clauses on 2 subjects"), "{t}");
         assert!(t.contains("assumed (documentation)"), "{t}");
+        assert!(t.contains("conditional clauses, qualified by `given` (0 on 0 subjects)"), "{t}");
+        assert!(t.contains("callback clauses (0 on 0 subjects), and protocols over calls (0)"), "{t}");
+    }
+
+    #[test]
+    fn callback_clauses_are_counted_by_what_they_name() {
+        let f = json!({"crate": "std 1.97.0", "status": "lifted", "subjects": [
+            {"kind": "function", "name": "std::a", "clauses": [
+                {"kind": "callback", "text": "callback f : called at most once before return", "source": "s"},
+                {"kind": "callback", "text": "callback g : called exactly once when exists self, with self, returning r", "source": "s"},
+                {"kind": "callback", "text": "callback h : called exactly once when self is none, returning d", "source": "s"},
+                {"kind": "protocol", "text": "protocol self.next+", "source": "s"}]}]});
+        let t = libstats(&f, None);
+        assert!(t.contains("callback clauses (3 on 1 subjects), and protocols over calls (1)"), "{t}");
+        let line = |l: &str| t.lines().find(|x| x.contains(l)).unwrap_or("").split_whitespace().rev().nth(1).unwrap_or("").to_string();
+        assert_eq!((line("(`when`)"), line("(`with`)"), line("(`returning`)")), ("2".into(), "1".into(), "2".into()), "{t}");
+    }
+
+    #[test]
+    fn later_calls_handles_and_bindings_are_counted_by_form() {
+        let c = |k: &str, t: &str| json!({"kind": k, "text": t, "source": "s"});
+        let f = json!({"crate": "std 1.97.0", "status": "lifted", "subjects": [
+            {"kind": "function", "name": "std::a", "clauses": [
+                c("callback", "callback f : called by result.next, at most once per call, with x, returning y"),
+                c("callback", "callback g : called exactly once, returning r"),
+                c("panics", "fails panic in result.next when n > 3"),
+                c("panics", "fails panic when n > 3 and old(count(self)) in x"),
+                c("ensure", "ensure a : final(yields(self)) == skip(size(y), old(yields(self)))"),
+                c("ensure", "ensure b : same(current(e), v) and present(xs, 0) and yields(result) == flatten(map(yields, y))"),
+                c("access", "mutates only owner(self)[key(self)]"),
+                c("hold", "lifetime every item of yields(self) ends with self"),
+                c("let", "let (a, b) = result")]}]});
+        let t = libstats(&f, None);
+        let n = |l: &str| t.lines().find(|x| x.contains(l)).unwrap_or("").split_whitespace().rev().nth(1).unwrap_or("").to_string();
+        assert!(t.contains("later calls, handles and bindings (8 clauses)"), "{t}");
+        let got: Vec<String> = ["called by P.m", "fails F in P.m", "final(e)", "`current`, `owner`", "every item of", "`let`, a name", "present(xs, i)"].iter().map(|l| n(l)).collect();
+        assert_eq!(got, ["1", "1", "1", "2", "1", "1", "1"], "{t}");
+        assert!(t.lines().any(|l| l.trim_start().starts_with("let ") && l.contains('1')), "{t}");
+        assert!(t.contains("`present`, `select`, `while_true`, `flatten`"), "{t}");
+    }
+
+    #[test]
+    fn conditional_clauses_are_counted_apart() {
+        let f = json!({"crate": "std 1.97.0", "status": "lifted", "subjects": [
+            {"kind": "function", "name": "std::a", "clauses": [
+                {"kind": "never panics", "text": "never panics", "given": ["Q.hash never panic", "build overflow_checks"], "source": "s"},
+                {"kind": "ensure", "text": "ensure x : true", "given": ["default"], "source": "s"},
+                {"kind": "ensure", "text": "ensure y : true", "source": "s"}]}]});
+        let t = libstats(&f, None);
+        assert!(t.contains("conditional clauses, qualified by `given` (2 on 1 subjects)"), "{t}");
+        assert!(t.contains("on a build setting") && t.contains("on the default body") && t.contains("on a bound's implementations"), "{t}");
     }
 }

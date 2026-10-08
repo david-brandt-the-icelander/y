@@ -2,15 +2,15 @@
 //! element fits on one line.
 use serde_json::Value;
 
-const ORDER: [&str; 44] = [
+const ORDER: [&str; 47] = [
     "format", "host", "version", "crate", "module", "status", "failures", "panic", "macros", "views", "subjects", "arms", "pattern", "when", "holes", "kind", "n", "name", "visible", "visible_path",
-    "generics", "for", "bounds", "where", "trait", "self", "type", "form", "fields", "derive", "variants", "params", "result",
+    "generics", "for", "bounds", "where", "trait", "self", "type", "form", "fields", "derive", "variants", "implements", "assoc", "impl", "params", "result",
     "fails", "clauses", "access", "hold", "rights", "guarantee", "from", "lifetime", "locals", "hints", "sep",
 ];
 
 /// The members of a clause of a library file (`clauses`), in the order they are written: the keyword, the text,
 /// where it comes from, why the language cannot say it, and its status.
-const CLAUSE_ORDER: [&str; 5] = ["kind", "text", "source", "reason", "status"];
+const CLAUSE_ORDER: [&str; 6] = ["kind", "text", "given", "source", "reason", "status"];
 
 fn rank(parent: &str, k: &str) -> usize {
     if parent == "views" {
