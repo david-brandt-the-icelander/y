@@ -74,6 +74,20 @@ enum Ref<'a> {
     Number(usize),
 }
 
+impl<'a> From<&'a str> for Ref<'a> {
+    #[inline]
+    fn from(x: &'a str) -> Ref<'a> {
+        Ref::Named(x)
+    }
+}
+
+impl From<usize> for Ref<'static> {
+    #[inline]
+    fn from(x: usize) -> Ref<'static> {
+        Ref::Number(x)
+    }
+}
+
 /// Parses a possible reference to a capture group name in the given text,
 /// starting at the beginning of `replacement`.
 ///

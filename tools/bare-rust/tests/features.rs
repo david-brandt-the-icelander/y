@@ -225,8 +225,8 @@ fn unsupported_is_refused_with_a_reason() {
     assert!(e.starts_with("union:"), "{e}");
     let e = strip("fn f(x: u8", "demo 0.1.0", "src/lib.rs").unwrap_err();
     assert!(e.starts_with("parse-error:"), "{e}");
-    let e = strip("fn f<const N: usize>() {}", "demo 0.1.0", "src/lib.rs").unwrap_err();
-    assert!(e.starts_with("const-generics:"), "{e}");
+    let e = strip("struct S<const N: usize = 3>;", "demo 0.1.0", "src/lib.rs").unwrap_err();
+    assert!(e.starts_with("generic-default:"), "{e}");
 }
 
 #[test]
@@ -617,4 +617,37 @@ pub unsafe extern "C" fn c(p: u8) -> u8 {
     assert!(w.contains("pub const unsafe fn get_unchecked") && w.contains("pub async unsafe fn a") && w.contains("pub unsafe extern \"C\" fn c"), "{w}");
     let l = bare_rust::clause::lint("obliges", &ob("demo::a").unwrap(), &["obliges caller"], &bare_rust::clause::Scope::default());
     assert!(l.is_empty(), "{l:?}");
+}
+
+#[test]
+fn named_lifetime_in_trait_argument() {
+    let src = "pub struct Ref<'a> {\n    pub s: &'a str,\n}\n\nimpl<'a> From<&'a str> for Ref<'a> {\n    fn from(s: &'a str) -> Ref<'a> {\n        Ref { s }\n    }\n}\n";
+    let (b, j) = roundtrip(src);
+    let w = weave(&b, &j).unwrap();
+    assert!(w.contains("impl<'a> From<&'a str> for Ref<'a>"), "{w}");
+}
+
+#[test]
+fn const_generics() {
+    let src = "pub struct Buf<T> {\n    items: Vec<T>,\n}\n\nimpl<T: Clone> Buf<T> {\n    pub fn get_array<const K: usize>(&self) -> [T; K] {\n        todo!()\n    }\n}\n\npub struct Grid<const N: usize> {\n    cells: [u8; N],\n}\n\nimpl<const N: usize> Grid<N> {\n    pub fn len(&self) -> usize {\n        N\n    }\n}\n";
+    let (b, j) = roundtrip(src);
+    assert!(b.contains("get_array"), "{b}");
+    let w = weave(&b, &j).unwrap();
+    assert!(w.contains("get_array<const K: usize>(&self) -> [T; K]") && w.contains("impl<const N: usize> Grid<N>"), "{w}");
+}
+
+#[test]
+fn item_level_macro_invocations_stay_as_host_text() {
+    let src = "pub trait Peek {\n    fn peek_it(&mut self) -> Option<u8>;\n}\n\nmacro_rules! peek_by_clone {\n    ([$($typarm:tt)*] $type_:ty) => {\n        impl<$($typarm)*> Peek for $type_ {\n            fn peek_it(&mut self) -> Option<u8> {\n                None\n            }\n        }\n    };\n}\n\npeek_by_clone! { ['a] ::std::str::Bytes<'a> }\n\n#[cfg(test)]\npeek_by_clone! { ['a, T] ::std::vec::IntoIter<T> }\n\npub fn f(x: u8) -> u8 {\n    x\n}\n";
+    let (b, j) = roundtrip(src);
+    assert!(b.contains("peek_by_clone! { ['a] ::std::str::Bytes<'a> }"), "{b}");
+    assert!(b.contains("macro_rules! peek_by_clone"), "{b}");
+    let names: Vec<_> = j["subjects"].as_array().unwrap().iter().map(|s| s["name"].as_str().unwrap().to_string()).collect();
+    assert!(!names.iter().any(|n| n.contains("peek_by_clone")), "{names:?}");
+    let d = std::env::temp_dir().join("bare-rust-macro-items");
+    std::fs::create_dir_all(&d).unwrap();
+    std::fs::write(d.join("lib.brs"), &b).unwrap();
+    std::fs::write(d.join("lib.constraints.json"), canonical(&j)).unwrap();
+    let st = bare_rust::stats::stats(&d).unwrap();
+    assert_eq!(st["left_in_body"]["macros"]["macro items kept as host text"], 2, "{st}");
 }

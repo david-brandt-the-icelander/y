@@ -52,6 +52,10 @@ impl LazyBuffer
     fn get_at(self, indices) {
         indices.iter().map(|i| self.buffer[*i].clone()).collect()
     }
+
+    fn get_array(self, indices) {
+        indices.map(|i| self.buffer[i].clone())
+    }
 }
 
 impl Index for LazyBuffer

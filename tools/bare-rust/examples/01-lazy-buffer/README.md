@@ -8,7 +8,7 @@ Features: generic struct with associated-type fields, three impl blocks with dif
 ## What was changed from the original
 
 - Removed `use alloc::vec::Vec` (std's prelude has `Vec`) and `use crate::size_hint::{self, SizeHint}`; the one helper used (`size_hint::add_scalar` and the `SizeHint` alias) is copied from `src/size_hint.rs` at the same commit into an inline `mod size_hint`.
-- Removed `get_array<const K: usize>`: the tool refuses const generics (see the tool problems in `examples/README.md`).
+- `get_array<const K: usize>` is kept (const generics are carried as host text).
 
 The result compiles on its own (`cargo check` in this folder) and is `src/lib.rs`.
 

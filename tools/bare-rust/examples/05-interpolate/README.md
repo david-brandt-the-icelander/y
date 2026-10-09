@@ -9,7 +9,6 @@ Features: a byte-string parser with callback parameters (`FnMut(usize, &mut Vec<
 
 - Removed `use memchr::memchr` and replaced the one call `memchr(b'$', replacement)` by `replacement.iter().position(|&b| b == b'$')`, so the crate has no dependency.
 - Removed the `#[cfg(test)] mod tests` module (about 190 lines, macro-based).
-- Removed `impl<'a> From<&'a str> for Ref<'a>` and `impl From<usize> for Ref<'static>`: they were used only by the removed tests, and the first one trips a tool bug (see `examples/README.md`).
 
 The result compiles on its own (`cargo check` in this folder) and is `src/lib.rs`.
 
@@ -20,6 +19,8 @@ The result compiles on its own (`cargo check` in this folder) and is `src/lib.rs
 - `LICENSE-*`: the licence texts from the source commit.
 
 ## What is interesting in the bare/constraint split
+
+- `impl<'a> From<&'a str> for Ref<'a>` has the named lifetime inside the trait argument. The bare header is `impl From for Ref`; the constraint file keeps `From<&'a str>` as a `host` trait entry, the one host-text type slot.
 
 - `interpolate<A, N>` takes two callbacks; their types `A: FnMut(usize, &mut Vec<u8>)` and `N: FnMut(&str) -> Option<usize>` are `bounds` in constraints, while the `while`/`match` loop that calls `append(i, dst)` stays as host text.
 - `struct CaptureRef<'a> { cap, end }` and `enum Ref<'a> { Named, Number }` keep names only; the lifetime and the `&'a str` payload are constraints.

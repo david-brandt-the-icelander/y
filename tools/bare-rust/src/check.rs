@@ -382,6 +382,10 @@ impl CheckReport {
                 "undetermined": self.c4.undetermined.len(), "undetermined_by_kind": by_kind(&self.c4.undetermined),
                 "functions_with_undetermined": per_fn.len(), "undetermined_by_function": per_fn,
                 "undetermined_by_cause": {"uninferred": self.c4.undetermined.iter().filter(|h| h.how == "uninferred").count(), "rejected": self.c4.undetermined.iter().filter(|h| h.how == "rejected").count()},
+                "undetermined_holes": self.c4.undetermined.iter().map(|h| json!({
+                    "file": h.file, "subject": h.subject, "kind": h.kind, "n": h.n, "key": h.key, "line": h.line, "column": h.col,
+                    "how": h.how, "code": h.code, "message": h.message, "fill_with": h.clause,
+                })).collect::<Vec<_>>(),
                 "follow_on_errors": self.c4.follow_on,
                 "undetermined_at_unfilled_sites_never_dropped": self.c4.undetermined_not_dropped,
                 "other_errors": self.c4.other_errors, "silently_filled": self.c4.silently_filled, "weave_errors": self.c4.weave_errors,

@@ -72,6 +72,20 @@ enum Ref {
     Number(_),
 }
 
+impl From for Ref {
+    #[inline]
+    fn from(x) {
+        Ref::Named(x)
+    }
+}
+
+impl From for Ref {
+    #[inline]
+    fn from(x) {
+        Ref::Number(x)
+    }
+}
+
 /// Parses a possible reference to a capture group name in the given text,
 /// starting at the beginning of `replacement`.
 ///

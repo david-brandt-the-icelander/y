@@ -8,12 +8,12 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-type Flat = BTreeMap<String, u64>;
+pub(crate) type Flat = BTreeMap<String, u64>;
 
-struct Corpus {
-    name: String,
-    flat: Flat,
-    check: Value,
+pub(crate) struct Corpus {
+    pub(crate) name: String,
+    pub(crate) flat: Flat,
+    pub(crate) check: Value,
 }
 
 /// Every number below a JSON object, keyed by its path joined with dots. Arrays, strings and booleans are skipped.
@@ -33,7 +33,7 @@ fn flatten(v: &Value, prefix: &str, out: &mut Flat) {
     }
 }
 
-fn load(dir: &Path) -> R<Corpus> {
+pub(crate) fn load(dir: &Path) -> R<Corpus> {
     let cj = dir.join("check.json");
     let text = fs::read_to_string(&cj).map_err(|e| format!("{}: {e} (run `bare-rust check` first)", cj.display()))?;
     let check: Value = serde_json::from_str(&text).map_err(|e| format!("{}: {e}", cj.display()))?;
@@ -44,7 +44,7 @@ fn load(dir: &Path) -> R<Corpus> {
     Ok(Corpus { name, flat, check })
 }
 
-fn table(out: &mut String, head: &[String], rows: &[Vec<String>]) {
+pub(crate) fn table(out: &mut String, head: &[String], rows: &[Vec<String>]) {
     out.push_str(&format!("| {} |\n|{}\n", head.join(" | "), "---|".repeat(head.len())));
     for r in rows {
         out.push_str(&format!("| {} |\n", r.join(" | ")));

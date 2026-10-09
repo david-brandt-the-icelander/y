@@ -399,7 +399,7 @@ impl<'a> Weaver<'a> {
     fn alias(&mut self, n: Node, sc: &Scope) -> R<()> {
         let name = n.child_by_field_name("name").unwrap();
         let sname = self.namer.unique(format!("{}::{}", sc.path, text(name, self.src)));
-        let Some(sub) = self.lookup(&sname) else { return Ok(()) };
+        let sub = self.find(&sname)?;
         self.at(&sname, "visible");
         self.ins(n.start_byte(), vis_text(sub)?);
         let mut t = generics_text(sub);

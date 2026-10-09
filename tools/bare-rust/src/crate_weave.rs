@@ -99,6 +99,8 @@ pub struct ErrReport {
     /// The offset in the bare file (0 when the file is not woven).
     pub bare_start: usize,
     pub rendered: String,
+    /// The same error with its position in the bare file and the JSON pointer of the slot (see `errmap`).
+    pub mapped: crate::errmap::MappedError,
 }
 
 impl ErrReport {
@@ -144,6 +146,21 @@ impl CrateWeave {
         (n("unbound local"), n("unbound hint"), n("unbound subject"))
     }
 
+    /// The result as JSON, for `weave --json`: counts, and every error and undetermined hole mapped to the bare file and
+    /// the constraint pointer (see `errmap`).
+    pub fn to_json(&self) -> Value {
+        let (ul, uh, us) = self.unbound_counts();
+        serde_json::json!({
+            "ok": self.ok(),
+            "files_woven": self.files.len(),
+            "files_not_woven": self.unwoven.len(),
+            "weave_errors": self.weave_errors.iter().map(|(f, e)| serde_json::json!({"file": f.display().to_string(), "message": e})).collect::<Vec<_>>(),
+            "unbound": {"locals": ul, "hints": uh, "subjects": us},
+            "mut_inserted": self.mut_added(),
+            "errors": crate::errmap::map_crate(self).iter().map(|e| e.to_json()).collect::<Vec<_>>(),
+        })
+    }
+
     pub fn mut_added(&self) -> usize {
         self.files.iter().map(|f| f.mut_added).sum()
     }
@@ -155,11 +172,8 @@ impl CrateWeave {
         for h in &self.holes {
             eprintln!("{}", h.show());
         }
-        for e in &self.errors {
-            eprintln!("{}", e.show());
-        }
-        for e in &self.follow_on {
-            eprintln!("{}", e.show());
+        for e in self.errors.iter().chain(&self.follow_on) {
+            eprintln!("{}", e.mapped.show());
         }
         for (f, u) in self.unbound() {
             eprintln!("warning: {f}: {}", u.show());
@@ -201,8 +215,11 @@ fn skip(rel: &Path, woven: &BTreeSet<PathBuf>) -> bool {
         || rel.to_str().is_some_and(|r| {
             // The stripped files of a corpus file: x.brs and x.constraints.json beside x.rs.
             let stem = r.strip_suffix(".brs").or_else(|| r.strip_suffix(".constraints.json"));
+            let under_bare = stem.and_then(|st| st.strip_prefix("bare/"));
             stem.is_some_and(|st| woven.contains(Path::new(&format!("{st}.rs"))))
+                || under_bare.is_some_and(|st| woven.contains(Path::new(&format!("{st}.rs"))))
         })
+        || rel == Path::new("bare/refusals.json")
 }
 
 fn copy_tree(src: &Path, base: &Path, dst: &Path, woven: &BTreeSet<PathBuf>) -> R<()> {
@@ -347,7 +364,7 @@ fn classify(files: &[WovenFile], diags: &[Diag], cw: &mut CrateWeave) {
     // Pass 2: the others.
     for (_, d) in errs.iter().enumerate().filter(|(i, _)| !handled[*i]) {
         let code = d.code.clone().unwrap_or_default();
-        let mk = |locus: String, bare_start: usize| ErrReport { code: code.clone(), message: d.message.clone(), woven_file: d.file.clone(), woven_line: d.line, woven_col: d.col, locus, bare_start, rendered: d.rendered.clone() };
+        let mk = |locus: String, bare_start: usize| ErrReport { code: code.clone(), message: d.message.clone(), woven_file: d.file.clone(), woven_line: d.line, woven_col: d.col, locus, bare_start, rendered: d.rendered.clone(), mapped: crate::errmap::map_diag(files.iter().find(|f| f.rel.to_string_lossy() == d.file), d) };
         let Some(wf) = find(d) else {
             let locus = if d.file.is_empty() { "no source span".to_string() } else { format!("{} (not a woven file)", d.file) };
             cw.errors.push(mk(locus, 0));
@@ -409,7 +426,14 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
     }
     let mut cw = CrateWeave { cargo: o.cargo, out: out.to_path_buf(), ..Default::default() };
     for b in brs {
-        let rel = b.strip_prefix(from).unwrap_or(&b).with_extension("rs");
+        let mut rel = b.strip_prefix(from).unwrap_or(&b).with_extension("rs");
+        // A crate directory whose stripped files sit in a `bare/` folder (`strip --out <crate>/bare`): the files belong
+        // at the paths below `bare/`, where the crate's own sources are, not at `bare/…`.
+        if let Ok(rest) = rel.strip_prefix("bare") {
+            if !rest.as_os_str().is_empty() && crate_dir.join(rest).is_file() && !crate_dir.join(&rel).exists() {
+                rel = rest.to_path_buf();
+            }
+        }
         let r = (|| {
             let bare = fs::read_to_string(&b).map_err(|e| format!("{}: {e}", b.display()))?;
             let cj = b.with_extension("constraints.json");

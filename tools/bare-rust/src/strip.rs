@@ -364,7 +364,15 @@ impl<'a> Stripper<'a> {
                         let b = c.child_by_field_name("bounds").map(|b| self.bound_list(b)).unwrap_or_default();
                         ents.push((name, b, vec![]));
                     }
-                    "const_parameter" => return refuse("const-generics", text(c, src)),
+                    // `const K: usize` is carried as a generic named `const K` whose one bound is the host-text type `usize`
+                    "const_parameter" => {
+                        if c.child_by_field_name("value").is_some() {
+                            return refuse("generic-default", text(c, src));
+                        }
+                        let name = text(c.child_by_field_name("name").ok_or("parse-error: const parameter")?, src);
+                        let ty = c.child_by_field_name("type").ok_or("parse-error: const parameter")?;
+                        ents.push((format!("const {name}"), vec![collapse(text(ty, src))], vec![]));
+                    }
                     k if is_comment(c) => {
                         let _ = k;
                     }
@@ -410,7 +418,7 @@ impl<'a> Stripper<'a> {
                 }
             }
         }
-        let names: Vec<String> = ents.iter().map(|e| e.0.clone()).collect();
+        let names: Vec<String> = ents.iter().map(|e| e.0.strip_prefix("const ").unwrap_or(&e.0).to_string()).collect();
         let gens = ents
             .into_iter()
             .filter(|e| !elide.contains(&e.0))
@@ -874,6 +882,18 @@ impl<'a> Stripper<'a> {
         }
     }
 
+    /// The `trait` slot of an impl. A reference with a named lifetime inside a trait argument (`From<&'a str>`) has no
+    /// slot of its own here, so the whole trait path stays as host text rather than losing the lifetime.
+    fn trait_ty(&mut self, t: Node, cx: &Cx) -> Value {
+        let slot = self.map_type(t, cx);
+        let lost = slot.has_ref && (slot.lifetime.is_some() || slot.access.as_ref().is_some_and(|a| a["rights"] == "write"));
+        if lost {
+            self.host(t, "ref_trait".into(), cx.elide)
+        } else {
+            slot.ty
+        }
+    }
+
     fn imp(&mut self, n: Node, sc: &Scope) -> R<()> {
         let src = self.src;
         if all_children(n).iter().any(|c| c.kind() == "!") {
@@ -916,7 +936,8 @@ impl<'a> Stripper<'a> {
         }
         if let Some((t, (th, complex))) = &tr {
             if *complex {
-                sub.insert("trait".into(), self.map_type(*t, &cx).ty);
+                let tv = self.trait_ty(*t, &cx);
+                sub.insert("trait".into(), tv);
                 self.cuts.push((t.start_byte(), t.end_byte(), th.clone()));
             }
         }
@@ -926,7 +947,7 @@ impl<'a> Stripper<'a> {
         }
         // the type declares what it implements, with the associated types this impl fixes (language 6.11)
         if let (Some((t, (th, complex))), false) = (&tr, ty_n.kind() == "reference_type") {
-            let tv = if *complex { self.map_type(*t, &cx).ty } else { json!(th) };
+            let tv = if *complex { self.trait_ty(*t, &cx) } else { json!(th) };
             let mut e = Obj::new();
             e.insert("trait".into(), tv);
             let mut assoc = Obj::new();
