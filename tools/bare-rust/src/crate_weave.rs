@@ -132,7 +132,7 @@ pub struct CrateWeave {
 
 impl CrateWeave {
     pub fn ok(&self) -> bool {
-        self.weave_errors.is_empty() && self.holes.is_empty() && self.errors.is_empty()
+        self.weave_errors.is_empty() && self.holes.is_empty() && self.errors.is_empty() && self.cargo_stderr.is_empty()
     }
 
     /// Entries of the constraint files that bind to nothing in their bare body, with the bare file.
