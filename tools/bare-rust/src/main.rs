@@ -14,6 +14,17 @@ const USAGE: &str = "usage:
       undetermined holes and errors, each at its place in the .brs file and, if it lies in woven-in text, with the JSON
       pointer of the slot (`src/lib.brs:12:5 [constraints: /subjects/3/params/1/type] error[E0308]: ...`); --json prints
       them as one JSON object instead; exits non-zero on any. --no-cargo only writes the files.
+  bare-rust scaffold <fn|impl|alias|struct> <path> [options] [--write <dir>]
+      a bare stub for a new item and its constraint entries, with `TODO` where a type goes (weave refuses a leftover
+      TODO); printed, or with --write <crate-or-bare-dir> appended to the module's .brs and .constraints.json:
+        fn     [mod::][Type::]name [--params a,b] [--self ref|mut|owned] [--generics T,U:Bound+Bound]
+               [--param-types t1,t2] [--result T|none]
+        impl   [mod::]Type [--trait Path] [--for Type] [--methods m1,m2:mut,m3:owned,m4:static] [--generics T]
+        alias  [mod::]Name [--type T] [--generics T]
+        struct [mod::]Name [--fields a,b | --tuple N] [--field-types t1,t2] [--generics T]
+        all    [--visible public|crate|module] [--crate <name>]
+      a parse error in a .brs that has a known fix (`let x: T`, `type X = T;`) and a missing subject at weave come
+      with the JSON entry to add
   bare-rust check <crate-dir> [--check-only] [--src-only] [--work <dir>] [--libraries <dir>] [--allow-missing-libraries]
       checks 1 to 5 of the plan for one crate; --check-only skips clippy and cargo test; results in <work>/<name>/check.json;
       check 5 (library files) runs when <libraries>/externals/<crate>.json exists, and fails on an external item with no
@@ -69,6 +80,9 @@ fn report(what: &str, results: &[FileResult]) -> Result<(), String> {
 
 fn run(args: Vec<String>) -> Result<(), String> {
     let rd = |p: &str| fs::read_to_string(p).map_err(|e| format!("{p}: {e}"));
+    if args.get(1).map(String::as_str) == Some("scaffold") {
+        return bare_rust::scaffold::run(&args[2..]);
+    }
     let out_dir = arg(&args, "--out").map(PathBuf::from);
     let target = args.get(2).ok_or(USAGE)?;
     match args.get(1).map(String::as_str) {

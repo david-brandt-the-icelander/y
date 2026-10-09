@@ -3,7 +3,7 @@
 use crate::cargo::{self, Diag};
 use crate::corpus::{corpus_files, find_brs};
 use crate::trace::Kind;
-use crate::weave::{weave_traced, HoleSite, Woven};
+use crate::weave::{weave_at, HoleSite, WeaveError, Woven};
 use crate::R;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -116,6 +116,8 @@ impl ErrReport {
 pub struct CrateWeave {
     pub files: Vec<WovenFile>,
     pub weave_errors: Vec<(PathBuf, String)>,
+    /// The same refusals mapped to the bare file, with the hint that names the fix (see `hints`).
+    pub weave_diags: Vec<crate::errmap::MappedError>,
     /// Corpus files with no bare file (strip refused them): copied as they are.
     pub unwoven: Vec<PathBuf>,
     pub iterations: usize,
@@ -166,8 +168,8 @@ impl CrateWeave {
     }
 
     pub fn print(&self) {
-        for (f, e) in &self.weave_errors {
-            eprintln!("weave refused {}: {e}", f.display());
+        for d in &self.weave_diags {
+            eprintln!("{}", d.show());
         }
         for h in &self.holes {
             eprintln!("{}", h.show());
@@ -435,10 +437,10 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
             }
         }
         let r = (|| {
-            let bare = fs::read_to_string(&b).map_err(|e| format!("{}: {e}", b.display()))?;
+            let bare = fs::read_to_string(&b).map_err(|e| WeaveError::from(format!("{}: {e}", b.display())))?;
             let cj = b.with_extension("constraints.json");
-            let js = fs::read_to_string(&cj).map_err(|e| format!("{}: {e}", cj.display()))?;
-            let mut js: Value = serde_json::from_str(&js).map_err(|e| format!("{}: {e}", cj.display()))?;
+            let js = fs::read_to_string(&cj).map_err(|e| WeaveError::from(format!("{}: {e}", cj.display())))?;
+            let mut js: Value = serde_json::from_str(&js).map_err(|e| WeaveError::from(format!("{}: {e}", cj.display())))?;
             let mut dropped = BTreeSet::new();
             if o.drop_holes {
                 let mut kept = serde_json::Map::new();
@@ -473,11 +475,14 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
                 }
                 js["holes"] = Value::Object(kept);
             }
-            Ok::<_, String>((weave_traced(&bare, &js)?, js, dropped))
+            Ok::<_, WeaveError>((weave_at(&bare, &js)?, js, dropped))
         })();
         match r {
             Ok((woven, json, dropped)) => cw.files.push(WovenFile { rel, woven, json, mut_added: 0, dropped }),
-            Err(e) => cw.weave_errors.push((rel, e)),
+            Err(e) => {
+                cw.weave_diags.push(crate::errmap::map_weave_error(&rel.with_extension("brs").display().to_string(), &rel.with_extension("constraints.json").display().to_string(), &e));
+                cw.weave_errors.push((rel, e.msg));
+            }
         }
     }
     let woven_set: BTreeSet<PathBuf> = cw.files.iter().map(|f| f.rel.clone()).collect();

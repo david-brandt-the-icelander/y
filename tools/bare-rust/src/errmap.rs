@@ -157,6 +157,26 @@ pub fn map_diag(wf: Option<&WovenFile>, d: &Diag) -> MappedError {
     m
 }
 
+/// A refusal of `weave` as a mapped error: at its place in the bare file when it has one.
+pub fn map_weave_error(bare_file: &str, constraints_file: &str, e: &crate::weave::WeaveError) -> MappedError {
+    let (l, c) = e.at.unwrap_or((0, 0));
+    MappedError {
+        level: "error".into(),
+        code: String::new(),
+        message: e.short.clone().unwrap_or_else(|| e.msg.clone()),
+        woven_file: String::new(),
+        woven_line: 0,
+        woven_col: 0,
+        bare_file: Some(bare_file.to_string()),
+        bare_line: l,
+        bare_col: c,
+        constraints_file: Some(constraints_file.to_string()),
+        origin: "weave",
+        json_path: None,
+        related: vec![],
+    }
+}
+
 /// An undetermined hole, as a mapped error: the hole entry that would fill it.
 pub fn map_hole(files: &[WovenFile], h: &HoleReport) -> MappedError {
     let wf = files.iter().find(|f| f.bare_name() == h.file);
@@ -198,6 +218,10 @@ pub fn map_hole(files: &[WovenFile], h: &HoleReport) -> MappedError {
 impl MappedError {
     /// `src/lib.brs:12:5 [constraints: /subjects/3/params/1/type] error[E0308]: mismatched types`
     pub fn show(&self) -> String {
+        if self.origin == "weave" {
+            let f = self.bare_file.as_deref().unwrap_or("");
+            return if self.bare_line > 0 { format!("{f}:{}:{}: {}", self.bare_line, self.bare_col, self.message) } else { format!("{f}: {}", self.message) };
+        }
         let at = match &self.bare_file {
             Some(f) => format!("{f}:{}:{}", self.bare_line, self.bare_col),
             None if self.woven_file.is_empty() => "(no source span)".to_string(),
@@ -238,7 +262,8 @@ impl MappedError {
 /// Every error of a woven crate, mapped: undetermined holes first, then the other errors, then those that follow
 /// from a hole.
 pub fn map_crate(cw: &CrateWeave) -> Vec<MappedError> {
-    let mut v: Vec<MappedError> = cw.holes.iter().map(|h| map_hole(&cw.files, h)).collect();
+    let mut v: Vec<MappedError> = cw.weave_diags.clone();
+    v.extend(cw.holes.iter().map(|h| map_hole(&cw.files, h)));
     v.extend(cw.errors.iter().chain(&cw.follow_on).map(|e| e.mapped.clone()));
     v
 }

@@ -3,9 +3,11 @@
 #   check (default): weave (which runs cargo check, derives `mut`, reports holes and errors) and exit non-zero on failure.
 #   test:            also run `cargo test` in .weave/.  Extra tests: put plain test files in extra-tests/*.rs (they are
 #                    copied to .weave/tests/ and are not part of the bare crate).
+#   scaffold ...:    `bare-rust scaffold ...` (print or, with --write ., add a stub and its constraint entry).
 set -u
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BARE_RUST="${BARE_RUST:-@BARE_RUST@}"
+if [ "${1:-}" = scaffold ]; then shift; exec "$BARE_RUST" scaffold "$@"; fi
 out="$here/.weave"
 rm -rf "$out"
 grep -q "^\[workspace\]" "$here/Cargo.toml" || printf "\n[workspace]\n" >> "$here/Cargo.toml"

@@ -1,0 +1,389 @@
+# The bare format on one page
+
+A Rust file becomes two files. `bare-rust strip` writes `x.brs`, the **bare body**: names, control flow and
+expressions, and no types, lifetimes, `&`, `mut`, visibility, generics or `where`. It writes `x.constraints.json`
+beside it, the **constraint file**: one *subject* per item, holding everything the bare body left out. `bare-rust
+weave` puts them together again. Edit either file; the weave refuses a body and a constraint file that disagree.
+
+Rules that cover most edits:
+
+- A subject is named by its path: `crate::module::Type::method`; a trait impl's methods are
+  `crate::Type as Trait::method`; a second item of the same name gets `#2`.
+- `self` stays in the bare parameter list; whether it is `&self`, `&mut self` or `self` is in the subject's first
+  parameter (`access` read or write, or none for an owned `self`).
+- Types are written in the constraint type syntax (`text`, `list<T> as 'Vec'`, `map<K, V> as 'HashMap'`, `ref<T>`,
+  `T?` for `Option<T>`, `u32`, a plain name for any other type); `{ "host": "..." }` is Rust text for a type that has
+  no such form.
+- `mut` is never written: the weave derives it through rustc. A `let` has no type in the bare body; where rustc cannot
+  infer it, it goes under `"holes"` (a local, a cast, a turbofish, see the last example).
+- A field or parameter whose type is a `ref<...>` needs an `access`; a result that borrows says `"hold": {"kind":
+  "borrows", "from": "self"}`.
+- The examples below come from `docs/bare-format-src/lib.rs`, stripped as crate `format_demo 0.1.0`; the test
+  `tests/docs.rs` re-strips it and fails if a block here has drifted.
+
+## One example per subject kind
+
+### Free function
+
+A `function` subject: `params` in order, each with a `type`; `result` if it returns something; `visible` for `pub`.
+
+Rust:
+
+```rust
+pub fn double(x: u32) -> u32 {
+    x * 2
+}
+```
+
+Bare (`.brs`):
+
+```brs
+fn double(x) {
+    x * 2
+}
+```
+
+Constraint file (`.constraints.json`, under `"subjects"`):
+
+```json
+{
+  "kind": "function",
+  "name": "format_demo::double",
+  "visible": "public",
+  "params": [{"name": "x", "type": "u32"}],
+  "result": {"type": "u32"}
+}
+```
+
+### Methods: `&self` and `&mut self`
+
+`self` is a parameter. `&self` is `access` read/readers; `&mut self` is write/exclusive; a result that points into `self` says what it borrows from.
+
+Rust:
+
+```rust
+impl Counter {
+    pub fn get(&self, word: &str) -> Option<&u32> {
+        self.counts.get(word)
+    }
+
+    pub fn bump(&mut self, word: String) {
+        *self.counts.entry(word).or_insert(0) += 1;
+    }
+}
+```
+
+Bare (`.brs`):
+
+```brs
+impl Counter {
+    fn get(self, word) {
+        self.counts.get(word)
+    }
+
+    fn bump(self, word) {
+        *self.counts.entry(word).or_insert(0) += 1;
+    }
+}
+```
+
+Constraint file (`.constraints.json`, under `"subjects"`):
+
+```json
+{
+  "kind": "function",
+  "name": "format_demo::Counter::get",
+  "visible": "public",
+  "params": [{"name": "self", "type": "ref<Counter>", "access": {"rights": "read", "guarantee": "readers"}}, {"name": "word", "type": "ref<text>", "access": {"rights": "read", "guarantee": "readers"}}],
+  "result": {"type": "ref<u32>?", "hold": {"kind": "borrows", "from": "self"}}
+}
+{
+  "kind": "function",
+  "name": "format_demo::Counter::bump",
+  "visible": "public",
+  "params": [{"name": "self", "type": "ref<Counter>", "access": {"rights": "write", "guarantee": "exclusive"}}, {"name": "word", "type": "text"}]
+}
+```
+
+### Generic function with bounds
+
+`generics` lists the type parameters; bounds written inline are `bounds`, bounds from a `where` clause are `where`.
+
+Rust:
+
+```rust
+pub fn largest<T: PartialOrd + Copy>(items: &[T]) -> T {
+    let mut best = items[0];
+    for &x in items {
+        if x > best {
+            best = x;
+        }
+    }
+    best
+}
+```
+
+Bare (`.brs`):
+
+```brs
+fn largest(items) {
+    let best = items[0];
+    for &x in items {
+        if x > best {
+            best = x;
+        }
+    }
+    best
+}
+```
+
+Constraint file (`.constraints.json`, under `"subjects"`):
+
+```json
+{
+  "kind": "function",
+  "name": "format_demo::largest",
+  "visible": "public",
+  "generics": [{"name": "T", "bounds": ["PartialOrd", "Copy"]}],
+  "params": [{"name": "items", "type": "ref<list<T> as 'std::primitive::slice'>", "access": {"rights": "read", "guarantee": "readers"}}],
+  "result": {"type": "T"}
+}
+```
+
+### Impl of a trait
+
+An `impl` subject (named `Type as Trait`) carries the impl's own generics; each method is a `function` subject named under it. The type's subject lists the trait under `implements`.
+
+Rust:
+
+```rust
+impl Describe for Counter {
+    fn describe(&self) -> String {
+        format!("{} words", self.counts.len())
+    }
+}
+```
+
+Bare (`.brs`):
+
+```brs
+impl Describe for Counter {
+    fn describe(self) {
+        format!("{} words", self.counts.len())
+    }
+}
+```
+
+Constraint file (`.constraints.json`, under `"subjects"`):
+
+```json
+{
+  "kind": "impl",
+  "name": "format_demo::Counter as Describe"
+}
+{
+  "kind": "function",
+  "name": "format_demo::Counter as Describe::describe",
+  "params": [{"name": "self", "type": "ref<Counter>", "access": {"rights": "read", "guarantee": "readers"}}],
+  "result": {"type": "text"}
+}
+```
+
+### Type alias
+
+The bare body says `type Table;` and the subject (kind `alias`) holds the right-hand side in `type`.
+
+Rust:
+
+```rust
+pub type Table = HashMap<String, u32>;
+```
+
+Bare (`.brs`):
+
+```brs
+type Table;
+```
+
+Constraint file (`.constraints.json`, under `"subjects"`):
+
+```json
+{
+  "kind": "alias",
+  "name": "format_demo::Table",
+  "visible": "public",
+  "type": "map<text, u32> as 'HashMap'"
+}
+```
+
+### Struct, named fields
+
+A `type` subject; `fields` in order, each with `type`, `hold` (`owns` unless it borrows) and `visible` if `pub`.
+
+Rust:
+
+```rust
+pub struct Point {
+    pub x: f64,
+    y: f64,
+}
+```
+
+Bare (`.brs`):
+
+```brs
+struct Point {
+    x,
+    y,
+}
+```
+
+Constraint file (`.constraints.json`, under `"subjects"`):
+
+```json
+{
+  "kind": "type",
+  "name": "format_demo::Point",
+  "visible": "public",
+  "fields": [{"name": "x", "visible": "public", "type": "f64", "hold": {"kind": "owns"}}, {"name": "y", "type": "f64", "hold": {"kind": "owns"}}]
+}
+```
+
+### Struct, tuple fields
+
+A tuple struct is `struct Meters(_, _);` in the bare body; its fields have no `name`.
+
+Rust:
+
+```rust
+pub struct Meters(pub f64, f64);
+```
+
+Bare (`.brs`):
+
+```brs
+struct Meters(_, _);
+```
+
+Constraint file (`.constraints.json`, under `"subjects"`):
+
+```json
+{
+  "kind": "type",
+  "name": "format_demo::Meters",
+  "visible": "public",
+  "fields": [{"visible": "public", "type": "f64", "hold": {"kind": "owns"}}, {"type": "f64", "hold": {"kind": "owns"}}]
+}
+```
+
+### Enum
+
+`variants` in order; a variant with fields has `fields`, named for a struct variant and unnamed for a tuple variant.
+
+Rust:
+
+```rust
+pub enum Shape {
+    Dot,
+    Circle(f64),
+    Rect { w: f64, h: f64 },
+}
+```
+
+Bare (`.brs`):
+
+```brs
+enum Shape {
+    Dot,
+    Circle(_),
+    Rect { w, h },
+}
+```
+
+Constraint file (`.constraints.json`, under `"subjects"`):
+
+```json
+{
+  "kind": "type",
+  "name": "format_demo::Shape",
+  "visible": "public",
+  "variants": [{"name": "Dot"}, {"name": "Circle", "fields": [{"type": "f64", "hold": {"kind": "owns"}}]}, {"name": "Rect", "fields": [{"name": "w", "type": "f64", "hold": {"kind": "owns"}}, {"name": "h", "type": "f64", "hold": {"kind": "owns"}}]}]
+}
+```
+
+### Local and cast hints
+
+What rustc cannot infer from the bare body goes in `holes`, keyed by the subject: a `locals` entry per `let` (keyed by the pattern; the second `let x` is `x#2`) and `hints` for a `cast` (the `as _` in the body), a `targ` (a turbofish `::<_>`), a `literal`, or a closure's parameter or return type, each numbered `n` from 0 in body order.
+
+Rust:
+
+```rust
+pub fn mean(values: &[f64]) -> f64 {
+    let total: f64 = values.iter().sum();
+    let n = values.len() as f64;
+    total / n
+}
+```
+
+Bare (`.brs`):
+
+```brs
+fn mean(values) {
+    let total = values.iter().sum();
+    let n = values.len() as _;
+    total / n
+}
+```
+
+Constraint file (`.constraints.json`, under `"subjects"` and `"holes"`):
+
+```json
+{
+  "kind": "function",
+  "name": "format_demo::mean",
+  "visible": "public",
+  "params": [{"name": "values", "type": "ref<list<f64> as 'std::primitive::slice'>", "access": {"rights": "read", "guarantee": "readers"}}],
+  "result": {"type": "f64"}
+}
+{
+  "holes": {
+    "format_demo::mean": {
+      "locals": {
+        "total": "f64"
+      },
+      "hints": [
+        {
+          "kind": "cast",
+          "n": 0,
+          "type": "f64"
+        }
+      ]
+    }
+  }
+}
+```
+
+## When something is wrong, the message names the fix
+
+- `let x: T = ...` in a `.brs`: `src/lib.brs:12:9: a local's type does not go in the bare body; ...` prints the
+  `"holes": {"<fn path>": {"locals": {"x": "<T>"}}}` entry to add (`<T>` converted to the constraint syntax, or host
+  text), or write a turbofish such as `collect::<T>()`. (`let mut x` is accepted and `mut` is derived, so it is not
+  an error.)
+- `type X = ...;` in a `.brs`: the message says to write `type X;` and prints the `alias` subject to add.
+- `slot missing: no subject ...` from a weave: the message ends with a ready-to-paste subject entry for the item,
+  with `TODO` where a type goes. Fill each `TODO`; the weave refuses a leftover `TODO` and names where it is.
+
+The same messages appear in the text output of `bare-rust weave` and in the `errors` of `weave --json`.
+
+## Adding an item
+
+`bare-rust scaffold <fn|impl|alias|struct> <path> [options]` prints a bare stub and its subject entries, or with
+`--write <dir>` appends the stub to the module's `.brs` and the entries to its `.constraints.json` (canonical form).
+Types default to `TODO`. See `bare-rust` with no arguments for the options.
+
+```
+bare-rust scaffold fn util::Counter::peek --self ref --params key --param-types 'ref<text>' --result 'u32?'
+bare-rust scaffold impl Counter --trait Describe --methods describe,reset:mut
+bare-rust scaffold alias Table --type "map<text, u32> as 'HashMap'"
+bare-rust scaffold struct Point --fields x,y --field-types f64,f64 --write .
+```

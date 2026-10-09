@@ -28,6 +28,7 @@ case "$arm" in
   bare|bare-nolib|bare-nounexpressed)
     strip_into "$base" "$out"
     sed "s|@BARE_RUST@|$BARE_RUST|" "$EXP/templates/weave.sh" > "$out/weave.sh"; chmod +x "$out/weave.sh"
+    cp "$EXP/../docs/bare-format.md" "$out/FORMAT.md"
     case "$arm" in
       bare) mkdir -p "$out/libraries"; cp "$LIBFILE" "$out/libraries/"; render "$EXP/templates/bare.md" ;;
       bare-nounexpressed)

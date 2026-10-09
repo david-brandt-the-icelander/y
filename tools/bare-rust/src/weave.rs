@@ -10,6 +10,14 @@ use tree_sitter::Node;
 #[derive(Clone)]
 struct Scope {
     path: String,
+    /// The type a method's `self` is: the impl's type, `Self` in a trait; `None` outside both.
+    self_ty: Option<String>,
+}
+
+impl Scope {
+    fn new(path: String) -> Scope {
+        Scope { path, self_ty: None }
+    }
 }
 
 /// A place in a bare body where a concrete type became a hole: a `let`, a cast, a type argument, a numeric literal
@@ -90,6 +98,30 @@ struct Weaver<'a> {
     used: HashSet<String>,
     scanned: HashSet<String>,
     unbound: Vec<Unbound>,
+    /// Where (a byte of the bare body) the first error came from: the innermost item being woven.
+    fail_at: Option<usize>,
+}
+
+/// A refusal of `weave`, with where in the bare body it comes from, if it has a place.
+#[derive(Clone, Debug)]
+pub struct WeaveError {
+    /// The message (what `weave` returns as its error).
+    pub msg: String,
+    /// What to show beside the position, when it differs from `msg`.
+    pub short: Option<String>,
+    pub at: Option<(usize, usize)>,
+}
+
+impl From<String> for WeaveError {
+    fn from(msg: String) -> Self {
+        WeaveError { msg, short: None, at: None }
+    }
+}
+
+impl From<&str> for WeaveError {
+    fn from(msg: &str) -> Self {
+        msg.to_string().into()
+    }
 }
 
 fn missing<T>(what: impl std::fmt::Display) -> R<T> {
@@ -211,10 +243,14 @@ impl<'a> Weaver<'a> {
         s
     }
 
-    fn find(&mut self, name: &str) -> R<&'a Value> {
+    /// The subject of an item. A missing one is refused with a ready-to-paste entry for it (see `hints`).
+    fn find(&mut self, n: Node, sc: &Scope, name: &str) -> R<&'a Value> {
         match self.lookup(name) {
             Some(s) => Ok(s),
-            None => missing(format!("no subject `{name}`")),
+            None => {
+                let entry = crate::hints::missing_entry(n, self.src, name, sc.self_ty.as_deref());
+                missing(format!("no subject `{name}`\n{}", crate::hints::paste_note(&entry)))
+            }
         }
     }
 
@@ -226,6 +262,14 @@ impl<'a> Weaver<'a> {
     }
 
     fn item(&mut self, n: Node, sc: &Scope) -> R<()> {
+        let r = self.item_inner(n, sc);
+        if r.is_err() && self.fail_at.is_none() {
+            self.fail_at = Some(n.start_byte());
+        }
+        r
+    }
+
+    fn item_inner(&mut self, n: Node, sc: &Scope) -> R<()> {
         match n.kind() {
             "function_item" | "function_signature_item" => self.func(n, sc),
             "struct_item" => self.strukt(n, sc),
@@ -267,7 +311,7 @@ impl<'a> Weaver<'a> {
         }
         let mut items = vec![];
         find(body, &mut items);
-        let inner = Scope { path: name.to_string() };
+        let inner = Scope::new(name.to_string());
         for it in items {
             self.item(it, &inner)?;
         }
@@ -283,7 +327,7 @@ impl<'a> Weaver<'a> {
             self.ins(n.start_byte(), v);
         }
         if let Some(b) = n.child_by_field_name("body") {
-            self.items_in(b, &Scope { path: format!("{}::{name}", sc.path) })?;
+            self.items_in(b, &Scope::new(format!("{}::{name}", sc.path)))?;
         }
         Ok(())
     }
@@ -325,7 +369,7 @@ impl<'a> Weaver<'a> {
     fn strukt(&mut self, n: Node, sc: &Scope) -> R<()> {
         let name = n.child_by_field_name("name").unwrap();
         let sname = self.namer.unique(format!("{}::{}", sc.path, text(name, self.src)));
-        let sub = self.find(&sname)?;
+        let sub = self.find(n, sc, &sname)?;
         self.at(&sname, "clauses");
         if let Some(a) = must_use_text(sub, "must be used") {
             self.ins(n.start_byte(), a);
@@ -351,7 +395,7 @@ impl<'a> Weaver<'a> {
         let src = self.src;
         let name = n.child_by_field_name("name").unwrap();
         let sname = self.namer.unique(format!("{}::{}", sc.path, text(name, src)));
-        let sub = self.find(&sname)?;
+        let sub = self.find(n, sc, &sname)?;
         self.at(&sname, "clauses");
         if let Some(a) = must_use_text(sub, "must be used") {
             self.ins(n.start_byte(), a);
@@ -382,7 +426,7 @@ impl<'a> Weaver<'a> {
     fn konst(&mut self, n: Node, sc: &Scope) -> R<()> {
         let name = n.child_by_field_name("name").unwrap();
         let sname = self.namer.unique(format!("{}::{}", sc.path, text(name, self.src)));
-        let sub = self.find(&sname)?;
+        let sub = self.find(n, sc, &sname)?;
         self.at(&sname, "visible");
         self.ins(n.start_byte(), vis_text(sub)?);
         let lt = sub["hold"]["lifetime"].as_str();
@@ -399,7 +443,7 @@ impl<'a> Weaver<'a> {
     fn alias(&mut self, n: Node, sc: &Scope) -> R<()> {
         let name = n.child_by_field_name("name").unwrap();
         let sname = self.namer.unique(format!("{}::{}", sc.path, text(name, self.src)));
-        let sub = self.find(&sname)?;
+        let sub = self.find(n, sc, &sname)?;
         self.at(&sname, "visible");
         self.ins(n.start_byte(), vis_text(sub)?);
         let mut t = generics_text(sub);
@@ -420,7 +464,7 @@ impl<'a> Weaver<'a> {
     fn trait_item(&mut self, n: Node, sc: &Scope) -> R<()> {
         let name = n.child_by_field_name("name").unwrap();
         let sname = self.namer.unique(format!("{}::{}", sc.path, text(name, self.src)));
-        let sub = self.find(&sname)?;
+        let sub = self.find(n, sc, &sname)?;
         self.at(&sname, "clauses");
         if let Some(a) = must_use_text(sub, "must be used") {
             self.ins(n.start_byte(), a);
@@ -435,7 +479,7 @@ impl<'a> Weaver<'a> {
         t += &where_text(sub);
         self.at(&sname, "generics");
         self.ins(name.end_byte(), t);
-        self.items_in(n.child_by_field_name("body").unwrap(), &Scope { path: sname })
+        self.items_in(n.child_by_field_name("body").unwrap(), &Scope { path: sname, self_ty: Some("Self".into()) })
     }
 
     fn imp(&mut self, n: Node, sc: &Scope) -> R<()> {
@@ -466,7 +510,7 @@ impl<'a> Weaver<'a> {
         }
         let path = if tr.is_some() { sname } else { format!("{}::{ty_head}", sc.path) };
         match n.child_by_field_name("body") {
-            Some(b) => self.items_in(b, &Scope { path }),
+            Some(b) => self.items_in(b, &Scope { path, self_ty: Some(ty_head.clone()) }),
             None => Ok(()),
         }
     }
@@ -475,7 +519,7 @@ impl<'a> Weaver<'a> {
         let src = self.src;
         let name_n = f.child_by_field_name("name").unwrap();
         let sname = self.namer.unique(format!("{}::{}", sc.path, text(name_n, src)));
-        let sub = self.find(&sname)?;
+        let sub = self.find(f, sc, &sname)?;
         // a clause that stands for host text: `#[must_use]` before the item, `const` after its visibility (language 6.14)
         let says = |kind: &str, t: &str| sub["clauses"].as_array().into_iter().flatten().any(|c| c["kind"] == kind && c["text"] == t);
         self.at(&sname, "clauses");
@@ -689,19 +733,38 @@ fn apply_traced(src: &str, mut edits: Vec<(Edit, Origin)>) -> (String, SpanMap) 
     (out, map)
 }
 
+/// The path every subject of a file starts with: the crate and the modules of the file.
+pub fn base_path(json: &Value) -> String {
+    let name = json["crate"].as_str().and_then(|k| k.split_whitespace().next()).unwrap_or("crate").replace('-', "_");
+    let mut path = vec![name];
+    path.extend(module_path(json["module"].as_str().unwrap_or("")));
+    path.join("::")
+}
+
 /// Weave a bare body and its constraint JSON into Rust, with the span map and the hole sites.
 pub fn weave_traced(brs: &str, json: &Value) -> R<Woven> {
+    weave_at(brs, json).map_err(|e| e.msg)
+}
+
+/// As `weave_traced`, and an error says where in the bare body it comes from.
+pub fn weave_at(brs: &str, json: &Value) -> Result<Woven, WeaveError> {
     let tree = parse_bare(brs);
     if let Some(e) = crate::first_error(&tree) {
-        return Err(format!("parse-error: bare body, at {e}"));
+        let at = e.split_once(':').and_then(|(l, c)| Some((l.parse().ok()?, c.parse().ok()?)));
+        return Err(match crate::hints::parse_hint_at(brs, json) {
+            Some((hat, h)) => WeaveError { msg: format!("parse-error: bare body, at {}:{}: {h}", hat.0, hat.1), short: Some(h), at: Some(hat) },
+            None => WeaveError { msg: format!("parse-error: bare body, at {e}"), short: Some("parse error in the bare body".into()), at },
+        });
     }
-    let krate = json["crate"].as_str().ok_or("slot missing: crate")?;
-    let name = krate.split_whitespace().next().unwrap_or("").replace('-', "_");
-    let subjects = json["subjects"].as_array().ok_or("slot missing: subjects")?;
+    crate::hints::reject_placeholders(json)?;
+    weave_checked(brs, json, tree).map_err(|(e, off)| WeaveError { at: off.map(|o| line_col(brs, o)), msg: e, short: None })
+}
+
+fn weave_checked(brs: &str, json: &Value, tree: tree_sitter::Tree) -> Result<Woven, (String, Option<usize>)> {
+    let krate = json["crate"].as_str().ok_or_else(|| ("slot missing: crate".to_string(), None))?;
+    let subjects = json["subjects"].as_array().ok_or_else(|| ("slot missing: subjects".to_string(), None))?;
     let subs: HashMap<String, &Value> = subjects.iter().filter_map(|s| Some((s["name"].as_str()?.to_string(), s))).collect();
-    let module = json["module"].as_str().unwrap_or("");
-    let mut path = vec![name];
-    path.extend(module_path(module));
+    let _ = krate;
     let cur = Origin { kind: Kind::Slot, subject: String::new(), slot: String::new() };
     let mut w = Weaver {
         src: brs,
@@ -714,8 +777,11 @@ pub fn weave_traced(brs: &str, json: &Value) -> R<Woven> {
         used: HashSet::new(),
         scanned: HashSet::new(),
         unbound: vec![],
+        fail_at: None,
     };
-    w.items_in(tree.root_node(), &Scope { path: path.join("::") })?;
+    if let Err(e) = w.items_in(tree.root_node(), &Scope::new(base_path(json))) {
+        return Err((e, w.fail_at));
+    }
     // Entries of the file that nothing in the body took: a subject with no item, a `holes` entry with no body.
     let mut unbound = std::mem::take(&mut w.unbound);
     let mut stale: Vec<&str> = subjects.iter().filter_map(|s| s["name"].as_str()).filter(|n| !w.used.contains(*n)).collect();

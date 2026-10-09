@@ -43,6 +43,11 @@ fn inline(v: &Value, parent: &str, sort: bool) -> String {
     }
 }
 
+/// A value on one line, keys in canonical order: for an entry a message asks the reader to paste.
+pub fn entry(v: &Value) -> String {
+    inline(v, "", true)
+}
+
 /// The widest line a compact value may make.
 const WIDTH: usize = 110;
 
