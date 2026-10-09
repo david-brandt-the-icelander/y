@@ -1,0 +1,37 @@
+{
+ "run_id": "e4-fnv-clone-bare-t1",
+ "experiment": "e4",
+ "task": "fnv-clone",
+ "arm": "bare",
+ "trial": 1,
+ "kind": "signature",
+ "e5": true,
+ "workspace": "/tmp/claude-0/-home-user-y/9673def1-2027-5ffe-9d6e-8413dc645c64/scratchpad/runs/e4-fnv-clone-bare-t1",
+ "rs_files_in_bare": [],
+ "weaves": true,
+ "weave_summary": "weave: 1 files woven, 0 not woven, 0 weave errors; 0 unbound entries (locals 0, hints 0, subjects 0); cargo check after 2 runs: 3 mut inserted, 0 holes undetermined, 0 other errors, 0 warnings",
+ "compiles": true,
+ "hidden_compiled": true,
+ "tests_passed": 3,
+ "tests_failed": 0,
+ "tests_total": 3,
+ "pass": true,
+ "json_entries_changed": 0,
+ "json_leaf_edits": 0,
+ "json_files_changed": 0,
+ "lines_changed": 1,
+ "agent": {
+  "done": true,
+  "attempts": 1,
+  "json_edits": 0,
+  "library_promises_relied_on": [],
+  "notes": "Added #[derive(Clone)] to FnvHasher in lib.brs; weaves and tests pass; no JSON change needed."
+ },
+ "tokens": {
+  "input": 286221,
+  "output": 123,
+  "total": 286344
+ },
+ "duration_s": null,
+ "model": "sonnet"
+}

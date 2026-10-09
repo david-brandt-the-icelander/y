@@ -1,0 +1,37 @@
+{
+ "run_id": "e4-ndl-empty-rust-t2",
+ "experiment": "e4",
+ "task": "ndl-empty",
+ "arm": "rust",
+ "trial": 2,
+ "kind": "body",
+ "e5": false,
+ "workspace": "/tmp/claude-0/-home-user-y/9673def1-2027-5ffe-9d6e-8413dc645c64/scratchpad/runs/e4-ndl-empty-rust-t2",
+ "weaves": null,
+ "rs_files_in_bare": null,
+ "compiles": true,
+ "hidden_compiled": true,
+ "existing_tests_ok": true,
+ "tests_passed": 3,
+ "tests_failed": 0,
+ "tests_total": 3,
+ "pass": true,
+ "json_entries_changed": null,
+ "json_leaf_edits": null,
+ "json_files_changed": null,
+ "lines_changed": 3,
+ "agent": {
+  "done": true,
+  "attempts": 1,
+  "json_edits": 0,
+  "library_promises_relied_on": [],
+  "notes": "Added early return of 1.0 when both strings are empty."
+ },
+ "tokens": {
+  "input": 181987,
+  "output": 76,
+  "total": 182063
+ },
+ "duration_s": null,
+ "model": "sonnet"
+}

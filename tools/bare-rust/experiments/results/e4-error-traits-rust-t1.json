@@ -1,0 +1,37 @@
+{
+ "run_id": "e4-error-traits-rust-t1",
+ "experiment": "e4",
+ "task": "error-traits",
+ "arm": "rust",
+ "trial": 1,
+ "kind": "signature",
+ "e5": false,
+ "workspace": "/tmp/claude-0/-home-user-y/9673def1-2027-5ffe-9d6e-8413dc645c64/scratchpad/runs/e4-error-traits-rust-t1",
+ "weaves": null,
+ "rs_files_in_bare": null,
+ "compiles": true,
+ "hidden_compiled": true,
+ "existing_tests_ok": true,
+ "tests_passed": 3,
+ "tests_failed": 0,
+ "tests_total": 3,
+ "pass": true,
+ "json_entries_changed": null,
+ "json_leaf_edits": null,
+ "json_files_changed": null,
+ "lines_changed": 11,
+ "agent": {
+  "done": true,
+  "attempts": 1,
+  "json_edits": 0,
+  "library_promises_relied_on": [],
+  "notes": "Added Display and std::error::Error impls for StrSimError in src/lib.rs; all tests pass."
+ },
+ "tokens": {
+  "input": 182805,
+  "output": 72,
+  "total": 182877
+ },
+ "duration_s": null,
+ "model": "sonnet"
+}
