@@ -158,7 +158,8 @@ fn fn_stub(name: &str, has_self: Option<SelfKind>, params: &[String], indent: &s
 /// Build the stub and the entries. `prefix` is the path every subject name starts with (crate and modules).
 pub fn build(spec: &Spec, prefix: &str) -> R<Scaffold> {
     let segs: Vec<&str> = spec.path.split("::").filter(|s| !s.is_empty()).collect();
-    let segs: Vec<&str> = if segs.first() == Some(&"crate") { segs[1..].to_vec() } else { segs };
+    // `crate::x` and `<crate name>::x` (as the constraint file writes names) both mean the crate root
+    let segs: Vec<&str> = if segs.len() > 1 && (segs[0] == "crate" || segs[0] == prefix) { segs[1..].to_vec() } else { segs };
     let (last, rest) = match segs.split_last() {
         Some((l, r)) => (*l, r),
         None if spec.kind == "impl" && spec.for_.is_some() => ("", &segs[..]),
@@ -286,13 +287,14 @@ pub fn build(spec: &Spec, prefix: &str) -> R<Scaffold> {
 }
 
 /// The `.brs` of a module below `dir` (the bare folder or the crate): `src/lib.brs`, `src/a.brs` or `src/a/mod.brs`,
-/// looked for under `dir/bare` too.
+/// or the same without `src/`, looked for under `dir/bare` too.
 pub fn module_file(dir: &Path, module: &[String]) -> R<PathBuf> {
     let rels: Vec<String> = if module.is_empty() {
-        vec!["src/lib.brs".into(), "src/main.brs".into()]
+        // `lib.brs` beside Cargo.toml too, for a crate whose `[lib] path` is `lib.rs` (fnv)
+        vec!["src/lib.brs".into(), "src/main.brs".into(), "lib.brs".into(), "main.brs".into()]
     } else {
         let m = module.join("/");
-        vec![format!("src/{m}.brs"), format!("src/{m}/mod.brs")]
+        vec![format!("src/{m}.brs"), format!("src/{m}/mod.brs"), format!("{m}.brs"), format!("{m}/mod.brs")]
     };
     let mut tried = vec![];
     for root in [dir.to_path_buf(), dir.join("bare")] {
@@ -311,7 +313,9 @@ pub fn module_file(dir: &Path, module: &[String]) -> R<PathBuf> {
 /// Returns the two files.
 pub fn write(dir: &Path, spec: &Spec) -> R<(PathBuf, PathBuf)> {
     // The module comes from the path; build once to learn it.
-    let probe = build(spec, "x")?;
+    // The crate's own name counts as `crate::` (constraint files name items `<crate>::…`).
+    let krate = crate::corpus::crate_info(dir).map(|i| i.name.replace('-', "_")).unwrap_or_else(|_| "crate".into());
+    let probe = build(spec, &krate)?;
     let brs = module_file(dir, &probe.module)?;
     let cj = brs.with_extension("constraints.json");
     let text = fs::read_to_string(&cj).map_err(|e| format!("{}: {e}", cj.display()))?;

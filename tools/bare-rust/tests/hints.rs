@@ -243,3 +243,22 @@ fn scaffold_into_a_module_file_and_through_the_cli() {
     assert!(!run(&["union", "X"]).status.success());
     assert!(!run(&["fn", "x", "--nope", "1"]).status.success());
 }
+
+/// A crate whose `[lib] path` is `lib.rs` beside Cargo.toml (as fnv's is), stripped in place, with the item named
+/// the way its constraint file names items (`<crate>::Id`) as well as `crate::…`.
+#[test]
+fn scaffold_into_a_crate_with_its_lib_at_the_root() {
+    let top = root().join("target/bare-rust-test/scaffold_root");
+    let _ = fs::remove_dir_all(&top);
+    fs::create_dir_all(&top).unwrap();
+    fs::write(top.join("Cargo.toml"), "[package]\nname = \"scaffold_root\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[lib]\npath = \"lib.rs\"\n").unwrap();
+    fs::write(top.join("lib.rs"), "pub fn one() -> u32 { 1 }\n").unwrap();
+    let results = strip_crate(&top, &top, true).unwrap();
+    assert!(results.iter().all(|r| r.outcome.is_ok()));
+    let spec = |path: &str| Spec { kind: "alias".into(), path: path.into(), ty: Some("u32".into()), ..Default::default() };
+    let (brs, _) = scaffold::write(&top, &spec("scaffold_root::Id")).unwrap();
+    assert_eq!(brs, top.join("lib.brs"));
+    scaffold::write(&top, &spec("crate::Other")).unwrap();
+    let bare = fs::read_to_string(&brs).unwrap();
+    assert!(bare.contains("type Id;") && bare.contains("type Other;"), "{bare}");
+}
