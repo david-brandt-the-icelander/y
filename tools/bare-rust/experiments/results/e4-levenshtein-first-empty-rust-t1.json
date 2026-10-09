@@ -1,0 +1,37 @@
+{
+ "run_id": "e4-levenshtein-first-empty-rust-t1",
+ "experiment": "e4",
+ "task": "levenshtein-first-empty",
+ "arm": "rust",
+ "trial": 1,
+ "kind": "body",
+ "e5": true,
+ "workspace": "/tmp/claude-0/-home-user-y/9673def1-2027-5ffe-9d6e-8413dc645c64/scratchpad/runs/e4-levenshtein-first-empty-rust-t1",
+ "weaves": null,
+ "rs_files_in_bare": null,
+ "compiles": true,
+ "hidden_compiled": true,
+ "existing_tests_ok": true,
+ "tests_passed": 6,
+ "tests_failed": 0,
+ "tests_total": 6,
+ "pass": true,
+ "json_entries_changed": null,
+ "json_leaf_edits": null,
+ "json_files_changed": null,
+ "lines_changed": 2,
+ "agent": {
+  "done": true,
+  "attempts": 2,
+  "json_edits": 0,
+  "library_promises_relied_on": [],
+  "notes": "Fixed by initializing result to b_len in generic_levenshtein; my first sed missed on a wrong line number, so the first test run showed a normalized_levenshtein doctest failure that went away after the fix."
+ },
+ "tokens": {
+  "input": 329817,
+  "output": 383,
+  "total": 330200
+ },
+ "duration_s": null,
+ "model": "sonnet"
+}

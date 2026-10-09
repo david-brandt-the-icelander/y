@@ -212,6 +212,10 @@ fn body_counts(n: Node, src: &str, c: &mut BodyCounts) {
         }
         "macro_invocation" => {
             bump(&mut c.macros, "invocations");
+            // an invocation standing where an item stands: kept verbatim, with no constraints extracted
+            if n.parent().is_some_and(|p| matches!(p.kind(), "source_file" | "declaration_list")) {
+                bump(&mut c.macros, "macro items kept as host text");
+            }
             let name = n.child_by_field_name("macro").map(|m| text(m, src)).unwrap_or("");
             let last = name.rsplit("::").next().unwrap_or("");
             if matches!(last, "assert" | "assert_eq" | "assert_ne" | "debug_assert" | "panic" | "unreachable" | "todo" | "unimplemented") {

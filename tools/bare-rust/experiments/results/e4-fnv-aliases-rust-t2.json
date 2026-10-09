@@ -1,0 +1,36 @@
+{
+ "run_id": "e4-fnv-aliases-rust-t2",
+ "experiment": "e4",
+ "task": "fnv-aliases",
+ "arm": "rust",
+ "trial": 2,
+ "kind": "signature",
+ "e5": true,
+ "workspace": "/tmp/claude-0/-home-user-y/9673def1-2027-5ffe-9d6e-8413dc645c64/scratchpad/runs/e4-fnv-aliases-rust-t2",
+ "weaves": null,
+ "rs_files_in_bare": null,
+ "compiles": true,
+ "hidden_compiled": true,
+ "tests_passed": 3,
+ "tests_failed": 0,
+ "tests_total": 3,
+ "pass": true,
+ "json_entries_changed": null,
+ "json_leaf_edits": null,
+ "json_files_changed": null,
+ "lines_changed": 11,
+ "agent": {
+  "done": true,
+  "attempts": 1,
+  "json_edits": 0,
+  "library_promises_relied_on": [],
+  "notes": "Crate docs already referenced FnvHashMap/FnvHashSet but the aliases were missing; added them plus FnvBuildHasher in lib.rs, doctests pass."
+ },
+ "tokens": {
+  "input": 279258,
+  "output": 126,
+  "total": 279384
+ },
+ "duration_s": null,
+ "model": "sonnet"
+}

@@ -162,3 +162,87 @@ fn report_prints_the_tables_from_check_output() {
         assert!(md.contains(row), "missing `{row}` in\n{md}");
     }
 }
+
+#[test]
+fn a_crate_directory_with_its_stripped_files_in_bare_counts_one_woven_none_unwoven() {
+    // `strip --out <crate>/bare`, then `weave <crate> --out <out>`: the file is woven once, at its own path.
+    let (dir, bare, out) = krate("wc_bare_layout", "pub fn f(x: u8) -> u8 {\n    x\n}\n");
+    let inside = dir.join("bare");
+    fs::create_dir_all(&inside).unwrap();
+    fn cp(a: &Path, b: &Path) {
+        fs::create_dir_all(b).unwrap();
+        for e in fs::read_dir(a).unwrap() {
+            let p = e.unwrap().path();
+            let t = b.join(p.file_name().unwrap());
+            if p.is_dir() { cp(&p, &t) } else { fs::copy(&p, &t).unwrap(); }
+        }
+    }
+    cp(&bare, &inside);
+    let o = WeaveOpts { cargo: false, crate_dir: None, target: bare_rust::cargo::target_dir(&root()), drop_holes: false, keep: Default::default() };
+    let cw = weave_crate_with(&dir, &out, &o).unwrap();
+    assert_eq!((cw.files.len(), cw.unwoven.len()), (1, 0), "{:?}", cw.unwoven);
+    assert!(out.join("src/lib.rs").exists() && !out.join("bare/src/lib.brs").exists());
+}
+
+const MAPPED_SRC: &str = "pub fn add(a: u8, b: u8) -> u8 {\n    let c = a + b;\n    c\n}\n\npub fn twice(x: u8) -> u8 {\n    add(x, x)\n}\n";
+
+fn bare_lib(bare: &Path) -> (PathBuf, PathBuf) {
+    (bare.join("src/lib.brs"), bare.join("src/lib.constraints.json"))
+}
+
+#[test]
+fn an_error_from_a_constraint_maps_to_its_json_path_and_the_bare_file() {
+    let (dir, bare, out) = krate("wc_errmap_json", MAPPED_SRC);
+    let (_, cj) = bare_lib(&bare);
+    // `twice` takes a type that does not exist.
+    let mut js: Value = serde_json::from_str(&fs::read_to_string(&cj).unwrap()).unwrap();
+    let idx = js["subjects"].as_array().unwrap().iter().position(|s| s["name"] == "wc_errmap_json::twice").unwrap();
+    js["subjects"][idx]["params"][0]["type"] = Value::String("Missing".into());
+    fs::write(&cj, serde_json::to_string_pretty(&js).unwrap()).unwrap();
+    let cw = weave(&dir, &bare, &out, false);
+    assert!(!cw.ok());
+    let m = crate_errors(&cw);
+    let e = m.iter().find(|e| e.code == "E0425").unwrap_or_else(|| panic!("{:?}", m.iter().map(|e| e.show()).collect::<Vec<_>>()));
+    assert_eq!(e.origin, "slot");
+    assert_eq!(e.json_path.as_deref(), Some(format!("/subjects/{idx}/params/0/type").as_str()));
+    assert_eq!(e.bare_file.as_deref(), Some("src/lib.brs"));
+    let brs = fs::read_to_string(bare.join("src/lib.brs")).unwrap();
+    let want = brs.lines().position(|l| l.starts_with("fn twice")).unwrap() + 1;
+    assert_eq!(e.bare_line, want, "{}", e.show());
+    assert!(e.show().starts_with(&format!("src/lib.brs:{want}:")) && e.show().contains(&format!("[constraints: /subjects/{idx}/params/0/type] error[E0425]")), "{}", e.show());
+    let j = e.to_json();
+    assert_eq!(j["constraints"]["path"], format!("/subjects/{idx}/params/0/type"));
+}
+
+#[test]
+fn an_error_in_a_body_maps_to_the_bare_line_and_its_related_slot() {
+    let (dir, bare, out) = krate("wc_errmap_body", MAPPED_SRC);
+    let (brs, cj) = bare_lib(&bare);
+    // A body error: an unknown name in `add`'s body.
+    let text = fs::read_to_string(&brs).unwrap().replace("let c = a + b;", "let c = a + bb;");
+    fs::write(&brs, &text).unwrap();
+    let cw = weave(&dir, &bare, &out, false);
+    let m = crate_errors(&cw);
+    let e = m.iter().find(|e| e.code == "E0425").unwrap_or_else(|| panic!("{:?}", m.iter().map(|e| e.show()).collect::<Vec<_>>()));
+    assert_eq!(e.origin, "body");
+    assert_eq!(e.json_path, None);
+    let line = text.lines().position(|l| l.contains("a + bb")).unwrap() + 1;
+    let col = text.lines().nth(line - 1).unwrap().find("bb").unwrap() + 1;
+    assert_eq!((e.bare_line, e.bare_col), (line, col), "{}", e.show());
+    // A mismatch between the body and a constraint: `add` now says it returns u16; the error is in the body and the
+    // result slot is named as related.
+    fs::write(&brs, text.replace("a + bb", "a + b")).unwrap();
+    let mut js: Value = serde_json::from_str(&fs::read_to_string(&cj).unwrap()).unwrap();
+    let idx = js["subjects"].as_array().unwrap().iter().position(|s| s["name"] == "wc_errmap_body::add").unwrap();
+    js["subjects"][idx]["result"]["type"] = Value::String("u16".into());
+    fs::write(&cj, serde_json::to_string_pretty(&js).unwrap()).unwrap();
+    let cw = weave(&dir, &bare, &out, false);
+    let m = crate_errors(&cw);
+    let e = m.iter().find(|e| e.code == "E0308").unwrap_or_else(|| panic!("{:?}", m.iter().map(|e| e.show()).collect::<Vec<_>>()));
+    assert_eq!(e.origin, "body");
+    assert!(e.related.iter().any(|r| r.json_path.as_deref() == Some(format!("/subjects/{idx}/result/type").as_str())), "{}", e.show());
+}
+
+fn crate_errors(cw: &CrateWeave) -> Vec<bare_rust::errmap::MappedError> {
+    bare_rust::errmap::map_crate(cw)
+}

@@ -1,0 +1,38 @@
+{
+ "run_id": "e4-nlev-multibyte-bare-t2",
+ "experiment": "e4",
+ "task": "nlev-multibyte",
+ "arm": "bare",
+ "trial": 2,
+ "kind": "body",
+ "e5": true,
+ "workspace": "/tmp/claude-0/-home-user-y/9673def1-2027-5ffe-9d6e-8413dc645c64/scratchpad/runs/e4-nlev-multibyte-bare-t2",
+ "rs_files_in_bare": [],
+ "weaves": true,
+ "weave_summary": "weave: 2 files woven, 0 not woven, 0 weave errors; 0 unbound entries (locals 0, hints 0, subjects 0); cargo check after 2 runs: 34 mut inserted, 0 holes undetermined, 0 other errors, 0 warnings",
+ "compiles": true,
+ "hidden_compiled": true,
+ "existing_tests_ok": true,
+ "tests_passed": 3,
+ "tests_failed": 0,
+ "tests_total": 3,
+ "pass": true,
+ "json_entries_changed": 0,
+ "json_leaf_edits": 0,
+ "json_files_changed": 0,
+ "lines_changed": 2,
+ "agent": {
+  "done": true,
+  "attempts": 1,
+  "json_edits": 0,
+  "library_promises_relied_on": [],
+  "notes": "Changed normalized_levenshtein denominator from byte len to chars().count() in lib.brs only; tests pass."
+ },
+ "tokens": {
+  "input": 234828,
+  "output": 205,
+  "total": 235033
+ },
+ "duration_s": null,
+ "model": "sonnet"
+}

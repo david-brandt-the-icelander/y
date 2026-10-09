@@ -9,7 +9,7 @@ Features: `impl Iterator` for a struct borrowing `&'a mut I`, lifetime parameter
 
 - Kept `PeekingNext` and its impls for `&mut I`, `Peekable<I>` and `vec::IntoIter<T>`, plus `PeekingTakeWhile` and its `Iterator` and `PeekingNext` impls.
 - Removed the impls for `PutBack`, `PutBackN`, `RepeatN`, `Drain`, `array::IntoIter`, the `use_alloc`/`use_std` cfg-gated impls, the `Debug` impl (it used the crate's `debug_fmt_fields!` macro) and the doc intra-links.
-- Replaced the `peeking_next_by_clone!` macro and its ~20 invocations by its expansion for `slice::Iter<'a, T>` only (the macro body, written out by hand, with the same text).
+- Kept the `peeking_next_by_clone!` macro and its eight invocations that need no cargo feature; removed the invocations gated by `use_alloc` and `use_std`.
 
 The result compiles on its own (`cargo check` in this folder) and is `src/lib.rs`.
 
@@ -20,6 +20,8 @@ The result compiles on its own (`cargo check` in this folder) and is `src/lib.rs
 - `LICENSE-*`: the licence texts from the source commit.
 
 ## What is interesting in the bare/constraint split
+
+- The `macro_rules!` definition and its eight item-level invocations stay in the bare file as written; no constraints are extracted from them, and `stats` counts them as "macro items kept as host text". The impls they expand to are invisible to the tool.
 
 - The lifetime `'a` of `PeekingTakeWhile<'a, I, F>` appears in the bare file as `struct PeekingTakeWhile` and as `generics.lifetime` in the constraints; the field `iter: &'a mut I` has its reference and exclusive access in constraints (`fields.access`).
 - All closure bounds (`F: FnOnce(&Self::Item) -> bool`, `F: FnMut(&I::Item) -> bool`) are in the constraints; the bodies that call `accept(r)` or `f(r) && g(r)` stay as host text.

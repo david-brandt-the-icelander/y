@@ -1,0 +1,1 @@
+`osa_distance` is wrong when strings differ by an adjacent swap: `osa_distance("ab", "ba")` returns 0, although the strings are different (a transposition counts as one edit). The other operations are fine.

@@ -1,0 +1,1 @@
+`sorensen_dice` counts repeated bigrams wrongly. A bigram that occurs once in the first string should match at most one occurrence in the second: `sorensen_dice("aa", "aaaa")` must be 0.5 but returns 1.5, a score above 1.0. The coefficient is 2 * |shared bigrams (as multisets)| / (total bigrams of both).

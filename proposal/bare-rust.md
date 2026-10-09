@@ -511,7 +511,10 @@ experiments need.
   own source stays a corpus for checks 1 to 4 only, so its dependencies have no library files.
 - **Stage 3, edits and agents.** Errors mapped back to the bare body and the JSON, E2, E3, E4 and E5. Done when the
   results are written up with a recommendation: complete the tool and build a second host, change the design of
-  language § 11.2, or stop.
+  language § 11.2, or stop. Done: errors map to the `.brs` position and the JSON pointer of the slot (`src/errmap.rs`); E2, E3, E4
+  and E5 are in `tools/bare-rust/results/` (`e2.md`, `e3.md`, `e4-e5.md`), and `results/stage3.md` recommends
+  completing the tool and building a second host, TypeScript first, after making new items cheaper for agents to add.
+  The second hosts are planned in [`second-hosts.md`](second-hosts.md).
 
 Later releases, only if stage 3 recommends going on, and in an order its results decide:
 
@@ -683,6 +686,26 @@ all):
   20, each in a fresh agent, would have cost about half as much.
 - **The repair round was larger than in stage 1,** because the review checked meaning, not only mechanics: 119 stated
   clauses against their sources. Writing claims about someone else's code is where a second agent earns its cost.
+
+#### Stage 3
+
+Stage 3 was run with Sonnet 5.5 agents at the default effort:
+
+- two build agents, one for the fixes, error mapping, E2 and E3, and one for the E4 and E5 harness;
+- 124 experiment runs, of which 4 were pilots.
+
+The orchestrating Opus session checked the work and graded every run. The details are in
+`tools/bare-rust/results/stage3.md`.
+
+| Part | Calls | Cache writes | Cache reads | Cost |
+| --- | --- | --- | --- | --- |
+| Build, two agents | 107 | 0.60M | 13.7M | $4.3 to $5.3 |
+| Experiment runs | about 700 | 1.75M | 31.6M | $11 to $13 |
+| Orchestration, Opus 5.5 | about 120 | | | about $5, estimated |
+| **Stage 3** | | | **about 47M** | **about $20 to $23** |
+
+That is against the estimate of § 14.2 of about $103. The experiment runs averaged 6 calls and 270K tokens, a seventh
+of the unit, because the tasks were small.
 
 ### 14.2 The rest, priced on Sonnet
 

@@ -1,0 +1,1 @@
+`sorensen_dice` should ignore whitespace: `sorensen_dice("apple event", "apple    event")` should be 1.0 and `sorensen_dice("fer ris", "ferris")` too, but today the spaces take part in the bigrams and the scores are lower. All kinds of whitespace (tabs, newlines, non-breaking space) count.

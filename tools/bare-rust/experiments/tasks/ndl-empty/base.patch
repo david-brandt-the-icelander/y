@@ -1,0 +1,14 @@
+diff -ruN a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs	2026-10-09 08:06:03.624547897 +0000
++++ b/src/lib.rs	2026-10-09 08:13:05.973592917 +0000
+@@ -687,10 +687,6 @@
+ /// assert!((normalized_damerau_levenshtein("sunglasses", "sunglasses") - 1.0).abs() < 0.00001);
+ /// ```
+ pub fn normalized_damerau_levenshtein(a: &str, b: &str) -> f64 {
+-    if a.is_empty() && b.is_empty() {
+-        return 1.0;
+-    }
+-
+     let len1 = a.chars().count();
+     let len2 = b.chars().count();
+     let dist = damerau_levenshtein_impl(a.chars(), len1, b.chars(), len2);

@@ -1,0 +1,1 @@
+`jaro_winkler` gives a score that is too high for strings that are not very similar but start with the same letters. For example `jaro_winkler("abxxxxxxxxx", "abyyyyyyyyy")` is much larger than `jaro` of the same pair, but the Jaro-Winkler definition only boosts a pair whose Jaro similarity is already high (above 0.7). Fix it for both `jaro_winkler` and `generic_jaro_winkler`.

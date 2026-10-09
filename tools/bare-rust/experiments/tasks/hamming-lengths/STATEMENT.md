@@ -1,0 +1,1 @@
+`hamming` and `generic_hamming` silently accept sequences of different lengths: `hamming("ham", "hamming")` returns `Ok(0)`. It should return `Err(StrSimError::DifferentLengthArgs)` when the lengths differ, whichever of the two is longer.

@@ -120,6 +120,24 @@
       "result": { "type": "list<I::Item> as 'Vec'" }
     },
     {
+      "kind": "function",
+      "name": "lazy_buffer::LazyBuffer::get_array",
+      "visible": "public",
+      "generics": [{ "name": "const K", "bounds": ["usize"] }],
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<LazyBuffer<I>>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        {
+          "name": "indices",
+          "type": "list<u64 as 'usize'> where size(value) == K as 'std::primitive::array'"
+        }
+      ],
+      "result": { "type": "list<I::Item> where size(value) == K as 'std::primitive::array'" }
+    },
+    {
       "kind": "impl",
       "name": "lazy_buffer::LazyBuffer as Index",
       "generics": [{ "name": "I", "bounds": [], "where": ["Iterator"] }, { "name": "J", "bounds": [] }],

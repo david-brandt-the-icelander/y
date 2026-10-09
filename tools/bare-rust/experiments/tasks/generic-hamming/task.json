@@ -1,0 +1,6 @@
+{
+ "id": "generic-hamming",
+ "crate": "strsim",
+ "kind": "signature",
+ "e5": false
+}

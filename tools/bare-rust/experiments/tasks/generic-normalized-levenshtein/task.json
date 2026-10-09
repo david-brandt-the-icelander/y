@@ -1,0 +1,6 @@
+{
+ "id": "generic-normalized-levenshtein",
+ "crate": "strsim",
+ "kind": "signature",
+ "e5": false
+}

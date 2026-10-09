@@ -183,26 +183,6 @@
         { "name": "g", "type": "G" }
       ],
       "result": { "type": "Self::Item?" }
-    },
-    {
-      "kind": "impl",
-      "name": "peeking_take_while::::std::slice::Iter as PeekingNext",
-      "generics": [{ "name": "'a", "bounds": [] }, { "name": "T", "bounds": [] }],
-      "self": "::std::slice::Iter<'a, T>"
-    },
-    {
-      "kind": "function",
-      "name": "peeking_take_while::::std::slice::Iter as PeekingNext::peeking_next",
-      "generics": [{ "name": "F", "bounds": [], "where": ["FnOnce(&Self::Item) -> bool"] }],
-      "params": [
-        {
-          "name": "self",
-          "type": "ref<::std::slice::Iter<'a, T>>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
-        },
-        { "name": "accept", "type": "F" }
-      ],
-      "result": { "type": "Self::Item?" }
     }
   ]
 }

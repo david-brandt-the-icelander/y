@@ -1,0 +1,13 @@
+diff -ruN a/lib.rs b/lib.rs
+--- a/lib.rs	2026-10-09 08:06:03.625050443 +0000
++++ b/lib.rs	2026-10-09 08:13:06.066613985 +0000
+@@ -123,8 +123,8 @@
+         let FnvHasher(mut hash) = *self;
+ 
+         for byte in bytes {
+-            hash ^= u64::from(*byte);
+             hash = hash.wrapping_mul(PRIME);
++            hash ^= u64::from(*byte);
+         }
+ 
+         *self = FnvHasher(hash);

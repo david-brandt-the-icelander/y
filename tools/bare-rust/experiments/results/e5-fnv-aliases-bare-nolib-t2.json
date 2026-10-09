@@ -1,0 +1,37 @@
+{
+ "run_id": "e5-fnv-aliases-bare-nolib-t2",
+ "experiment": "e5",
+ "task": "fnv-aliases",
+ "arm": "bare-nolib",
+ "trial": 2,
+ "kind": "signature",
+ "e5": true,
+ "workspace": "/tmp/claude-0/-home-user-y/9673def1-2027-5ffe-9d6e-8413dc645c64/scratchpad/runs/e5-fnv-aliases-bare-nolib-t2",
+ "rs_files_in_bare": [],
+ "weaves": true,
+ "weave_summary": "weave: 1 files woven, 0 not woven, 0 weave errors; 0 unbound entries (locals 0, hints 0, subjects 0); cargo check after 2 runs: 3 mut inserted, 0 holes undetermined, 0 other errors, 0 warnings",
+ "compiles": true,
+ "hidden_compiled": true,
+ "tests_passed": 3,
+ "tests_failed": 0,
+ "tests_total": 3,
+ "pass": true,
+ "json_entries_changed": 3,
+ "json_leaf_edits": 15,
+ "json_files_changed": 1,
+ "lines_changed": 14,
+ "agent": {
+  "done": true,
+  "attempts": 7,
+  "json_edits": 3,
+  "library_promises_relied_on": [],
+  "notes": "Aliases need an alias subject in JSON (generics as objects with name, type as target) plus a bodyless `type X;` placeholder in .brs; `= _` and a full alias in .brs both fail to parse."
+ },
+ "tokens": {
+  "input": 619146,
+  "output": 371,
+  "total": 619517
+ },
+ "duration_s": null,
+ "model": "sonnet"
+}

@@ -19,6 +19,8 @@ pub struct Diag {
     pub rendered: String,
     /// Suggested replacements: (file, start, end, replacement, applicability).
     pub fixes: Vec<Fix>,
+    /// The other spans of the diagnostic that lie in the crate: (file, start, end, label).
+    pub secondary: Vec<(String, usize, usize, String)>,
 }
 
 #[derive(Clone, Debug)]
@@ -124,6 +126,12 @@ fn parse(stdout: &str, dir: &Path) -> Vec<Diag> {
             col: loc.as_ref().and_then(|s| s["column_start"].as_u64()).unwrap_or(0) as usize,
             rendered: m["rendered"].as_str().unwrap_or("").to_string(),
             fixes: fx,
+            secondary: spans
+                .iter()
+                .filter(|s| s["is_primary"] != true)
+                .filter_map(|s| local(s, dir))
+                .map(|s| (s["file_name"].as_str().unwrap_or("").to_string(), s["byte_start"].as_u64().unwrap_or(0) as usize, s["byte_end"].as_u64().unwrap_or(0) as usize, s["label"].as_str().unwrap_or("").to_string()))
+                .collect(),
         };
         let dup = out.iter().any(|o| o.key() == d.key() && o.start == d.start && o.end == d.end);
         if !dup {

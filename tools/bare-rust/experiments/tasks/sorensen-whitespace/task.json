@@ -1,0 +1,6 @@
+{
+ "id": "sorensen-whitespace",
+ "crate": "strsim",
+ "kind": "body",
+ "e5": true
+}
