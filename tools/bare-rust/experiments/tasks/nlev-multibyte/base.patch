@@ -1,0 +1,12 @@
+diff -ruN a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs	2026-10-09 08:06:03.624547897 +0000
++++ b/src/lib.rs	2026-10-09 08:13:06.055762745 +0000
+@@ -282,7 +282,7 @@
+     if a.is_empty() && b.is_empty() {
+         return 1.0;
+     }
+-    1.0 - (levenshtein(a, b) as f64) / (a.chars().count().max(b.chars().count()) as f64)
++    1.0 - (levenshtein(a, b) as f64) / (a.len().max(b.len()) as f64)
+ }
+ 
+ /// Like Levenshtein but allows for adjacent transpositions. Each substring can

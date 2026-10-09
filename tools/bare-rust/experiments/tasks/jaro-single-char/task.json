@@ -1,0 +1,6 @@
+{
+ "id": "jaro-single-char",
+ "crate": "strsim",
+ "kind": "body",
+ "e5": true
+}

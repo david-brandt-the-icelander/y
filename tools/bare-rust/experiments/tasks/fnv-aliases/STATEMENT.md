@@ -1,0 +1,1 @@
+Using `FnvHasher` with the standard collections is clumsy: one has to spell out `HashMap<K, V, BuildHasherDefault<FnvHasher>>`. Please add the type aliases `FnvHashMap<K, V>` and `FnvHashSet<T>` (available when the `std` feature is on) and `FnvBuildHasher` for the builder.

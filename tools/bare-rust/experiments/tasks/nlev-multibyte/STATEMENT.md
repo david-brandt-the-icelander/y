@@ -1,0 +1,1 @@
+`normalized_levenshtein` gives wrong scores for non-ASCII text: `normalized_levenshtein("löwen", "lowen")` should be 0.8 (one substitution out of five characters) but we return about 0.83. The edit distance itself is right; the normalisation is not.

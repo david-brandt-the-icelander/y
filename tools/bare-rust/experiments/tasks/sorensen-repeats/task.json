@@ -1,0 +1,6 @@
+{
+ "id": "sorensen-repeats",
+ "crate": "strsim",
+ "kind": "body",
+ "e5": true
+}

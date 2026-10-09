@@ -1,0 +1,1 @@
+`jaro` overcounts transpositions: `jaro("MARTHA", "MARHTA")` should be 0.9444 (the textbook value) but we return 0.8889, and `jaro_winkler` inherits the problem (textbook 0.9611). `generic_jaro` has the same fault.

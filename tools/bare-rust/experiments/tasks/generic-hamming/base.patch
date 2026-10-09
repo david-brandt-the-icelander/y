@@ -1,0 +1,52 @@
+diff -ruN a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs	2026-10-09 08:06:03.624547897 +0000
++++ b/src/lib.rs	2026-10-09 08:13:06.128074945 +0000
+@@ -48,15 +48,18 @@
+ 
+ pub type HammingResult = Result<usize, StrSimError>;
+ 
+-/// Calculates the number of positions in the two sequences where the elements
+-/// differ. Returns an error if the sequences have different lengths.
+-pub fn generic_hamming<Iter1, Iter2, Elem1, Elem2>(a: Iter1, b: Iter2) -> HammingResult
+-where
+-    Iter1: IntoIterator<Item = Elem1>,
+-    Iter2: IntoIterator<Item = Elem2>,
+-    Elem1: PartialEq<Elem2>,
+-{
+-    let (mut ita, mut itb) = (a.into_iter(), b.into_iter());
++/// Calculates the number of positions in the two strings where the characters
++/// differ. Returns an error if the strings have different lengths.
++///
++/// ```
++/// use strsim::{hamming, StrSimError::DifferentLengthArgs};
++///
++/// assert_eq!(Ok(3), hamming("hamming", "hammers"));
++///
++/// assert_eq!(Err(DifferentLengthArgs), hamming("hamming", "ham"));
++/// ```
++pub fn hamming(a: &str, b: &str) -> HammingResult {
++    let (mut ita, mut itb) = (a.chars(), b.chars());
+     let mut count = 0;
+     loop {
+         match (ita.next(), itb.next()) {
+@@ -71,20 +74,6 @@
+     }
+ }
+ 
+-/// Calculates the number of positions in the two strings where the characters
+-/// differ. Returns an error if the strings have different lengths.
+-///
+-/// ```
+-/// use strsim::{hamming, StrSimError::DifferentLengthArgs};
+-///
+-/// assert_eq!(Ok(3), hamming("hamming", "hammers"));
+-///
+-/// assert_eq!(Err(DifferentLengthArgs), hamming("hamming", "ham"));
+-/// ```
+-pub fn hamming(a: &str, b: &str) -> HammingResult {
+-    generic_hamming(a.chars(), b.chars())
+-}
+-
+ /// Calculates the Jaro similarity between two sequences. The returned value
+ /// is between 0.0 and 1.0 (higher value means more similar).
+ pub fn generic_jaro<'a, 'b, Iter1, Iter2, Elem1, Elem2>(a: &'a Iter1, b: &'b Iter2) -> f64

@@ -1,0 +1,1 @@
+`StrSimError` cannot be used with `?` in functions returning `Box<dyn std::error::Error>` and cannot be printed with `{}`. Please make it a proper error type: `Display` with the message "Differing length arguments provided" and `std::error::Error`.
