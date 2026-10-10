@@ -202,8 +202,8 @@ cannot check is reported as such for every subject of that host, never silently 
   when it is present. `where` always filters: the values of a type here, the rows of a table in an expression (§ 4).
 - **Units and quantities:** `unit m`, `unit s`; `quantity Distance : decimal in m`; arithmetic checks dimensions, and
   conversion between units is an explicit named function.
-- **Generics:** `for T where T: Comparable` binds a type parameter and its bounds; bounds name interfaces, so they are
-  checked as behavioural subtyping (§ 6.10). `for 'a` binds a lifetime, and a host subject of any kind may bind both
+- **Generics:** a subject with type parameters is a template (§ 3.5). `for T where T: Comparable` binds a type
+  parameter and its bounds; bounds name interfaces, so they are checked as behavioural subtyping (§ 6.10). `for 'a` binds a lifetime, and a host subject of any kind may bind both
   (§ 6.11). **Existential types:** `some I` is a value of one type, fixed by the subject, that implements `I`; `any I` is a
   value of any type that implements `I` (§ 6.11).
 - **Representation.** A type in the language says which values are allowed. When a host needs a representation the
@@ -211,6 +211,31 @@ cannot check is reported as such for every subject of that host, never silently 
 
 A host type maps onto these through its profile: T-SQL `INT` to `i32`, `NVARCHAR(50)` to `text where utf16_length(value)
 <= 50`, C# `int?` to `i32?`, Rust `Option<u64>` to `u64?`, Python `int` to `int`.
+
+### 3.5 Templates and realizations
+
+A subject with type parameters is a **template**, not a type or a function. Writing it with arguments makes a
+**realization**: `Vec<u8>` is a *realized type*, `parse<u32>` a *realized function*. A realization is a subject of its
+own, made by putting each argument in place of its parameter everywhere in the template: its fields, its signature and
+its clauses. It exists as soon as something uses it; nothing declares it. Two uses with the same arguments are the
+same realization.
+
+- **A realized type** is a type like any other: `Vec<u8>` has the fields and methods of `Vec` with `u8` for `T`.
+- **A realized function** has the template's signature with the arguments in place: `parse<u32>` is
+  `(self: ref<str>) -> Result<u32, ParseIntError>`. A method of a realized type is realized with it: `Vec<u8>::push`.
+- **Bounds** say which arguments a template accepts: `T: Ord` is a condition for the realization to exist. A use that
+  breaks it does not realize anything; it is an error.
+- **Clauses.** A clause of the template holds of every realization, with the arguments in place. A clause can also be
+  stated of one realization alone, where it promises more than the template does.
+- **Names.** A realization can be named, and is named where a body uses it with arguments written out (§ 11.2):
+  `type Bytes = Vec<u8>`, `realize parse_port = 'std::primitive::str::parse'<u16>`. A use whose arguments the host
+  infers states no type, and needs no name.
+- **Hosts.** How a host makes realizations is a fact of the host, not of the meaning. Rust and C++ generate code for each
+  one when they build. C# makes them at run time. Java and TypeScript check each one and then erase them to one type.
+  The meaning is the same in each: every realization is a subject.
+
+A trait object or interface value (`any I`, § 6.11) is not a template: it is one value whose type is chosen at run
+time, and nothing is realized for it.
 
 ---
 
@@ -1684,7 +1709,7 @@ path that breaks it before it is enforced.
 - **Refinement types.** `type Quantity = i64 where value >= 0` and `type ShipName = text where …` are named and reused
   in every signature.
 - **Generics.** `for T where T: Comparable` binds a type parameter; a clause stated for every `T` applies to every
-  instance.
+  realization (§ 3.5).
 - **Interfaces.** Clauses on an `interface` bind every implementation, under the rules of behavioural subtyping
   (§ 6.10). "Every implementation of `Repository.save` is idempotent by its id" is one clause. What one implementation
   adds is an `impl` subject (§ 6.11).
@@ -1835,6 +1860,12 @@ its file, and two rules hold:
 
 `weave` therefore prints and never infers: the file is authoritative, and where it says `access self : write
 exclusive`, `weave` writes `&mut self`. Each profile lists its holes, and how each is filled.
+
+**Every written type has a name.** A type that the host's source writes in the middle of an expression has nothing to
+attach to there, so the bare form names the value or the realization that carries it: a cast or a literal's type goes
+onto a local (`let n = len;` with `n` a cast local to `f64`), a closure's parameter types are keyed by the closure's
+name, and a turbofish is a realization the body names (`s.parse_port()` for `s.parse::<u16>()`, § 3.5). The names are
+the file's, so the body reads as if the host had no generics at the place of use.
 
 | Host | Moves to the constraint file | Stays in the bare body | Woven into |
 | --- | --- | --- | --- |

@@ -133,7 +133,8 @@ fn body_stuff(mut a: u8, (mut b, c): (u8, u8)) -> u32 {
 "#;
     let (b, j) = roundtrip(src);
     // Casts and suffixed literals are bound (`bind`); the ones inside a macro call are marked as Rust text.
-    assert!(!b.contains("as _") && b.contains("collect::<Vec<_>>()") && b.contains("Vec::<_>::new()"), "{b}");
+    // A turbofish that states a type is a realization the body names (`collect_vec_u8`, `VecU8`).
+    assert!(!b.contains("as _") && !b.contains("::<") && b.contains("(0..3).collect_vec_u8()") && b.contains("VecU8::new()"), "{b}");
     assert!(b.contains("let a_u32 = a;") && b.contains("let x = a_u32 + k1_u8_u32;"), "{b}");
     assert!(b.contains("rust! { assert_eq!(x as u32, 1u32) };"), "{b}");
     let h = &j["holes"]["demo::body_stuff"];
@@ -143,7 +144,9 @@ fn body_stuff(mut a: u8, (mut b, c): (u8, u8)) -> u32 {
     assert_eq!(h["locals"]["a_u32"], serde_json::json!({"type": "u32", "cast": true}));
     assert_eq!(h["locals"]["k1_u8"], "u8");
     assert_eq!(h["locals"]["k2_5_f32"], "f32");
-    assert!(h["hints"].as_array().unwrap().iter().all(|x| x["kind"] != "literal" && x["kind"] != "cast"));
+    assert!(h["hints"].is_null(), "{h}");
+    assert_eq!(h["realizations"]["collect_vec_u8"], serde_json::json!({"template": "collect", "args": ["list<u8> as 'Vec'"]}));
+    assert_eq!(h["realizations"]["VecU8"], serde_json::json!({"template": "Vec", "args": ["u8"]}));
     assert!(j["subjects"].as_array().unwrap().iter().any(|s| s["name"] == "demo::body_stuff::nested"));
     assert!(j["subjects"].as_array().unwrap().iter().any(|s| s["name"] == "demo::body_stuff::Local"));
 }
@@ -299,14 +302,15 @@ fn stale_entries_are_reported_as_unbound() {
     use bare_rust::weave::{weave_traced, Unbound};
     let src = "fn f(a: u8) -> u8 {\n    let x: u16 = 1;\n    let y: u32 = 2;\n    (0..a).sum::<u8>() + y as u8\n}\nfn g() {}\n";
     let (b, mut j) = strip(src, "demo 0.1.0", "src/lib.rs").unwrap();
-    // A renamed local, one hint too many, a duplicate of a hint, a subject with no item, holes of a function that is gone.
+    // A renamed local, a hint with no site, a realization the body no longer names, a subject with no item, holes of a
+    // function that is gone.
     let h = &mut j["holes"]["demo::f"];
+    assert_eq!(h["realizations"]["sum_u8"], serde_json::json!({"template": "sum", "args": ["u8"]}));
     let ty = h["locals"]["x"].take();
     h["locals"].as_object_mut().unwrap().remove("x");
     h["locals"]["z"] = ty;
-    h["hints"].as_array_mut().unwrap().push(serde_json::json!({"kind": "targ", "n": 5, "type": "u64"}));
-    let dup = h["hints"][0].clone();
-    h["hints"].as_array_mut().unwrap().push(dup);
+    h["hints"] = serde_json::json!([{"kind": "targ", "n": 5, "type": "u64"}]);
+    h["realizations"]["sum_u64"] = serde_json::json!({"template": "sum", "args": ["u64"]});
     let g = subject(&j, "demo::g").clone();
     let mut gone = g.clone();
     gone["name"] = "demo::h".into();
@@ -317,14 +321,14 @@ fn stale_entries_are_reported_as_unbound() {
     assert_eq!(
         w.unbound,
         vec![
+            u("unbound realization", "demo::f", "sum_u64"),
             u("unbound local", "demo::f", "z"),
             u("unbound hint", "demo::f", "targ #5"),
-            u("unbound hint", "demo::f", "targ #0"),
             u("unbound subject", "demo::h", ""),
             u("unbound subject", "demo::k", ""),
         ]
     );
-    assert_eq!(w.unbound[0].show(), "unbound local `z` of `demo::f`");
+    assert_eq!(w.unbound[1].show(), "unbound local `z` of `demo::f`");
     assert_eq!(w.unbound[3].show(), "unbound subject `demo::h`");
     // Nothing stale: no warning.
     let (b, j) = strip(src, "demo 0.1.0", "src/lib.rs").unwrap();
@@ -690,4 +694,32 @@ fn a_type_of_the_crate_shadows_a_standard_one_of_the_same_name() {
     let (_, j) = roundtrip(src);
     assert!(subject(&j, "demo::Holder")["clauses"].is_null(), "{}", j["subjects"]);
     assert!(subject(&j, "demo::Kind")["clauses"].is_null(), "{}", j["subjects"]);
+}
+
+#[test]
+fn a_turbofish_is_a_realization_the_body_names() {
+    // A method (`parse::<u16>`), a function by path (`std::mem::size_of::<u64>`), a type in a path (`Vec::<u8>`); the
+    // same template and arguments twice are one realization; a turbofish of only `_` states nothing and stays.
+    let src = r#"
+pub fn f(s: &str, v: Vec<i32>) -> Result<usize, std::num::ParseIntError> {
+    let port: u16 = s.parse::<u16>()?;
+    let n = std::mem::size_of::<u64>();
+    let mut bytes = Vec::<u8>::new();
+    bytes.push(1);
+    let evens = v.iter().filter(|x| *x % 2 == 0).collect::<Vec<_>>();
+    let again = v.iter().collect::<Vec<_>>();
+    let r = Ok::<_, ()>(1).unwrap_or(0) + Ok::<_, _>(2).unwrap_or(0);
+    Ok(port as usize + n + bytes.len() + evens.len() + again.len() + r as usize)
+}
+"#;
+    let (b, j) = roundtrip(src);
+    for want in ["s.parse_u16()?", "let n = size_of_u64();", "VecU8::new()", ".collect_vec();", "ok_unit(1)", "Ok::<_, _>(2)"] {
+        assert!(b.contains(want), "missing `{want}` in\n{b}");
+    }
+    let r = &j["holes"]["demo::f"]["realizations"];
+    assert_eq!(r["parse_u16"], serde_json::json!({"template": "parse", "args": ["u16"]}));
+    assert_eq!(r["size_of_u64"], serde_json::json!({"template": "std::mem::size_of", "args": ["u64"]}));
+    assert_eq!(r["VecU8"], serde_json::json!({"template": "Vec", "args": ["u8"]}));
+    assert_eq!(r["collect_vec"], serde_json::json!({"template": "collect", "args": ["list<_> as 'Vec'"]}));
+    assert_eq!(r.as_object().unwrap().len(), 5, "{r}");
 }

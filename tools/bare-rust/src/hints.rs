@@ -448,7 +448,7 @@ pub fn parse_hint_at(src: &str, json: &Value) -> Option<((usize, usize), String)
                 let subject = func.as_ref().map_or("<fn path>".to_string(), |f| f.0.clone());
                 let holes = json!({ subject: { "locals": { key.clone(): constraint_type(ty_text, krate, module) } } });
                 format!(
-                    "a local's type does not go in the bare body; write `let {} ...` without `: {}` and add the type to the constraint file as  \"holes\": {}  (merge it into the \"holes\" entry of the function if there is one), or write a turbofish such as collect::<T>()",
+                    "a local's type does not go in the bare body; write `let {} ...` without `: {}` and add the type to the constraint file as  \"holes\": {}  (merge it into the \"holes\" entry of the function if there is one)",
                     src[pat.0..pat.1].trim(),
                     ty_text,
                     entry(&holes)

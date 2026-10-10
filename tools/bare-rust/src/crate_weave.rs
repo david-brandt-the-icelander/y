@@ -65,10 +65,12 @@ pub struct HoleReport {
 impl HoleReport {
     pub fn show(&self) -> String {
         let what = match &self.key {
+            Some(k) if self.kind == "realization" => format!("realization `{k}`"),
             Some(k) => format!("local `{k}`"),
             None => format!("{} #{}", self.kind, self.n),
         };
         let path = match &self.key {
+            Some(k) if self.kind == "realization" => format!("holes[\"{}\"].realizations[\"{k}\"].args", self.subject),
             Some(k) => format!("holes[\"{}\"].locals[\"{k}\"]", self.subject),
             None => format!("holes[\"{}\"].hints += {{kind: {}, n: {}, type: T}}", self.subject, self.kind, self.n),
         };
@@ -458,6 +460,18 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
                             dropped.insert(id);
                         }
                     }
+                    // A realization keeps its template and drops its arguments: `parse::<_>()`.
+                    let mut reals = serde_json::Map::new();
+                    for (k, v) in h["realizations"].as_object().into_iter().flatten() {
+                        let id = hole_id(sub, "realization", Some(k), 0);
+                        let mut v = v.clone();
+                        if !o.keep.contains(&id) {
+                            let n = v["args"].as_array().map_or(0, Vec::len);
+                            v["args"] = serde_json::json!(vec!["_"; n]);
+                            dropped.insert(id);
+                        }
+                        reals.insert(k.clone(), v);
+                    }
                     for x in h["hints"].as_array().into_iter().flatten() {
                         let id = hole_id(sub, x["kind"].as_str().unwrap_or(""), None, x["n"].as_u64().unwrap_or(0) as usize);
                         if o.keep.contains(&id) {
@@ -469,6 +483,9 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
                     let mut e = serde_json::Map::new();
                     if !locals.is_empty() {
                         e.insert("locals".into(), Value::Object(locals));
+                    }
+                    if !reals.is_empty() {
+                        e.insert("realizations".into(), Value::Object(reals));
                     }
                     if !hints.is_empty() {
                         e.insert("hints".into(), Value::Array(hints));

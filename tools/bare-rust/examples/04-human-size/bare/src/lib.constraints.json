@@ -100,6 +100,8 @@
     { "kind": "function", "name": "human_size::tests::invalid_suffix", "params": [] }
   ],
   "holes": {
-    "human_size::parse_human_readable_size": { "hints": [{ "kind": "targ", "n": 0, "type": "u64" }] }
+    "human_size::parse_human_readable_size": {
+      "realizations": { "parse_u64": { "template": "parse", "args": ["u64"] } }
+    }
   }
 }

@@ -86,6 +86,9 @@ pub fn json_path(json: &Value, o: &Origin) -> Option<String> {
             if let Some(key) = o.slot.strip_prefix("locals[").and_then(|s| s.strip_suffix(']')) {
                 return Some(format!("{base}/locals/{}", esc(key)));
             }
+            if let Some(key) = o.slot.strip_prefix("realizations[").and_then(|s| s.strip_suffix(']')) {
+                return Some(format!("{base}/realizations/{}/args", esc(key)));
+            }
             let inner = o.slot.strip_prefix("hints[")?.strip_suffix(']')?;
             let (kind, n) = inner.split_once(" #")?;
             let n: u64 = n.parse().ok()?;
@@ -185,6 +188,7 @@ pub fn map_hole(files: &[WovenFile], h: &HoleReport) -> MappedError {
             kind: Kind::Hole,
             subject: h.subject.clone(),
             slot: match &h.key {
+                Some(k) if h.kind == "realization" => format!("realizations[{k}]"),
                 Some(k) => format!("locals[{k}]"),
                 None => format!("hints[{} #{}]", h.kind, h.n),
             },
@@ -193,6 +197,7 @@ pub fn map_hole(files: &[WovenFile], h: &HoleReport) -> MappedError {
         json_path(&wf.json, &o).or_else(|| {
             let base = format!("/holes/{}", esc(&h.subject));
             Some(match &h.key {
+                Some(k) if h.kind == "realization" => format!("{base}/realizations/{}/args", esc(k)),
                 Some(k) => format!("{base}/locals/{}", esc(k)),
                 None => format!("{base}/hints/-"),
             })

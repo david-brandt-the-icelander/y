@@ -108,18 +108,20 @@ that kept such a construct ("C#'s `ref`, Rust's trait objects") whole in the bod
 **Every constraint has a binding.** A cast or a literal's suffix states a type in the middle of an expression, where
 nothing is named for it to attach to. `strip` first binds each one (`bind`): the value initialises a typed `let`, before
 its statement or, where the statement would compute it when the source might not, in a new block in that place; and
-anything earlier in the statement that has an effect is bound first, in order. The local then carries the type (a
-cast local, `{"type": "u64", "cast": true}`, weaves `let x = e;` back to `let x: u64 = e as u64;`). The names are
-mechanical, and are renamed once by an agent or a person who knows what the values are. A mid-expression form is an
-obfuscation in this view: the round trip is exact on the bound source, not on the original. A macro call whose tokens
-state a type is kept as Rust text, `rust! { ... }`, and should be rewritten by hand to name the value first. A
-closure with typed parameters is named the same way, and its parameters are keyed by that name (`by_len.a`); a
-closure's return type goes onto a local in its body. A value that releases something at its end (a type with
-`lifetime self released at end`, language § 7.3: a lock guard, a file) keeps its end where the source has it: `bind`
-names it and puts the statement in a block that ends where the statement did. What cannot be bound yet (a turbofish, a cast to a non-primitive, a constant context) keeps `_` in the body and a
-positional hint; `_` in casts and type arguments is valid Rust, so the bare form keeps the target's syntax and only its
-types are erased. The proof of concept leaves `Rc`, `Arc`, `Box` and trait objects in the body as written and
-counts them, and keeps every `.unwrap()` and `.expect()` in the body, as decided (§ 3.2).
+anything earlier in the statement that has an effect is bound first, in order. The local then carries the type (a cast
+local, `{"type": "u64", "cast": true}`, weaves `let x = e;` back to `let x: u64 = e as u64;`). The names are mechanical,
+and are renamed once by an agent or a person who knows what the values are. A mid-expression form is an obfuscation in
+this view: the round trip is exact on the bound source, not on the original. A macro call whose tokens state a type is
+kept as Rust text, `rust! { ... }`, and should be rewritten by hand to name the value first. A closure with typed
+parameters is named the same way, and its parameters are keyed by that name (`by_len.a`); a closure's return type goes
+onto a local in its body. A value that releases something at its end (a type with `lifetime self released at end`,
+language § 7.3: a lock guard, a file) keeps its end where the source has it: `bind` names it and puts the statement in a
+block that ends where the statement did. A turbofish is a realization of a template (language § 3.5), named in the body:
+`s.parse_u16()` for `s.parse::<u16>()`, with `{"template": "parse", "args": ["u16"]}` in the function's `holes`. What
+cannot be bound yet (a cast to a non-primitive, a constant context) keeps `_` in the body and a positional hint; `_` in
+casts and type arguments is valid Rust, so the bare form keeps the target's syntax and only its types are erased. The
+proof of concept leaves `Rc`, `Arc`, `Box` and trait objects in the body as written and counts them, and keeps every
+`.unwrap()` and `.expect()` in the body, as decided (§ 3.2).
 
 ### 2.3 The file is authoritative, and the weaver does no type inference
 

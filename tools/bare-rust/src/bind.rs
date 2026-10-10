@@ -46,7 +46,9 @@ pub struct Left {
 #[derive(Default)]
 pub struct Release {
     pub types: HashSet<String>,
+    /// Methods (called as `x.lock()`) by name, and calls by path (`File::open`, or a free function's name).
     pub calls: HashSet<String>,
+    pub paths: HashSet<String>,
     /// The source's own types with an `impl Drop`.
     pub drops: HashSet<String>,
 }
@@ -73,7 +75,13 @@ impl Release {
         }
         for s in subs.iter().filter(|s| s["kind"] == "function") {
             if s["result"]["type"].as_str().is_some_and(|t| mentions(t, &self.types)) {
-                self.calls.insert(last(s["name"].as_str().unwrap_or("")).to_string());
+                let name = s["name"].as_str().unwrap_or("");
+                let segs: Vec<&str> = name.split("::").collect();
+                let n = segs.len();
+                if s["params"][0]["name"] == "self" {
+                    self.calls.insert(segs[n - 1].to_string());
+                }
+                self.paths.insert(if n >= 2 { format!("{}::{}", segs[n - 2], segs[n - 1]) } else { name.to_string() });
             }
         }
     }
@@ -94,7 +102,7 @@ impl Release {
     /// and a function whose result type mentions one.
     pub fn of_source(root: Node, src: &str) -> Release {
         let std = Release::std();
-        let mut r = Release { types: std.types.clone(), calls: std.calls.clone(), drops: HashSet::new() };
+        let mut r = Release { types: std.types.clone(), calls: std.calls.clone(), paths: std.paths.clone(), drops: HashSet::new() };
         let mut items = vec![];
         fn walk<'a>(n: Node<'a>, out: &mut Vec<Node<'a>>) {
             if matches!(n.kind(), "impl_item" | "struct_item" | "enum_item" | "function_item" | "function_signature_item" | "type_item") {
@@ -153,7 +161,23 @@ impl Release {
         for f in items.iter().filter(|i| matches!(i.kind(), "function_item" | "function_signature_item")) {
             if let (Some(n), Some(t)) = (f.child_by_field_name("name"), f.child_by_field_name("return_type")) {
                 if mentions(text(t, src), &r.types) {
-                    r.calls.insert(text(n, src).to_string());
+                    let name = text(n, src).to_string();
+                    let method = f.child_by_field_name("parameters").is_some_and(|ps| named_children(ps).iter().any(|p| p.kind() == "self_parameter"));
+                    // A function of an impl is called by its type's path; a free one by its name.
+                    let owner = {
+                        let mut a = f.parent();
+                        while let Some(x) = a.filter(|x| x.kind() != "impl_item") {
+                            a = x.parent();
+                        }
+                        a.and_then(|i| i.child_by_field_name("type")).map(|t| last(text(t, src)).to_string())
+                    };
+                    if method {
+                        r.calls.insert(name.clone());
+                    }
+                    r.paths.insert(match owner {
+                        Some(o) => format!("{o}::{name}"),
+                        None => name,
+                    });
                 }
             }
         }
@@ -282,7 +306,7 @@ fn step(body: Node, src: &str, rel: &Release) -> Step {
     Step::Done(left)
 }
 
-fn idents(s: &str) -> HashSet<String> {
+pub(crate) fn idents(s: &str) -> HashSet<String> {
     let mut out = HashSet::new();
     let mut cur = String::new();
     for c in s.chars().chain(std::iter::once(' ')) {
@@ -513,7 +537,8 @@ fn plan(e: Node, what: &'static str, ty: &str, src: &str, used: &mut HashSet<Str
     if !held.is_empty() && matches!(anchor, Anchor::Boundary(_)) {
         return Err("a value that releases something at its end, where the statement might not run");
     }
-    for (x, _) in earlier(e, region) {
+    // A literal is a constant: binding it first changes no order and ends nothing.
+    for (x, _) in if what == "cast" { earlier(e, region) } else { vec![] } {
         if !pure(x) && !releasing(x, src, rel).is_empty() {
             return Err("something before it in the statement holds a value that releases something at its end");
         }
@@ -632,13 +657,22 @@ fn releasing<'a>(e: Node<'a>, src: &str, rel: &Release) -> Vec<Node<'a>> {
     let mut out: Vec<Node> = vec![];
     for c in cs {
         let f = c.child_by_field_name("function");
-        let name = match f.map(|f| f.kind()) {
-            Some("field_expression") => f.and_then(|f| f.child_by_field_name("field")).map(|n| text(n, src)),
-            Some("identifier") | Some("scoped_identifier") => f.map(|f| last(text(f, src))),
-            Some("generic_function") => f.and_then(|f| f.child_by_field_name("function")).map(|n| last(text(n, src))),
-            _ => None,
+        // A method by its name; a call by path by its last two segments (`Box::new` is not `BufWriter::new`).
+        let by_path = |t: &str| {
+            let segs: Vec<&str> = t.split("::").map(|x| x.split('<').next().unwrap_or(x).trim()).collect();
+            let n = segs.len();
+            rel.paths.contains(&if n >= 2 { format!("{}::{}", segs[n - 2], segs[n - 1]) } else { segs[0].to_string() })
         };
-        if !name.is_some_and(|n| rel.calls.contains(n)) {
+        let hit = match f.map(|f| f.kind()) {
+            Some("field_expression") => f.and_then(|f| f.child_by_field_name("field")).is_some_and(|n| rel.calls.contains(text(n, src))),
+            Some("identifier") | Some("scoped_identifier") => f.is_some_and(|f| by_path(text(f, src))),
+            Some("generic_function") => f.and_then(|f| f.child_by_field_name("function")).is_some_and(|n| match n.kind() {
+                "field_expression" => n.child_by_field_name("field").is_some_and(|m| rel.calls.contains(text(m, src))),
+                _ => by_path(text(n, src)),
+            }),
+            _ => false,
+        };
+        if !hit {
             continue;
         }
         let mut g = c;

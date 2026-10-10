@@ -192,11 +192,15 @@ fn kind_counts(files: &[crate::crate_weave::WovenFile]) -> (BTreeMap<String, usi
             for (_, v) in m {
                 let l = v["locals"].as_object().map_or(0, |o| o.len());
                 let h = v["hints"].as_array().map_or(0, Vec::len);
-                if l + h > 0 {
+                let r = v["realizations"].as_object().map_or(0, |o| o.len());
+                if l + h + r > 0 {
                     fns += 1;
                 }
                 if l > 0 {
                     *by.entry("local".to_string()).or_insert(0) += l;
+                }
+                if r > 0 {
+                    *by.entry("realization".to_string()).or_insert(0) += r;
                 }
                 for x in v["hints"].as_array().into_iter().flatten() {
                     *by.entry(x["kind"].as_str().unwrap_or("?").to_string()).or_insert(0) += 1;
@@ -271,6 +275,7 @@ fn check4(bare: &Path, dir: &Path, o: &CheckOpts, name: &str, originals: &CrateW
         originals.files.iter().filter(|f| f.bare_name() == h.file).any(|f| {
             let e = &f.json["holes"][&h.subject];
             match &h.key {
+                Some(k) if h.kind == "realization" => e["realizations"][k]["args"].as_array().is_some_and(|a| a.iter().any(|x| x != "_")),
                 Some(k) => !e["locals"][k].is_null(),
                 None => e["hints"].as_array().into_iter().flatten().any(|x| x["kind"] == h.kind && x["n"].as_u64() == Some(h.n as u64)),
             }

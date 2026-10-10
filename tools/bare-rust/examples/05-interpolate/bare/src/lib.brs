@@ -122,7 +122,7 @@ fn find_cap_ref(replacement) {
         cap_end += 1;
     }
     Some(CaptureRef {
-        cap: match cap.parse::<_>() {
+        cap: match cap.parse_u32() {
             Ok(i) => { let i_usize = i; Ref::Number(i_usize) },
             Err(_) => Ref::Named(cap),
         },

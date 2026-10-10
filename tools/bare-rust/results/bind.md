@@ -1,14 +1,3 @@
-After `bind`, the only positional hints left in any corpus are 12 turbofishes (`targ`): 1 in strsim, 2 in the
-examples, 9 in the tool's own source. Every closure parameter type (151, all in the tool's source) is keyed by the
-closure's name, and every closure return type (19) is carried by a local in the closure's body:
-
-- **Closures with typed parameters get a name.** `v.retain(|s: &String| s.len() > n)` becomes
-  `let retain_fn = |s: &String| s.len() > n;` and then `v.retain(retain_fn)`. The parameter's type is keyed
-  `"retain_fn.s"` in `locals`. Most such closures were already named by a `let`, and only 7 needed a new name. Creating
-  a closure has no effect, so moving it before its statement does not change the order of anything.
-- **A closure's return type goes onto a local.** `|s| -> usize { s.len() * 2 }` becomes
-  `|s| { let out: usize = { s.len() * 2 }; out }`.
-
 # bind: every written type has a name
 
 A cast (`e as u64`) or a suffixed literal (`1u8`) in the middle of an expression states a type with nothing named for
@@ -53,6 +42,15 @@ say. A mid-expression type is treated as an obfuscation that `bind` undoes once.
 inputs, and checks that they print the same. It also checks the placements above and that a second `bind` changes
 nothing.
 
+## Closures
+
+- **Closures with typed parameters get a name.** `v.retain(|s: &String| s.len() > n)` becomes
+  `let retain_fn = |s: &String| s.len() > n;` and then `v.retain(retain_fn)`. The parameter's type is keyed
+  `"retain_fn.s"` in `locals`. Creating a closure has no effect, so moving it before its statement changes the order
+  of nothing.
+- **A closure's return type goes onto a local.** `|s| -> usize { s.len() * 2 }` becomes
+  `|s| { let out: usize = { s.len() * 2 }; out }`.
+
 ## Values that release something at their end
 
 A `let` ends the temporaries of its own value when it ends. Binding `m.lock().unwrap().len() as u32` out of
@@ -76,36 +74,49 @@ it:
   ```
 
   Such a value in a position that might not run (the right of `&&`, a match arm) is left unbound and reported.
+- **How a call is recognised.** A method call by its name (`.lock()`), a call by path by its type and name
+  (`File::open`, not `Box::new`). A type the crate defines shadows a standard one of the same name, and only the types
+  of fields count, not the names of variants.
 - **Tested** with a guard whose end is visible: the function it is passed to prints whether the guard is still held.
   The output is the same before and after `bind`.
 - **The corpora have no such values.** The 10 bound casts that hold a temporary hold iterators, `Option`s and
   references.
 
+## Realizations: a turbofish is named
+
+A turbofish writes a generic's type arguments where it is used: `s.parse::<u16>()`, `Vec::<u8>::new()`,
+`std::mem::size_of::<u64>()`. The constraint language now calls a generic subject a *template*, and one with its
+arguments a *realization*, a subject of its own (constraint language § 3.5). The bare body names the realization, and
+the function's `holes` say what it is:
+
+| Rust | Bare body | `holes.<fn>.realizations` |
+|---|---|---|
+| `s.parse::<u16>()` | `s.parse_u16()` | `"parse_u16": {"template": "parse", "args": ["u16"]}` |
+| `std::mem::size_of::<u64>()` | `size_of_u64()` | `"size_of_u64": {"template": "std::mem::size_of", "args": ["u64"]}` |
+| `Vec::<u8>::new()` | `VecU8::new()` | `"VecU8": {"template": "Vec", "args": ["u8"]}` |
+| `x.collect::<Vec<_>>()` | `x.collect_vec()` | `"collect_vec": {"template": "collect", "args": ["list<_> as 'Vec'"]}` |
+
+- **One name per template and arguments** in a function: two `collect::<Vec<_>>()` are one `collect_vec`.
+- **A turbofish of only `_`** (`Ok::<_, _>(x)`) states no type and stays as it is.
+- **The names are mechanical**, and renamed like the others.
+- **Check 4** drops a realization's arguments to `_` and keeps its template, so `parse::<_>()` is what rustc must infer.
+
 ## On the corpora
 
-| corpus | files | typed names added | of them, casts | literals | earlier values bound for order | sites left |
-|---|---:|---:|---:|---:|---:|---:|
-| strsim | 2 | 27 | 27 | 0 | 1 | 0 |
-| fnv | 1 | 1 | 1 | 0 | 0 | 0 |
-| the tool's own source | 31 | 42 | 35 | 7 | 11 | 0 |
+After `strip`, no positional hint is left in any corpus. What the `holes` hold instead:
 
-The table counts casts and literals. Closures are counted below.
-| examples | 6 | 1 | 1 | 0 | 0 | 0 |
+| corpus | cast locals | typed locals | closure parameters, keyed by name | realizations | positional hints |
+|---|---:|---:|---:|---:|---:|
+| strsim | 29 | 13 | 0 | 1 | 0 |
+| fnv | 1 | 0 | 0 | 0 | 0 |
+| examples | 1 | 0 | 0 | 2 | 0 |
+| the tool's own source | 44 | 296 | 151 | 30 | 0 |
 
-**A stronger check than the tests above:** the tool's own source, with every file bound (casts, literals and
-closures), still compiles with no warnings. Built from that bound source, the tool passes its unit tests and six of
-its test files (90 tests).
+Closure return types (19 in the tool's source) are among the typed locals, as `out`. A turbofish inside a macro call
+stays in the call, which is marked `rust! { ... }`.
 
-After `bind`, no `cast` or `literal` hint is left in any corpus. The hints that remain are of three kinds:
-
-| corpus | `targ` (turbofish) | `closure_param` | `closure_return` |
-|---|---:|---:|---:|
-| strsim | 1 | 0 | 0 |
-| examples | 2 | 0 | 0 |
-| the tool's own source | 9 | 151 | 19 |
-
-A closure parameter is already a binding, so its hint is attached to a name. Turbofishes and closure return types
-are the open questions below.
+**A stronger check than the tests:** the tool's own source, with every file bound, still compiles with no warnings.
+Built from that bound source, the tool passes its unit tests and six of its test files (90 tests).
 
 **Bugs the tool's own source found.** The first full run found two bugs in `bind`, both in struct literals, and
 both now have a regression test:

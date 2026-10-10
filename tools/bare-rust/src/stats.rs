@@ -154,7 +154,14 @@ impl Acc {
             if let Some(l) = v["locals"].as_object() {
                 for (_, t) in l {
                     bump(&mut self.slots, "holes.locals");
-                    self.ty(t);
+                    // A cast local carries its type under `type`.
+                    self.ty(if t.get("cast").is_some() { &t["type"] } else { t });
+                }
+            }
+            for (_, r) in v["realizations"].as_object().into_iter().flatten() {
+                bump(&mut self.slots, "holes.realizations");
+                for a in r["args"].as_array().into_iter().flatten().filter(|a| *a != "_") {
+                    self.ty(a);
                 }
             }
             for x in v["hints"].as_array().map(|a| a.as_slice()).unwrap_or(&[]) {
@@ -305,6 +312,7 @@ pub fn stats(dir: &Path) -> R<Value> {
         },
         "holes": {
             "locals": acc.slots.get("holes.locals").copied().unwrap_or(0),
+            "realizations": acc.slots.get("holes.realizations").copied().unwrap_or(0),
             "hints": acc.slots.get("holes.hints").copied().unwrap_or(0),
             "hints_by_kind": obj(&acc.hints),
             "functions_with_holes": fns_with_holes,

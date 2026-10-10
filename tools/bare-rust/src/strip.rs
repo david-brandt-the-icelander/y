@@ -533,8 +533,19 @@ impl<'a> Stripper<'a> {
         // The key of each `let`, so that the parameters of a closure it names are keyed `<let>.<parameter>`.
         let mut let_keys: HashMap<usize, String> = HashMap::new();
         let mut param_seen: HashMap<String, usize> = HashMap::new();
+        // Realizations of templates (a turbofish): name -> {template, args}; one name per template and arguments.
+        let mut realizations = Obj::new();
+        let mut realized: HashMap<(String, String), String> = HashMap::new();
+        let mut done_targs: HashSet<usize> = HashSet::new();
+        // Type arguments named by a realization leave the body, so the turbofish hints after them are numbered without.
+        let mut removed_targs = 0;
+        let mut used = crate::bind::idents(text(body, src));
         for s in life::sites(body) {
-            let n = if s.kind == SK::Cast { s.n - removed } else { s.n };
+            let n = match s.kind {
+                SK::Cast => s.n - removed,
+                SK::Targ => s.n - removed_targs,
+                _ => s.n,
+            };
             let node = s.node;
             match s.kind {
                 SK::Let => {
@@ -569,6 +580,35 @@ impl<'a> Stripper<'a> {
                     }
                 }
                 SK::Targ => {
+                    // A turbofish that states a type is a realization of a template, named in the body (language 3).
+                    if let Some(ta) = node.parent().filter(|p| p.kind() == "type_arguments") {
+                        if done_targs.contains(&ta.id()) {
+                            removed_targs += 1;
+                            continue;
+                        }
+                        if let Some((cut, template, base, is_type)) = realization_site(ta, src) {
+                            let args: Vec<Node> = named_children(ta).into_iter().filter(|c| !is_comment(*c)).collect();
+                            let plain = args.iter().all(|a| !matches!(a.kind(), "lifetime" | "type_binding") && !is_literal(a.kind()));
+                            if plain && args.iter().any(|a| text(*a, src) != "_") {
+                                done_targs.insert(ta.id());
+                                let vals: Vec<Value> =
+                                    args.iter().map(|a| if text(*a, src) == "_" { json!("_") } else { self.loose(*a, generics) }).collect();
+                                let key = (template.clone(), vals.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(","));
+                                let name = match realized.get(&key) {
+                                    Some(n) => n.clone(),
+                                    None => {
+                                        let n = realization_name(&base, is_type, &args.iter().map(|a| text(*a, src)).collect::<Vec<_>>(), &mut used);
+                                        realized.insert(key, n.clone());
+                                        realizations.insert(n.clone(), json!({"template": template, "args": vals}));
+                                        n
+                                    }
+                                };
+                                self.cuts.push((cut.0, cut.1, name));
+                                removed_targs += 1;
+                                continue;
+                            }
+                        }
+                    }
                     let sk = self.skeleton(node);
                     if sk != text(node, src) {
                         self.cuts.push((node.start_byte(), node.end_byte(), sk));
@@ -621,10 +661,13 @@ impl<'a> Stripper<'a> {
                 }
             }
         }
-        if !locals.is_empty() || !hints.is_empty() {
+        if !locals.is_empty() || !hints.is_empty() || !realizations.is_empty() {
             let mut h = Obj::new();
             if !locals.is_empty() {
                 h.insert("locals".into(), Value::Object(locals));
+            }
+            if !realizations.is_empty() {
+                h.insert("realizations".into(), Value::Object(realizations));
             }
             if !hints.is_empty() {
                 h.insert("hints".into(), Value::Array(hints));
@@ -1264,4 +1307,77 @@ pub fn strip(src: &str, krate: &str, module: &str) -> R<(String, Value)> {
         out.insert("holes".into(), Value::Object(st.holes));
     }
     Ok((bare, Value::Object(out)))
+}
+
+/// The place of a turbofish that a realization's name replaces, the template as written, and the base of its name:
+/// a method (`s.parse::<u32>` -> `s.parse_u32`), a function (`std::mem::size_of::<u64>` -> `size_of_u64`), or a type in a
+/// path (`Vec::<u8>::new` -> `VecU8::new`).
+fn realization_site(ta: Node, src: &str) -> Option<((usize, usize), String, String, bool)> {
+    let p = ta.parent()?;
+    match p.kind() {
+        "generic_function" => {
+            let f = p.child_by_field_name("function")?;
+            match f.kind() {
+                "field_expression" => {
+                    let field = f.child_by_field_name("field")?;
+                    Some(((field.start_byte(), ta.end_byte()), text(field, src).to_string(), text(field, src).to_string(), false))
+                }
+                "identifier" | "scoped_identifier" => {
+                    let t = text(f, src);
+                    Some(((p.start_byte(), p.end_byte()), t.to_string(), t.rsplit("::").next().unwrap_or(t).to_string(), false))
+                }
+                _ => None,
+            }
+        }
+        "generic_type" if p.parent().is_some_and(|s| s.kind() == "scoped_identifier" && s.child_by_field_name("path") == Some(p)) => {
+            let t = text(p.child_by_field_name("type")?, src);
+            Some(((p.start_byte(), p.end_byte()), t.to_string(), t.rsplit("::").next().unwrap_or(t).to_string(), true))
+        }
+        _ => None,
+    }
+}
+
+/// A mechanical name for a realization: the template's last segment and the words of its arguments (`parse_u32`,
+/// `collect_vec_i32`), in upper camel case for a type (`VecU8`), unique in the function.
+fn realization_name(base: &str, ty: bool, args: &[&str], used: &mut HashSet<String>) -> String {
+    let mut words = vec![];
+    for a in args {
+        if a.trim() == "()" {
+            words.push("unit".to_string());
+            continue;
+        }
+        // The last segment of each path: `serde_json::Map<_, _>` gives `map`.
+        let mut cur = String::new();
+        let chars: Vec<char> = a.chars().collect();
+        for (i, c) in chars.iter().enumerate() {
+            if c.is_alphanumeric() || *c == '_' {
+                cur.push(*c);
+            } else {
+                let path = *c == ':' && chars.get(i + 1) == Some(&':');
+                if !cur.is_empty() && !path && cur != "_" {
+                    words.push(cur.to_lowercase());
+                }
+                cur.clear();
+            }
+        }
+        if !cur.is_empty() && cur != "_" {
+            words.push(cur.to_lowercase());
+        }
+    }
+    let name = if ty {
+        std::iter::once(base.to_string()).chain(words.iter().map(|w| {
+            let mut c = w.chars();
+            c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default()
+        })).collect::<String>()
+    } else {
+        std::iter::once(base.to_lowercase()).chain(words).collect::<Vec<_>>().join("_")
+    };
+    let mut n = name.clone();
+    let mut i = 2;
+    while used.contains(&n) {
+        n = format!("{name}{}{i}", if ty { "" } else { "_" });
+        i += 1;
+    }
+    used.insert(n.clone());
+    n
 }

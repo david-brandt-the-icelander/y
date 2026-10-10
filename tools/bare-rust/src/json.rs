@@ -2,10 +2,10 @@
 //! element fits on one line.
 use serde_json::Value;
 
-const ORDER: [&str; 47] = [
+const ORDER: [&str; 50] = [
     "format", "host", "version", "crate", "module", "status", "failures", "panic", "macros", "views", "subjects", "arms", "pattern", "when", "holes", "kind", "n", "name", "visible", "visible_path",
     "generics", "for", "bounds", "where", "trait", "self", "type", "form", "fields", "derive", "variants", "implements", "assoc", "impl", "params", "result",
-    "fails", "clauses", "access", "hold", "rights", "guarantee", "from", "lifetime", "locals", "hints", "sep",
+    "fails", "clauses", "access", "hold", "rights", "guarantee", "from", "lifetime", "locals", "realizations", "template", "args", "hints", "sep",
 ];
 
 /// The members of a clause of a library file (`clauses`), in the order they are written: the keyword, the text,
@@ -24,7 +24,7 @@ fn rank(parent: &str, k: &str) -> usize {
 
 fn keys_of<'a>(m: &'a serde_json::Map<String, Value>, parent: &str, sort: bool) -> Vec<&'a String> {
     let mut keys: Vec<&String> = m.keys().collect();
-    if sort && !matches!(parent, "holes" | "locals") {
+    if sort && !matches!(parent, "holes" | "locals" | "realizations") {
         keys.sort_by(|a, b| rank(parent, a).cmp(&rank(parent, b)).then(a.cmp(b)));
     }
     keys

@@ -54,7 +54,7 @@ fn a_typed_local_names_the_holes_entry_and_the_fix_works() {
     let text = d.show();
     assert!(text.starts_with("src/lib.brs:2:5: a local's type does not go in the bare body"), "{text}");
     assert!(text.contains("\"holes\": { \"hint_local::f\": { \"locals\": { \"v\": \"list<u8> as 'Vec'\" } } }"), "{text}");
-    assert!(text.contains("turbofish") && text.contains("without `: Vec<u8>`"), "{text}");
+    assert!(text.contains("without `: Vec<u8>`") && !text.contains("turbofish"), "{text}");
     // in the --json output too
     let j = cw.to_json();
     let e = &j["errors"][0];

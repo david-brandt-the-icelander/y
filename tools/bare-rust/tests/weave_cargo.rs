@@ -155,7 +155,8 @@ fn report_prints_the_tables_from_check_output() {
         "| function | 1 | 1 |",
         "| use | 1 | 1 |",
         "| locals | 2 | 2 |",
-        "| hints: targ | 1 | 1 |",
+        "| realizations | 1 | 1 |",
+        "| hints | 0 | 0 |",
         "| unbound entries: locals | 0 | 0 |",
         "| wc_report | 1 files, 0 refused | ok, 1 files | ok: 1 of 1 exact, 0 differ only in `mut`, 0 other | ok: cargo check | ok |",
     ] {

@@ -518,6 +518,19 @@
             ]
           }
         },
+        "realizations": {
+          "type": "object",
+          "description": "Realizations of templates the body names: `s.parse_u32()` is `parse` realized with `u32` (constraint language 3). Keyed by the name the body uses.",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["template", "args"],
+            "properties": {
+              "template": { "type": "string", "minLength": 1, "description": "The template as the host source writes it: a method name, a function path or a type path." },
+              "args": { "type": "array", "items": { "$ref": "#/$defs/type" }, "description": "Its type arguments, in order; `_` is left for the host to infer." }
+            }
+          }
+        },
         "hints": {
           "type": "array",
           "description": "Body hints, by kind and the ordinal of the site among sites of that kind in the body.",

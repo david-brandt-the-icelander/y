@@ -43,6 +43,7 @@ impl HoleSite {
     /// The clause of the constraint file that would fill this hole.
     pub fn clause(&self) -> String {
         match &self.key {
+            Some(k) if self.kind == "realization" => format!("realize {k} = template<T, ..>"),
             Some(k) => format!("local {k} : T"),
             None => format!("hint {} #{} : T", self.kind, self.n),
         }
@@ -753,6 +754,58 @@ impl<'a> Weaver<'a> {
         }
         for (at, t, origin) in casts_after {
             self.edits.push(((at, at, t), origin));
+        }
+        // Realizations: each use of the name is the template with its arguments, `parse_u32` -> `parse::<u32>`.
+        let reals = h["realizations"].as_object();
+        let mut real_used: HashSet<String> = HashSet::new();
+        if let Some(reals) = reals {
+            let mut uses = vec![];
+            fn find<'b>(n: Node<'b>, src: &str, names: &serde_json::Map<String, Value>, out: &mut Vec<Node<'b>>) {
+                if crate::is_item_kind(n.kind()) || n.kind() == "token_tree" {
+                    return;
+                }
+                if matches!(n.kind(), "identifier" | "field_identifier") && names.contains_key(text(n, src)) {
+                    out.push(n);
+                }
+                for c in named_children(n) {
+                    find(c, src, names, out);
+                }
+            }
+            for c in named_children(body) {
+                find(c, src, reals, &mut uses);
+            }
+            for u in uses {
+                let name = text(u, src).to_string();
+                let r = &reals[&name];
+                let template = r["template"].as_str().ok_or_else(|| format!("{subject} realization `{name}` has no template"))?;
+                let args = r["args"].as_array().ok_or_else(|| format!("{subject} realization `{name}` has no args"))?;
+                let mut ts = vec![];
+                for a in args {
+                    ts.push(if a == "_" { "_".to_string() } else { ty_text(a, &Value::Null, None, false, &format!("{subject} realization `{name}`"))? });
+                }
+                // With every argument dropped (check 4) it states nothing, and fills no hole.
+                let all_inferred = ts.iter().all(|t| t == "_");
+                if all_inferred {
+                    self.at(subject, format!("realizations[{name}]"));
+                } else {
+                    self.at_hole(subject, format!("realizations[{name}]"));
+                }
+                self.rep(u.start_byte(), u.end_byte(), format!("{template}::<{}>", ts.join(", ")));
+                real_used.insert(name.clone());
+                self.sites.push(HoleSite {
+                    subject: subject.to_string(),
+                    kind: "realization",
+                    n: 0,
+                    key: Some(name),
+                    range: (u.start_byte(), u.end_byte()),
+                    full: (u.start_byte(), u.end_byte()),
+                    body: (body.start_byte(), body.end_byte()),
+                    filled: !all_inferred,
+                });
+            }
+        }
+        for k in reals.into_iter().flatten().map(|(k, _)| k).filter(|k| !real_used.contains(*k)) {
+            self.unbound.push(Unbound { what: "unbound realization", subject: subject.to_string(), name: k.clone() });
         }
         for k in h["locals"].as_object().into_iter().flatten().map(|(k, _)| k).filter(|k| !keys_taken.contains(*k)) {
             self.unbound.push(Unbound { what: "unbound local", subject: subject.to_string(), name: k.clone() });

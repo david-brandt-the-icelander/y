@@ -15,7 +15,7 @@ Rules that cover most edits:
   `T?` for `Option<T>`, `u32`, a plain name for any other type); `{ "host": "..." }` is Rust text for a type that has
   no such form.
 - `mut` is never written: the weave derives it through rustc. A `let` has no type in the bare body; where rustc cannot
-  infer it, it goes under `"holes"` (a local, a cast, a turbofish; see the last example).
+  infer it, it goes under `"holes"` (a local, a cast local, a realization of a generic; see the last example).
 - A field or parameter whose type is a `ref<...>` needs an `access`; a result that borrows says `"hold": {"kind":
   "borrows", "from": "self"}`.
 - The examples below come from `docs/bare-format-src/lib.rs`, stripped as crate `format_demo 0.1.0`; the test
@@ -313,7 +313,7 @@ Constraint file (`.constraints.json`, under `"subjects"`):
 
 ### Locals, casts and hints
 
-What rustc cannot infer from the bare body goes in `holes`, keyed by the subject: a `locals` entry per `let` (keyed by the pattern; the second `let x` is `x#2`), and per typed parameter of a closure that a `let` names (keyed `<closure>.<parameter>`: `let by_len = |a, b| ...` with `"by_len.a": "<T>"`). A closure's return type is carried by a local in its body: `|s| { let out = { ... }; out }` with `"out": "<T>"`. A turbofish (`::<_>`) still takes a positional hint, `{"kind": "targ", "n": <ordinal>, "type": "<T>"}`.
+What rustc cannot infer from the bare body goes in `holes`, keyed by the subject: a `locals` entry per `let` (keyed by the pattern; the second `let x` is `x#2`), and per typed parameter of a closure that a `let` names (keyed `<closure>.<parameter>`: `let by_len = |a, b| ...` with `"by_len.a": "<T>"`). A closure's return type is carried by a local in its body: `|s| { let out = { ... }; out }` with `"out": "<T>"`. A turbofish is a *realization* of a template (a generic function or type with its type arguments), and the body names it: `s.parse::<u16>()` is `s.parse_u16()` in the body, `Vec::<u8>::new()` is `VecU8::new()`, and `std::mem::size_of::<u64>()` is `size_of_u64()`, each with an entry under `realizations`: `"parse_u16": {"template": "parse", "args": ["u16"]}`. One name serves every use with the same template and arguments, and an argument can be `_` for the host to infer (`"collect_vec": {"template": "collect", "args": ["list<_> as 'Vec'"]}`). Rename the mechanical names like the others (the body and the key together).
 
 **Every cast and suffixed literal has a name.** A conversion between built-in types (`as u64`, `as f64`, ...) and a literal's type (`1u8`) are not written in the body. The value initialises a `let`, and the local's entry carries the type: `{"type": "<T>", "cast": true}` for a cast, so that `let n = e;` weaves to `let n: T = e as T;` (with brackets around `e` when it needs them), and `"<T>"` for a literal, so that `let one = 1;` weaves to `let one: u8 = 1;`. Write a `let` where the Rust would cast in the middle of an expression too: `1.0 - d / m`, with `d` and `m` cast locals, rather than `1.0 - (d as f64) / (m as f64)`.
 
@@ -369,7 +369,7 @@ A few casts cannot be bound and stay `e as _` with a hint `{"kind": "cast", "n":
 
 - `let x: T = ...` in a `.brs`: `src/lib.brs:12:9: a local's type does not go in the bare body; ...` prints the
   `"holes": {"<fn path>": {"locals": {"x": "<T>"}}}` entry to add (`<T>` converted to the constraint syntax, or host
-  text), or write a turbofish such as `collect::<T>()`. (`let mut x` is accepted and `mut` is derived, so it is not
+  text). (`let mut x` is accepted and `mut` is derived, so it is not
   an error.)
 - `type X = ...;` in a `.brs`: the message says to write `type X;` and prints the `alias` subject to add.
 - `slot missing: no subject ...` from a weave: the message ends with a ready-to-paste subject entry for the item,
