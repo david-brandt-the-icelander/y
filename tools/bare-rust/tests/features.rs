@@ -681,3 +681,13 @@ pub struct Plain {
     let says = |n: &str| subject(&j, n)["clauses"].as_array().into_iter().flatten().any(|c| c["text"] == "lifetime self released at end");
     assert!(says("demo::Guard") && says("demo::Holder") && !says("demo::Plain"), "{}", j["subjects"]);
 }
+
+#[test]
+fn a_type_of_the_crate_shadows_a_standard_one_of_the_same_name() {
+    // `Ref` here is the crate's own, not `std::cell::Ref`, so a field of it releases nothing.
+    // A variant named `Ref` is not a field of type `Ref` either.
+    let src = "pub struct Ref {\n    n: u8,\n}\npub struct Holder {\n    r: Ref,\n}\npub enum Kind {\n    File,\n    Mut,\n}\n";
+    let (_, j) = roundtrip(src);
+    assert!(subject(&j, "demo::Holder")["clauses"].is_null(), "{}", j["subjects"]);
+    assert!(subject(&j, "demo::Kind")["clauses"].is_null(), "{}", j["subjects"]);
+}

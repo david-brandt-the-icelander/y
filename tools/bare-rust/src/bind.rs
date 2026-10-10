@@ -97,7 +97,7 @@ impl Release {
         let mut r = Release { types: std.types.clone(), calls: std.calls.clone(), drops: HashSet::new() };
         let mut items = vec![];
         fn walk<'a>(n: Node<'a>, out: &mut Vec<Node<'a>>) {
-            if matches!(n.kind(), "impl_item" | "struct_item" | "enum_item" | "function_item" | "function_signature_item") {
+            if matches!(n.kind(), "impl_item" | "struct_item" | "enum_item" | "function_item" | "function_signature_item" | "type_item") {
                 out.push(n);
             }
             for c in named_children(n) {
@@ -105,6 +105,12 @@ impl Release {
             }
         }
         walk(root, &mut items);
+        // A type the source defines shadows a standard one of the same name (`Ref` here is not `std::cell::Ref`).
+        for i in items.iter().filter(|i| matches!(i.kind(), "struct_item" | "enum_item" | "type_item")) {
+            if let Some(n) = i.child_by_field_name("name") {
+                r.types.remove(text(n, src));
+            }
+        }
         for i in items.iter().filter(|i| i.kind() == "impl_item") {
             let tr = i.child_by_field_name("trait").map(|t| text(t, src));
             if tr.is_some_and(|t| last(t) == "Drop") {
@@ -118,8 +124,25 @@ impl Release {
             let before = r.types.len();
             for i in items.iter().filter(|i| matches!(i.kind(), "struct_item" | "enum_item")) {
                 let name = i.child_by_field_name("name").map(|n| text(n, src).to_string()).unwrap_or_default();
-                let body = i.child_by_field_name("body").map(|b| text(b, src)).unwrap_or("");
-                if !r.types.contains(&name) && mentions(body, &r.types) {
+                // The types of its fields, not their names or the names of its variants.
+                fn field_types<'a>(n: Node<'a>, src: &'a str, out: &mut Vec<&'a str>) {
+                    if matches!(n.kind(), "field_declaration" | "ordered_field_declaration_list") {
+                        let mut c = n.walk();
+                        for (i, ch) in n.children(&mut c).enumerate() {
+                            if n.field_name_for_child(i as u32) == Some("type") {
+                                out.push(text(ch, src));
+                            }
+                        }
+                    }
+                    for c in named_children(n) {
+                        field_types(c, src, out);
+                    }
+                }
+                let mut tys = vec![];
+                if let Some(b) = i.child_by_field_name("body") {
+                    field_types(b, src, &mut tys);
+                }
+                if !r.types.contains(&name) && tys.iter().any(|t| mentions(t, &r.types)) {
                     r.types.insert(name);
                 }
             }
