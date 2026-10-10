@@ -1,3 +1,14 @@
+After `bind`, the only positional hints left in any corpus are 12 turbofishes (`targ`): 1 in strsim, 2 in the
+examples, 9 in the tool's own source. Every closure parameter type (151, all in the tool's source) is keyed by the
+closure's name, and every closure return type (19) is carried by a local in the closure's body:
+
+- **Closures with typed parameters get a name.** `v.retain(|s: &String| s.len() > n)` becomes
+  `let retain_fn = |s: &String| s.len() > n;` and then `v.retain(retain_fn)`. The parameter's type is keyed
+  `"retain_fn.s"` in `locals`. Most such closures were already named by a `let`, and only 7 needed a new name. Creating
+  a closure has no effect, so moving it before its statement does not change the order of anything.
+- **A closure's return type goes onto a local.** `|s| -> usize { s.len() * 2 }` becomes
+  `|s| { let out: usize = { s.len() * 2 }; out }`.
+
 # bind: every written type has a name
 
 A cast (`e as u64`) or a suffixed literal (`1u8`) in the middle of an expression states a type with nothing named for
@@ -49,10 +60,13 @@ nothing.
 | strsim | 2 | 27 | 27 | 0 | 1 | 0 |
 | fnv | 1 | 1 | 1 | 0 | 0 | 0 |
 | the tool's own source | 31 | 42 | 35 | 7 | 11 | 0 |
+
+The table counts casts and literals. Closures are counted below.
 | examples | 6 | 1 | 1 | 0 | 0 | 0 |
 
-**A stronger check than the tests above:** the tool's own source, with every file bound, still compiles with no
-warnings. Built from that bound source, the tool passes its unit tests and five of its test files (85 tests).
+**A stronger check than the tests above:** the tool's own source, with every file bound (casts, literals and
+closures), still compiles with no warnings. Built from that bound source, the tool passes its unit tests and six of
+its test files (90 tests).
 
 After `bind`, no `cast` or `literal` hint is left in any corpus. The hints that remain are of three kinds:
 

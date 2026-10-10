@@ -19,6 +19,9 @@
 //!   and could have an effect (a call, an index, a macro) is bound first, in order. Where that is not a plain value
 //!   (a method receiver, a borrowed place, the left of an assignment), the site is left as it is and reported.
 //! - **Already named.** `let n = e as f64;` gets a type, `let n: f64 = e as f64;`, rather than a second name.
+//! - **Closures.** A closure with typed parameters is bound to a name the same way (its creation has no effect, so
+//!   nothing earlier is bound for it), so that its parameters are keyed `<name>.<parameter>`. A closure's return type
+//!   goes onto a local in its body: `|s| -> usize { b }` becomes `|s| { let out: usize = { b }; out }`.
 //!
 //! The names are mechanical (`h_u64`, `k1_u8`, `len_v`), and unique in their function. They are meant to be renamed
 //! once by someone who knows what the values are. Sites `bind` cannot name are reported with the reason; `strip`
@@ -111,6 +114,34 @@ fn step(body: Node, src: &str) -> Step {
                 }
             }
             _ => {}
+        }
+    }
+    // Closures: a return type moves onto a local inside the body, and a closure with typed parameters gets a name, so
+    // that its parameters are keyed by it (`by_len.a`).
+    fn closures<'a>(n: Node<'a>, out: &mut Vec<Node<'a>>) {
+        if crate::is_item_kind(n.kind()) || n.kind() == "token_tree" {
+            return;
+        }
+        if n.kind() == "closure_expression" {
+            out.push(n);
+        }
+        for c in named_children(n) {
+            closures(c, out);
+        }
+    }
+    let mut cls = vec![];
+    for c in named_children(body) {
+        closures(c, &mut cls);
+    }
+    for c in cls {
+        if c.child_by_field_name("return_type").is_some() {
+            sites.push((c, "closure_return", String::new()));
+        }
+        let typed = c.child_by_field_name("parameters").is_some_and(|ps| {
+            named_children(ps).into_iter().any(|p| p.kind() == "parameter" && p.child_by_field_name("type").is_some())
+        });
+        if typed {
+            sites.push((c, "closure", String::new()));
         }
     }
     // Innermost first, then in order: the order the values are computed in.
@@ -288,6 +319,11 @@ fn earlier<'a>(e: Node<'a>, region: Node<'a>) -> Vec<(Node<'a>, bool)> {
 
 /// The edits that bind one site, none if it is already bound, or why it cannot be.
 fn plan(e: Node, what: &'static str, ty: &str, src: &str, used: &mut HashSet<String>) -> Result<Vec<Edit>, &'static str> {
+    match what {
+        "closure_return" => return plan_closure_return(e, src, used),
+        "closure" => return plan_closure_name(e, src, used),
+        _ => {}
+    }
     if what == "cast" && !carried_type(ty) {
         return Err("the target is not a primitive type");
     }
@@ -366,6 +402,50 @@ fn plan(e: Node, what: &'static str, ty: &str, src: &str, used: &mut HashSet<Str
             let shifted = inner.into_iter().map(|(s, e, t)| (s - base, e - base, t)).collect();
             let body = apply(text(b, src), shifted);
             Ok(vec![(b.start_byte(), b.end_byte(), format!("{{ {} {body} }}", lets.join(" ")))])
+        }
+    }
+}
+
+/// `|x| -> u32 { body }` becomes `|x| { let out: u32 = { body }; out }`: the return type is carried by a local.
+fn plan_closure_return(c: Node, src: &str, used: &mut HashSet<String>) -> Result<Vec<Edit>, &'static str> {
+    let (Some(ps), Some(rt), Some(body)) =
+        (c.child_by_field_name("parameters"), c.child_by_field_name("return_type"), c.child_by_field_name("body"))
+    else {
+        return Err("closure without parameters or body");
+    };
+    let name = fresh("out", used);
+    Ok(vec![
+        (ps.end_byte(), rt.end_byte(), String::new()),
+        (body.start_byte(), body.end_byte(), format!("{{ let {name}: {} = {}; {name} }}", text(rt, src), text(body, src))),
+    ])
+}
+
+/// A closure with typed parameters, not yet the value of a `let`, is bound to a name before its statement (or in a
+/// new block where its statement would run it conditionally), so that its parameters are keyed by that name.
+fn plan_closure_name(c: Node, src: &str, used: &mut HashSet<String>) -> Result<Vec<Edit>, &'static str> {
+    if let Some(p) = c.parent().filter(|p| p.kind() == "let_declaration" && p.child_by_field_name("value") == Some(c)) {
+        return if p.child_by_field_name("pattern").is_some_and(|x| x.kind() == "identifier") {
+            Ok(vec![])
+        } else {
+            Err("the closure is the value of a `let` whose pattern is not a name")
+        };
+    }
+    let base = match c.parent().filter(|p| p.kind() == "arguments").and_then(|a| a.parent()) {
+        Some(call) => call.child_by_field_name("function").map_or("closure".to_string(), |f| format!("{}_fn", base_name(f, src))),
+        None => "closure".into(),
+    };
+    let name = fresh(&base, used);
+    let line = format!("let {name} = {};", text(c, src));
+    match anchor(c)? {
+        Anchor::Stmt(s) => {
+            let line_start = src[..s.start_byte()].rfind('\n').map_or(0, |i| i + 1);
+            let indent: String = src[line_start..s.start_byte()].chars().take_while(|c| c.is_whitespace()).collect();
+            Ok(vec![(s.start_byte(), s.start_byte(), format!("{line}\n{indent}")), (c.start_byte(), c.end_byte(), name)])
+        }
+        Anchor::Boundary(b) => {
+            let base = b.start_byte();
+            let body = apply(text(b, src), vec![(c.start_byte() - base, c.end_byte() - base, name)]);
+            Ok(vec![(b.start_byte(), b.end_byte(), format!("{{ {line} {body} }}"))])
         }
     }
 }

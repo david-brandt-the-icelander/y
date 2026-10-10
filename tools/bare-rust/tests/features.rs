@@ -171,9 +171,9 @@ fn typed<'a, T>(n: Vec<T>, src: &'a str) -> &'a str {
 }
 
 #[test]
-fn closure_sites_count_underscore_parameters() {
+fn closure_parameters_are_keyed_by_the_closure_name() {
     // `|_|` has a `_` that tree-sitter-rust leaves anonymous and the bare grammar names: both count it, so the
-    // ordinals of the hints after it agree on both sides.
+    // ordinals of the sites after it agree on both sides. A typed parameter of a named closure is keyed by the name.
     let src = r#"
 fn f(v: Vec<u8>) -> usize {
     let a = v.iter().filter(|_| true).count();
@@ -183,8 +183,8 @@ fn f(v: Vec<u8>) -> usize {
 "#;
     let (b, j) = roundtrip(src);
     assert!(b.contains("|_| true") && b.contains("|x| x"), "{b}");
-    let hints = j["holes"]["demo::f"]["hints"].as_array().unwrap();
-    assert!(hints.iter().any(|h| h["kind"] == "closure_param" && h["n"] == 1), "{hints:?}");
+    assert_eq!(j["holes"]["demo::f"]["locals"]["g.x"], "u8");
+    assert!(j["holes"]["demo::f"]["hints"].is_null(), "{}", j["holes"]);
 }
 
 #[test]

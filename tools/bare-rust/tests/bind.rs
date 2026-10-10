@@ -121,3 +121,14 @@ fn struct_fields_are_bound_in_the_order_they_run_and_shorthand_fields_stay() {
         "{b}"
     );
 }
+
+#[test]
+fn closures_with_typed_parameters_get_a_name_and_return_types_go_onto_a_local() {
+    let src = "pub fn f(v: &mut Vec<String>, n: usize) -> usize {\n    v.retain(|s: &String| s.len() > n);\n    v.iter().map(|s| -> usize { s.len() * 2 }).sum()\n}\n";
+    let b = bind(src).unwrap();
+    assert!(b.contains("let retain_fn = |s: &String| s.len() > n;\n    v.retain(retain_fn);"), "{b}");
+    assert!(b.contains("map(|s| { let out: usize = { s.len() * 2 }; out })"), "{b}");
+    let (bare, json) = bare_rust::strip(src, "demo 0.1.0", "src/lib.rs").unwrap();
+    assert_eq!(json["holes"]["demo::f"]["locals"]["retain_fn.s"], "ref<text as 'String'>", "{bare}");
+    assert_eq!(json["holes"]["demo::f"]["locals"]["out"], "u64 as 'usize'");
+}

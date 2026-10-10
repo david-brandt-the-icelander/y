@@ -626,6 +626,8 @@ impl<'a> Weaver<'a> {
         let hold = |x: &Value| ty_text(&x["type"], &Value::Null, None, false, &format!("{subject} hint"));
         let mut seen: HashMap<String, usize> = HashMap::new();
         let mut casts_after: Vec<(usize, String, Origin)> = vec![];
+        let mut let_keys: HashMap<usize, String> = HashMap::new();
+        let mut param_seen: HashMap<String, usize> = HashMap::new();
         for s in life::sites(body) {
             let node = s.node;
             let mut hint = |k: &str| {
@@ -650,6 +652,7 @@ impl<'a> Weaver<'a> {
                     let c = seen.entry(key.clone()).or_insert(0);
                     *c += 1;
                     let key = if *c == 1 { key } else { format!("{key}#{c}") };
+                    let_keys.insert(node.id(), key.clone());
                     site.kind = "local";
                     site.range = (pat.start_byte(), pat.end_byte());
                     site.key = Some(key.clone());
@@ -705,7 +708,23 @@ impl<'a> Weaver<'a> {
                 }
                 SK::ClParam => {
                     site.kind = "closure_param";
-                    if let Some(x) = hint("closure_param") {
+                    // A parameter of a closure that a `let` names is keyed `<let>.<parameter>` in `locals`.
+                    let keyed = life::closure_let(node).and_then(|l| let_keys.get(&l.id())).map(|k| {
+                        let pat = if node.kind() == "parameter" { node.child_by_field_name("pattern").unwrap_or(node) } else { node };
+                        let pk = format!("{k}.{}", collapse(text(pat, src)));
+                        let c = param_seen.entry(pk.clone()).or_insert(0);
+                        *c += 1;
+                        if *c == 1 { pk } else { format!("{pk}#{c}") }
+                    });
+                    if let Some(ty) = keyed.as_ref().and_then(|k| present(&h["locals"][k])) {
+                        let k = keyed.clone().unwrap();
+                        keys_taken.insert(k.clone());
+                        let t = ty_text(ty, &Value::Null, None, false, &format!("{subject} local `{k}`"))?;
+                        self.at_hole(subject, format!("locals[{k}]"));
+                        self.ins(node.end_byte(), format!(": {t}"));
+                        site.key = Some(k);
+                        site.filled = true;
+                    } else if let Some(x) = hint("closure_param") {
                         let t = hold(x)?;
                         self.at_hole(subject, format!("hints[closure_param #{}]", s.n));
                         self.ins(node.end_byte(), format!(": {t}"));

@@ -530,6 +530,9 @@ impl<'a> Stripper<'a> {
         let mut seen: HashMap<String, usize> = HashMap::new();
         // Casts carried by a local leave the body, so the casts after them are numbered without them.
         let (mut carried, mut removed): (HashSet<usize>, usize) = (HashSet::new(), 0);
+        // The key of each `let`, so that the parameters of a closure it names are keyed `<let>.<parameter>`.
+        let mut let_keys: HashMap<usize, String> = HashMap::new();
+        let mut param_seen: HashMap<String, usize> = HashMap::new();
         for s in life::sites(body) {
             let n = if s.kind == SK::Cast { s.n - removed } else { s.n };
             let node = s.node;
@@ -545,6 +548,7 @@ impl<'a> Stripper<'a> {
                     let c = seen.entry(key.clone()).or_insert(0);
                     *c += 1;
                     let key = if *c == 1 { key } else { format!("{key}#{c}") };
+                    let_keys.insert(node.id(), key.clone());
                     if let Some(ty) = node.child_by_field_name("type") {
                         self.cuts.push((pat.end_byte(), ty.end_byte(), String::new()));
                         let t = self.loose(ty, generics);
@@ -590,7 +594,20 @@ impl<'a> Stripper<'a> {
                         life::mut_edits(node, &mut self.cuts);
                         if let (Some(pat), Some(ty)) = (node.child_by_field_name("pattern"), node.child_by_field_name("type")) {
                             self.cuts.push((pat.end_byte(), ty.end_byte(), String::new()));
-                            hints.push(json!({"kind": "closure_param", "n": n, "type": self.loose(ty, generics)}));
+                            let t = self.loose(ty, generics);
+                            match life::closure_let(node).and_then(|l| let_keys.get(&l.id())) {
+                                Some(k) => {
+                                    let mut pe = vec![];
+                                    life::pat_mut_edits(pat, &mut pe);
+                                    let base = pat.start_byte();
+                                    let shifted = pe.into_iter().map(|(a, b, t)| (a - base, b - base, t)).collect();
+                                    let pk = format!("{k}.{}", collapse(&apply(&src[pat.byte_range()], shifted)));
+                                    let c = param_seen.entry(pk.clone()).or_insert(0);
+                                    *c += 1;
+                                    locals.insert(if *c == 1 { pk } else { format!("{pk}#{c}") }, t);
+                                }
+                                None => hints.push(json!({"kind": "closure_param", "n": n, "type": t})),
+                            }
                         }
                     } else {
                         life::pat_mut_edits(node, &mut self.cuts);

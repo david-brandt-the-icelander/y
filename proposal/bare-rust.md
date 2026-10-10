@@ -112,8 +112,9 @@ anything earlier in the statement that has an effect is bound first, in order. T
 cast local, `{"type": "u64", "cast": true}`, weaves `let x = e;` back to `let x: u64 = e as u64;`). The names are
 mechanical, and are renamed once by an agent or a person who knows what the values are. A mid-expression form is an
 obfuscation in this view: the round trip is exact on the bound source, not on the original. A macro call whose tokens
-state a type is kept as Rust text, `rust! { ... }`, and should be rewritten by hand to name the value first. What
-cannot be bound yet (a turbofish, a cast to a non-primitive, a constant context) keeps `_` in the body and a
+state a type is kept as Rust text, `rust! { ... }`, and should be rewritten by hand to name the value first. A
+closure with typed parameters is named the same way, and its parameters are keyed by that name (`by_len.a`); a
+closure's return type goes onto a local in its body. What cannot be bound yet (a turbofish, a cast to a non-primitive, a constant context) keeps `_` in the body and a
 positional hint; `_` in casts and type arguments is valid Rust, so the bare form keeps the target's syntax and only its
 types are erased. The proof of concept leaves `Rc`, `Arc`, `Box` and trait objects in the body as written and
 counts them, and keeps every `.unwrap()` and `.expect()` in the body, as decided (§ 3.2).

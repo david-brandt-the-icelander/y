@@ -429,6 +429,12 @@ pub fn rust_marker<'a>(n: Node, src: &'a str) -> Option<&'a str> {
     Some(t.get(1..t.len().saturating_sub(1))?.trim())
 }
 
+/// For a closure parameter: the `let` whose value is the closure, if the closure is one.
+pub fn closure_let(param: Node) -> Option<Node> {
+    let closure = param.parent().filter(|p| p.kind() == "closure_parameters")?.parent()?;
+    closure.parent().filter(|l| l.kind() == "let_declaration" && l.child_by_field_name("value") == Some(closure))
+}
+
 /// The sites of a body (or of an initialiser), in source order.
 pub fn sites(body: Node) -> Vec<Site> {
     let mut out = vec![];
