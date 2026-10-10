@@ -132,3 +132,41 @@ fn closures_with_typed_parameters_get_a_name_and_return_types_go_onto_a_local() 
     assert_eq!(json["holes"]["demo::f"]["locals"]["retain_fn.s"], "ref<text as 'String'>", "{bare}");
     assert_eq!(json["holes"]["demo::f"]["locals"]["out"], "u64 as 'usize'");
 }
+
+#[test]
+fn a_value_that_releases_at_its_end_keeps_its_end_where_it_was() {
+    // `Guard` releases at its end (an `impl Drop`); `log` sees whether it is still held. Binding the cast must not
+    // end the guard before `log` runs: the guard is named, in a block that ends where the statement did.
+    let src = r#"
+use std::cell::Cell;
+pub struct Guard<'a>(&'a Cell<bool>);
+impl Drop for Guard<'_> {
+    fn drop(&mut self) { self.0.set(false); }
+}
+impl Guard<'_> {
+    pub fn len(&self) -> usize { 3 }
+}
+pub fn acquire(c: &Cell<bool>) -> Guard<'_> { c.set(true); Guard(c) }
+pub fn try_acquire(c: &Cell<bool>) -> Option<Guard<'_>> { c.set(true); Some(Guard(c)) }
+fn log(c: &Cell<bool>, n: u32) -> String { format!("{n} held={}", c.get()) }
+pub fn f(c: &Cell<bool>) -> String {
+    let a = log(c, acquire(c).len() as u32);
+    let b = log(c, try_acquire(c).unwrap().len() as u32 + 1);
+    log(c, acquire(c).len() as u32) + &a + &b
+}
+"#;
+    let b = bind(src).unwrap();
+    assert!(b.contains("let a = { let acquire_guard = acquire(c); let len_u32: u32 = acquire_guard.len() as u32; log(c, len_u32) };"), "{b}");
+    assert!(b.contains("let b = { let try_acquire_guard = try_acquire(c).unwrap();"), "{b}");
+    let main = "\nfn main() { let c = Cell::new(false); println!(\"{}\", f(&c)); }\n";
+    let run = |s: &str, name: &str| {
+        let d = scratch(name);
+        std::fs::write(d.join("m.rs"), format!("{s}{main}")).unwrap();
+        let out = Command::new("rustc").args(["--edition", "2021", "-o"]).arg(d.join("m")).arg(d.join("m.rs")).output().unwrap();
+        assert!(out.status.success(), "{}\n{s}", String::from_utf8_lossy(&out.stderr));
+        String::from_utf8(Command::new(d.join("m")).output().unwrap().stdout).unwrap()
+    };
+    let (before, after) = (run(src, "guard-source"), run(&b, "guard-bound"));
+    assert_eq!(before, after);
+    assert!(before.contains("held=true") && !before.contains("held=false"), "{before}");
+}

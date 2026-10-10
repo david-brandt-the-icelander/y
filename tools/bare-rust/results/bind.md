@@ -53,6 +53,34 @@ say. A mid-expression type is treated as an obfuscation that `bind` undoes once.
 inputs, and checks that they print the same. It also checks the placements above and that a second `bind` changes
 nothing.
 
+## Values that release something at their end
+
+A `let` ends the temporaries of its own value when it ends. Binding `m.lock().unwrap().len() as u32` out of
+`log(...)` would therefore unlock the mutex before `log` runs, where the source unlocked it after. Whether that
+matters depends on the type: when a lock guard ends, it unlocks; when a `Chars` iterator ends, nothing happens. So
+the language now says it of the type, `lifetime self released at end` (constraint language § 7.3), and `bind` reads
+it:
+
+- **Where the clause comes from.**
+  - For a crate's own types, `strip` writes it: a type with an `impl Drop`, or with a field of a type that has the
+    clause.
+  - For the standard library, the library file has it: lock guards, `RefCell` borrows, files, buffered writers,
+    standard stream locks and TCP streams, with the calls that make them.
+- **What bind does with it.** A value of such a type inside a bound expression is named, and the statement goes into
+  a block that ends where the statement did, so the value ends at the same point:
+
+  ```rust
+  let a = log(c, acquire(c).len() as u32);
+  // becomes
+  let a = { let acquire_guard = acquire(c); let len_u32: u32 = acquire_guard.len() as u32; log(c, len_u32) };
+  ```
+
+  Such a value in a position that might not run (the right of `&&`, a match arm) is left unbound and reported.
+- **Tested** with a guard whose end is visible: the function it is passed to prints whether the guard is still held.
+  The output is the same before and after `bind`.
+- **The corpora have no such values.** The 10 bound casts that hold a temporary hold iterators, `Option`s and
+  references.
+
 ## On the corpora
 
 | corpus | files | typed names added | of them, casts | literals | earlier values bound for order | sites left |

@@ -657,3 +657,27 @@ fn item_level_macro_invocations_stay_as_host_text() {
     let st = bare_rust::stats::stats(&d).unwrap();
     assert_eq!(st["left_in_body"]["macros"]["macro items kept as host text"], 2, "{st}");
 }
+
+#[test]
+fn a_type_that_releases_at_its_end_says_so() {
+    // Its own `impl Drop`, or a field of such a type (language 7.3, `lifetime self released at end`).
+    let src = r#"
+use std::cell::Cell;
+pub struct Guard<'a>(&'a Cell<bool>);
+impl Drop for Guard<'_> {
+    fn drop(&mut self) {
+        self.0.set(false);
+    }
+}
+pub struct Holder<'a> {
+    g: Guard<'a>,
+    n: u8,
+}
+pub struct Plain {
+    n: u8,
+}
+"#;
+    let (_, j) = roundtrip(src);
+    let says = |n: &str| subject(&j, n)["clauses"].as_array().into_iter().flatten().any(|c| c["text"] == "lifetime self released at end");
+    assert!(says("demo::Guard") && says("demo::Holder") && !says("demo::Plain"), "{}", j["subjects"]);
+}

@@ -1438,6 +1438,13 @@ Each predicate is defined over the core; § 7.4 and § 7.5 give its meaning unde
 - **`lifetime e released by f exactly once`:** release happens through `f`, once, on every path. `released before end`
   forbids leaving release to finalisation. `ends by f exactly once` is the linear form: the entity is consumed exactly
   once.
+- **`lifetime self released at end`:** said of a type: the end of each value of it is also its release (§ 7.1). It
+  gives back something other than memory: a lock is unlocked, a file closed, a buffer flushed, a borrow flag reset, a
+  connection closed. The moment a value ends is then part of what the program does, and a rewrite that moves it
+  changes the program, where moving the end of any other value only changes when memory is reclaimed. A type has it
+  when its host says so through a destructor (Rust's `Drop`, a C++ destructor under RAII, Swift's `deinit`), or when it
+  owns a value of a type that has it. `bind` keeps the end of such a value where the source has it (bare-rust
+  proposal § 2.2).
 - **`lifetime e no use after end`:** no reference is used to reach `e` after `end(e)`; for resources, `no use after
   release`.
 - **`lifetime e reachable only from p, q`:** every strong path to `e` from a root passes through one of the named

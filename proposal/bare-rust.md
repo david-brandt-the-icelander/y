@@ -114,7 +114,9 @@ mechanical, and are renamed once by an agent or a person who knows what the valu
 obfuscation in this view: the round trip is exact on the bound source, not on the original. A macro call whose tokens
 state a type is kept as Rust text, `rust! { ... }`, and should be rewritten by hand to name the value first. A
 closure with typed parameters is named the same way, and its parameters are keyed by that name (`by_len.a`); a
-closure's return type goes onto a local in its body. What cannot be bound yet (a turbofish, a cast to a non-primitive, a constant context) keeps `_` in the body and a
+closure's return type goes onto a local in its body. A value that releases something at its end (a type with
+`lifetime self released at end`, language § 7.3: a lock guard, a file) keeps its end where the source has it: `bind`
+names it and puts the statement in a block that ends where the statement did. What cannot be bound yet (a turbofish, a cast to a non-primitive, a constant context) keeps `_` in the body and a
 positional hint; `_` in casts and type arguments is valid Rust, so the bare form keeps the target's syntax and only its
 types are erased. The proof of concept leaves `Rc`, `Arc`, `Box` and trait objects in the body as written and
 counts them, and keeps every `.unwrap()` and `.expect()` in the body, as decided (§ 3.2).

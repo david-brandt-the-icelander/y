@@ -41,6 +41,103 @@ pub struct Left {
     pub why: &'static str,
 }
 
+/// What releases something at its end (language 7.3, `lifetime self released at end`): the names of such types, and
+/// the names of the calls whose result holds one. From the standard library's file and from the source itself.
+#[derive(Default)]
+pub struct Release {
+    pub types: HashSet<String>,
+    pub calls: HashSet<String>,
+    /// The source's own types with an `impl Drop`.
+    pub drops: HashSet<String>,
+}
+
+fn last(path: &str) -> &str {
+    let p = path.split('<').next().unwrap_or(path);
+    p.rsplit("::").next().unwrap_or(p).trim()
+}
+
+/// Words of a type text, to see whether it mentions a type by name.
+fn mentions(ty: &str, names: &HashSet<String>) -> bool {
+    idents(ty).iter().any(|w| names.contains(w))
+}
+
+impl Release {
+    /// From a constraint file: its types with the clause, and its functions whose result mentions one.
+    pub fn add_file(&mut self, file: &serde_json::Value) {
+        let subs = file["subjects"].as_array().map(|a| a.as_slice()).unwrap_or(&[]);
+        for s in subs.iter().filter(|s| s["kind"] == "type") {
+            let releases = s["clauses"].as_array().into_iter().flatten().any(|c| c["text"] == "lifetime self released at end");
+            if releases {
+                self.types.insert(last(s["name"].as_str().unwrap_or("")).to_string());
+            }
+        }
+        for s in subs.iter().filter(|s| s["kind"] == "function") {
+            if s["result"]["type"].as_str().is_some_and(|t| mentions(t, &self.types)) {
+                self.calls.insert(last(s["name"].as_str().unwrap_or("")).to_string());
+            }
+        }
+    }
+
+    /// The standard library's, from the library file built into the tool.
+    pub fn std() -> &'static Release {
+        static R: std::sync::OnceLock<Release> = std::sync::OnceLock::new();
+        R.get_or_init(|| {
+            let mut r = Release::default();
+            if let Ok(v) = serde_json::from_str(include_str!("../libraries/std-1.97.0.constraints.json")) {
+                r.add_file(&v);
+            }
+            r
+        })
+    }
+
+    /// The standard library's, and the source's own: a type with an `impl Drop`, or with a field of a releasing type,
+    /// and a function whose result type mentions one.
+    pub fn of_source(root: Node, src: &str) -> Release {
+        let std = Release::std();
+        let mut r = Release { types: std.types.clone(), calls: std.calls.clone(), drops: HashSet::new() };
+        let mut items = vec![];
+        fn walk<'a>(n: Node<'a>, out: &mut Vec<Node<'a>>) {
+            if matches!(n.kind(), "impl_item" | "struct_item" | "enum_item" | "function_item" | "function_signature_item") {
+                out.push(n);
+            }
+            for c in named_children(n) {
+                walk(c, out);
+            }
+        }
+        walk(root, &mut items);
+        for i in items.iter().filter(|i| i.kind() == "impl_item") {
+            let tr = i.child_by_field_name("trait").map(|t| text(t, src));
+            if tr.is_some_and(|t| last(t) == "Drop") {
+                if let Some(t) = i.child_by_field_name("type") {
+                    r.types.insert(last(text(t, src)).to_string());
+                    r.drops.insert(last(text(t, src)).to_string());
+                }
+            }
+        }
+        loop {
+            let before = r.types.len();
+            for i in items.iter().filter(|i| matches!(i.kind(), "struct_item" | "enum_item")) {
+                let name = i.child_by_field_name("name").map(|n| text(n, src).to_string()).unwrap_or_default();
+                let body = i.child_by_field_name("body").map(|b| text(b, src)).unwrap_or("");
+                if !r.types.contains(&name) && mentions(body, &r.types) {
+                    r.types.insert(name);
+                }
+            }
+            if r.types.len() == before {
+                break;
+            }
+        }
+        for f in items.iter().filter(|i| matches!(i.kind(), "function_item" | "function_signature_item")) {
+            if let (Some(n), Some(t)) = (f.child_by_field_name("name"), f.child_by_field_name("return_type")) {
+                if mentions(text(t, src), &r.types) {
+                    r.calls.insert(text(n, src).to_string());
+                }
+            }
+        }
+        r
+    }
+}
+
 /// A cast target that a local can carry: a primitive written as such.
 pub fn carried_type(t: &str) -> bool {
     t != "_" && (crate::types::is_prim(t) || matches!(t, "usize" | "isize" | "char"))
@@ -63,7 +160,8 @@ pub fn bind_report(src: &str) -> R<(String, Vec<Left>)> {
         let mut fns = vec![];
         functions(tree.root_node(), &mut fns);
         let Some(&body) = fns.get(fi) else { break };
-        match step(body, &s) {
+        let rel = Release::of_source(tree.root_node(), &s);
+        match step(body, &s, &rel) {
             Step::Edit(edits) => {
                 steps += 1;
                 if steps > 100_000 {
@@ -98,7 +196,7 @@ enum Step {
 }
 
 /// One rewrite in a function body, or the sites it leaves.
-fn step(body: Node, src: &str) -> Step {
+fn step(body: Node, src: &str, rel: &Release) -> Step {
     let mut sites: Vec<(Node, &'static str, String)> = vec![];
     for s in life::sites(body) {
         match s.kind {
@@ -149,7 +247,7 @@ fn step(body: Node, src: &str) -> Step {
     let mut used = idents(text(body, src));
     let mut left = vec![];
     for (e, what, ty) in sites {
-        match plan(e, what, &ty, src, &mut used) {
+        match plan(e, what, &ty, src, &mut used, rel) {
             Ok(edits) if edits.is_empty() => {}
             Ok(edits) => return Step::Edit(edits),
             Err(why) => {
@@ -197,7 +295,16 @@ fn base_name(n: Node, src: &str) -> String {
         }
         "field_expression" => n.child_by_field_name("field").map_or("value".into(), |f| text(f, src).to_string()),
         "scoped_identifier" => n.child_by_field_name("name").map_or("value".into(), |f| text(f, src).to_string()),
-        "call_expression" => n.child_by_field_name("function").map_or("value".into(), |f| base_name(f, src)),
+        "call_expression" => match n.child_by_field_name("function") {
+            // `x.parse().unwrap()` is named for what was unwrapped.
+            Some(f) if f.kind() == "field_expression"
+                && f.child_by_field_name("field").is_some_and(|m| matches!(text(m, src), "unwrap" | "expect")) =>
+            {
+                f.child_by_field_name("value").map_or("value".into(), |v| base_name(v, src))
+            }
+            Some(f) => base_name(f, src),
+            None => "value".into(),
+        },
         "index_expression" => named_children(n).first().map_or("item".into(), |v| format!("{}_item", base_name(*v, src))),
         "type_cast_expression" => n.child_by_field_name("value").map_or("value".into(), |v| base_name(v, src)),
         "generic_function" => n.child_by_field_name("function").map_or("value".into(), |f| base_name(f, src)),
@@ -318,7 +425,7 @@ fn earlier<'a>(e: Node<'a>, region: Node<'a>) -> Vec<(Node<'a>, bool)> {
 }
 
 /// The edits that bind one site, none if it is already bound, or why it cannot be.
-fn plan(e: Node, what: &'static str, ty: &str, src: &str, used: &mut HashSet<String>) -> Result<Vec<Edit>, &'static str> {
+fn plan(e: Node, what: &'static str, ty: &str, src: &str, used: &mut HashSet<String>, rel: &Release) -> Result<Vec<Edit>, &'static str> {
     match what {
         "closure_return" => return plan_closure_return(e, src, used),
         "closure" => return plan_closure_name(e, src, used),
@@ -377,9 +484,30 @@ fn plan(e: Node, what: &'static str, ty: &str, src: &str, used: &mut HashSet<Str
             inner.push((x.start_byte(), x.end_byte(), name));
         }
     }
+    // A value inside the cast that releases something at its end (a lock guard) keeps its end where it was: it is
+    // named, and the statement goes into a block that ends where the statement did (language 7.3).
+    let held = if what == "cast" { releasing(e, src, rel) } else { vec![] };
+    if !held.is_empty() && matches!(anchor, Anchor::Boundary(_)) {
+        return Err("a value that releases something at its end, where the statement might not run");
+    }
+    for (x, _) in earlier(e, region) {
+        if !pure(x) && !releasing(x, src, rel).is_empty() {
+            return Err("something before it in the statement holds a value that releases something at its end");
+        }
+    }
+    let mut cast_text = text(e, src).to_string();
+    if !held.is_empty() {
+        let mut ed = vec![];
+        for g in &held {
+            let gname = fresh(&format!("{}_guard", base_name(*g, src)), used);
+            lets.push(format!("let {gname} = {};", text(*g, src)));
+            ed.push((g.start_byte() - e.start_byte(), g.end_byte() - e.start_byte(), gname));
+        }
+        cast_text = apply(&cast_text, ed);
+    }
     let (name, value) = if what == "cast" {
         let op = e.child_by_field_name("value").ok_or("cast without a value")?;
-        (fresh(&format!("{}_{ty}", base_name(op, src)), used), text(e, src).to_string())
+        (fresh(&format!("{}_{ty}", base_name(op, src)), used), cast_text)
     } else {
         let v = lit_value(e);
         let base = format!("k{}_{ty}", v.replace('-', "neg"));
@@ -390,6 +518,18 @@ fn plan(e: Node, what: &'static str, ty: &str, src: &str, used: &mut HashSet<Str
     let target = e.parent().filter(|p| p.kind() == "parenthesized_expression" && named_children(*p).len() == 1).unwrap_or(e);
     inner.push((target.start_byte(), target.end_byte(), name));
     match anchor {
+        Anchor::Stmt(s) if !held.is_empty() => {
+            // The block ends where the statement ended: a `let` keeps its name outside, around its value.
+            let (outer, wrap) = match s.kind() {
+                "let_declaration" => (s, s.child_by_field_name("value").ok_or("let without a value")?),
+                _ => (s, s),
+            };
+            let _ = outer;
+            let base = wrap.start_byte();
+            let shifted = inner.into_iter().map(|(a, b, t)| (a - base, b - base, t)).collect();
+            let body = apply(text(wrap, src), shifted);
+            Ok(vec![(wrap.start_byte(), wrap.end_byte(), format!("{{ {} {body} }}", lets.join(" ")))])
+        }
         Anchor::Stmt(s) => {
             let line_start = src[..s.start_byte()].rfind('\n').map_or(0, |i| i + 1);
             let indent: String = src[line_start..s.start_byte()].chars().take_while(|c| c.is_whitespace()).collect();
@@ -448,4 +588,59 @@ fn plan_closure_name(c: Node, src: &str, used: &mut HashSet<String>) -> Result<V
             Ok(vec![(b.start_byte(), b.end_byte(), format!("{{ {line} {body} }}"))])
         }
     }
+}
+
+/// The values inside `e` that hold something released at their end: each call whose result is one, extended through
+/// `?`, `.unwrap()` and `.expect(..)` to the value that is then used.
+fn releasing<'a>(e: Node<'a>, src: &str, rel: &Release) -> Vec<Node<'a>> {
+    fn calls<'a>(n: Node<'a>, out: &mut Vec<Node<'a>>) {
+        if n.kind() == "closure_expression" || crate::is_item_kind(n.kind()) {
+            return;
+        }
+        if n.kind() == "call_expression" {
+            out.push(n);
+        }
+        for c in named_children(n) {
+            calls(c, out);
+        }
+    }
+    let mut cs = vec![];
+    calls(e, &mut cs);
+    let mut out: Vec<Node> = vec![];
+    for c in cs {
+        let f = c.child_by_field_name("function");
+        let name = match f.map(|f| f.kind()) {
+            Some("field_expression") => f.and_then(|f| f.child_by_field_name("field")).map(|n| text(n, src)),
+            Some("identifier") | Some("scoped_identifier") => f.map(|f| last(text(f, src))),
+            Some("generic_function") => f.and_then(|f| f.child_by_field_name("function")).map(|n| last(text(n, src))),
+            _ => None,
+        };
+        if !name.is_some_and(|n| rel.calls.contains(n)) {
+            continue;
+        }
+        let mut g = c;
+        loop {
+            let Some(p) = g.parent() else { break };
+            if p.kind() == "try_expression" {
+                g = p;
+                continue;
+            }
+            let unwraps = p.kind() == "field_expression"
+                && p.child_by_field_name("value") == Some(g)
+                && p.child_by_field_name("field").is_some_and(|m| matches!(text(m, src), "unwrap" | "expect"))
+                && p.parent().is_some_and(|call| call.kind() == "call_expression");
+            if unwraps {
+                g = p.parent().unwrap();
+                continue;
+            }
+            break;
+        }
+        // Inner values first is not needed: a value inside another one is named with it.
+        if !out.iter().any(|o| o.start_byte() <= g.start_byte() && g.end_byte() <= o.end_byte()) {
+            out.retain(|o| !(g.start_byte() <= o.start_byte() && o.end_byte() <= g.end_byte()));
+            out.push(g);
+        }
+    }
+    out.sort_by_key(|n| n.start_byte());
+    out
 }

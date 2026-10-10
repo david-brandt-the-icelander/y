@@ -1225,6 +1225,20 @@ pub fn strip(src: &str, krate: &str, module: &str) -> R<(String, Value)> {
         let list = sub.as_object_mut().unwrap().entry("implements").or_insert_with(|| json!([]));
         list.as_array_mut().unwrap().push(entry);
     }
+    // A type whose end releases something (language 7.3): its own `impl Drop`, or a field of such a type.
+    let rel = crate::bind::Release::of_source(tree.root_node(), src);
+    for sub in st.subjects.iter_mut().filter(|s| s["kind"] == "type") {
+        let name = sub["name"].as_str().unwrap_or("").rsplit("::").next().unwrap_or("").to_string();
+        if rel.types.contains(&name) {
+            let (source, observed) = if rel.drops.contains(&name) {
+                ("impl Drop", "from its Drop impl")
+            } else {
+                ("a field of a type that releases at its end", "from its fields")
+            };
+            let c = json!({"kind": "hold", "text": "lifetime self released at end", "source": source, "status": {"observed": observed}});
+            sub.as_object_mut().unwrap().entry("clauses").or_insert_with(|| json!([])).as_array_mut().unwrap().push(c);
+        }
+    }
     // A comment inside a span that strip cuts would be dropped: refuse the file (proposal 2.6, 2.7).
     let mut comments = vec![];
     collect_comments(tree.root_node(), &mut comments);
