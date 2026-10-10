@@ -179,7 +179,7 @@ fn pure(n: Node) -> bool {
     match n.kind() {
         "identifier" | "self" | "scoped_identifier" | "field_identifier" | "integer_literal" | "float_literal"
         | "boolean_literal" | "char_literal" | "string_literal" | "raw_string_literal" | "unit_expression" | "crate"
-        | "super" | "closure_expression" => true,
+        | "super" | "closure_expression" | "shorthand_field_initializer" => true,
         "field_expression" => n.child_by_field_name("value").is_some_and(pure),
         "reference_expression" | "unary_expression" | "parenthesized_expression" | "type_cast_expression"
         | "binary_expression" | "tuple_expression" | "array_expression" | "range_expression" | "negative_literal" => {
@@ -246,11 +246,13 @@ fn anchor(e: Node) -> Result<Anchor, &'static str> {
 
 /// The expressions in `region` that run before `e`, outermost first, with whether each can be bound by value.
 fn earlier<'a>(e: Node<'a>, region: Node<'a>) -> Vec<(Node<'a>, bool)> {
-    let mut out = vec![];
+    // One group per level, innermost level first; the outermost level runs first, and each level runs in order.
+    let mut levels: Vec<Vec<(Node<'a>, bool)>> = vec![];
     let mut cur = e;
     while cur.id() != region.id() {
         let Some(p) = cur.parent() else { break };
         let assigns = matches!(p.kind(), "assignment_expression" | "compound_assignment_expr");
+        let mut out = vec![];
         if !(assigns && p.child_by_field_name("right") == Some(cur)) {
             for c in named_children(p).into_iter().take_while(|c| c.id() != cur.id()) {
                 // `S { a: f(), b: x as u8 }`: what runs is the field's value.
@@ -278,10 +280,10 @@ fn earlier<'a>(e: Node<'a>, region: Node<'a>) -> Vec<(Node<'a>, bool)> {
                 }
             }
         }
+        levels.push(out);
         cur = p;
     }
-    out.reverse();
-    out
+    levels.into_iter().rev().flatten().collect()
 }
 
 /// The edits that bind one site, none if it is already bound, or why it cannot be.

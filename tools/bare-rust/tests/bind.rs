@@ -111,3 +111,13 @@ fn a_macro_call_that_states_a_type_is_marked_and_weaves_back() {
     let woven = bare_rust::weave(&bare, &json).unwrap();
     assert_eq!(woven.trim(), src.trim());
 }
+
+#[test]
+fn struct_fields_are_bound_in_the_order_they_run_and_shorthand_fields_stay() {
+    let src = "pub struct S { a: String, m: String, n: usize }\npub fn f(x: &str, m: String) -> S {\n    S { a: x.to_string(), m, n: x.len() as usize }\n}\n";
+    let b = bind(src).unwrap();
+    assert!(
+        b.contains("let to_string_v = x.to_string();\n    let len_usize: usize = x.len() as usize;\n    S { a: to_string_v, m, n: len_usize }"),
+        "{b}"
+    );
+}

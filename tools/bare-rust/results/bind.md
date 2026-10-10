@@ -44,12 +44,15 @@ nothing.
 
 ## On the corpora
 
-| corpus | files | names added | of them, casts | literals | sites left |
-|---|---:|---:|---:|---:|---:|
-| strsim | 2 | 27 | 27 | 0 | 0 |
-| fnv | 1 | 1 | 1 | 0 | 0 |
-| the tool's own source | 31 | 42 | 35 | 7 | 0 |
-| examples | 6 | 1 | 1 | 0 | 0 |
+| corpus | files | typed names added | of them, casts | literals | earlier values bound for order | sites left |
+|---|---:|---:|---:|---:|---:|---:|
+| strsim | 2 | 27 | 27 | 0 | 1 | 0 |
+| fnv | 1 | 1 | 1 | 0 | 0 | 0 |
+| the tool's own source | 31 | 42 | 35 | 7 | 11 | 0 |
+| examples | 6 | 1 | 1 | 0 | 0 | 0 |
+
+**A stronger check than the tests above:** the tool's own source, with every file bound, still compiles with no
+warnings. Built from that bound source, the tool passes its unit tests and five of its test files (85 tests).
 
 After `bind`, no `cast` or `literal` hint is left in any corpus. The hints that remain are of three kinds:
 
@@ -62,10 +65,23 @@ After `bind`, no `cast` or `literal` hint is left in any corpus. The hints that 
 A closure parameter is already a binding, so its hint is attached to a name. Turbofishes and closure return types
 are the open questions below.
 
+**Bugs the tool's own source found.** The first full run found two bugs in `bind`, both in struct literals, and
+both now have a regression test:
+
+- **A shorthand field** (`Diag { message, .. }`) was taken for an expression with an effect, and bound. The rewrite
+  renamed the field, which does not compile.
+- **The earlier values in one expression were bound in reverse order.** `level`, `code` and `file` became `file`,
+  `code`, `level`. That is the order change `bind` exists to prevent.
+
+The first fails to compile, and `cargo check` on the woven tool caught it. The second compiles: the values here
+have no effects, so the program's behaviour did not change. It was found by reading the bound text while chasing the
+first bug. A check that compares evaluation order would have to run the program, as `tests/bind.rs` does for its
+fixture.
+
 ## Renaming: one agent pass on strsim
 
 The names `bind` makes are mechanical: `a_len_f64`, `value_f64`, `i_isize_3`. One Sonnet agent was given the stripped
-strsim, the list of the 26 names `bind` added, and the rule: rename each to say what the value is, in the `.brs` and
+strsim, the list of the names `bind` added, and the rule: rename each to say what the value is, in the `.brs` and
 the `holes` key together, change nothing else, and keep `./weave.sh test` passing.
 
 - **28 renames**, two of them a repeated name in a second function. The full list is in
