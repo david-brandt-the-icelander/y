@@ -64,9 +64,10 @@ Arms. `rust`: the base crate (`.rs` files, `Cargo.toml`, `tests/`), no hidden te
 `.constraints.json` (from `bare-rust strip` of the base), `Cargo.toml` and other non-`.rs` files, `weave.sh`,
 `libraries/std-1.97.0.constraints.json` (full, 264 KB), `TASK.md`. `bare-nolib`: as `bare` without `libraries/`, and a
 `TASK.md` that says there is none. `bare-nounexpressed`: as `bare` but every clause of kind `unexpressed` removed from
-the library file (jq `walk`), and a `TASK.md` that does not mention such clauses. `bare-castlocal`: as `bare`, stripped
-with `--implicit-casts`, with `FORMAT.md`'s section on casts replaced by `templates/format-castlocal.md` (casts written
-as `let`s whose entry is `{"type": T, "cast": true}`; the `cast-*` runs of `matrix.tsv`). `LIBFILE=...` overrides the library file.
+the library file (jq `walk`), and a `TASK.md` that does not mention such clauses. `bare-castlocal`: the arm of the
+cast comparison (the `cast-*` runs of `matrix.tsv`), which ran with `FORMAT.md`'s section on casts replaced by
+`templates/format-castlocal.md` (casts written as `let`s whose entry is `{"type": T, "cast": true}`). That form is now the
+default, in `strip` and in `FORMAT.md`, so the arm is now the same as `bare`. `LIBFILE=...` overrides the library file.
 `weave.sh [check|test]` weaves into `.weave/` and runs cargo there; agents may add plain test files in `extra-tests/*.rs`.
 
 ## Grader output

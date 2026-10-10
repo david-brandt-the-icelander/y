@@ -5,11 +5,10 @@ use bare_rust::json::canonical;
 use std::{fs, path::PathBuf, process::exit};
 
 const USAGE: &str = "usage:
-  bare-rust strip <file.rs> --crate <name> --module <path> [--out <dir>] [--implicit-casts]
-  bare-rust strip <crate-dir> [--out <dir>] [--src-only] [--implicit-casts]
-      --implicit-casts (experimental): a cast that is the whole initialiser of a typed `let` goes into the local's
-      entry, `let x: u8 = (a + b) as u8;` becoming `let x = a + b;` and `x: {type: u8, cast: true}`; weave
-      always accepts this form
+  bare-rust strip <file.rs> --crate <name> --module <path> [--out <dir>]
+  bare-rust strip <crate-dir> [--out <dir>] [--src-only]
+      a cast that is the whole initialiser of a typed `let` goes into the local's entry: `let x: u8 = (a + b) as u8;`
+      becomes `let x = a + b;` and `x: {type: u8, cast: true}`
   bare-rust weave <file.brs> <file.constraints.json> [--out <dir>]
   bare-rust weave <dir> --out <dir> [--crate <crate-dir>] [--no-cargo] [--drop-holes] [--json]
       <dir> holds the .brs and .constraints.json files (the crate directory, if stripped in place); the crate's
@@ -88,9 +87,6 @@ fn run(args: Vec<String>) -> Result<(), String> {
     }
     let out_dir = arg(&args, "--out").map(PathBuf::from);
     let target = args.get(2).ok_or(USAGE)?;
-    if args.iter().any(|a| a == "--implicit-casts") {
-        bare_rust::strip::IMPLICIT_CASTS.store(true, std::sync::atomic::Ordering::Relaxed);
-    }
     match args.get(1).map(String::as_str) {
         Some("strip") if PathBuf::from(target).is_dir() => {
             let dir = PathBuf::from(target);

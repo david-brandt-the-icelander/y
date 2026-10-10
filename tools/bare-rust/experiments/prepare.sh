@@ -26,19 +26,13 @@ case "$arm" in
     render "$EXP/templates/rust.md"
     ;;
   bare|bare-nolib|bare-nounexpressed|bare-castlocal)
-    strip_into "$base" "$out" $([ "$arm" = bare-castlocal ] && echo --implicit-casts)
+    strip_into "$base" "$out"
     sed "s|@BARE_RUST@|$BARE_RUST|" "$EXP/templates/weave.sh" > "$out/weave.sh"; chmod +x "$out/weave.sh"
     cp "$EXP/../docs/bare-format.md" "$out/FORMAT.md"
     case "$arm" in
       bare-castlocal)
-        # casts are written as locals: the FORMAT.md section on local and cast hints says so
-        python3 - "$out/FORMAT.md" "$EXP/templates/format-castlocal.md" <<'Q'
-import re, sys
-f, sec = sys.argv[1], open(sys.argv[2]).read()
-s = open(f).read()
-a = s.index("### Local and cast hints"); b = s.index("\n## ", a) + 1
-open(f, "w").write(s[:a] + sec + s[b:])
-Q
+        # the arm of the cast comparison (results/e4-e5.md); its FORMAT.md section (templates/format-castlocal.md) is
+        # now the reference's own, so it is the bare arm
         mkdir -p "$out/libraries"; cp "$LIBFILE" "$out/libraries/"; render "$EXP/templates/bare-castlocal.md" ;;
       bare) mkdir -p "$out/libraries"; cp "$LIBFILE" "$out/libraries/"; render "$EXP/templates/bare.md" ;;
       bare-nounexpressed)

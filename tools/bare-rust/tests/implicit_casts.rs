@@ -1,9 +1,7 @@
-//! `strip --implicit-casts`: a cast that is the whole initialiser of a typed `let` is carried by the local's entry.
-//! In a test binary of its own, because the option is a process-wide flag.
+//! A cast that is the whole initialiser of a typed `let` is carried by the local's entry.
 use bare_rust::json::canonical;
 use bare_rust::{first_error, normalise_nomut, parse_bare, rustfmt, strip, weave};
 use serde_json::{json, Value};
-use std::sync::atomic::Ordering;
 
 fn schema_errors(j: &Value) -> Vec<String> {
     let schema: Value = serde_json::from_str(include_str!("../schema/y-constraints-0.schema.json")).unwrap();
@@ -26,7 +24,6 @@ pub fn f(a: u32, b: u32, x: i64, s: &str) -> f64 {
 
 #[test]
 fn casts_at_typed_lets_round_trip_through_the_local() {
-    bare_rust::strip::IMPLICIT_CASTS.store(true, Ordering::Relaxed);
     let (b, j) = strip(SRC, "demo 0.1.0", "src/lib.rs").unwrap();
     assert!(first_error(&parse_bare(&b)).is_none(), "bare does not parse:\n{b}");
     assert_eq!(schema_errors(&j), Vec::<String>::new());

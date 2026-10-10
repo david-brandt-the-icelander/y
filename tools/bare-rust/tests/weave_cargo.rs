@@ -142,7 +142,7 @@ fn unbound_entries_are_counted_in_the_weave_and_its_map() {
 #[test]
 fn report_prints_the_tables_from_check_output() {
     use bare_rust::check::{check_crate, CheckOpts};
-    let src = "pub fn f(x: u8) -> u32 {\n    let y: u32 = x as u32;\n    y\n}\npub use std::fmt::Debug;\n";
+    let src = "pub fn f(x: u8) -> u32 {\n    let y: u32 = x as u32 + 1;\n    y\n}\npub use std::fmt::Debug;\n";
     let (dir, _bare, _out) = krate("wc_report", src);
     let work = root().join("target/bare-rust-test/wc_report/check");
     let o = CheckOpts { work: work.clone(), target: bare_rust::cargo::target_dir(&root()), tests: true, full: false, ..Default::default() };

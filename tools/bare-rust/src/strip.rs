@@ -10,17 +10,11 @@ use std::collections::{HashMap, HashSet};
 
 type Obj = Map<String, Value>;
 
-/// Strip a cast that is the whole initialiser of a typed `let` to the cast form of a local: `let x: u8 = (a + b) as u8;`
-/// becomes `let x = a + b;` with `locals: {"x": {"type": "u8", "cast": true}}`. Off by default; `--implicit-casts`.
-pub static IMPLICIT_CASTS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-/// With `IMPLICIT_CASTS`: the cast that initialises this typed `let`, if it can be carried by the local, and the
-/// cuts that remove it. The cast's target must be a primitive written as the local's type, and the brackets around
+/// A cast that is the whole initialiser of a typed `let` is carried by the local: `let x: u8 = (a + b) as u8;` becomes
+/// `let x = a + b;` with `locals: {"x": {"type": "u8", "cast": true}}`. This returns that cast, and the cuts that
+/// remove it. The cast's target must be a primitive written as the local's type, and the brackets around
 /// the operand must be exactly those weave puts back.
 fn implicit_cast<'a>(node: Node<'a>, src: &str) -> Option<(Node<'a>, Vec<Edit>)> {
-    if !IMPLICIT_CASTS.load(std::sync::atomic::Ordering::Relaxed) {
-        return None;
-    }
     let ty = node.child_by_field_name("type")?;
     let v = node.child_by_field_name("value")?;
     let target = v.child_by_field_name("type").filter(|_| v.kind() == "type_cast_expression")?;

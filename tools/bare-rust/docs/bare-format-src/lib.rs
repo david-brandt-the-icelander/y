@@ -63,6 +63,6 @@ where
 
 pub fn mean(values: &[f64]) -> f64 {
     let total: f64 = values.iter().sum();
-    let n = values.len() as f64;
+    let n: f64 = values.len() as f64;
     total / n
 }

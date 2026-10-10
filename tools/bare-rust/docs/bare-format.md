@@ -15,7 +15,7 @@ Rules that cover most edits:
   `T?` for `Option<T>`, `u32`, a plain name for any other type); `{ "host": "..." }` is Rust text for a type that has
   no such form.
 - `mut` is never written: the weave derives it through rustc. A `let` has no type in the bare body; where rustc cannot
-  infer it, it goes under `"holes"` (a local, a cast, a turbofish, see the last example).
+  infer it, it goes under `"holes"` (a local, a cast, a turbofish; see the last example).
 - A field or parameter whose type is a `ref<...>` needs an `access`; a result that borrows says `"hold": {"kind":
   "borrows", "from": "self"}`.
 - The examples below come from `docs/bare-format-src/lib.rs`, stripped as crate `format_demo 0.1.0`; the test
@@ -311,16 +311,18 @@ Constraint file (`.constraints.json`, under `"subjects"`):
 }
 ```
 
-### Local and cast hints
+### Locals, casts and hints
 
-What rustc cannot infer from the bare body goes in `holes`, keyed by the subject: a `locals` entry per `let` (keyed by the pattern; the second `let x` is `x#2`) and `hints` for a `cast` (the `as _` in the body), a `targ` (a turbofish `::<_>`), a `literal`, or a closure's parameter or return type, each numbered `n` from 0 in body order.
+What rustc cannot infer from the bare body goes in `holes`, keyed by the subject: a `locals` entry per `let` (keyed by the pattern; the second `let x` is `x#2`), and `hints` for a `targ` (a turbofish `::<_>`), a `literal`, or a closure's parameter or return type, each numbered `n` from 0 in body order.
+
+**A cast is written as a local.** A conversion between built-in types (`as u64`, `as f64`, ...) is not written in the body. Bind the value with a `let` and give the local the entry `{"type": "<T>", "cast": true}`: `let n = e;` weaves to `let n: T = e as T;`, with brackets around `e` when it needs them. Do this where the Rust would cast in the middle of an expression too: `1.0 - d / m`, with `d` and `m` cast locals, rather than `1.0 - (d as f64) / (m as f64)`.
 
 Rust:
 
 ```rust
 pub fn mean(values: &[f64]) -> f64 {
     let total: f64 = values.iter().sum();
-    let n = values.len() as f64;
+    let n: f64 = values.len() as f64;
     total / n
 }
 ```
@@ -330,7 +332,7 @@ Bare (`.brs`):
 ```brs
 fn mean(values) {
     let total = values.iter().sum();
-    let n = values.len() as _;
+    let n = values.len();
     total / n
 }
 ```
@@ -349,19 +351,15 @@ Constraint file (`.constraints.json`, under `"subjects"` and `"holes"`):
   "holes": {
     "format_demo::mean": {
       "locals": {
-        "total": "f64"
-      },
-      "hints": [
-        {
-          "kind": "cast",
-          "n": 0,
-          "type": "f64"
-        }
-      ]
+        "total": "f64",
+        "n": {"type": "f64", "cast": true}
+      }
     }
   }
 }
 ```
+
+Code stripped from Rust that casts in the middle of an expression still has `e as _` in the body, with the target in a hint `{"kind": "cast", "n": <ordinal of the cast in the body>, "type": "<T>"}`. Do not write new ones; use a cast local.
 
 ## When something is wrong, the message names the fix
 
