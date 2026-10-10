@@ -16,7 +16,8 @@ binary is `$BARE_RUST` (default: the prebuilt one in the session scratchpad), no
   in that file. Bases are mostly history-derived (a behaviour or feature of upstream's history taken out of HEAD);
   `generic-normalized-levenshtein` is an invented addition. Expected values in hidden tests are textbook values or
   upstream's own test values, and the reference passes them.
-- `templates/`: `TASK.md` templates (`rust.md`, `bare.md`, `bare-nolib.md`, `bare-nounexpressed.md`) and the `weave.sh`
+- `templates/`: `TASK.md` templates (`rust.md`, `bare.md`, `bare-nolib.md`, `bare-nounexpressed.md`, `bare-castlocal.md`, with
+  `format-castlocal.md`) and the `weave.sh`
   given to bare workspaces.
 - `prepare.sh`, `grade.sh` (-> `grade.py`), `record.py`, `summarize.py`, `make_matrix.py`, `verify_tasks.sh`,
   `smoke.sh`, `common.sh`; `matrix.tsv`; `results/`; `verify.txt` (last output of `verify_tasks.sh`).
@@ -52,7 +53,7 @@ the hidden tests; none changes an existing item's signature). The E5 tasks are t
 
 ## Commands
 
-    experiments/prepare.sh <task> <arm> <trial> <outdir>     # arms: rust bare bare-nolib bare-nounexpressed; outdir must be empty
+    experiments/prepare.sh <task> <arm> <trial> <outdir>     # arms: rust bare bare-nolib bare-nounexpressed bare-castlocal; outdir must be empty
     experiments/grade.sh   <task> <arm> <workspace>          # one JSON line
     experiments/record.py  <run_id> <workspace> --agent-file <final-message.txt> --input N --output N [--total N] [--duration S]
     experiments/summarize.py                                 # Markdown tables from results/*.json
@@ -63,7 +64,9 @@ Arms. `rust`: the base crate (`.rs` files, `Cargo.toml`, `tests/`), no hidden te
 `.constraints.json` (from `bare-rust strip` of the base), `Cargo.toml` and other non-`.rs` files, `weave.sh`,
 `libraries/std-1.97.0.constraints.json` (full, 264 KB), `TASK.md`. `bare-nolib`: as `bare` without `libraries/`, and a
 `TASK.md` that says there is none. `bare-nounexpressed`: as `bare` but every clause of kind `unexpressed` removed from
-the library file (jq `walk`), and a `TASK.md` that does not mention such clauses. `LIBFILE=...` overrides the library file.
+the library file (jq `walk`), and a `TASK.md` that does not mention such clauses. `bare-castlocal`: as `bare`, stripped
+with `--implicit-casts`, with `FORMAT.md`'s section on casts replaced by `templates/format-castlocal.md` (casts written
+as `let`s whose entry is `{"type": T, "cast": true}`; the `cast-*` runs of `matrix.tsv`). `LIBFILE=...` overrides the library file.
 `weave.sh [check|test]` weaves into `.weave/` and runs cargo there; agents may add plain test files in `extra-tests/*.rs`.
 
 ## Grader output

@@ -1,5 +1,5 @@
 #!/bin/bash
-# prepare.sh <task> <arm> <trial> <outdir>   arms: rust | bare | bare-nolib | bare-nounexpressed
+# prepare.sh <task> <arm> <trial> <outdir>   arms: rust | bare | bare-nolib | bare-nounexpressed | bare-castlocal
 set -euo pipefail
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 task="${1:?task}"; arm="${2:?arm}"; trial="${3:?trial}"; out="${4:?outdir}"
@@ -25,11 +25,21 @@ case "$arm" in
     cp -r "$base/." "$out/"
     render "$EXP/templates/rust.md"
     ;;
-  bare|bare-nolib|bare-nounexpressed)
-    strip_into "$base" "$out"
+  bare|bare-nolib|bare-nounexpressed|bare-castlocal)
+    strip_into "$base" "$out" $([ "$arm" = bare-castlocal ] && echo --implicit-casts)
     sed "s|@BARE_RUST@|$BARE_RUST|" "$EXP/templates/weave.sh" > "$out/weave.sh"; chmod +x "$out/weave.sh"
     cp "$EXP/../docs/bare-format.md" "$out/FORMAT.md"
     case "$arm" in
+      bare-castlocal)
+        # casts are written as locals: the FORMAT.md section on local and cast hints says so
+        python3 - "$out/FORMAT.md" "$EXP/templates/format-castlocal.md" <<'Q'
+import re, sys
+f, sec = sys.argv[1], open(sys.argv[2]).read()
+s = open(f).read()
+a = s.index("### Local and cast hints"); b = s.index("\n## ", a) + 1
+open(f, "w").write(s[:a] + sec + s[b:])
+Q
+        mkdir -p "$out/libraries"; cp "$LIBFILE" "$out/libraries/"; render "$EXP/templates/bare-castlocal.md" ;;
       bare) mkdir -p "$out/libraries"; cp "$LIBFILE" "$out/libraries/"; render "$EXP/templates/bare.md" ;;
       bare-nounexpressed)
         mkdir -p "$out/libraries"

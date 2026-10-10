@@ -10,6 +10,35 @@ use std::collections::{HashMap, HashSet};
 
 type Obj = Map<String, Value>;
 
+/// Strip a cast that is the whole initialiser of a typed `let` to the cast form of a local: `let x: u8 = (a + b) as u8;`
+/// becomes `let x = a + b;` with `locals: {"x": {"type": "u8", "cast": true}}`. Off by default; `--implicit-casts`.
+pub static IMPLICIT_CASTS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// With `IMPLICIT_CASTS`: the cast that initialises this typed `let`, if it can be carried by the local, and the
+/// cuts that remove it. The cast's target must be a primitive written as the local's type, and the brackets around
+/// the operand must be exactly those weave puts back.
+fn implicit_cast<'a>(node: Node<'a>, src: &str) -> Option<(Node<'a>, Vec<Edit>)> {
+    if !IMPLICIT_CASTS.load(std::sync::atomic::Ordering::Relaxed) {
+        return None;
+    }
+    let ty = node.child_by_field_name("type")?;
+    let v = node.child_by_field_name("value")?;
+    let target = v.child_by_field_name("type").filter(|_| v.kind() == "type_cast_expression")?;
+    let operand = v.child_by_field_name("value")?;
+    let t = text(ty, src);
+    if text(target, src) != t || t == "_" || !(crate::types::is_prim(t) || matches!(t, "usize" | "isize" | "char")) {
+        return None;
+    }
+    if operand.kind() == "parenthesized_expression" {
+        let inner = named_children(operand).into_iter().find(|c| !is_comment(*c))?;
+        if life::binds_tighter_than_as(inner) || named_children(operand).len() != 1 {
+            return None;
+        }
+        return Some((target, vec![(v.start_byte(), inner.start_byte(), String::new()), (inner.end_byte(), v.end_byte(), String::new())]));
+    }
+    life::binds_tighter_than_as(operand).then(|| (target, vec![(operand.end_byte(), v.end_byte(), String::new())]))
+}
+
 fn refuse<T>(category: &str, detail: impl std::fmt::Display) -> R<T> {
     Err(format!("{category}: {detail}"))
 }
@@ -500,8 +529,10 @@ impl<'a> Stripper<'a> {
         let mut locals = Obj::new();
         let mut hints: Vec<Value> = vec![];
         let mut seen: HashMap<String, usize> = HashMap::new();
+        // Casts carried by a local leave the body, so the casts after them are numbered without them.
+        let (mut carried, mut removed): (HashSet<usize>, usize) = (HashSet::new(), 0);
         for s in life::sites(body) {
-            let n = s.n;
+            let n = if s.kind == SK::Cast { s.n - removed } else { s.n };
             let node = s.node;
             match s.kind {
                 SK::Let => {
@@ -517,9 +548,17 @@ impl<'a> Stripper<'a> {
                     let key = if *c == 1 { key } else { format!("{key}#{c}") };
                     if let Some(ty) = node.child_by_field_name("type") {
                         self.cuts.push((pat.end_byte(), ty.end_byte(), String::new()));
-                        locals.insert(key, self.loose(ty, generics));
+                        let t = self.loose(ty, generics);
+                        if let Some((target, cuts)) = implicit_cast(node, src) {
+                            carried.insert(target.id());
+                            self.cuts.extend(cuts);
+                            locals.insert(key, json!({"type": t, "cast": true}));
+                        } else {
+                            locals.insert(key, t);
+                        }
                     }
                 }
+                SK::Cast if carried.contains(&node.id()) => removed += 1,
                 SK::Cast => {
                     if text(node, src) != "_" {
                         self.cuts.push((node.start_byte(), node.end_byte(), "_".into()));

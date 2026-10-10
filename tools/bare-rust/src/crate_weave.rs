@@ -451,6 +451,10 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
                         if o.keep.contains(&id) {
                             locals.insert(k.clone(), v.clone());
                         } else {
+                            // A cast local drops its type, not its cast: `let x: _ = e as _;`.
+                            if v["cast"] == true {
+                                locals.insert(k.clone(), serde_json::json!({"type": "_", "cast": true}));
+                            }
                             dropped.insert(id);
                         }
                     }

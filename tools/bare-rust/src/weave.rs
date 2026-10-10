@@ -624,6 +624,7 @@ impl<'a> Weaver<'a> {
         let mut keys_taken: HashSet<String> = HashSet::new();
         let hold = |x: &Value| ty_text(&x["type"], &Value::Null, None, false, &format!("{subject} hint"));
         let mut seen: HashMap<String, usize> = HashMap::new();
+        let mut casts_after: Vec<(usize, String, Origin)> = vec![];
         for s in life::sites(body) {
             let node = s.node;
             let mut hint = |k: &str| {
@@ -653,9 +654,26 @@ impl<'a> Weaver<'a> {
                     site.key = Some(key.clone());
                     if let Some(ty) = present(&h["locals"][&key]) {
                         keys_taken.insert(key.clone());
+                        // `{"type": T, "cast": true}`: the initialiser is cast to the local's type.
+                        let cast = ty.get("cast").and_then(Value::as_bool) == Some(true);
+                        let ty = if cast { &ty["type"] } else { ty };
                         let t = ty_text(ty, &Value::Null, None, false, &format!("{subject} local `{key}`"))?;
                         self.at_hole(subject, format!("locals[{key}]"));
                         self.ins(pat.end_byte(), format!(": {t}"));
+                        if cast {
+                            let Some(v) = node.child_by_field_name("value") else {
+                                return Err(format!(
+                                    "weave: {subject} local `{key}` is a cast, but its `let` has no initialiser to cast"
+                                ));
+                            };
+                            // The closing text goes in after every other edit at the end of the initialiser.
+                            if life::binds_tighter_than_as(v) {
+                                casts_after.push((v.end_byte(), format!(" as {t}"), self.cur.clone()));
+                            } else {
+                                self.ins(v.start_byte(), "(".into());
+                                casts_after.push((v.end_byte(), format!(") as {t}"), self.cur.clone()));
+                            }
+                        }
                         site.filled = true;
                     }
                 }
@@ -703,6 +721,9 @@ impl<'a> Weaver<'a> {
                 }
             }
             self.sites.push(site);
+        }
+        for (at, t, origin) in casts_after {
+            self.edits.push(((at, at, t), origin));
         }
         for k in h["locals"].as_object().into_iter().flatten().map(|(k, _)| k).filter(|k| !keys_taken.contains(*k)) {
             self.unbound.push(Unbound { what: "unbound local", subject: subject.to_string(), name: k.clone() });

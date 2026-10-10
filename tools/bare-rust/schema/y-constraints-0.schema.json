@@ -506,7 +506,16 @@
           "type": "object",
           "description": "`local name : T`, keyed by the binding's bare pattern text; `#2` marks a second `let` of the same pattern.",
           "additionalProperties": {
-            "$ref": "#/$defs/type"
+            "oneOf": [
+              { "$ref": "#/$defs/type" },
+              {
+                "type": "object",
+                "description": "A local whose initialiser is cast to its type: `let x = e;` weaves to `let x: T = e as T;`.",
+                "additionalProperties": false,
+                "required": ["type", "cast"],
+                "properties": { "type": { "$ref": "#/$defs/type" }, "cast": { "const": true } }
+              }
+            ]
           }
         },
         "hints": {

@@ -119,3 +119,11 @@ e5-sorensen-whitespace-bare-nolib-t1	sorensen-whitespace	bare-nolib	1
 e5-sorensen-whitespace-bare-nolib-t2	sorensen-whitespace	bare-nolib	2
 e5-sorensen-whitespace-bare-nounexpressed-t1	sorensen-whitespace	bare-nounexpressed	1
 e5-sorensen-whitespace-bare-nounexpressed-t2	sorensen-whitespace	bare-nounexpressed	2
+cast-fnv-const-hash-bare-t1	fnv-const-hash	bare	1
+cast-fnv-const-hash-bare-t2	fnv-const-hash	bare	2
+cast-fnv-const-hash-bare-castlocal-t1	fnv-const-hash	bare-castlocal	1
+cast-fnv-const-hash-bare-castlocal-t2	fnv-const-hash	bare-castlocal	2
+cast-ndl-add-bare-t1	ndl-add	bare	1
+cast-ndl-add-bare-t2	ndl-add	bare	2
+cast-ndl-add-bare-castlocal-t1	ndl-add	bare-castlocal	1
+cast-ndl-add-bare-castlocal-t2	ndl-add	bare-castlocal	2

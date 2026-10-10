@@ -362,6 +362,29 @@ fn walk<'a>(n: Node<'a>, out: &mut Vec<Site<'a>>, cnt: &mut [usize; 6]) {
     }
 }
 
+/// An expression that binds tighter than `as`, so `<e> as T` needs no brackets around `<e>`.
+pub fn binds_tighter_than_as(n: Node) -> bool {
+    matches!(
+        n.kind(),
+        "identifier"
+            | "scoped_identifier"
+            | "self"
+            | "field_expression"
+            | "call_expression"
+            | "index_expression"
+            | "parenthesized_expression"
+            | "integer_literal"
+            | "float_literal"
+            | "boolean_literal"
+            | "char_literal"
+            | "unary_expression"
+            | "type_cast_expression"
+            | "try_expression"
+            | "await_expression"
+            | "macro_invocation"
+    )
+}
+
 /// The sites of a body (or of an initialiser), in source order.
 pub fn sites(body: Node) -> Vec<Site> {
     let mut out = vec![];
