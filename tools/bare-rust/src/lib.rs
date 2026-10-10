@@ -1,6 +1,7 @@
 //! Bare Rust: strip Rust into a bare body plus constraint JSON, and weave them back (proposal/bare-rust.md).
 use tree_sitter::{Language, Node, Parser, Tree};
 
+pub mod bind;
 pub mod cargo;
 pub mod check;
 pub mod clause;
@@ -166,11 +167,14 @@ pub fn normalise_nomut(src: &str) -> R<String> {
     normalise_with(src, true)
 }
 
+/// Round trips compare bound sources: `weave(strip(s))` is `bind(s)` (see `bind`), up to the rest of `normalise`.
 fn normalise_with(src: &str, strip_mut: bool) -> R<String> {
-    let tree = parse_rust(src);
-    if let Some(e) = first_error(&tree) {
+    if let Some(e) = first_error(&parse_rust(src)) {
         return Err(format!("parse-error: {e}"));
     }
+    let bound = bind::bind(src)?;
+    let src = bound.as_str();
+    let tree = parse_rust(src);
     let mut edits = vec![];
     life::normalise_edits(tree.root_node(), src, &mut edits, strip_mut);
     Ok(apply(src, edits))

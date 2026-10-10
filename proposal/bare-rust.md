@@ -52,8 +52,10 @@ and a constraint file, which says what must hold, and that `strip` and `weave` m
 
 ## 1. What the trial must show
 
-1. **Lossless.** `strip(weave(b, c)) == (b, c)` exactly, and `weave(strip(s)) == s` up to `rustfmt` and lifetime
-   elision, for every file in the corpora; the woven code compiles and passes its tests.
+1. **Lossless.** `strip(weave(b, c)) == (b, c)` exactly, and `weave(strip(s)) == bind(s)` up to `rustfmt` and
+   lifetime elision, for every file in the corpora; the woven code compiles and passes its tests. `bind` (§ 2.2) gives
+   every value that carries a written type a name, without changing what the program does; it is the one rewrite of
+   the source the round trip allows.
 2. **Host-neutral.** Most of what moves maps onto the constraint language's own clauses and types, not onto Rust text
    carried along unread. What does not map is a list of gaps in the language, with a count for each (§ 12).
 3. **Bare in practice.** Bodies need few types of their own. The trial measures how many holes a body leaves that only
@@ -103,8 +105,17 @@ that kept such a construct ("C#'s `ref`, Rust's trait objects") whole in the bod
 | `Rc` or `Arc`, `Box` | Sharing; owning | Which one, from `shares` and `sendable`; `Box` where an owned recursive type needs it |
 | `Box<dyn T>` or a generic `T` | Dispatch through the interface | The set of implementations allowed |
 
-`_` in casts and type arguments is already valid Rust, so the bare form of an expression keeps the target's syntax and
-only its types are erased. The proof of concept leaves `Rc`, `Arc`, `Box` and trait objects in the body as written and
+**Every constraint has a binding.** A cast or a literal's suffix states a type in the middle of an expression, where
+nothing is named for it to attach to. `strip` first binds each one (`bind`): the value initialises a typed `let`, before
+its statement or, where the statement would compute it when the source might not, in a new block in that place; and
+anything earlier in the statement that has an effect is bound first, in order. The local then carries the type (a
+cast local, `{"type": "u64", "cast": true}`, weaves `let x = e;` back to `let x: u64 = e as u64;`). The names are
+mechanical, and are renamed once by an agent or a person who knows what the values are. A mid-expression form is an
+obfuscation in this view: the round trip is exact on the bound source, not on the original. A macro call whose tokens
+state a type is kept as Rust text, `rust! { ... }`, and should be rewritten by hand to name the value first. What
+cannot be bound yet (a turbofish, a cast to a non-primitive, a constant context) keeps `_` in the body and a
+positional hint; `_` in casts and type arguments is valid Rust, so the bare form keeps the target's syntax and only its
+types are erased. The proof of concept leaves `Rc`, `Arc`, `Box` and trait objects in the body as written and
 counts them, and keeps every `.unwrap()` and `.expect()` in the body, as decided (§ 3.2).
 
 ### 2.3 The file is authoritative, and the weaver does no type inference
@@ -446,8 +457,8 @@ the tooling draws on three sources.
 ## 9. Checks
 
 1. **Bare round trip.** `strip(weave(b, c)) == (b, c)` exactly.
-2. **Source round trip.** `weave(strip(s)) == s` after `rustfmt` on both sides and with lifetimes elided where Rust
-   allows.
+2. **Source round trip.** `weave(strip(s)) == bind(s)` after `rustfmt` on both sides and with lifetimes elided where
+   Rust allows.
 3. **Compiles and behaves.** The woven crate passes `cargo check`, `cargo clippy` with the corpus's settings, and its
    tests.
 4. **Holes.** Every hole is either filled or reported (§ 2.4); none is filled silently by a guess.

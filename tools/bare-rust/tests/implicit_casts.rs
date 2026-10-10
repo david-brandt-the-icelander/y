@@ -23,27 +23,26 @@ pub fn f(a: u32, b: u32, x: i64, s: &str) -> f64 {
 "#;
 
 #[test]
-fn casts_at_typed_lets_round_trip_through_the_local() {
+fn every_cast_is_bound_and_carried_by_its_local() {
     let (b, j) = strip(SRC, "demo 0.1.0", "src/lib.rs").unwrap();
     assert!(first_error(&parse_bare(&b)).is_none(), "bare does not parse:\n{b}");
     assert_eq!(schema_errors(&j), Vec::<String>::new());
-    // Carried: an operand that needs brackets loses them, one that does not stays as it is, a suffixed literal keeps
-    // its literal hint. Not carried: brackets weave would not put back, and a cast that is not the whole initialiser.
-    for line in ["let y = a + b;", "let z = x;", "let w = (x) as _;", "let q = 5;", "let n = s.len();", "let r = -(z as _);"] {
+    // Every cast and suffixed literal is bound (`bind`), then carried by its local. Brackets weave would not put back
+    // are dropped (`(x) as u16`), and a value already initialising a `let` keeps that name.
+    for line in ["let y = a + b;", "let z = x;", "let w = x;", "let k5_u32 = 5;", "let q = k5_u32;", "let n = s.len();", "let r = -z_f64;"] {
         assert!(b.contains(line), "missing `{line}` in\n{b}");
     }
+    assert!(!b.contains(" as "), "{b}");
     let locals = &j["holes"]["demo::f"]["locals"];
     assert_eq!(locals["y"], json!({"type": "u8", "cast": true}));
     assert_eq!(locals["n"], json!({"type": "u64 as 'usize'", "cast": true}));
-    assert_eq!(locals["w"], json!("u16"));
-    // The casts left in the body are numbered without the carried ones: `(x) as _` is cast 0.
-    let hints = j["holes"]["demo::f"]["hints"].as_array().unwrap();
-    assert_eq!(hints[0], json!({"kind": "cast", "n": 0, "type": "u16"}));
-    assert_eq!(hints.iter().filter(|h| h["kind"] == "cast").count(), 10);
+    assert_eq!(locals["w"], json!({"type": "u16", "cast": true}));
+    assert_eq!(locals["k5_u32"], json!("u32"));
+    assert!(j["holes"]["demo::f"]["hints"].is_null());
 
     let w = weave(&b, &j).unwrap();
     let norm = |s: &str| rustfmt(&normalise_nomut(s).unwrap()).unwrap();
-    assert_eq!(norm(&w), norm(SRC), "check 2");
+    assert_eq!(norm(&w), norm(SRC), "check 2: the woven text is the bound source");
     let (b2, j2) = strip(&w, "demo 0.1.0", "src/lib.rs").unwrap();
     assert_eq!(b2, b, "check 1 (bare)");
     assert_eq!(canonical(&j2), canonical(&j), "check 1 (json)");

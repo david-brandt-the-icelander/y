@@ -313,9 +313,13 @@ Constraint file (`.constraints.json`, under `"subjects"`):
 
 ### Locals, casts and hints
 
-What rustc cannot infer from the bare body goes in `holes`, keyed by the subject: a `locals` entry per `let` (keyed by the pattern; the second `let x` is `x#2`), and `hints` for a `targ` (a turbofish `::<_>`), a `literal`, or a closure's parameter or return type, each numbered `n` from 0 in body order.
+What rustc cannot infer from the bare body goes in `holes`, keyed by the subject: a `locals` entry per `let` (keyed by the pattern; the second `let x` is `x#2`), and `hints` for a `targ` (a turbofish `::<_>`) or a closure's parameter or return type, each numbered `n` from 0 in body order.
 
-**A cast is written as a local.** A conversion between built-in types (`as u64`, `as f64`, ...) is not written in the body. Bind the value with a `let` and give the local the entry `{"type": "<T>", "cast": true}`: `let n = e;` weaves to `let n: T = e as T;`, with brackets around `e` when it needs them. Do this where the Rust would cast in the middle of an expression too: `1.0 - d / m`, with `d` and `m` cast locals, rather than `1.0 - (d as f64) / (m as f64)`.
+**Every cast and suffixed literal has a name.** A conversion between built-in types (`as u64`, `as f64`, ...) and a literal's type (`1u8`) are not written in the body. The value initialises a `let`, and the local's entry carries the type: `{"type": "<T>", "cast": true}` for a cast, so that `let n = e;` weaves to `let n: T = e as T;` (with brackets around `e` when it needs them), and `"<T>"` for a literal, so that `let one = 1;` weaves to `let one: u8 = 1;`. Write a `let` where the Rust would cast in the middle of an expression too: `1.0 - d / m`, with `d` and `m` cast locals, rather than `1.0 - (d as f64) / (m as f64)`.
+
+`strip` does this to the Rust it reads (`bare-rust bind <file.rs>` shows the result): `(h as u64).wrapping_mul(P)` becomes `let h_u64: u64 = h as u64;` before the statement and `h_u64.wrapping_mul(P)` in it. Where the statement would compute the value when the Rust might not (the right of `&&` or `||`, a match arm or guard, an `else if`, a `while` condition, a closure body), the `let` goes into a new block in that place: `c && { let h_u8 = h; h_u8 > 3 }`. Names such as `h_u64` and `k1_u8` are mechanical; rename them (the `.brs` and the `holes` key together) to say what the value is.
+
+A macro call whose tokens state a type, such as `println!("{}", x as u8)`, cannot be split, and is kept as Rust text: `rust! { println!("{}", x as u8) }`, which weaves to the call. Prefer naming the value before the call, `let shown = x;` with `shown` a cast local, and `println!("{}", shown)`.
 
 Rust:
 
@@ -359,7 +363,7 @@ Constraint file (`.constraints.json`, under `"subjects"` and `"holes"`):
 }
 ```
 
-Code stripped from Rust that casts in the middle of an expression still has `e as _` in the body, with the target in a hint `{"kind": "cast", "n": <ordinal of the cast in the body>, "type": "<T>"}`. Do not write new ones; use a cast local.
+A few casts cannot be bound and stay `e as _` with a hint `{"kind": "cast", "n": <ordinal of the cast in the body>, "type": "<T>"}`: a cast to a type that is not a primitive (`p as *const u8`), one in a constant context (`[0; N as usize]`), and one after a method receiver or borrowed place that has an effect. A suffixed literal in a pattern (`1u8 => ...`) keeps a `literal` hint the same way. Do not write new ones; use a cast local.
 
 ## When something is wrong, the message names the fix
 

@@ -20,7 +20,7 @@ fn implicit_cast<'a>(node: Node<'a>, src: &str) -> Option<(Node<'a>, Vec<Edit>)>
     let target = v.child_by_field_name("type").filter(|_| v.kind() == "type_cast_expression")?;
     let operand = v.child_by_field_name("value")?;
     let t = text(ty, src);
-    if text(target, src) != t || t == "_" || !(crate::types::is_prim(t) || matches!(t, "usize" | "isize" | "char")) {
+    if text(target, src) != t || !crate::bind::carried_type(t) {
         return None;
     }
     if operand.kind() == "parenthesized_expression" {
@@ -520,6 +520,11 @@ impl<'a> Stripper<'a> {
 
     fn body_holes(&mut self, body: Node, subject: &str, generics: &[String]) {
         let src = self.src;
+        // A macro call that states a type, which no binding can carry: marked as Rust text (`rust! { ... }`).
+        for m in life::typed_macro_calls(body, src) {
+            self.cuts.push((m.start_byte(), m.start_byte(), "rust! { ".into()));
+            self.cuts.push((m.end_byte(), m.end_byte(), " }".into()));
+        }
         let mut locals = Obj::new();
         let mut hints: Vec<Value> = vec![];
         let mut seen: HashMap<String, usize> = HashMap::new();
@@ -1177,11 +1182,14 @@ fn collect_comments(n: Node, out: &mut Vec<(usize, usize)>) {
 
 /// Strip Rust source into (bare body, constraint JSON). `krate` is "name version"; `module` the file's path.
 /// A refusal is an `Err` whose text starts with its category and a colon.
+/// The source is bound first (`crate::bind`), so the bare body and the positions in refusals are those of `bind(src)`.
 pub fn strip(src: &str, krate: &str, module: &str) -> R<(String, Value)> {
-    let tree = parse_rust(src);
-    if let Some(e) = first_error(&tree) {
+    if let Some(e) = first_error(&parse_rust(src)) {
         return refuse("parse-error", format!("Rust source, at {e}"));
     }
+    let bound = crate::bind::bind(src)?;
+    let src = bound.as_str();
+    let tree = parse_rust(src);
     let name = krate.split_whitespace().next().unwrap_or(krate).replace('-', "_");
     let mut path = vec![name];
     path.extend(module_path(module));

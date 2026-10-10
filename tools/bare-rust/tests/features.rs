@@ -132,12 +132,18 @@ fn body_stuff(mut a: u8, (mut b, c): (u8, u8)) -> u32 {
 }
 "#;
     let (b, j) = roundtrip(src);
-    assert!(b.contains("as _") && b.contains("collect::<Vec<_>>()") && b.contains("Vec::<_>::new()"), "{b}");
+    // Casts and suffixed literals are bound (`bind`); the ones inside a macro call are marked as Rust text.
+    assert!(!b.contains("as _") && b.contains("collect::<Vec<_>>()") && b.contains("Vec::<_>::new()"), "{b}");
+    assert!(b.contains("let a_u32 = a;") && b.contains("let x = a_u32 + k1_u8_u32;"), "{b}");
+    assert!(b.contains("rust! { assert_eq!(x as u32, 1u32) };"), "{b}");
     let h = &j["holes"]["demo::body_stuff"];
     assert_eq!(h["locals"]["x"], "u32");
     assert_eq!(h["locals"]["x#2"], "u8");
     assert_eq!(h["locals"]["(m, n)"], "(u8, u8)");
-    assert_eq!(h["hints"].as_array().unwrap().iter().filter(|x| x["kind"] == "literal").count(), 4);
+    assert_eq!(h["locals"]["a_u32"], serde_json::json!({"type": "u32", "cast": true}));
+    assert_eq!(h["locals"]["k1_u8"], "u8");
+    assert_eq!(h["locals"]["k2_5_f32"], "f32");
+    assert!(h["hints"].as_array().unwrap().iter().all(|x| x["kind"] != "literal" && x["kind"] != "cast"));
     assert!(j["subjects"].as_array().unwrap().iter().any(|s| s["name"] == "demo::body_stuff::nested"));
     assert!(j["subjects"].as_array().unwrap().iter().any(|s| s["name"] == "demo::body_stuff::Local"));
 }
@@ -291,14 +297,14 @@ fn use_visibility_moves_to_the_file() {
 #[test]
 fn stale_entries_are_reported_as_unbound() {
     use bare_rust::weave::{weave_traced, Unbound};
-    let src = "fn f(a: u8) -> u8 {\n    let x: u16 = 1;\n    let y: u32 = 2;\n    (a as u32 + y) as u8\n}\nfn g() {}\n";
+    let src = "fn f(a: u8) -> u8 {\n    let x: u16 = 1;\n    let y: u32 = 2;\n    (0..a).sum::<u8>() + y as u8\n}\nfn g() {}\n";
     let (b, mut j) = strip(src, "demo 0.1.0", "src/lib.rs").unwrap();
     // A renamed local, one hint too many, a duplicate of a hint, a subject with no item, holes of a function that is gone.
     let h = &mut j["holes"]["demo::f"];
     let ty = h["locals"]["x"].take();
     h["locals"].as_object_mut().unwrap().remove("x");
     h["locals"]["z"] = ty;
-    h["hints"].as_array_mut().unwrap().push(serde_json::json!({"kind": "cast", "n": 5, "type": "u64"}));
+    h["hints"].as_array_mut().unwrap().push(serde_json::json!({"kind": "targ", "n": 5, "type": "u64"}));
     let dup = h["hints"][0].clone();
     h["hints"].as_array_mut().unwrap().push(dup);
     let g = subject(&j, "demo::g").clone();
@@ -312,8 +318,8 @@ fn stale_entries_are_reported_as_unbound() {
         w.unbound,
         vec![
             u("unbound local", "demo::f", "z"),
-            u("unbound hint", "demo::f", "cast #5"),
-            u("unbound hint", "demo::f", "cast #0"),
+            u("unbound hint", "demo::f", "targ #5"),
+            u("unbound hint", "demo::f", "targ #0"),
             u("unbound subject", "demo::h", ""),
             u("unbound subject", "demo::k", ""),
         ]

@@ -9,6 +9,9 @@ const USAGE: &str = "usage:
   bare-rust strip <crate-dir> [--out <dir>] [--src-only]
       a cast that is the whole initialiser of a typed `let` goes into the local's entry: `let x: u8 = (a + b) as u8;`
       becomes `let x = a + b;` and `x: {type: u8, cast: true}`
+  bare-rust bind <file.rs>
+      prints the source with every cast and suffixed literal bound to a typed `let` (what strip strips, and what weave
+      gives back), and on stderr each site it left and why; mechanical names such as `h_u64` are meant to be renamed
   bare-rust weave <file.brs> <file.constraints.json> [--out <dir>]
   bare-rust weave <dir> --out <dir> [--crate <crate-dir>] [--no-cargo] [--drop-holes] [--json]
       <dir> holds the .brs and .constraints.json files (the crate directory, if stripped in place); the crate's
@@ -88,6 +91,14 @@ fn run(args: Vec<String>) -> Result<(), String> {
     let out_dir = arg(&args, "--out").map(PathBuf::from);
     let target = args.get(2).ok_or(USAGE)?;
     match args.get(1).map(String::as_str) {
+        Some("bind") => {
+            let (out, left) = bare_rust::bind::bind_report(&rd(target)?)?;
+            print!("{out}");
+            for l in &left {
+                eprintln!("{target}:{}:{}: {} left: {}", l.line, l.col, l.what, l.why);
+            }
+            Ok(())
+        }
         Some("strip") if PathBuf::from(target).is_dir() => {
             let dir = PathBuf::from(target);
             let out = out_dir.unwrap_or_else(|| dir.clone());

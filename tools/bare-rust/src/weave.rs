@@ -610,6 +610,7 @@ impl<'a> Weaver<'a> {
 
     fn body_holes(&mut self, body: Node, subject: &str) -> R<()> {
         let src = self.src;
+        self.unmark(body);
         self.scanned.insert(subject.to_string());
         let h = &self.holes[subject];
         // Hints bind by kind and ordinal. An entry that no site takes (or a second one for the same site) is unbound.
@@ -658,7 +659,12 @@ impl<'a> Weaver<'a> {
                         let cast = ty.get("cast").and_then(Value::as_bool) == Some(true);
                         let ty = if cast { &ty["type"] } else { ty };
                         let t = ty_text(ty, &Value::Null, None, false, &format!("{subject} local `{key}`"))?;
-                        self.at_hole(subject, format!("locals[{key}]"));
+                        // A cast local whose type was dropped (check 4) keeps its cast: `let x: _ = e as _;` fills no hole.
+                        if cast && t == "_" {
+                            self.at(subject, format!("locals[{key}]"));
+                        } else {
+                            self.at_hole(subject, format!("locals[{key}]"));
+                        }
                         self.ins(pat.end_byte(), format!(": {t}"));
                         if cast {
                             let Some(v) = node.child_by_field_name("value") else {
@@ -733,6 +739,23 @@ impl<'a> Weaver<'a> {
             self.unbound.push(Unbound { what: "unbound hint", subject: subject.to_string(), name: format!("{k} #{n}") });
         }
         Ok(())
+    }
+}
+
+impl Weaver<'_> {
+    /// `rust! { <text> }` in a body weaves to the text.
+    fn unmark(&mut self, n: Node) {
+        if crate::is_item_kind(n.kind()) {
+            return;
+        }
+        if let Some(t) = life::rust_marker(n, self.src) {
+            let t = t.to_string();
+            self.rep(n.start_byte(), n.end_byte(), t);
+            return;
+        }
+        for c in named_children(n) {
+            self.unmark(c);
+        }
     }
 }
 

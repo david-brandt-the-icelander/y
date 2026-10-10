@@ -123,7 +123,7 @@ fn find_cap_ref(replacement) {
     }
     Some(CaptureRef {
         cap: match cap.parse::<_>() {
-            Ok(i) => Ref::Number(i as _),
+            Ok(i) => { let i_usize = i; Ref::Number(i_usize) },
             Err(_) => Ref::Named(cap),
         },
         end: cap_end,

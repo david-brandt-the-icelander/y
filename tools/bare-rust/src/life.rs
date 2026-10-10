@@ -385,6 +385,50 @@ pub fn binds_tighter_than_as(n: Node) -> bool {
     )
 }
 
+/// The macro calls of a body (not of the items nested in it) whose tokens state a type: a cast, a suffixed literal or
+/// a turbofish. `strip` cannot reach into them, so it marks them `rust! { ... }`.
+pub fn typed_macro_calls<'a>(body: Node<'a>, src: &str) -> Vec<Node<'a>> {
+    fn typed(tt: Node, src: &str) -> bool {
+        let toks = all_children(tt);
+        toks.iter().enumerate().any(|(i, t)| match t.kind() {
+            "token_tree" => typed(*t, src),
+            "as" => true,
+            "integer_literal" | "float_literal" => lit_suffix(text(*t, src)).is_some(),
+            "::" => toks.get(i + 1).is_some_and(|n| n.kind() == "<"),
+            _ => false,
+        })
+    }
+    fn walk<'a>(n: Node<'a>, src: &str, out: &mut Vec<Node<'a>>) {
+        if is_item_kind(n.kind()) {
+            return;
+        }
+        if n.kind() == "macro_invocation" {
+            if all_children(n).into_iter().any(|c| c.kind() == "token_tree" && typed(c, src)) {
+                out.push(n);
+            }
+            return;
+        }
+        for c in named_children(n) {
+            walk(c, src, out);
+        }
+    }
+    let mut out = vec![];
+    for c in named_children(body) {
+        walk(c, src, &mut out);
+    }
+    out
+}
+
+/// `rust! { <text> }`: the Rust text it carries, if `n` is that marker.
+pub fn rust_marker<'a>(n: Node, src: &'a str) -> Option<&'a str> {
+    if n.kind() != "macro_invocation" || n.child_by_field_name("macro").map(|m| text(m, src)) != Some("rust") {
+        return None;
+    }
+    let tt = all_children(n).into_iter().find(|c| c.kind() == "token_tree")?;
+    let t = text(tt, src);
+    Some(t.get(1..t.len().saturating_sub(1))?.trim())
+}
+
 /// The sites of a body (or of an initialiser), in source order.
 pub fn sites(body: Node) -> Vec<Site> {
     let mut out = vec![];
