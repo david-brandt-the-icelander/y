@@ -716,13 +716,17 @@ impl<'a> Weaver<'a> {
                         *c += 1;
                         if *c == 1 { pk } else { format!("{pk}#{c}") }
                     });
+                    if let Some(k) = &keyed {
+                        // A `locals` entry, present or not, and identified as one (check 4 drops and restores it so).
+                        site.kind = "local";
+                        site.key = Some(k.clone());
+                    }
                     if let Some(ty) = keyed.as_ref().and_then(|k| present(&h["locals"][k])) {
                         let k = keyed.clone().unwrap();
                         keys_taken.insert(k.clone());
                         let t = ty_text(ty, &Value::Null, None, false, &format!("{subject} local `{k}`"))?;
                         self.at_hole(subject, format!("locals[{k}]"));
                         self.ins(node.end_byte(), format!(": {t}"));
-                        site.key = Some(k);
                         site.filled = true;
                     } else if let Some(x) = hint("closure_param") {
                         let t = hold(x)?;
