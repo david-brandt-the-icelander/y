@@ -212,7 +212,18 @@ fn assert_holes_are_sites(r: &CheckReport) {
         let p = bare.join(&h.file);
         let brs = fs::read_to_string(&p).unwrap();
         let mut js: Value = serde_json::from_str(&fs::read_to_string(p.with_extension("constraints.json")).unwrap()).unwrap();
-        js["holes"] = json!({});
+        // Every hole dropped, as check 4 drops them: a realization keeps its template, with `_` for each argument.
+        let mut kept = serde_json::Map::new();
+        for (sub, h) in js["holes"].as_object().into_iter().flatten() {
+            if let Some(r) = h["realizations"].as_object() {
+                let r: serde_json::Map<String, Value> = r
+                    .iter()
+                    .map(|(k, v)| (k.clone(), json!({"template": v["template"], "args": vec!["_"; v["args"].as_array().map_or(0, Vec::len)]})))
+                    .collect();
+                kept.insert(sub.clone(), json!({"realizations": r}));
+            }
+        }
+        js["holes"] = Value::Object(kept);
         let w = weave_traced(&brs, &js).unwrap();
         // The hole as weave sees it: the woven text has nothing at the site.
         assert!(w.map.spans.iter().all(|s| s.origin.kind != bare_rust::trace::Kind::Hole));
@@ -222,7 +233,7 @@ fn assert_holes_are_sites(r: &CheckReport) {
     };
     for h in &r.c4.undetermined {
         assert!(sites_of(h).contains(&(h.line, h.col)), "not a hole site: {}", h.show());
-        assert!(h.clause.starts_with("local ") || h.clause.starts_with("hint "), "{}", h.clause);
+        assert!(h.clause.starts_with("local ") || h.clause.starts_with("hint ") || h.clause.starts_with("realize "), "{}", h.clause);
     }
 }
 
