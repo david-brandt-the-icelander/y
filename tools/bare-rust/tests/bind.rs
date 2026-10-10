@@ -170,3 +170,11 @@ pub fn f(c: &Cell<bool>) -> String {
     assert_eq!(before, after);
     assert!(before.contains("held=true") && !before.contains("held=false"), "{before}");
 }
+
+#[test]
+fn a_standard_library_lock_guard_is_kept_to_the_end_of_its_statement() {
+    // `Mutex::lock` and `MutexGuard` come from the library file: the guard releases the lock at its end.
+    let src = "use std::sync::Mutex;\nfn log(m: &Mutex<Vec<u8>>, n: u32) -> String { format!(\"{n} held={}\", m.try_lock().is_err()) }\npub fn f(m: &Mutex<Vec<u8>>) -> String {\n    log(m, m.lock().unwrap().len() as u32)\n}\n";
+    let b = bind(src).unwrap();
+    assert!(b.contains("{ let lock_guard = m.lock().unwrap(); let len_u32: u32 = lock_guard.len() as u32; log(m, len_u32) }"), "{b}");
+}
