@@ -1,0 +1,303 @@
+{
+ "bare_rust::bind::Release::of_source::field_types": {
+  "i_u32": "child_index"
+ },
+ "bare_rust::bind::fresh": {
+  "starts_with_fn": "is_digit"
+ },
+ "bare_rust::bind::plan": {
+  "value_v": "lets_edit"
+ },
+ "bare_rust::callback::follows": {
+  "k0_usize": "start"
+ },
+ "bare_rust::callback::split_top": {
+  "k0_i32": "zero"
+ },
+ "bare_rust::cargo::fixes": {
+  "to_string_v": "fix_file",
+  "unwrap_or_usize": "fix_start",
+  "unwrap_or_usize_2": "fix_end"
+ },
+ "bare_rust::cargo::parse": {
+  "map_v": "diag_code",
+  "to_string_v": "diag_level",
+  "to_string_v_2": "diag_file",
+  "to_string_v_3": "sec_file",
+  "unwrap_or_usize": "diag_start",
+  "unwrap_or_usize_2": "diag_end",
+  "unwrap_or_usize_3": "diag_line",
+  "unwrap_or_usize_4": "diag_col",
+  "unwrap_or_usize_5": "sec_start",
+  "unwrap_or_usize_6": "sec_end"
+ },
+ "bare_rust::check::CheckReport::print": {
+  "len_v": "n_undetermined",
+  "st_v": "verdict",
+  "unwrap_or_else_v": "by_kind_text"
+ },
+ "bare_rust::check::CheckReport::to_json": {
+  "by_kind_v": "by_kind_counts",
+  "collect_v": "differing",
+  "collect_v_2": "hole_rows",
+  "count_v": "n_uninferred",
+  "count_v_2": "n_rejected",
+  "len_v": "n_differing",
+  "len_v_2": "n_undetermined",
+  "len_v_3": "n_functions",
+  "map_v": "clippy_json",
+  "map_v_2": "test_json",
+  "sum_v": "total_dropped"
+ },
+ "bare_rust::check::check4": {
+  "as_u64_v": "hint_n",
+  "n_u64": "hole_n",
+  "out_2": "was_filled"
+ },
+ "bare_rust::clause::later_call": {
+  "join_v": "method_list"
+ },
+ "bare_rust::clause::lint": {
+  "join_v": "wanted"
+ },
+ "bare_rust::clause::lint_given": {
+  "join_v": "settings",
+  "join_v_2": "method_list"
+ },
+ "bare_rust::clause::lint_protocol": {
+  "join_v": "method_list"
+ },
+ "bare_rust::clause::tests::callbacks_bind_their_results_and_protocols_name_calls": {
+  "callback_binds_v": "at_most_once",
+  "new_v": "no_binds"
+ },
+ "bare_rust::clause::tests::given_items_name_generics_methods_and_builds": {
+  "lint_given_v": "given_errs",
+  "new_v": "no_errs"
+ },
+ "bare_rust::clause::tests::the_forms_of_interfaces_implementations_and_lifetimes_pass": {
+  "lint_v": "found",
+  "new_v": "none"
+ },
+ "bare_rust::clause::tests::the_small_additions_have_forms_of_their_own": {
+  "lint_v": "except_errs",
+  "lint_v_2": "budget_errs",
+  "new_v": "none_except",
+  "new_v_2": "none_budget"
+ },
+ "bare_rust::conformance::env_of": {
+  "out": "entries"
+ },
+ "bare_rust::conformance::eval_case": {
+  "collect_v": "new_binds",
+  "out": "parsed_calls"
+ },
+ "bare_rust::conformance::table": {
+  "collect_v": "named_fns"
+ },
+ "bare_rust::corpus::crate_realization_names": {
+  "starts_with_fn": "is_upper"
+ },
+ "bare_rust::crate_weave::CrateWeave::to_json": {
+  "collect_v": "weave_error_list",
+  "collect_v_2": "hole_errors",
+  "len_v": "woven",
+  "len_v_2": "not_woven",
+  "mut_added_v": "mut_count",
+  "ok_v": "all_ok"
+ },
+ "bare_rust::crate_weave::hole_of": {
+  "closure_2": "range_holds_error",
+  "closure_3": "is_used_local",
+  "closure_4": "inside_error_span",
+  "closure_5": "let_holds_error",
+  "closure_6": "closure_holds_error",
+  "split_fn": "not_ident_char"
+ },
+ "bare_rust::crate_weave::weave_crate_with": {
+  "unwrap_or_usize": "hint_ordinal",
+  "unwrap_or_v": "hint_kind"
+ },
+ "bare_rust::e2::e2": {
+  "len_u64": "n_errors",
+  "out_2": "cells",
+  "out_3": "found"
+ },
+ "bare_rust::e2::pct": {
+  "a_f64": "part",
+  "b_f64": "whole"
+ },
+ "bare_rust::e3::cargo_phase": {
+  "collect_v": "weave_errs",
+  "len_v": "n_files",
+  "len_v_2": "n_holes",
+  "ok_v": "compiles"
+ },
+ "bare_rust::e3::render": {
+  "count_u64": "matching_files",
+  "count_u64_2": "matching_commits",
+  "len_u64": "total_commits",
+  "len_u64_2": "n_compile_errors",
+  "len_u64_3": "n_new_holes",
+  "len_u64_4": "n_new_errors",
+  "out_2": "all_files"
+ },
+ "bare_rust::e3::stage": {
+  "collect_v": "entries"
+ },
+ "bare_rust::errmap::MappedError::to_json": {
+  "collect_v": "related_list",
+  "map_v": "bare_pos",
+  "map_v_2": "constraints_pos"
+ },
+ "bare_rust::externals::Syn::pos": {
+  "clone_v": "file_name",
+  "column_u32": "col0",
+  "row_u32": "row0"
+ },
+ "bare_rust::externals::mir_of": {
+  "join_v": "errors"
+ },
+ "bare_rust::externals::parse_fn_path": {
+  "c_u8": "byte"
+ },
+ "bare_rust::externals::self_head": {
+  "starts_with_fn": "is_alpha"
+ },
+ "bare_rust::externals::skip_balanced": {
+  "k0_i32": "zero"
+ },
+ "bare_rust::externals::split_as": {
+  "k0_i32": "zero"
+ },
+ "bare_rust::externals::tests::operators_fold_into_their_trait": {
+  "collect_v": "found_paths"
+ },
+ "bare_rust::hints::has_todo": {
+  "split_fn": "not_word_char"
+ },
+ "bare_rust::hints::parse_hint_at": {
+  "find_fn": "not_id_char"
+ },
+ "bare_rust::hints::type_end": {
+  "k0_i32": "zero"
+ },
+ "bare_rust::host::tests::a_profile_names_its_strategy_and_arms": {
+  "collect_v": "all_settings"
+ },
+ "bare_rust::json::inline": {
+  "join_v": "items"
+ },
+ "bare_rust::libcheck::LibReport::to_json": {
+  "collect_v": "missing_list",
+  "collect_v_2": "reasons",
+  "collect_v_3": "mismatch_list",
+  "len_v": "checked_count",
+  "len_v_2": "resolved_count",
+  "map_v": "library_shown",
+  "map_v_2": "sigs_json",
+  "unchecked_total_v": "unchecked_count",
+  "value_v": "covered_shown"
+ },
+ "bare_rust::libcheck::given_generics": {
+  "out_2": "strings"
+ },
+ "bare_rust::libcheck::validate_with": {
+  "join_v": "template_list"
+ },
+ "bare_rust::libstats::libstats": {
+  "len_v": "given_count",
+  "len_v_2": "given_subjects",
+  "len_v_3": "callback_count",
+  "len_v_4": "callback_subjects",
+  "out_2": "collected",
+  "split_fn": "is_break",
+  "starts_with_fn": "is_digit",
+  "sum_v": "small_total",
+  "sum_v_2": "later_total"
+ },
+ "bare_rust::libstats::row": {
+  "n_f64": "part",
+  "total_f64": "whole",
+  "value_v": "percent"
+ },
+ "bare_rust::runcheck::RuntimeReport::to_json": {
+  "clone_v": "kind_name",
+  "collect_v": "kinds_json",
+  "fold_v": "reason_counts",
+  "len_v": "unchecked_count"
+ },
+ "bare_rust::runcheck::run_program": {
+  "k0_usize": "start"
+ },
+ "bare_rust::scaffold::split_top": {
+  "k0_i32": "zero"
+ },
+ "bare_rust::seq::Seq::counter": {
+  "k_i64": "idx"
+ },
+ "bare_rust::seq::Seq::enumerate": {
+  "k_i64": "idx"
+ },
+ "bare_rust::seq::Seq::index": {
+  "i_usize": "idx"
+ },
+ "bare_rust::seq::Seq::present": {
+  "i_usize": "idx"
+ },
+ "bare_rust::seq::Seq::while_true": {
+  "n_i64": "leading"
+ },
+ "bare_rust::seq::eval_op": {
+  "k_usize": "in_range_pos",
+  "k_usize_2": "part_pos",
+  "n_i64": "seq_len",
+  "n_i64_2": "full_len",
+  "to_json_v": "last_item"
+ },
+ "bare_rust::seq::to_json": {
+  "collect_v": "elems",
+  "collect_v_2": "sized_head",
+  "collect_v_3": "open_head",
+  "collect_v_4": "field_values"
+ },
+ "bare_rust::seqexpr::P::postfix": {
+  "k_usize": "field_index",
+  "new_v": "target"
+ },
+ "bare_rust::seqexpr::call": {
+  "n_i64": "n_items",
+  "out_2": "arity_ok"
+ },
+ "bare_rust::stats::Acc::generics": {
+  "len_u64": "own_bounds",
+  "map_or_u64": "where_bounds",
+  "n_u64": "generic_bounds"
+ },
+ "bare_rust::trace::SpanMap::to_bare": {
+  "max_usize": "bare_pos",
+  "pos_isize": "signed_pos",
+  "value_isize": "woven_len",
+  "value_isize_2": "bare_len"
+ },
+ "bare_rust::types::Ty::rust_in": {
+  "out": "joined"
+ },
+ "bare_rust::weave::Weaver::body_holes": {
+  "unwrap_or_usize": "hint_ordinal",
+  "unwrap_or_v": "hint_kind"
+ },
+ "realizations": {
+  "VecString": "StringList",
+  "collect_map": "collect_object",
+  "collect_map_2": "collect_json_object",
+  "collect_r": "collect_checked",
+  "collect_result": "collect_or_err",
+  "collect_vec_2": "collect_list",
+  "from_str_value": "parse_json",
+  "ok_weaveerror": "weave_ok",
+  "parse_usize": "parse_index",
+  "sum_u64": "sum_total",
+  "sum_usize": "sum_counts"
+ }
+}

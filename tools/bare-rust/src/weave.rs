@@ -80,6 +80,8 @@ pub struct Woven {
     pub unbound: Vec<Unbound>,
     /// The realizations the bodies use, by name.
     pub realizations_used: HashSet<String>,
+    /// Each body (a function's, a constant's value) with the subject it belongs to: its range in the bare text.
+    pub bodies: Vec<(String, (usize, usize))>,
 }
 
 impl Woven {
@@ -104,6 +106,7 @@ struct Weaver<'a> {
     /// The crate's realizations (language 3.5): the file's own table, or the crate's when the crate is woven.
     reals: Option<&'a serde_json::Map<String, Value>>,
     reals_used: HashSet<String>,
+    bodies: Vec<(String, (usize, usize))>,
     /// Where (a byte of the bare body) the first error came from: the innermost item being woven.
     fail_at: Option<usize>,
 }
@@ -618,6 +621,7 @@ impl<'a> Weaver<'a> {
         let src = self.src;
         self.unmark(body);
         self.scanned.insert(subject.to_string());
+        self.bodies.push((subject.to_string(), (body.start_byte(), body.end_byte())));
         let h = &self.holes[subject];
         // Hints bind by kind and ordinal. An entry that no site takes (or a second one for the same site) is unbound.
         let hints: Vec<(&str, usize, &Value)> = h["hints"]
@@ -907,6 +911,7 @@ fn weave_checked(brs: &str, json: &Value, tree: tree_sitter::Tree, crate_reals: 
         unbound: vec![],
         reals: crate_reals.or(json["realizations"].as_object()),
         reals_used: HashSet::new(),
+        bodies: vec![],
         fail_at: None,
     };
     if let Err(e) = w.items_in(tree.root_node(), &Scope::new(base_path(json))) {
@@ -925,7 +930,7 @@ fn weave_checked(brs: &str, json: &Value, tree: tree_sitter::Tree, crate_reals: 
         unbound.extend(unused_realizations(json["realizations"].as_object(), &w.reals_used, &base_path(json)));
     }
     let (text, map) = apply_traced(brs, w.edits);
-    Ok(Woven { text, map, sites: w.sites, bare: brs.to_string(), unbound, realizations_used: w.reals_used })
+    Ok(Woven { text, map, sites: w.sites, bare: brs.to_string(), unbound, realizations_used: w.reals_used, bodies: w.bodies })
 }
 
 /// The realizations of a table that no body uses, reported under `owner` (the crate).

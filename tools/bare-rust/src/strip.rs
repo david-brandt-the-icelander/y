@@ -1389,22 +1389,23 @@ fn realization_name(base: &str, ty: bool, args: &[&str], used: &mut HashSet<Stri
             } else {
                 let path = *c == ':' && chars.get(i + 1) == Some(&':');
                 if !cur.is_empty() && !path && cur != "_" {
-                    words.push(cur.to_lowercase());
+                    words.push(cur.clone());
                 }
                 cur.clear();
             }
         }
         if !cur.is_empty() && cur != "_" {
-            words.push(cur.to_lowercase());
+            words.push(cur);
         }
     }
+    // A type's name keeps the words' own capitals (`HashMapRowId`); a function's is lower case (`collect_vec`).
     let name = if ty {
         std::iter::once(base.to_string()).chain(words.iter().map(|w| {
             let mut c = w.chars();
             c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default()
         })).collect::<String>()
     } else {
-        std::iter::once(base.to_lowercase()).chain(words).collect::<Vec<_>>().join("_")
+        std::iter::once(base.to_lowercase()).chain(words.iter().map(|w| w.to_lowercase())).collect::<Vec<_>>().join("_")
     };
     let mut n = name.clone();
     let mut i = 2;

@@ -165,6 +165,8 @@ def main():
         else:
             sdir = os.path.join(tmp, "basebare")
             sh('. "%s/common.sh"; strip_into "%s" "%s"' % (EXP, base, sdir))
+            if arm == "bare-renamed":
+                sh('. "%s/common.sh"; rename_into "%s" "%s"' % (EXP, sdir, crate))
             e, l, f = json_changes(sdir, ws)
             res["json_entries_changed"], res["json_leaf_edits"], res["json_files_changed"] = e, l, f
             res["lines_changed"] = lines_changed(sdir, ws, ".brs")

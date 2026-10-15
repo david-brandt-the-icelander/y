@@ -30,3 +30,10 @@ strip_into() { # [strip options...]
   (cd "$tmp/strip" && find . -type f ! -name refusals.json -print0 | xargs -0 -I{} cp --parents {} "$dest/")
   rm -rf "$tmp"
 }
+# rename_into <bare-dir> <crate>: the stored names for the crate's mechanical names (renames/<crate>.json), where they
+# apply (a task's base may lack some of them)
+rename_into() {
+  local dir="$1" crate="$2"
+  [ -f "$EXP/renames/$crate.json" ] && "$BARE_RUST" rename "$dir" "$EXP/renames/$crate.json" --lenient >/dev/null
+  return 0
+}

@@ -162,7 +162,7 @@ pub fn strip_crate(dir: &Path, out: &Path, include_tests: bool) -> R<Vec<FileRes
 pub fn strip_sources(krate: &str, sources: &[(PathBuf, String)], trees: &[(PathBuf, Vec<PathBuf>)]) -> Vec<(PathBuf, R<(String, Value)>)> {
     let mut stripped: Vec<(PathBuf, R<(String, Value)>)> =
         sources.iter().map(|(rel, src)| (rel.clone(), strip(src, krate, &rel.to_string_lossy().replace('\\', "/")))).collect();
-    let names = crate_realization_names(stripped.iter().filter_map(|s| s.1.as_ref().ok()));
+    let names = crate_realization_names(&stripped.iter().filter_map(|s| s.1.as_ref().ok()).collect::<Vec<_>>());
     for ((rel, src), (_, r)) in sources.iter().zip(stripped.iter_mut()) {
         let differs = r.as_ref().is_ok_and(|(_, js)| {
             js["realizations"].as_object().into_iter().flatten().any(|(k, v)| names.get(&realization_key(v["template"].as_str().unwrap_or(""), &v["args"])) != Some(k))
@@ -197,14 +197,14 @@ pub fn strip_sources(krate: &str, sources: &[(PathBuf, String)], trees: &[(PathB
 
 /// The name of each realization of a package, by `realization_key`: the name the first file gave it, unless another
 /// realization has it or it is an identifier of some bare body, then with a number after it.
-pub fn crate_realization_names<'a>(files: impl Iterator<Item = &'a (String, Value)> + Clone) -> HashMap<String, String> {
+pub fn crate_realization_names(files: &[&(String, Value)]) -> HashMap<String, String> {
     let mut idents: HashSet<String> = HashSet::new();
-    for (bare, js) in files.clone() {
+    for (bare, js) in files.iter().copied() {
         let own: HashSet<&String> = js["realizations"].as_object().into_iter().flatten().map(|(k, _)| k).collect();
         idents.extend(crate::bind::idents(bare).into_iter().filter(|i| !own.contains(i)));
     }
     let (mut names, mut taken): (HashMap<String, String>, HashSet<String>) = (HashMap::new(), HashSet::new());
-    for (_, js) in files {
+    for (_, js) in files.iter().copied() {
         for (k, v) in js["realizations"].as_object().into_iter().flatten() {
             let key = realization_key(v["template"].as_str().unwrap_or(""), &v["args"]);
             if names.contains_key(&key) {

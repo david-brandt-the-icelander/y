@@ -1,0 +1,5 @@
+{
+ "fnv::fnv_hash": {
+  "bytes_item_u64": "byte"
+ }
+}
