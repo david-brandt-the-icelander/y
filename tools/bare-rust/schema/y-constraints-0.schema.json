@@ -200,6 +200,10 @@
       ],
       "additionalProperties": false,
       "properties": {
+        "default": {
+          "$ref": "#/$defs/type",
+          "description": "The parameter's default: a type, or for a const parameter its value as host text (form `const_default`)."
+        },
         "name": {
           "type": "string",
           "description": "A type parameter, or a lifetime with its quote."

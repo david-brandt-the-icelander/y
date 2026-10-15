@@ -1,7 +1,7 @@
 //! Crate mode: find a crate's corpus files, strip them into `x.brs` and `x.constraints.json`, weave them back.
 use crate::json::canonical;
 use crate::strip::{realization_key, strip_with, StripOpts};
-use crate::{named_children, parse_rust, strip, text, R};
+use crate::{named_children, parse_rust, text, R};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -160,15 +160,19 @@ pub fn strip_crate(dir: &Path, out: &Path, include_tests: bool) -> R<Vec<FileRes
 /// among the identifiers of every bare body, a file whose own names differ stripped again with these names, and each
 /// crate's realizations in its root's file.
 pub fn strip_sources(krate: &str, sources: &[(PathBuf, String)], trees: &[(PathBuf, Vec<PathBuf>)]) -> Vec<(PathBuf, R<(String, Value)>)> {
-    let mut stripped: Vec<(PathBuf, R<(String, Value)>)> =
-        sources.iter().map(|(rel, src)| (rel.clone(), strip(src, krate, &rel.to_string_lossy().replace('\\', "/")))).collect();
+    let gated = gated_files(sources, trees);
+    let opts = |rel: &PathBuf, names: HashMap<String, String>| StripOpts { realization_names: names, cfg_gated: gated.contains(rel) };
+    let mut stripped: Vec<(PathBuf, R<(String, Value)>)> = sources
+        .iter()
+        .map(|(rel, src)| (rel.clone(), strip_with(src, krate, &rel.to_string_lossy().replace('\\', "/"), &opts(rel, HashMap::new()))))
+        .collect();
     let names = crate_realization_names(&stripped.iter().filter_map(|s| s.1.as_ref().ok()).collect::<Vec<_>>());
     for ((rel, src), (_, r)) in sources.iter().zip(stripped.iter_mut()) {
         let differs = r.as_ref().is_ok_and(|(_, js)| {
             js["realizations"].as_object().into_iter().flatten().any(|(k, v)| names.get(&realization_key(v["template"].as_str().unwrap_or(""), &v["args"])) != Some(k))
         });
         if differs {
-            *r = strip_with(src, krate, &rel.to_string_lossy().replace('\\', "/"), &StripOpts { realization_names: names.clone() });
+            *r = strip_with(src, krate, &rel.to_string_lossy().replace('\\', "/"), &opts(rel, names.clone()));
         }
     }
     for (root, tree) in trees {
@@ -193,6 +197,40 @@ pub fn strip_sources(krate: &str, sources: &[(PathBuf, String)], trees: &[(PathB
         }
     }
     stripped
+}
+
+/// The files a `#[cfg(..)]` on their `mod` (or on one around it) may leave out of the build.
+fn gated_files(sources: &[(PathBuf, String)], trees: &[(PathBuf, Vec<PathBuf>)]) -> HashSet<PathBuf> {
+    let roots: HashSet<&PathBuf> = trees.iter().map(|(r, _)| r).collect();
+    let mut gated: HashSet<PathBuf> = HashSet::new();
+    // (child, parent, the `mod` gates it): each `mod name;` of each file.
+    let mut edges: Vec<(PathBuf, PathBuf, bool)> = vec![];
+    for (rel, src) in sources {
+        let dir = rel.parent().unwrap_or(Path::new(""));
+        let stem = rel.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+        let base = if roots.contains(rel) || stem == "mod" { dir.to_path_buf() } else { dir.join(stem) };
+        let tree = parse_rust(src);
+        for m in named_children(tree.root_node()).into_iter().filter(|n| n.kind() == "mod_item" && n.child_by_field_name("body").is_none()) {
+            let name = text(m.child_by_field_name("name").unwrap(), src);
+            for cand in [base.join(format!("{name}.rs")), base.join(name).join("mod.rs")] {
+                if sources.iter().any(|(r, _)| r == &cand) {
+                    edges.push((cand, rel.clone(), crate::life::cfg_gated(m, src)));
+                    break;
+                }
+            }
+        }
+    }
+    loop {
+        let before = gated.len();
+        for (child, parent, gates) in &edges {
+            if *gates || gated.contains(parent) {
+                gated.insert(child.clone());
+            }
+        }
+        if gated.len() == before {
+            return gated;
+        }
+    }
 }
 
 /// The name of each realization of a package, by `realization_key`: the name the first file gave it, unless another

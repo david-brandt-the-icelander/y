@@ -119,11 +119,11 @@ language § 7.3: a lock guard, a file) keeps its end where the source has it: `b
 block that ends where the statement did. A turbofish is a realization of a template (language § 3.5), named in the body:
 `s.parse_u16()` for `s.parse::<u16>()`, with `"parse_u16": {"template": "<_>::parse", "args": ["u16"]}` in the
 crate's table of realizations, in the root module's file; the same template with the same arguments has one name across
-the crate. A cast to a pointer is a cast local of type `ptr<T>` with its access. A constant context gets a block in
+the crate. A cast local carries any target, a pointer as `ptr<T>` with its access. A constant context gets a block in
 its place, and a `const` whose whole value is a cast carries it on its subject. A suffixed literal in a pattern loses
 its suffix where the value it matches is a name declared with that type, and otherwise is named, `_k1_u8 @ 1`, with
-the type keyed by that pattern. What cannot be bound yet (a cast to a type alias, the left of a compound assignment whose right
-has an effect) keeps `_` in the body and a positional hint; `_` in casts and type arguments is valid Rust, so the bare
+the type keyed by that pattern. What cannot be bound yet (a cast in a macro argument that runs only sometimes, a value
+that releases something at its end where the statement might not run) keeps `_` in the body and a positional hint; `_` in casts and type arguments is valid Rust, so the bare
 form keeps the target's syntax and only its types are erased. The
 proof of concept leaves `Rc`, `Arc`, `Box` and trait objects in the body as written and counts them, and keeps every
 `.unwrap()` and `.expect()` in the body, as decided (§ 3.2).
@@ -264,7 +264,7 @@ Every emptied production is a slot, and every slot maps to a clause:
 | A field's type | `fields[f].type`, `fields[f].hold` | `field f : T`; `hold f : owns \| shares \| borrows` |
 | A tuple field's type (`A(_)`) | `fields[i].type` | As above |
 | A `let`'s type | `holes.locals[name]` | `local name : T` |
-| `mut` on a binding | Not stored: derived (§ 2.3) | — |
+| `mut` on a binding | Not stored: derived (§ 2.3) | Kept in the body where a `#[cfg]` may leave the code out of the build, which rustc cannot derive from |
 | `#[must_use]`, `#[non_exhaustive]` | Clauses | `result must be used`; `open` |
 | `const fn`, `unsafe fn` | Host text only (§ 12) | — |
 | A hole in an expression | `holes.hints`, by position | Body hint (§ 2.4) |

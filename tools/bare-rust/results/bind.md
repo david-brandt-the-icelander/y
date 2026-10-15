@@ -26,6 +26,9 @@ say. A mid-expression type is treated as an obfuscation that `bind` undoes once.
     Every constant context allows a block with a `let`, so the binding goes into one in its place:
     `[0; { let n_usize: usize = N as usize; n_usize }]`. A `const` or `static` whose whole value is the cast is the
     name itself, as a `let` is: `const W: usize = N as usize;` is `const W = N;` with `"cast": true` on its subject.
+  - A `while let` runs its value each time round, and a let chain (Rust 2024) runs each part only if the parts
+    before it matched, and a part may use the names they bind. Each gets a block in its place:
+    `if let Some(y) = a && { let n_u8: u8 = n as u8; y > n_u8 }`.
 - **Order.** A bound value now runs before the rest of its statement. Anything earlier in the statement that could have
   an effect (a call, an index, a macro) is bound first, in order: `g(1) + g(h) as u32` becomes `let g_v = g(1);` and
   then `let g_u32: u32 = g(h) as u32;`. Rust runs a method's receiver before its arguments, and how it is bound
@@ -42,7 +45,8 @@ say. A mid-expression type is treated as an obfuscation that `bind` undoes once.
   - **A compound assignment** runs its right first when both sides are primitives, and its left first otherwise.
     `bind` cannot see which. So where the left has an effect, a cast in the right is bound in a block in the right's
     place, which runs where the right did either way: `*m.entry(k).or_insert(0) += { let len_u64: u64 = b.len() as
-    u64; len_u64 }`. A cast in the left whose right has an effect is left and reported.
+    u64; len_u64 }`. A cast in the left, where the right has an effect, goes into a block in place of the part of
+    the left it is in (an index, what is dereferenced): `v[{ let i_usize: usize = i as usize; i_usize }] += next()`.
 
   `tests/bind.rs` logs every call in such statements, and checks that the bound program logs the same sequence.
 - **Already named.** `let n = e as f64;` gets a type, `let n: f64 = e as f64;`, rather than a second name. Brackets
@@ -59,12 +63,14 @@ say. A mid-expression type is treated as an obfuscation that `bind` undoes once.
     `debug_assert!` only in a debug build) is left, and reported.
   - A macro whose syntax the tool does not know, and that states a type, is kept as Rust text in the bare body:
     `rust! { twice!(x as u8) }`, which weaves back to the call. It is never the preferred form.
+- **Any cast target.** A cast local carries whatever type the cast writes, not only a primitive or a pointer:
+  `x as Word` (a type alias) is `{"type": "Word", "cast": true}`, `&x as &dyn Display` is `{"type": "ref<any
+  Display>", "cast": true}`, and `double as fn(u8) -> u8` carries the `fn` pointer as host text. `&x as T` needed one
+  fix: `&` binds tighter than `as`, which the tool did not know, so it took the cast for one that needed brackets.
 - **Left as hints, and reported by `bare-rust bind`:**
-  - a cast to a type that is neither a primitive nor a pointer (a type alias, a `fn` pointer);
-  - a cast in the left of a compound assignment whose right has an effect (`v[i as usize] += f()`);
-  - a suffixed literal in the pattern of a `let ... else`, or under one name with literals of another type;
-  - a cast in a `while let` condition or a let chain;
-  - a cast or a turbofish in a macro argument that runs only sometimes.
+  - a cast or a turbofish in a macro argument that runs only sometimes;
+  - a cast holding a value that releases something at its end, where the statement might not run;
+  - a suffixed literal under one name with literals of another type.
 - **Left as written:** a cast in an enum's discriminant (`A = N as isize`), which stays in the bare body as before.
   A discriminant is not a body that `strip` takes holes from.
 
@@ -88,7 +94,8 @@ program computes. In `match s.parse().unwrap() { 200u8 => .. }` the pattern is w
   `"n @ 4..=6": {"literal": "u8"}`, which weaves back to the suffixes.
 - **Otherwise the literal gets a name** that does nothing else, together with the range or the alternatives it is part
   of: `Some(1u8)` becomes `Some(_k1_u8 @ 1u8)`, and `Some(2u8 | 3u8)` becomes `Some(_k2_3_u8 @ (2u8 | 3u8))`. The `_`
-  says that nothing uses it, and the compiler gives no warning for it.
+  says that nothing uses it, and the compiler gives no warning for it. A `let ... else` pattern is treated the same:
+  `let Some(0u8) = it.next() else { .. }` becomes `let Some(_k0_u8 @ 0u8) = it.next() else { .. }`.
 
 `bind` also found that a top-level literal pattern of an `if let` or `while let` (`if let -1i8 = x`) was read as an
 expression and bound to a `let`, which made the pattern a name that always matches. Patterns there are now patterns.
@@ -179,8 +186,9 @@ table, at the top of its root's constraint file (`src/lib.constraints.json`):
 
 ## On the corpora
 
-After `strip`, no positional hint and no `rust! { ... }` text is left in any corpus. What the constraint files hold
-instead:
+After `strip`, no positional hint and no `rust! { ... }` text is left in strsim, fnv, the examples or the tool's own
+source. The four crates added for the forms below have a few, all of one of three kinds (below the table). What the
+constraint files hold:
 
 | corpus | cast locals | typed locals | closure parameters, keyed by name | realizations | `rust!` | positional hints |
 |---|---:|---:|---:|---:|---:|---:|
@@ -188,13 +196,26 @@ instead:
 | fnv | 1 | 0 | 0 | 0 | 0 | 0 |
 | examples | 1 | 0 | 0 | 2 | 0 | 0 |
 | the tool's own source | 49 | 344 | 162 | 16 | 0 (was 43) | 0 |
+| itoa | 30 | 0 | 0 | 2 | 0 | 0 |
+| memchr | 22 | 5 | 0 | 10 | 3 | 0 |
+| miniz_oxide | 266 | 43 | 4 | 4 | 24 | 1 |
+| png | 320 | 162 | 13 | 15 | 4 | 2 |
 
 Closure return types are among the typed locals, as `out`. The tool's own source grew with this round's code, which is
-where its new typed locals and closure parameters come from. None of the corpora has a pattern literal, a pointer cast
-or a cast in a constant context. The tool's one raw pointer, `*const ()` from the grammar, is `ptr<()>` now where it was
+where its new typed locals and closure parameters come from. The four crates at the bottom are the ones added for
+pattern literals, pointers and constant contexts (below). The tool's one raw pointer, `*const ()` from the grammar, is `ptr<()>` now where it was
 host text, and its three casts in a compound assignment whose left has an effect are bound in place. The `rust!` markers were all standard macros: `json!` (14),
 `format!` (8), `assert_eq!` (6), `writeln!` (5), `vec!` (3) and `println!` (1) in the tool's source, and most of them
 for a turbofish (`collect::<Vec<_>>()`) in an argument.
+
+**What is left in the new crates** is of three kinds, none of them new:
+
+- **An argument a macro runs only sometimes:** `debug_assert!(n as usize <= MAX)` (6 in miniz_oxide), and an
+  `assert_eq!` message with a turbofish (3 in memchr's tests). A binding before the macro would run it always.
+- **A macro the tool does not know** that states a type: miniz_oxide's own `generate_state!` (19) and `approx`'s
+  `assert_relative_eq!` in png's tests (4). They stay as Rust text.
+- **Const generic arguments in a turbofish**, `b.extract::<{ STRIDE_BYTES - BPP }, BPP>()` (2 hints, in png's
+  nightly-only SIMD module). A realization's arguments are types, and these are values.
 
 **A stronger check than the tests:** the tool's own source, with every file bound, still compiles with no warnings.
 Built from that bound source, the tool passes its unit tests and six of its test files (90 tests).
@@ -271,6 +292,51 @@ realizations. (The other 335 typed locals and 158 closure parameters are named i
 **The experiment crates.** One more agent named strsim's 31 mechanical locals and its 2 realizations, and fnv's one
 local (`experiments/renames/`). E6 runs on workspaces renamed with these maps.
 
+
+## New corpora: itoa, memchr, miniz_oxide, png
+
+None of strsim, fnv, the examples or the tool's source has a suffixed literal in a pattern, a pointer cast or a cast in
+a constant context. Four crates that do are now corpora, pinned in `corpora/fetch.sh` and checked by
+`tests/corpora.rs` (checks 1 to 4; no externals list is committed for them, so check 5 does not run):
+
+| crate | files | tests | what it brings |
+|---|---:|---:|---|
+| itoa | 3 | 13 | pointer casts (2, cast locals of type `ptr<u8>`), an impl for a primitive type |
+| memchr | 45 | 166 | pointers in signatures (366 `ptr<..>` slots), a `const` whose whole value is a cast (2), a union, impls for pointer types |
+| miniz_oxide | 16 | 55 | casts in array lengths (4 blocks in place), modules behind `#[cfg(feature = ..)]` |
+| png | 24 | 117 | suffixed literals in patterns that decide what a generic call reads: `match buf.read_be()? { 0u8 => .. }` (3 names) |
+
+All four pass checks 1 to 4. Getting there needed these, each with a test:
+
+- **Forms strip refused.**
+  - An impl for a primitive type (`impl Unsigned for u128`): the bare grammar took only a type name there.
+  - An impl for a pointer type (`impl Pointer for *const T`), whose self slot is host text, as `&mut T` is.
+  - A union, which is a type with fields as a struct is; the bare body keeps the keyword.
+  - A generic parameter with a default (`type Result<T, E = Error>`), now `"default"` on the parameter.
+- **A type the file could not read back.** A call-sugar result with `as` (`FnMut(&[u8]) -> Option<usize>`) printed as
+  `-> u64 as 'usize'?`, where the `as` belongs to the whole type. It prints as `-> (u64 as 'usize')?` now, and `(T)`
+  without a comma groups, as a one-tuple is `(T,)`.
+- **`&raw`, a borrow of a variable named `raw`,** did not parse as bare Rust. The bare parser is generated by a newer
+  tree-sitter, which lexes `raw` after `&` as the start of `&raw const x`; the keyword pair is one token now.
+- **`mut` that rustc does not derive.**
+  - For `&mut x` of an immutable `x`, rustc may suggest removing the `&mut` rather than adding the `mut`. The weave now
+    puts `mut` on the binding the message names when rustc suggests none.
+  - Code a `#[cfg(..)]` leaves out of the build (other than `cfg(test)`) is never compiled, so its `mut` cannot be
+    derived. The bare body keeps it there, and in a file whose `mod` has such a `cfg`. This is the case for 186 of
+    miniz_oxide's 222 `mut`s, whose modules sit behind `#[cfg(feature = "with-alloc")]`, and for 53 of png's 457.
+- **Brackets bind kept.** Binding the value `(a << 9)` kept its brackets, `let v = (a << 9);`, and a block put where a
+  bracketed `||` operand was ended in `(..)`. Both gave `unused_parens` warnings.
+- **The checks.**
+  - Check 2 reads `&'_ T` as `&T`.
+  - Check 3 does not count an error the original crate has too: miniz_oxide's benchmark needs `criterion`, which
+    upstream left commented out.
+  - A crate in a workspace gets paths from the workspace's root in cargo's messages, and its tests and clippy
+    configuration read the workspace's files (`../miniz/miniz.c`, `clippy.toml`). The paths are taken from the crate,
+    and the woven copy gets the workspace's other files linked beside it.
+  - A test that writes under `target/` finds the directory in the woven copy.
+  - Check 4 counts an inference error at a realization, `TryInto::<_>::try_into(x)` with its arguments dropped, as
+    that realization's hole.
+  - `rustfmt` falls back to edition 2024 for what only it parses (let chains).
 
 ## Also fixed: a lifetime inside an `impl Trait` parameter
 

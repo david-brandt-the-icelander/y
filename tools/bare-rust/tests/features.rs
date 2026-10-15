@@ -254,12 +254,10 @@ fn os() -> u8 {
 
 #[test]
 fn unsupported_is_refused_with_a_reason() {
-    let e = strip("union U { a: u8 }", "demo 0.1.0", "src/lib.rs").unwrap_err();
-    assert!(e.starts_with("union:"), "{e}");
+    let e = strip("struct U;\nimpl !Send for U {}", "demo 0.1.0", "src/lib.rs").unwrap_err();
+    assert!(e.starts_with("negative-impl:"), "{e}");
     let e = strip("fn f(x: u8", "demo 0.1.0", "src/lib.rs").unwrap_err();
     assert!(e.starts_with("parse-error:"), "{e}");
-    let e = strip("struct S<const N: usize = 3>;", "demo 0.1.0", "src/lib.rs").unwrap_err();
-    assert!(e.starts_with("generic-default:"), "{e}");
 }
 
 #[test]
@@ -411,6 +409,44 @@ pub const NULL: *const u8 = std::ptr::null();
     assert_eq!(locals["y"], serde_json::json!({"type": "ptr<u16>", "access": {"rights": "read"}, "cast": true}));
     assert_eq!(locals["b_ptr"], serde_json::json!({"type": "ptr<Buf>", "access": {"rights": "read"}, "cast": true}));
     assert!(b.contains("let b_ptr = b;\n    let b_ptr_usize = b_ptr;\n    let z = b_ptr_usize + n;"), "{b}");
+}
+
+#[test]
+fn an_impl_for_a_primitive_type_keeps_its_head() {
+    let src = "pub trait Unsigned {\n    fn bits(self) -> u32;\n}\nimpl Unsigned for u128 {\n    fn bits(self) -> u32 {\n        128\n    }\n}\nimpl Unsigned for &str {\n    fn bits(self) -> u32 {\n        8\n    }\n}\n";
+    let (b, j) = roundtrip(src);
+    assert!(b.contains("impl Unsigned for u128 {") && b.contains("impl Unsigned for str {"), "{b}");
+    assert_eq!(subject(&j, "demo::u128 as Unsigned::bits")["params"][0]["type"], "u128");
+}
+
+#[test]
+fn a_union_is_a_type_with_fields_and_an_impl_may_be_for_a_pointer() {
+    let src = "pub union Word {\n    pub n: u32,\n    b: [u8; 4],\n}\npub trait Pointer {\n    fn is_null(self) -> bool;\n}\nimpl<T> Pointer for *const T {\n    fn is_null(self) -> bool {\n        self.is_null()\n    }\n}\nimpl<T> Pointer for *mut T {\n    fn is_null(self) -> bool {\n        self.is_null()\n    }\n}\n";
+    let (b, j) = roundtrip(src);
+    assert!(b.contains("union Word {\n    n,\n    b,\n}"), "{b}");
+    assert_eq!(subject(&j, "demo::Word")["fields"][0]["type"], "u32");
+    // The self type of an impl has no slot for an access: a `*const` there is host text, as a `&mut` is.
+    assert_eq!(subject(&j, "demo::T as Pointer")["self"]["host"], "*const T");
+    assert_eq!(subject(&j, "demo::T as Pointer#2")["self"], "ptr<T>");
+}
+
+#[test]
+fn a_generic_parameter_keeps_its_default() {
+    let src = "pub struct Error;\npub type Result<T, E = Error> = core::result::Result<T, E>;\npub struct Buf<T = u8, const N: usize = 3>([T; N]);\n";
+    let (_, j) = roundtrip(src);
+    assert_eq!(subject(&j, "demo::Result")["generics"][1], serde_json::json!({"name": "E", "bounds": [], "default": "Error"}));
+    assert_eq!(subject(&j, "demo::Buf")["generics"][0]["default"], "u8");
+    assert_eq!(subject(&j, "demo::Buf")["generics"][1]["default"]["host"], "3");
+}
+
+#[test]
+fn a_mut_the_compiler_cannot_see_stays_in_the_bare_body() {
+    // `mut` is derived through rustc, which does not compile what a `#[cfg]` leaves out; there the bare body keeps it.
+    let src = "#[cfg(feature = \"simd\")]\npub fn sum(v: &[u8], mut n: u32) -> u32 {\n    let mut t = 0;\n    for x in v {\n        t += *x as u32;\n    }\n    n += t;\n    n\n}\npub fn plain(v: &[u8]) -> usize {\n    let mut t = 0;\n    t += v.len();\n    #[cfg(test)]\n    let mut u = 1;\n    t\n}\n";
+    let (b, j) = roundtrip(src);
+    assert!(b.contains("fn sum(v, mut n) {\n    let mut t = 0;"), "{b}");
+    assert!(b.contains("fn plain(v) {\n    let t = 0;") && b.contains("    let u = 1;"), "{b}");
+    assert_eq!(subject(&j, "demo::sum")["params"][1]["name"], "n");
 }
 
 #[test]
@@ -795,6 +831,31 @@ pub fn f(s: &str, v: Vec<i32>) -> Result<usize, std::num::ParseIntError> {
     assert_eq!(r["collect_vec"], serde_json::json!({"template": "<_>::collect", "args": ["list<_> as 'Vec'"]}));
     assert_eq!(r["ok_unit"], serde_json::json!({"template": "std::result::Result::Ok", "args": ["_", "()"]}));
     assert_eq!(r.as_object().unwrap().len(), 5, "{r}");
+}
+
+#[test]
+fn a_file_whose_mod_has_a_cfg_keeps_its_muts() {
+    // `#[cfg(feature = "x")] mod gated;`: rustc may never see `gated.rs`, nor what is under it, so its `mut`s stay.
+    let d = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/bare-rust-test/cfg-gated-file");
+    let _ = std::fs::remove_dir_all(&d);
+    let w = |p: &str, s: &str| {
+        std::fs::create_dir_all(d.join(p).parent().unwrap()).unwrap();
+        std::fs::write(d.join(p), s).unwrap();
+    };
+    let body = "pub fn f() -> u32 {\n    let mut n = 0;\n    n += 1;\n    n\n}\n";
+    w("Cargo.toml", "[package]\nname = \"demo\"\nversion = \"0.1.0\"\nedition = \"2021\"\n");
+    w("src/lib.rs", "pub mod open;\n#[cfg(feature = \"x\")]\npub mod gated;\n");
+    w("src/open.rs", body);
+    w("src/gated.rs", &format!("pub mod inner;\n{body}"));
+    w("src/gated/inner.rs", body);
+    let out = d.join("bare");
+    for r in bare_rust::corpus::strip_crate(&d, &out, false).unwrap() {
+        assert!(r.outcome.is_ok(), "{:?}", r.outcome);
+    }
+    let read = |p: &str| std::fs::read_to_string(out.join(p)).unwrap();
+    assert!(read("src/open.brs").contains("let n = 0;"));
+    assert!(read("src/gated.brs").contains("let mut n = 0;"));
+    assert!(read("src/gated/inner.brs").contains("let mut n = 0;"));
 }
 
 #[test]

@@ -1,4 +1,5 @@
-//! Checks of proposal 9 over the corpora: the golden file, the tool's own source, strsim and fnv.
+//! Checks of proposal 9 over the corpora: the golden file, the tool's own source, strsim, fnv, itoa, memchr, miniz_oxide
+//! and png.
 //! `corpora_checks_1_and_2_without_cargo` runs strip and weave in memory (check 2 ignores `mut`); the `cargo_*` tests
 //! run checks 1 to 4 with cargo and rustc, for each crate.
 //! Needs the pinned crates: run `corpora/fetch.sh` first.
@@ -267,6 +268,36 @@ fn cargo_strsim() {
 fn cargo_fnv() {
     let r = run_checks(root().join("corpora/src/fnv"), true, true);
     assert_library_complete(&r);
+    assert_holes_are_sites(&r);
+}
+
+// Crates with the forms the others lack. No externals list is committed for them, so check 5 does not run.
+
+#[test]
+fn cargo_itoa() {
+    // Pointer casts, as cast locals of type `ptr<T>`; an impl for a primitive type.
+    let r = run_checks(root().join("corpora/src/itoa"), true, true);
+    assert_holes_are_sites(&r);
+}
+
+#[test]
+fn cargo_memchr() {
+    // Pointers in signatures, a `const` whose whole value is a cast, a union, impls for pointer types.
+    let r = run_checks(root().join("corpora/src/memchr"), true, true);
+    assert_holes_are_sites(&r);
+}
+
+#[test]
+fn cargo_miniz_oxide() {
+    // A cast in an array length; code a `#[cfg]` leaves out, which keeps its `mut`.
+    let r = run_checks(root().join("corpora/src/miniz_oxide/miniz_oxide"), true, true);
+    assert_holes_are_sites(&r);
+}
+
+#[test]
+fn cargo_png() {
+    // Suffixed literals in patterns where the pattern decides what a generic call reads (`match buf.read_be()? { 0u8 => .. }`).
+    let r = run_checks(root().join("corpora/src/png"), true, true);
     assert_holes_are_sites(&r);
 }
 

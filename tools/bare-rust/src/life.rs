@@ -226,6 +226,31 @@ fn text_starts_with_ref(n: Node) -> bool {
 }
 
 /// Edits that remove `mut` from a `let`, a `parameter` or the parameters of a closure.
+/// Whether a `#[cfg(..)]` on the node or around it may leave it out of the build (`#[cfg(test)]` and
+/// `#[cfg(not(test))]` aside, which a check of all targets builds): then rustc does not see it, and cannot say where it
+/// needs `mut`.
+pub fn cfg_gated(n: Node, src: &str) -> bool {
+    let gates = |a: Node| {
+        let t: String = text(a, src).chars().filter(|c| !c.is_whitespace()).collect();
+        (t.starts_with("#[cfg(") || t.starts_with("#![cfg(")) && !matches!(t.as_str(), "#[cfg(test)]" | "#[cfg(not(test))]" | "#![cfg(test)]")
+    };
+    let mut cur = Some(n);
+    while let Some(c) = cur {
+        let mut p = c.prev_sibling();
+        while let Some(a) = p.filter(|a| a.kind() == "attribute_item" || is_comment(*a)) {
+            if a.kind() == "attribute_item" && gates(a) {
+                return true;
+            }
+            p = a.prev_sibling();
+        }
+        if named_children(c).into_iter().any(|a| a.kind() == "inner_attribute_item" && gates(a)) {
+            return true;
+        }
+        cur = c.parent();
+    }
+    false
+}
+
 pub fn mut_edits(n: Node, out: &mut Vec<Edit>) {
     match n.kind() {
         "let_declaration" | "parameter" => {
@@ -262,6 +287,12 @@ pub fn normalise_edits(n: Node, src: &str, out: &mut Vec<Edit>, strip_mut: bool)
         "token_tree" => return,
         "function_item" | "function_signature_item" => out.extend(analyse(n, src).cuts),
         "let_declaration" | "parameter" | "closure_parameters" | "self_parameter" if strip_mut => mut_edits(n, out),
+        // `&'_ T` is `&T`: the anonymous lifetime is the elided one.
+        "lifetime" if text(n, src) == "'_" && n.parent().is_some_and(|p| p.kind() == "reference_type") => {
+            if let Some(next) = n.next_sibling() {
+                out.push((n.start_byte(), next.start_byte(), String::new()));
+            }
+        }
         _ => {}
     }
     for c in named_children(n) {
@@ -394,6 +425,7 @@ pub fn binds_tighter_than_as(n: Node) -> bool {
             | "boolean_literal"
             | "char_literal"
             | "unary_expression"
+            | "reference_expression"
             | "type_cast_expression"
             | "try_expression"
             | "await_expression"
@@ -458,8 +490,8 @@ pub fn sites(body: Node) -> Vec<Site> {
     out
 }
 
-/// The pattern under a name, `1..=9` in `n @ 1..=9`, and the literals in it.
-pub fn at_literals<'a>(at: Node<'a>) -> (Option<Node<'a>>, Vec<Node<'a>>) {
+/// The literals under a node.
+pub fn at_literals_in(n: Node) -> Vec<Node> {
     fn lits<'a>(n: Node<'a>, out: &mut Vec<Node<'a>>) {
         if matches!(n.kind(), "integer_literal" | "float_literal") {
             out.push(n);
@@ -468,13 +500,16 @@ pub fn at_literals<'a>(at: Node<'a>) -> (Option<Node<'a>>, Vec<Node<'a>>) {
             lits(c, out);
         }
     }
+    let mut out = vec![];
+    lits(n, &mut out);
+    out
+}
+
+/// The pattern under a name, `1..=9` in `n @ 1..=9`, and the literals in it.
+pub fn at_literals(at: Node) -> (Option<Node>, Vec<Node>) {
     let kids: Vec<Node> = named_children(at).into_iter().filter(|c| !is_comment(*c)).collect();
     let pat = kids.last().copied().filter(|_| kids.len() >= 2);
-    let mut out = vec![];
-    if let Some(p) = pat {
-        lits(p, &mut out);
-    }
-    (pat, out)
+    (pat, pat.map(at_literals_in).unwrap_or_default())
 }
 
 /// Split a numeric literal into its digits and its type suffix: (digits, separator `_`?, suffix).

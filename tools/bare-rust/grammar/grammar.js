@@ -1,6 +1,9 @@
 // Bare Rust: tree-sitter-rust with every constraint production made empty (proposal/bare-rust.md, 3.1).
 // Names stay; types, lifetimes, `&`/`&mut`/`mut`, visibility, generics, bounds and `where` go to the constraint file.
 const rust = require('tree-sitter-rust/grammar');
+// `impl Unsigned for u128`: the primitive types, as tree-sitter-rust names them.
+const primitiveTypes = ['u8', 'i8', 'u16', 'i16', 'u32', 'i32', 'u64', 'i64', 'u128', 'i128', 'isize', 'usize', 'f32', 'f64',
+  'bool', 'str', 'char'];
 module.exports = grammar(rust, {
   name: 'bare_rust',
   rules: {
@@ -26,7 +29,7 @@ module.exports = grammar(rust, {
     trait_item: $ => seq(optional('unsafe'), 'trait', field('name', $._type_identifier), field('body', $.declaration_list)),
     impl_item: $ => seq(optional('unsafe'), 'impl',
       optional(seq(optional('!'), field('trait', choice($._type_identifier, $.scoped_type_identifier)), 'for')),
-      field('type', choice($._type_identifier, $.scoped_type_identifier)),
+      field('type', choice($._type_identifier, $.scoped_type_identifier, alias(choice(...primitiveTypes), $.primitive_type))),
       choice(field('body', $.declaration_list), ';')),
 
     const_item: $ => seq('const', field('name', choice($.identifier, '_')),
@@ -46,6 +49,12 @@ module.exports = grammar(rust, {
     closure_parameters: $ => seq('|', sepBy(',', $.parameter), '|'),
     closure_expression: $ => prec(-1, seq(optional('static'), optional('async'), optional('move'),
       field('parameters', $.closure_parameters), field('body', choice($._expression, '_')))),
+    // `&raw const x` and `&raw mut x` borrow raw; `&raw` alone borrows a variable named `raw`. The keyword pair is one
+    // token, so that the lexer does not take `raw` for the keyword where it is a name.
+    reference_expression: $ => prec(12, seq('&',
+      choice(alias(token(seq('raw', /\s+/, 'const')), 'raw const'), alias(token(seq('raw', /\s+/, 'mut')), 'raw mut'),
+        optional($.mutable_specifier)),
+      field('value', $._expression))),
     // Visibility on a `use` is a constraint too: it moves to the file.
     use_declaration: $ => seq('use', field('argument', $._use_clause), ';'),
     let_declaration: $ => seq('let', field('pattern', $._pattern),

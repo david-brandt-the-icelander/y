@@ -63,12 +63,30 @@ fn command(dir: &Path, target: &Path, args: &[&str]) -> Command {
     c
 }
 
+/// A span's file relative to the crate directory: cargo gives a workspace member's from the workspace's root
+/// (`member/src/x.rs`), so a path that is not under the crate is tried from the directories above it.
+fn rebase(f: &str, dir: &Path) -> Option<String> {
+    let p = Path::new(f);
+    if !p.is_relative() {
+        return None;
+    }
+    if dir.join(p).is_file() {
+        return Some(f.to_string());
+    }
+    let dir = dir.canonicalize().ok()?;
+    dir.ancestors().skip(1).find_map(|a| {
+        let full = a.join(p).canonicalize().ok()?;
+        let rel = full.strip_prefix(&dir).ok()?;
+        full.is_file().then(|| rel.to_string_lossy().into_owned())
+    })
+}
+
 fn local(span: &Value, dir: &Path) -> Option<Value> {
     let mut s = span.clone();
     for _ in 0..16 {
         let f = s["file_name"].as_str()?;
-        let p = Path::new(f);
-        if p.is_relative() && dir.join(p).is_file() {
+        if let Some(r) = rebase(f, dir) {
+            s["file_name"] = Value::String(r);
             return Some(s);
         }
         s = s["expansion"]["span"].clone();
@@ -82,9 +100,9 @@ fn local(span: &Value, dir: &Path) -> Option<Value> {
 fn fixes(m: &Value, dir: &Path, out: &mut Vec<Fix>) {
     for sp in m["spans"].as_array().into_iter().flatten() {
         if let (Some(r), Some(f)) = (sp["suggested_replacement"].as_str(), sp["file_name"].as_str()) {
-            if Path::new(f).is_relative() && dir.join(f).is_file() {
+            if let Some(f) = rebase(f, dir) {
                 out.push(Fix {
-                    file: f.to_string(),
+                    file: f,
                     start: sp["byte_start"].as_u64().unwrap_or(0) as usize,
                     end: sp["byte_end"].as_u64().unwrap_or(0) as usize,
                     replacement: r.to_string(),

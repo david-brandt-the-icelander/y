@@ -189,9 +189,10 @@ impl Release {
     }
 }
 
-/// A cast target that a local can carry: a primitive written as such, or a pointer (`ptr<T>`, with its access).
+/// A cast target that a local can carry: any type written out, `_` aside. A primitive, a pointer (`ptr<T>`, with its
+/// access), a type alias, a `fn` pointer or a reference (`&x as &dyn Display`) alike: the local's type is the target.
 pub fn carried_type(t: &str) -> bool {
-    t != "_" && (crate::types::is_prim(t) || matches!(t, "usize" | "isize" | "char") || is_pointer(t))
+    !t.trim().is_empty() && t != "_"
 }
 
 fn is_pointer(t: &str) -> bool {
@@ -201,12 +202,19 @@ fn is_pointer(t: &str) -> bool {
     })
 }
 
-/// The word a cast's name ends with: the primitive (`h_u64`), or `ptr` for a pointer (`p_ptr`).
+/// The word a cast's name ends with: the primitive (`h_u64`), `ptr` for a pointer (`p_ptr`), `ref` for a reference,
+/// `fn` for a function pointer, or the last segment of a path (`x as Word` is `x_word`).
 fn type_word(t: &str) -> &str {
+    let t = t.trim();
     if is_pointer(t) {
         "ptr"
+    } else if t.starts_with('&') {
+        "ref"
+    } else if t.starts_with("fn") || t.starts_with("unsafe ") || t.starts_with("extern ") {
+        "fn"
     } else {
-        t
+        let head = t.split('<').next().unwrap_or(t);
+        head.rsplit("::").next().unwrap_or(head).trim()
     }
 }
 
@@ -274,6 +282,8 @@ fn step(body: Node, src: &str, rel: &Release) -> Step {
     let mut sites: Vec<(Node, &'static str, String)> = vec![];
     for s in life::sites(body) {
         match s.kind {
+            // `as _` states no type.
+            SK::Cast if text(s.node, src) == "_" => {}
             SK::Cast => {
                 if let Some(e) = s.node.parent() {
                     sites.push((e, "cast", text(s.node, src).to_string()));
@@ -491,6 +501,19 @@ fn anchor<'a>(e: Node<'a>, src: &str) -> Result<Anchor<'a>, &'static str> {
             // `m[k()] += x as u64`: whether the right runs before the left depends on the types (both primitives: the
             // right first). Where the left has an effect, the binding goes into a block in the right's place, which
             // runs where the right did either way.
+            // A cast in the left, where the right has an effect: a block in the place of the part of the left it is in
+            // (an index, what is dereferenced), which runs where that part did: `v[{ let i_usize: usize = i as
+            // usize; i_usize }] += next()`.
+            "compound_assignment_expr" if is("left") => {
+                if p.child_by_field_name("right").is_some_and(|r| !pure_in(r, Some(src))) {
+                    let mut ps = vec![];
+                    place_parts(cur, src, &mut ps);
+                    return match ps.into_iter().find(|x| x.start_byte() <= e.start_byte() && e.end_byte() <= x.end_byte()) {
+                        Some(part) => Ok(Anchor::Boundary(part)),
+                        None => Err("in the left of a compound assignment whose right has an effect"),
+                    };
+                }
+            }
             "compound_assignment_expr" if is("right") => {
                 let mut ps = vec![];
                 if let Some(l) = p.child_by_field_name("left") {
@@ -514,12 +537,14 @@ fn anchor<'a>(e: Node<'a>, src: &str) -> Result<Anchor<'a>, &'static str> {
                 }
                 return Ok(Anchor::Boundary(cur));
             }
+            // A `while let` runs its value each time round; a let chain runs each part only if the parts before it
+            // matched, and a part may use the names they bind: the binding goes into a block in the part's place.
             "let_condition" if is("value") => {
-                if p.parent().is_some_and(|g| g.kind() == "while_expression") {
+                if p.parent().is_some_and(|g| matches!(g.kind(), "while_expression" | "let_chain")) {
                     return Ok(Anchor::Boundary(cur));
                 }
             }
-            "let_chain" => return Err("in a let chain"),
+            "let_chain" => return Ok(Anchor::Boundary(cur)),
             "closure_expression" if is("body") => return Ok(Anchor::Boundary(cur)),
             _ => {}
         }
@@ -704,9 +729,6 @@ fn plan(e: Node, what: &'static str, ty: &str, src: &str, used: &mut HashSet<Str
         }
         _ => {}
     }
-    if what == "cast" && !carried_type(ty) {
-        return Err("the target is not a primitive or a pointer");
-    }
     let lit_value = |e: Node| -> String {
         let t = text(e, src);
         let (digits, _, suffix) = life::lit_suffix(t.trim_start_matches('-').trim()).unwrap_or((t, false, ""));
@@ -768,7 +790,7 @@ fn plan(e: Node, what: &'static str, ty: &str, src: &str, used: &mut HashSet<Str
         }
         for x in &before {
             let name = fresh(&format!("{}_v", base_name(*x, src)), used);
-            lets.push(format!("let {name} = {};", text(*x, src)));
+            lets.push(format!("let {name} = {};", text(unparen(*x), src)));
             inner.push((x.start_byte(), x.end_byte(), name));
         }
     }
@@ -826,12 +848,28 @@ fn plan(e: Node, what: &'static str, ty: &str, src: &str, used: &mut HashSet<Str
             Ok(edits)
         }
         Anchor::Boundary(b) => {
-            let base = b.start_byte();
+            // `|| (a > n as usize)`: the block takes the brackets' place, `|| { let ..; a > n_usize }`.
+            let c = unparen(b);
+            let c = if inner.iter().all(|(s, e, _)| c.start_byte() <= *s && *e <= c.end_byte()) { c } else { b };
+            let base = c.start_byte();
             let shifted = inner.into_iter().map(|(s, e, t)| (s - base, e - base, t)).collect();
-            let body = apply(text(b, src), shifted);
+            let body = apply(text(c, src), shifted);
             Ok(vec![(b.start_byte(), b.end_byte(), format!("{{ {} {body} }}", lets.join(" ")))])
         }
     }
+}
+
+/// What is inside brackets that hold one expression: a `let`'s value and a block's tail need none.
+fn unparen(n: Node) -> Node {
+    if n.kind() == "parenthesized_expression" {
+        let inner: Vec<Node> = named_children(n).into_iter().collect();
+        if let [i] = inner.as_slice() {
+            if !is_comment(*i) {
+                return unparen(*i);
+            }
+        }
+    }
+    n
 }
 
 /// What goes between a binding and the statement after it: a new line at the statement's indent, or a space where the
@@ -891,13 +929,6 @@ fn plan_pattern_literal(e: Node, ty: &str, src: &str, used: &mut HashSet<String>
     };
     if let Some(at) = up.parent().filter(|p| p.kind() == "captured_pattern") {
         return Ok(suffixed(at)?.0);
-    }
-    let mut root = target;
-    while let Some(p) = root.parent().filter(|p| p.kind().ends_with("_pattern") || p.kind() == "negative_literal") {
-        root = p;
-    }
-    if root.parent().is_some_and(|p| p.kind() == "let_declaration") {
-        return Err("in the pattern of a `let`");
     }
     let (edits, values) = suffixed(target)?;
     let base = target.start_byte();

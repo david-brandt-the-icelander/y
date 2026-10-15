@@ -49,6 +49,16 @@ fn join(v: &[Ty]) -> String {
     v.iter().map(Ty::show).collect::<Vec<_>>().join(", ")
 }
 
+/// The result of call sugar: an `as` or a refinement after it would belong to the whole type, so a result that has
+/// one is in brackets: `Fn(u8) -> (u64 as 'usize')?`.
+fn show_ret(t: &Ty) -> String {
+    match t {
+        Ty::Opt(i) => format!("{}?", show_ret(i)),
+        Ty::As(..) | Ty::Refined(..) => format!("({})", t.show()),
+        _ => t.show(),
+    }
+}
+
 fn show_bounds(b: &[Bound]) -> String {
     b.iter().map(Bound::show).collect::<Vec<_>>().join(" + ")
 }
@@ -59,7 +69,7 @@ impl Bound {
         match self {
             Bound::Lifetime(l) => l.clone(),
             Bound::Iface { path, call: Some((a, r)), .. } => {
-                format!("{path}({}){}", join(a), r.as_ref().map(|r| format!(" -> {}", r.show())).unwrap_or_default())
+                format!("{path}({}){}", join(a), r.as_ref().map(|r| format!(" -> {}", show_ret(r))).unwrap_or_default())
             }
             Bound::Iface { path, args, assoc, .. } => {
                 let mut s = path.clone();
@@ -512,13 +522,19 @@ impl P<'_> {
             let mut v = vec![];
             if !self.eat(")") {
                 v.push(self.ty()?);
+                let mut comma = false;
                 while self.eat(",") {
+                    comma = true;
                     if self.eat(")") {
                         return Ok(Ty::Tuple(v));
                     }
                     v.push(self.ty()?);
                 }
                 self.expect(")")?;
+                // `(T)` groups, as a one-tuple is written `(T,)`.
+                if !comma {
+                    return Ok(v.remove(0));
+                }
             }
             return Ok(Ty::Tuple(v));
         }
@@ -603,6 +619,8 @@ mod tests {
             "some Iterator { Item = (u8, ref<text>) } + Clone + '_",
             "any std::error::Error + Send + Sync as 'std::boxed::Box'",
             "ref<any Fn(ref<u8>) -> bool>",
+            "any FnMut(ref<text>) -> (u64 as 'usize')? + 'static as 'Box'",
+            "(u8,)",
             "ref<any Iterator { Item = u8 }>",
             "Chars<'a>",
             "ref<list<Node<'_>> as 'Vec'>",

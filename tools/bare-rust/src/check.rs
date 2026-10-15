@@ -47,6 +47,8 @@ pub struct Check2 {
 pub struct Check3 {
     /// Errors of the woven crate's `cargo check` (holes, others, weave refusals).
     pub check_failures: Vec<String>,
+    /// Errors the original crate has too (a bench whose dependency upstream left out): not the round trip's.
+    pub inherited: Vec<String>,
     pub check_warnings_new: Vec<String>,
     pub clippy: Option<(usize, usize, Vec<String>)>,
     pub test: Option<(bool, String)>,
@@ -167,16 +169,22 @@ fn new_warnings(orig: &[Diag], new: &[Diag]) -> Vec<String> {
     out
 }
 
-fn describe(cw: &CrateWeave) -> Vec<String> {
-    let mut v: Vec<String> = cw.weave_errors.iter().map(|(f, e)| format!("weave refused {}: {e}", f.display())).collect();
-    v.extend(cw.holes.iter().map(|h| h.show()));
-    v.extend(cw.errors.iter().map(|e| e.show()));
-    v
-}
-
 fn check3(cw: &CrateWeave, dir: &Path, o: &CheckOpts) -> R<Check3> {
-    let mut c = Check3 { check_failures: describe(cw), ..Default::default() };
     let orig = cargo::diagnostics(dir, &o.target, "check")?;
+    let had: BTreeSet<(String, String, String)> =
+        orig.diags.iter().filter(|d| d.is_error()).map(|d| (d.file.clone(), d.code.clone().unwrap_or_default(), d.message.clone())).collect();
+    let mut c = Check3::default();
+    c.check_failures = cw.weave_errors.iter().map(|(f, e)| format!("weave refused {}: {e}", f.display())).collect();
+    c.check_failures.extend(cw.holes.iter().map(|h| h.show()));
+    // A crate in a workspace has its paths from the workspace's root (`member/benches/x.rs`), the woven copy from its own.
+    let same = |f: &str, w: &str| f == w || f.ends_with(&format!("/{w}"));
+    for e in &cw.errors {
+        if had.iter().any(|(f, c, m)| same(f, &e.woven_file) && *c == e.code && *m == e.message) {
+            c.inherited.push(e.show());
+        } else {
+            c.check_failures.push(e.show());
+        }
+    }
     c.check_warnings_new = new_warnings(&orig.diags, &cw.warnings);
     if o.full && c.check_failures.is_empty() {
         let before = cargo::diagnostics(dir, &o.target, "clippy")?;
@@ -386,7 +394,7 @@ impl CheckReport {
             "check1": {"files": self.c1.files, "failures": self.c1.failures},
             "check2": {"files": self.c2.files, "exact": self.c2.exact, "mut_differs": self.c2.mut_differs.iter().map(|d| json!({"file": d.0, "original": d.1, "derived": d.2, "first_difference": d.3})).collect::<Vec<_>>(), "failures": self.c2.failures},
             "check3": {
-                "cargo_check_failures": self.c3.check_failures, "new_check_warnings": self.c3.check_warnings_new,
+                "cargo_check_failures": self.c3.check_failures, "inherited_errors": self.c3.inherited, "new_check_warnings": self.c3.check_warnings_new,
                 "clippy": self.c3.clippy.as_ref().map(|c| json!({"original": c.0, "woven": c.1, "new": c.2})),
                 "test": self.c3.test.as_ref().map(|t| json!({"passed": t.0, "summary": t.1})),
             },
@@ -434,8 +442,9 @@ impl CheckReport {
         let test = c.test.as_ref().map_or("not run".to_string(), |t| {
             if t.0 { format!("passed ({} tests)", test_count(&t.1)) } else { "FAILED".into() }
         });
+        let inherited = if c.inherited.is_empty() { String::new() } else { format!(", {} errors the original has too", c.inherited.len()) };
         println!(
-            "  check 3  {}  cargo check {} ({} new warnings); clippy: {clippy}; cargo test: {test}",
+            "  check 3  {}  cargo check {} ({} new warnings{inherited}); clippy: {clippy}; cargo test: {test}",
             st(self.c3_ok()), if c.check_failures.is_empty() { "passes" } else { "FAILS" }, c.check_warnings_new.len()
         );
         for f in c.check_failures.iter().chain(&c.check_warnings_new).chain(c.clippy.iter().flat_map(|x| &x.2)) {

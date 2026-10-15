@@ -141,6 +141,15 @@ fn present(v: &Value) -> Option<&Value> {
     (!v.is_null()).then_some(v)
 }
 
+/// A pattern's text without the `mut`s on its bindings, as keys and parameter names are: a `mut` the bare body keeps
+/// (in code a `#[cfg]` may leave out) is not part of the name.
+fn unmut(pat: Node, src: &str) -> String {
+    let mut pe = vec![];
+    life::pat_mut_edits(pat, &mut pe);
+    let base = pat.start_byte();
+    collapse(&crate::apply(text(pat, src), pe.into_iter().map(|(a, b, t)| (a - base, b - base, t)).collect()))
+}
+
 /// The text of a type slot: a type string, or host text.
 fn ty_text(v: &Value, acc: &Value, lifetime: Option<&str>, need_access: bool, what: &str) -> R<String> {
     if let Some(h) = v.get("host").and_then(Value::as_str) {
@@ -178,10 +187,11 @@ fn generics_text(sub: &Value) -> String {
         .map(|e| {
             let b = bounds_text(&e["bounds"]);
             let n = e["name"].as_str().unwrap_or("");
+            let d = present(&e["default"]).and_then(|d| ty_text(d, &Value::Null, None, false, "default").ok()).map(|d| format!(" = {d}")).unwrap_or_default();
             if b.is_empty() {
-                n.to_string()
+                format!("{n}{d}")
             } else {
-                format!("{n}: {b}")
+                format!("{n}: {b}{d}")
             }
         })
         .collect();
@@ -290,7 +300,7 @@ impl<'a> Weaver<'a> {
     fn item_inner(&mut self, n: Node, sc: &Scope) -> R<()> {
         match n.kind() {
             "function_item" | "function_signature_item" => self.func(n, sc),
-            "struct_item" => self.strukt(n, sc),
+            "struct_item" | "union_item" => self.strukt(n, sc),
             "enum_item" => self.enm(n, sc),
             "trait_item" => self.trait_item(n, sc),
             "impl_item" => self.imp(n, sc),
@@ -589,7 +599,7 @@ impl<'a> Weaver<'a> {
         }
         let (mut self_ref, mut ref_params) = (false, vec![]);
         for (i, p) in ps.iter().enumerate() {
-            let pname = if p.kind() == "self_parameter" { "self".to_string() } else { collapse(text(*p, src)) };
+            let pname = if p.kind() == "self_parameter" { "self".to_string() } else { unmut(*p, src) };
             let Some(slot) = slots.get(i).filter(|q| q["name"].as_str().is_some_and(|n| n == pname)) else {
                 return missing(format!("{sname} parameter `{pname}`"));
             };
@@ -686,7 +696,7 @@ impl<'a> Weaver<'a> {
             match s.kind {
                 SK::Let => {
                     let Some(pat) = node.child_by_field_name("pattern") else { continue };
-                    let key = collapse(text(pat, src));
+                    let key = unmut(pat, src);
                     let c = seen.entry(key.clone()).or_insert(0);
                     *c += 1;
                     let key = if *c == 1 { key } else { format!("{key}#{c}") };
@@ -767,7 +777,7 @@ impl<'a> Weaver<'a> {
                     // A parameter of a closure that a `let` names is keyed `<let>.<parameter>` in `locals`.
                     let keyed = life::closure_let(node).and_then(|l| let_keys.get(&l.id())).map(|k| {
                         let pat = if node.kind() == "parameter" { node.child_by_field_name("pattern").unwrap_or(node) } else { node };
-                        let pk = format!("{k}.{}", collapse(text(pat, src)));
+                        let pk = format!("{k}.{}", unmut(pat, src));
                         let c = param_seen.entry(pk.clone()).or_insert(0);
                         *c += 1;
                         if *c == 1 { pk } else { format!("{pk}#{c}") }

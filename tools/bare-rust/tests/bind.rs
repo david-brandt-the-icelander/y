@@ -83,28 +83,90 @@ fn bindings_go_before_the_statement_in_order_or_into_a_new_scope() {
 
 #[test]
 fn sites_that_cannot_be_bound_are_reported() {
+    // What is left: an argument a macro runs only sometimes, and a value that releases something at its end where the
+    // statement might not run.
     let src = r#"
-type Word = usize;
-pub fn f(x: u8, p: &u8, mut v: Vec<u8>) -> usize {
-    let a = match x { 1u8 => 0, _ => 1 };
-    let q = p as *const u8 as Word;
-    v.iter_mut().next().map(|e| *e = 1);
-    let n = [0u8; 4 as usize].len();
-    v[a as usize] += g();
-    let 1u8 = v[0] else { return 0 };
-    v.first().copied().unwrap_or(0).max(a as u8) as usize + q as usize + n
+pub fn f(x: u8, c: bool, m: &std::sync::Mutex<Vec<u8>>) -> bool {
+    debug_assert!(x as u32 > 0);
+    c && m.lock().unwrap().len() as u8 > x
 }
 "#;
     let (b, left) = bind_report(src).unwrap();
     let why: Vec<(&str, &str)> = left.iter().map(|l| (l.what, l.why)).collect();
-    // `x` is a `u8`, so `1u8` says nothing more and loses its suffix.
-    assert!(b.contains("match x { 1 => 0, _ => 1 }"), "{b}");
-    assert!(why.contains(&("literal", "in the pattern of a `let`")), "{why:?}");
-    // A type alias names a type `bind` cannot see; a pointer is carried (`ptr<u8>`, with its access).
-    assert!(why.contains(&("cast", "the target is not a primitive or a pointer")), "{why:?}");
-    assert!(b.contains("let p_ptr: *const u8 = p as *const u8;"), "{b}");
-    // `v[a as usize] += g()`: with primitives the right runs first, otherwise the left; which, the types say.
-    assert!(why.iter().any(|w| w.1.starts_with("the other side of a compound assignment")), "{why:?}\n{b}");
+    assert_eq!(
+        why,
+        vec![
+            ("cast", "in a macro argument that runs only sometimes (an assertion's message, `debug_assert!`)"),
+            ("cast", "a value that releases something at its end, where the statement might not run"),
+        ],
+        "{b}"
+    );
+}
+
+const LEFTOVERS: &str = r#"
+use std::cell::RefCell;
+thread_local!(static LOG: RefCell<Vec<String>> = RefCell::new(vec![]));
+fn note<T: std::fmt::Debug>(s: &str, t: T) -> T { LOG.with(|l| l.borrow_mut().push(format!("{s}={t:?}"))); t }
+type Word = u32;
+fn double(x: u8) -> u8 { x * 2 }
+pub fn f(x: u8, n: u64, a: Option<u8>, items: Vec<u8>) -> String {
+    let w = x as Word + 1;
+    let g = double as fn(u8) -> u8;
+    let d = &x as &dyn std::fmt::Display;
+    let mut v = vec![0u8; 4];
+    v[note("left", n) as usize % 4] += note("right", 1);
+    let mut it = items.into_iter();
+    let Some(0u8) = it.next() else { return format!("no zero {}", LOG.with(|l| l.borrow_mut().join(","))) };
+    let mut k = 0;
+    while let Some(b) = it.nth(note("nth", n) as usize % 2) { k += b as u32; }
+    let chained = if let Some(y) = a && y > note("chain", n) as u8 { y } else { 0 };
+    format!("{w} {} {d} {v:?} {k} {chained} {}", g(x), LOG.with(|l| l.borrow_mut().join(",")))
+}
+"#;
+
+#[test]
+fn every_cast_target_a_compound_left_a_let_else_and_a_let_chain_are_bound() {
+    let (b, left) = bind_report(LEFTOVERS).unwrap();
+    assert!(left.is_empty(), "{left:?}\n{b}");
+    for want in [
+        // Any type the cast writes is a cast local's: an alias, a `fn` pointer, a reference.
+        "let x_word: Word = x as Word;\n    let w = x_word + 1;",
+        "let g: fn(u8) -> u8 = double as fn(u8) -> u8;",
+        "let d: &dyn std::fmt::Display = &x as &dyn std::fmt::Display;",
+        // The left of `+=` where the right has an effect: a block where the index was.
+        "v[{ let note_usize: usize = note(\"left\", n) as usize; note_usize % 4 }] += note(\"right\", 1);",
+        // A literal in a `let ... else` pattern is named as in a `match`.
+        "let Some(_k0_u8 @ 0u8) = it.next() else",
+        // A `while let` value and a part of a let chain: a block in its place.
+        "while let Some(b) = { let note_usize_2: usize = note(\"nth\", n) as usize; it.nth(note_usize_2 % 2) } {",
+        "if let Some(y) = a && { let note_u8: u8 = note(\"chain\", n) as u8; y > note_u8 } { y } else { 0 };",
+    ] {
+        assert!(b.contains(want), "missing:\n{want}\nin:\n{b}");
+    }
+    let (bare, json) = bare_rust::strip(LEFTOVERS, "demo 0.1.0", "src/lib.rs").unwrap();
+    let locals = &json["holes"]["demo::f"]["locals"];
+    assert_eq!(locals["x_word"], serde_json::json!({"type": "Word", "cast": true}));
+    assert_eq!(locals["d"], serde_json::json!({"type": "ref<any std::fmt::Display>", "cast": true}));
+    assert_eq!(locals["g"]["type"]["host"], "fn(u8) -> u8");
+    assert_eq!(locals["_k0_u8 @ 0"], serde_json::json!({"literal": "u8"}));
+    assert!(json["holes"]["demo::f"]["hints"].is_null(), "{json}");
+    // A weave of one file derives no `mut` (a crate's weave does, through rustc).
+    let woven = bare_rust::weave(&bare, &json).unwrap();
+    let norm = |s: &str| bare_rust::rustfmt(&bare_rust::normalise_nomut(s).unwrap()).unwrap();
+    assert_eq!(norm(&woven), norm(&b));
+    // Let chains are Rust 2024.
+    let main = "\nfn main() {\n    for n in [0u64, 1, 5] {\n        for a in [None, Some(0u8), Some(9)] {\n            for items in [vec![], vec![0u8, 3, 4, 5], vec![1u8]] {\n                LOG.with(|l| l.borrow_mut().clear());\n                println!(\"{}\", f(7, n, a, items));\n            }\n        }\n    }\n}\n";
+    let run = |s: &str, name: &str| {
+        let d = scratch(name);
+        std::fs::write(d.join("m.rs"), format!("{s}{main}")).unwrap();
+        let out = Command::new("rustc").args(["--edition", "2024", "-o"]).arg(d.join("m")).arg(d.join("m.rs")).output().unwrap();
+        assert!(out.status.success(), "{}\n{s}", String::from_utf8_lossy(&out.stderr));
+        String::from_utf8(Command::new(d.join("m")).output().unwrap().stdout).unwrap()
+    };
+    let (before, after) = (run(LEFTOVERS, "leftovers-source"), run(&b, "leftovers-bound"));
+    assert_eq!(after, before);
+    assert!(before.contains("right=1,left=") && before.contains("chain="), "{before}");
+    assert_eq!(bind(&b).unwrap(), b);
 }
 
 const CONSTANTS: &str = r#"

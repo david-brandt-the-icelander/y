@@ -190,9 +190,18 @@ pub fn count_mut(src: &str) -> usize {
 
 /// Run `rustfmt` on a source text.
 pub fn rustfmt(src: &str) -> R<String> {
+    // Edition 2021 first (2024 reserves `gen`), then 2024 for what only it parses (let chains). Both sides of a
+    // comparison go through the same, so the edition only has to parse them.
+    match rustfmt_in(src, "2021") {
+        Err(e) if e.contains("2024") => rustfmt_in(src, "2024"),
+        r => r,
+    }
+}
+
+fn rustfmt_in(src: &str, edition: &str) -> R<String> {
     use std::io::Write;
     let mut child = std::process::Command::new("rustfmt")
-        .args(["--edition", "2021", "--config", "max_width=100"])
+        .args(["--edition", edition, "--config", "max_width=100"])
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())

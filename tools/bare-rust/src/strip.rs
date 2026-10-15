@@ -98,6 +98,8 @@ struct Stripper<'a> {
     names_used: HashSet<String>,
     /// Names given in advance, by `realization_key` (strip of a crate: one name across the crate).
     forced: HashMap<String, String>,
+    /// The file may be left out of the build (`StripOpts::cfg_gated`).
+    file_gated: bool,
 }
 
 /// What a strip of one file is told from outside it.
@@ -105,6 +107,8 @@ struct Stripper<'a> {
 pub struct StripOpts {
     /// The name of each realization, by `realization_key`, chosen for the whole crate.
     pub realization_names: HashMap<String, String>,
+    /// The whole file may be left out of the build: its `mod` (or one around it) has a `#[cfg(..)]`. Its `mut`s stay.
+    pub cfg_gated: bool,
 }
 
 /// The identity of a realization: its template's full path and its arguments.
@@ -466,6 +470,8 @@ impl<'a> Stripper<'a> {
     fn generics(&mut self, item: Node, cut_from: usize, cut: bool, elide: &HashSet<String>) -> R<(Vec<Value>, Vec<Value>, Vec<String>)> {
         let src = self.src;
         let mut ents: Vec<(String, Vec<String>, Vec<String>)> = vec![];
+        // A parameter's default: a type for a type parameter, the value (host text) for a const one.
+        let mut defaults: Vec<Option<Value>> = vec![];
         if let Some(tp) = item.child_by_field_name("type_parameters") {
             if cut {
                 self.cuts.push((cut_from, tp.end_byte(), String::new()));
@@ -473,21 +479,17 @@ impl<'a> Stripper<'a> {
             for c in named_children(tp) {
                 match c.kind() {
                     "type_parameter" | "lifetime_parameter" => {
-                        if c.child_by_field_name("default_type").is_some() {
-                            return refuse("generic-default", text(c, src));
-                        }
                         let name = text(c.child_by_field_name("name").unwrap(), src).to_string();
                         let b = c.child_by_field_name("bounds").map(|b| self.bound_list(b)).unwrap_or_default();
                         ents.push((name, b, vec![]));
+                        defaults.push(c.child_by_field_name("default_type").map(|d| self.loose(d, &[])));
                     }
                     // `const K: usize` is carried as a generic named `const K` whose one bound is the host-text type `usize`
                     "const_parameter" => {
-                        if c.child_by_field_name("value").is_some() {
-                            return refuse("generic-default", text(c, src));
-                        }
                         let name = text(c.child_by_field_name("name").ok_or("parse-error: const parameter")?, src);
                         let ty = c.child_by_field_name("type").ok_or("parse-error: const parameter")?;
                         ents.push((format!("const {name}"), vec![collapse(text(ty, src))], vec![]));
+                        defaults.push(c.child_by_field_name("value").map(|v| json!({"host": collapse(text(v, src)), "form": "const_default"})));
                     }
                     k if is_comment(c) => {
                         let _ = k;
@@ -537,13 +539,17 @@ impl<'a> Stripper<'a> {
         let names: Vec<String> = ents.iter().map(|e| e.0.strip_prefix("const ").unwrap_or(&e.0).to_string()).collect();
         let gens = ents
             .into_iter()
-            .filter(|e| !elide.contains(&e.0))
-            .map(|(name, bounds, wh)| {
+            .zip(defaults)
+            .filter(|(e, _)| !elide.contains(&e.0))
+            .map(|((name, bounds, wh), default)| {
                 let mut o = Obj::new();
                 o.insert("name".into(), json!(name));
                 o.insert("bounds".into(), json!(bounds));
                 if !wh.is_empty() {
                     o.insert("where".into(), json!(wh));
+                }
+                if let Some(d) = default {
+                    o.insert("default".into(), d);
                 }
                 Value::Object(o)
             })
@@ -593,6 +599,11 @@ impl<'a> Stripper<'a> {
             o.insert("hold".into(), json!({"kind": if slot.shares { "shares" } else { "owns" }}));
         }
         o
+    }
+
+    /// Whether rustc may not see the code at `n`, and so cannot derive its `mut`s (`life::cfg_gated`).
+    fn gated(&self, n: Node) -> bool {
+        self.file_gated || life::cfg_gated(n, self.src)
     }
 
     // ----- holes -----
@@ -645,10 +656,20 @@ impl<'a> Stripper<'a> {
             let node = s.node;
             match s.kind {
                 SK::Let => {
-                    life::mut_edits(node, &mut self.cuts);
+                    // `mut` is derived through rustc, which does not see code a `#[cfg]` leaves out: there it stays.
+                    if !self.gated(node) {
+                        life::mut_edits(node, &mut self.cuts);
+                    }
                     let Some(pat) = node.child_by_field_name("pattern") else { continue };
                     let mut pe = vec![];
                     life::pat_mut_edits(pat, &mut pe);
+                    // A literal in the pattern (`let Some(_k0_u8 @ 0u8) = it.next() else { .. }`) has no suffix in
+                    // the bare body, which the key is the text of.
+                    for l in life::at_literals_in(pat) {
+                        if let Some((digits, _, _)) = life::lit_suffix(text(l, src)) {
+                            pe.push((l.start_byte() + digits.len(), l.end_byte(), String::new()));
+                        }
+                    }
                     let base = pat.start_byte();
                     let shifted = pe.into_iter().map(|(a, b, t)| (a - base, b - base, t)).collect();
                     let key = collapse(&apply(&src[pat.byte_range()], shifted));
@@ -743,9 +764,12 @@ impl<'a> Stripper<'a> {
                         hints.push(h);
                     }
                 }
+                SK::ClParam if self.gated(node) && node.kind() != "parameter" => {}
                 SK::ClParam => {
                     if node.kind() == "parameter" {
-                        life::mut_edits(node, &mut self.cuts);
+                        if !self.gated(node) {
+                            life::mut_edits(node, &mut self.cuts);
+                        }
                         if let (Some(pat), Some(ty)) = (node.child_by_field_name("pattern"), node.child_by_field_name("type")) {
                             self.cuts.push((pat.end_byte(), ty.end_byte(), String::new()));
                             match life::closure_let(node).and_then(|l| let_keys.get(&l.id())) {
@@ -798,9 +822,9 @@ impl<'a> Stripper<'a> {
     fn item(&mut self, n: Node, sc: &Scope) -> R<()> {
         match n.kind() {
             "function_item" | "function_signature_item" => self.func(n, sc),
-            "struct_item" => self.strukt(n, sc),
+            // A union is a type with fields as a struct is; the bare body keeps the keyword that says which.
+            "struct_item" | "union_item" => self.strukt(n, sc),
             "enum_item" => self.enm(n, sc),
-            "union_item" => refuse("union", "unions are not supported"),
             "foreign_mod_item" => match n.child_by_field_name("body") {
                 Some(b) => self.items_in(b, sc),
                 None => Ok(()),
@@ -1086,9 +1110,10 @@ impl<'a> Stripper<'a> {
     fn head(&self, n: Node) -> R<(String, bool)> {
         let src = self.src;
         match n.kind() {
-            "type_identifier" | "scoped_type_identifier" => Ok((collapse(text(n, src)), false)),
+            // `impl Unsigned for u128`: a primitive is its own head, as a type's name is.
+            "type_identifier" | "scoped_type_identifier" | "primitive_type" => Ok((collapse(text(n, src)), false)),
             "generic_type" => Ok((collapse(text(n.child_by_field_name("type").unwrap(), src)), true)),
-            "reference_type" => {
+            "reference_type" | "pointer_type" => {
                 let (h, _) = self.head(n.child_by_field_name("type").ok_or("parse-error: reference")?)?;
                 Ok((h, true))
             }
@@ -1259,7 +1284,9 @@ impl<'a> Stripper<'a> {
                     if pat.kind() == "self" {
                         return refuse("typed-self", text(p, src));
                     }
-                    life::mut_edits(p, &mut self.cuts);
+                    if !self.gated(f) {
+                        life::mut_edits(p, &mut self.cuts);
+                    }
                     let mut pe = vec![];
                     life::pat_mut_edits(pat, &mut pe);
                     let base = pat.start_byte();
@@ -1387,6 +1414,7 @@ pub fn strip_with(src: &str, krate: &str, module: &str, opts: &StripOpts) -> R<(
         // A realization's name is unique among the file's identifiers (weave turns each use of it back into the template).
         names_used: crate::bind::idents(src),
         forced: opts.realization_names.clone(),
+        file_gated: opts.cfg_gated,
     };
     st.names_used.extend(opts.realization_names.values().cloned());
     let sc = Scope { path: path.join("::"), generics: vec![], self_ty: "Self".into() };
@@ -1422,7 +1450,8 @@ pub fn strip_with(src: &str, krate: &str, module: &str, opts: &StripOpts) -> R<(
     }
     let bare = apply(src, std::mem::take(&mut st.cuts));
     if let Some(e) = first_error(&parse_bare(&bare)) {
-        return refuse("bare-parse", format!("stripped body does not parse as bare Rust, at {e}"));
+        let line = e.split(':').next().and_then(|l| l.parse::<usize>().ok()).and_then(|l| bare.lines().nth(l - 1)).unwrap_or("");
+        return refuse("bare-parse", format!("stripped body does not parse as bare Rust, at {e}: `{}`", line.trim()));
     }
     let mut out = Obj::new();
     out.insert("format".into(), json!("y-constraints/0"));
