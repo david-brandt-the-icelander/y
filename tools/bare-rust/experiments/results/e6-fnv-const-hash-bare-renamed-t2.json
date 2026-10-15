@@ -1,0 +1,40 @@
+{
+ "run_id": "e6-fnv-const-hash-bare-renamed-t2",
+ "experiment": "e6",
+ "task": "fnv-const-hash",
+ "arm": "bare-renamed",
+ "trial": 2,
+ "kind": "signature",
+ "e5": false,
+ "workspace": "/tmp/claude-0/-home-user-y/9673def1-2027-5ffe-9d6e-8413dc645c64/scratchpad/runs/e6-fnv-const-hash-bare-renamed-t2",
+ "rs_files_in_bare": [],
+ "weaves": true,
+ "weave_summary": "weave: 1 files woven, 0 not woven, 0 weave errors; 0 unbound entries (locals 0, hints 0, subjects 0); cargo check after 2 runs: 3 mut inserted, 0 holes undetermined, 0 other errors, 0 warnings",
+ "compiles": true,
+ "hidden_compiled": true,
+ "tests_passed": 2,
+ "tests_failed": 0,
+ "tests_total": 2,
+ "pass": true,
+ "json_entries_changed": 2,
+ "json_leaf_edits": 13,
+ "json_files_changed": 1,
+ "lines_changed": 16,
+ "agent": {
+  "done": true,
+  "attempts": 3,
+  "json_edits": 2,
+  "library_promises_relied_on": [
+   "std::primitive::slice::len",
+   "std::primitive::u64::wrapping_mul"
+  ],
+  "notes": "Constness comes from an effects clause \"evaluable at compile time\" on the subject (the weaver emits `const`; writing `const fn` in the .brs gave `const const fn`), and const fn needs a while loop plus a cast local since `for` and `u64::from` are not const."
+ },
+ "tokens": {
+  "input": null,
+  "output": null,
+  "total": 68580
+ },
+ "duration_s": 73.746,
+ "model": "sonnet"
+}

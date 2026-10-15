@@ -1,0 +1,41 @@
+{
+ "run_id": "e6-error-traits-bare-renamed-t2",
+ "experiment": "e6",
+ "task": "error-traits",
+ "arm": "bare-renamed",
+ "trial": 2,
+ "kind": "signature",
+ "e5": false,
+ "workspace": "/tmp/claude-0/-home-user-y/9673def1-2027-5ffe-9d6e-8413dc645c64/scratchpad/runs/e6-error-traits-bare-renamed-t2",
+ "rs_files_in_bare": [],
+ "weaves": true,
+ "weave_summary": "weave: 2 files woven, 0 not woven, 0 weave errors; 0 unbound entries (locals 0, hints 0, subjects 0); cargo check after 2 runs: 34 mut inserted, 0 holes undetermined, 0 other errors, 0 warnings",
+ "compiles": true,
+ "hidden_compiled": true,
+ "existing_tests_ok": true,
+ "tests_passed": 3,
+ "tests_failed": 0,
+ "tests_total": 3,
+ "pass": true,
+ "json_entries_changed": 4,
+ "json_leaf_edits": 19,
+ "json_files_changed": 1,
+ "lines_changed": 14,
+ "agent": {
+  "done": true,
+  "attempts": 3,
+  "json_edits": 4,
+  "library_promises_relied_on": [
+   "std::fmt::Display::fmt",
+   "std::error::Error"
+  ],
+  "notes": "Added impl Display (write! of the message) and an empty impl Error for StrSimError in lib.brs plus matching impl/function subjects and an implements field in lib.constraints.json; the fmt param f needed a host type, and tests plus an extra Box<dyn Error> test pass."
+ },
+ "tokens": {
+  "input": null,
+  "output": null,
+  "total": 69529
+ },
+ "duration_s": 72.84,
+ "model": "sonnet"
+}

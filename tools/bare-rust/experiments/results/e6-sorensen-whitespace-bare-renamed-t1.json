@@ -1,0 +1,38 @@
+{
+ "run_id": "e6-sorensen-whitespace-bare-renamed-t1",
+ "experiment": "e6",
+ "task": "sorensen-whitespace",
+ "arm": "bare-renamed",
+ "trial": 1,
+ "kind": "body",
+ "e5": true,
+ "workspace": "/tmp/claude-0/-home-user-y/9673def1-2027-5ffe-9d6e-8413dc645c64/scratchpad/runs/e6-sorensen-whitespace-bare-renamed-t1",
+ "rs_files_in_bare": [],
+ "weaves": true,
+ "weave_summary": "weave: 2 files woven, 0 not woven, 0 weave errors; 0 unbound entries (locals 0, hints 0, subjects 0); cargo check after 2 runs: 34 mut inserted, 0 holes undetermined, 0 other errors, 0 warnings",
+ "compiles": true,
+ "hidden_compiled": true,
+ "existing_tests_ok": true,
+ "tests_passed": 4,
+ "tests_failed": 0,
+ "tests_total": 4,
+ "pass": true,
+ "json_entries_changed": 0,
+ "json_leaf_edits": 0,
+ "json_files_changed": 0,
+ "lines_changed": 6,
+ "agent": {
+  "done": true,
+  "attempts": 1,
+  "json_edits": 0,
+  "library_promises_relied_on": [],
+  "notes": "Edited only src/lib.brs: sorensen_dice now builds a and b by filtering out chars where is_whitespace() is true; the existing text holes for a and b already covered the collect, so no JSON change was needed. Woven, compiled, and tests plus doctests pass."
+ },
+ "tokens": {
+  "input": null,
+  "output": null,
+  "total": 60043
+ },
+ "duration_s": 40.619,
+ "model": "sonnet"
+}

@@ -771,3 +771,11 @@ fn a_crate_has_one_table_of_realizations_in_its_root_file() {
     let b = std::fs::read_to_string(woven.join("src/b.rs")).unwrap();
     assert!(b.contains("s.parse::<u16>().unwrap() + parse_u16"), "{b}");
 }
+
+#[test]
+fn a_const_fn_written_in_the_body_and_as_a_clause_weaves_with_one_const() {
+    let (b, j) = strip("pub const fn f(x: u8) -> u8 {\n    x\n}\n", "demo 0.1.0", "src/lib.rs").unwrap();
+    assert!(b.starts_with("fn f(x)"), "{b}");
+    let w = weave(&b.replacen("fn f", "const fn f", 1), &j).unwrap();
+    assert!(w.contains("pub const fn f(x: u8) -> u8") && !w.contains("const const"), "{w}");
+}

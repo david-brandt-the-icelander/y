@@ -53,7 +53,7 @@ the hidden tests; none changes an existing item's signature). The E5 tasks are t
 
 ## Commands
 
-    experiments/prepare.sh <task> <arm> <trial> <outdir>     # arms: rust bare bare-nolib bare-nounexpressed bare-castlocal; outdir must be empty
+    experiments/prepare.sh <task> <arm> <trial> <outdir>     # arms: rust bare bare-renamed bare-nolib bare-nounexpressed bare-castlocal; outdir must be empty
     experiments/grade.sh   <task> <arm> <workspace>          # one JSON line
     experiments/record.py  <run_id> <workspace> --agent-file <final-message.txt> --input N --output N [--total N] [--duration S]
     experiments/summarize.py                                 # Markdown tables from results/*.json
@@ -67,7 +67,10 @@ Arms. `rust`: the base crate (`.rs` files, `Cargo.toml`, `tests/`), no hidden te
 the library file (jq `walk`), and a `TASK.md` that does not mention such clauses. `bare-castlocal`: the arm of the
 cast comparison (the `cast-*` runs of `matrix.tsv`), which ran with `FORMAT.md`'s section on casts replaced by
 `templates/format-castlocal.md` (casts written as `let`s whose entry is `{"type": T, "cast": true}`). That form is now the
-default, in `strip` and in `FORMAT.md`, so the arm is now the same as `bare`. `LIBFILE=...` overrides the library file.
+default, in `strip` and in `FORMAT.md`, so the arm is now the same as `bare`. `bare-renamed` (E6, the `e6-` rows): the bare
+arm after `bind` (every cast, suffixed literal, standard macro argument and turbofish named), with the mechanical names
+renamed by `bare-rust rename --lenient` from `renames/<crate>.json` (names an agent chose once, on the snapshot); the
+grader renames its stripped base the same way, so the diff counts only the agent's edits. `LIBFILE=...` overrides the library file.
 `weave.sh [check|test]` weaves into `.weave/` and runs cargo there; agents may add plain test files in `extra-tests/*.rs`.
 
 ## Grader output

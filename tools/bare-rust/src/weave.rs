@@ -538,7 +538,12 @@ impl<'a> Weaver<'a> {
         self.at(&sname, "visible");
         self.ins(f.start_byte(), vis_text(sub)?);
         self.at(&sname, "clauses");
-        if says("effects", "evaluable at compile time") {
+        // A body that already says `const fn` (as an agent may write it) keeps one `const`.
+        let written_const = all_children(f)
+            .into_iter()
+            .find(|c| c.kind() == "function_modifiers")
+            .is_some_and(|m| all_children(m).into_iter().any(|c| c.kind() == "const"));
+        if says("effects", "evaluable at compile time") && !written_const {
             self.ins(f.start_byte(), "const ".into());
         }
         if sub["clauses"].as_array().into_iter().flatten().any(|c| c["kind"] == "obliges") {

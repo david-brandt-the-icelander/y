@@ -28,15 +28,25 @@ say. A mid-expression type is treated as an obfuscation that `bind` undoes once.
   reported. That covers a method receiver, a borrowed place, and the left of an assignment.
 - **Already named.** `let n = e as f64;` gets a type, `let n: f64 = e as f64;`, rather than a second name. Brackets
   that weave would not put back are dropped: `(x) as u16` becomes `x as u16`.
-- **Macros.** A macro call whose tokens state a type cannot be split, and is kept as Rust text in the bare body:
-  `rust! { println!("{}", x as u8) }`, which weaves back to the call. It is never the preferred form. Where an agent can
-  name the value before the call, it should.
+- **Macros.** The standard macros' arguments are bound as a call's are: the format family (`format!`, `println!`,
+  `write!`, `panic!`, ...), the assertions, `vec!`, `dbg!` and `json!`. While it binds, `bind` writes each such macro
+  as a call (`__bm_println_p("{}", x as u8)`, a JSON object as a call with its keys and values in turn), and writes it
+  back after. So `println!("{}", x as u8)` becomes `let x_u8: u8 = x as u8;` and `println!("{}", x_u8)`.
+  - An argument with a turbofish is named before the macro (`let collect_v = v.iter().collect::<Vec<_>>();`), where
+    `strip` names the realization.
+  - A binding never goes inside a macro's arguments, where `strip` could not take its type out: an argument with a
+    block or a closure that needs a binding is named first, and bound inside after.
+  - An argument the macro runs only sometimes (an assertion's message runs only when it fails, every argument of
+    `debug_assert!` only in a debug build) is left, and reported.
+  - A macro whose syntax the tool does not know, and that states a type, is kept as Rust text in the bare body:
+    `rust! { twice!(x as u8) }`, which weaves back to the call. It is never the preferred form.
 - **Left as hints, and reported by `bare-rust bind`:**
   - a cast to a type that is not a primitive (`p as *const u8`);
   - a cast in a constant context (`[0; N as usize]`, a `const` item);
   - a suffixed literal in a pattern (`1u8 => ...`);
   - a cast after a receiver, borrowed place or assignee that has an effect;
-  - a cast in a `while let` condition or a let chain.
+  - a cast in a `while let` condition or a let chain;
+  - a cast or a turbofish in a macro argument that runs only sometimes.
 
 `tests/bind.rs` compiles a function with every kind of position, before and after `bind`, runs both on the same
 inputs, and checks that they print the same. It also checks the placements above and that a second `bind` changes
@@ -86,34 +96,44 @@ it:
 
 A turbofish writes a generic's type arguments where it is used: `s.parse::<u16>()`, `Vec::<u8>::new()`,
 `std::mem::size_of::<u64>()`. The constraint language now calls a generic subject a *template*, and one with its
-arguments a *realization*, a subject of its own (constraint language § 3.5). The bare body names the realization, and
-the function's `holes` say what it is:
+arguments a *realization*, a subject of its own (constraint language § 3.5). The bare body names the realization in
+place of the template's last segment and its arguments; a path before it stays. The crate's realizations are one
+table, at the top of its root's constraint file (`src/lib.constraints.json`):
 
-| Rust | Bare body | `holes.<fn>.realizations` |
+| Rust | Bare body | `realizations` |
 |---|---|---|
-| `s.parse::<u16>()` | `s.parse_u16()` | `"parse_u16": {"template": "parse", "args": ["u16"]}` |
-| `std::mem::size_of::<u64>()` | `size_of_u64()` | `"size_of_u64": {"template": "std::mem::size_of", "args": ["u64"]}` |
-| `Vec::<u8>::new()` | `VecU8::new()` | `"VecU8": {"template": "Vec", "args": ["u8"]}` |
-| `x.collect::<Vec<_>>()` | `x.collect_vec()` | `"collect_vec": {"template": "collect", "args": ["list<_> as 'Vec'"]}` |
+| `s.parse::<u16>()` | `s.parse_u16()` | `"parse_u16": {"template": "<_>::parse", "args": ["u16"]}` |
+| `std::mem::size_of::<u64>()` | `std::mem::size_of_u64()` | `"size_of_u64": {"template": "std::mem::size_of", "args": ["u64"]}` |
+| `size_of::<u64>()` | `size_of_u64()` | the same entry |
+| `Vec::<u8>::new()` | `VecU8::new()` | `"VecU8": {"template": "std::vec::Vec", "args": ["u8"]}` |
+| `x.collect::<Vec<_>>()` | `x.collect_vec()` | `"collect_vec": {"template": "<_>::collect", "args": ["list<_> as 'Vec'"]}` |
 
-- **One name per template and arguments** in a function: two `collect::<Vec<_>>()` are one `collect_vec`.
+- **One realization per template and arguments, across the crate.** The template is its full path, found through the
+  file's `use` items, the items it defines and the standard prelude; a method's is `<_>::name`, since its type is the
+  receiver's, which needs type information. `strip` of a crate strips each file, gives each realization one name for
+  the whole package (kept clear of every identifier in every bare body), strips again the files whose names differ,
+  and moves each crate's table into its root's file. In the tool's own source, 30 entries in functions' `holes`
+  became 16 in two tables (the library's and the binary's).
 - **A turbofish of only `_`** (`Ok::<_, _>(x)`) states no type and stays as it is.
-- **The names are mechanical**, and renamed like the others.
-- **Check 4** drops a realization's arguments to `_` and keeps its template, so `parse::<_>()` is what rustc must infer.
+- **The names are mechanical**, and renamed like the others (`bare-rust rename`, below).
+- **Check 4** drops a realization's arguments to `_` across the crate and keeps its template, so `parse::<_>()` is what
+  rustc must infer. Check 1 strips the woven crate as a crate.
 
 ## On the corpora
 
-After `strip`, no positional hint is left in any corpus. What the `holes` hold instead:
+After `strip`, no positional hint and no `rust! { ... }` text is left in any corpus. What the constraint files hold
+instead:
 
-| corpus | cast locals | typed locals | closure parameters, keyed by name | realizations | positional hints |
-|---|---:|---:|---:|---:|---:|
-| strsim | 29 | 13 | 0 | 1 | 0 |
-| fnv | 1 | 0 | 0 | 0 | 0 |
-| examples | 1 | 0 | 0 | 2 | 0 |
-| the tool's own source | 44 | 296 | 151 | 30 | 0 |
+| corpus | cast locals | typed locals | closure parameters, keyed by name | realizations | `rust!` | positional hints |
+|---|---:|---:|---:|---:|---:|---:|
+| strsim | 30 | 13 | 0 | 2 | 0 (was 1) | 0 |
+| fnv | 1 | 0 | 0 | 0 | 0 | 0 |
+| examples | 1 | 0 | 0 | 2 | 0 | 0 |
+| the tool's own source | 49 | 335 | 158 | 16 | 0 (was 43) | 0 |
 
-Closure return types (19 in the tool's source) are among the typed locals, as `out`. A turbofish inside a macro call
-stays in the call, which is marked `rust! { ... }`.
+Closure return types are among the typed locals, as `out`. The `rust!` markers were all standard macros: `json!` (14),
+`format!` (8), `assert_eq!` (6), `writeln!` (5), `vec!` (3) and `println!` (1) in the tool's source, and most of them
+for a turbofish (`collect::<Vec<_>>()`) in an argument.
 
 **A stronger check than the tests:** the tool's own source, with every file bound, still compiles with no warnings.
 Built from that bound source, the tool passes its unit tests and six of its test files (90 tests).
@@ -150,3 +170,43 @@ the `holes` key together, change nothing else, and keep `./weave.sh test` passin
   - `subjects`, every local's type and every hint are unchanged;
   - the woven crate passes its 19 tests.
 - **Cost:** 2 weaves, 8 tool calls, about 62K tokens, a few cents.
+
+## `bare-rust rename`, and the tool's own source
+
+Renaming by hand meant editing the `.brs` and the `holes` keys together and then checking that nothing else changed.
+That check is now a command: `bare-rust rename <dir> <map.json>`, where the map is
+`{"<function>": {"<old>": "<new>"}, "realizations": {"<old>": "<new>"}}`.
+
+- **What it changes.** A local, in its function's own body (not in an item declared inside it) and in the keys of the
+  function's `holes` that name it (`len_f64`, `retain_fn.s`, `(m, n)`, `x#2`). A shorthand field keeps its field
+  (`S { x }` becomes `S { x: total }`). A realization, at every use in the crate and in the crate's table.
+- **What it refuses**, writing nothing:
+  - a new name that is not a name, or is already a name in that function (for a realization: anywhere in the crate);
+  - a new name that is an item of the crate, or that the map gives twice in one function;
+  - an old name that is not bound in that body (a parameter, an item);
+  - a name a format string captures (`"{x}"`).
+- **The check after.** The token streams are the same, but for the renamed names. Every file weaves as it did,
+  with as many unbound entries.
+- **Other modes.** `--check` checks and writes nothing. `--list` lists the names each body binds. `--lenient` skips an
+  entry that does not apply, for a map made on another version of the crate. The experiments use it: each task's base
+  differs a little from the snapshot the map was made on.
+- Tests are in `tests/rename.rs`. They cover a rename across two modules, that the woven crate is the same program,
+  and each refusal.
+
+**The tool's own source.** `strip` of the tool binds 160 values with mechanical names, in 64 functions, and has 15
+realizations. (The other 335 typed locals and 158 closure parameters are named in the source, not by `bind`.)
+
+- **Who chose the names.** Three Sonnet agents, one per third of the functions, each with the bare files, the original
+  Rust for reference, and the command's `--check`. They gave the 160 locals and 11 of the realizations new names; four
+  realizations already read well (`collect_string`, `BTreeMapStringUsize`, ...).
+- **The map is** [`rename-tool-own-source.json`](rename-tool-own-source.json). Some examples:
+  - in `cargo::parse`, `unwrap_or_usize_3` became `diag_line` and `to_string_v_2` became `diag_file`;
+  - in `check::check4`, `out_2` became `was_filled`;
+  - the realization `sum_usize` became `sum_counts`.
+- **Checked:** the three maps merged pass the check. Applied, the renamed tool weaves with no unbound entry,
+  compiles with no errors and no warnings, and passes its 45 unit tests.
+- **Cost:** about 240K tokens for the three agents, 2 minutes each.
+
+**The experiment crates.** One more agent named strsim's 31 mechanical locals and its 2 realizations, and fnv's one
+local (`experiments/renames/`). E6 runs on workspaces renamed with these maps.
+
