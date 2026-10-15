@@ -3,7 +3,7 @@
 use crate::cargo::{self, Diag};
 use crate::corpus::{corpus_files, find_brs};
 use crate::trace::Kind;
-use crate::weave::{weave_at, HoleSite, WeaveError, Woven};
+use crate::weave::{weave_in_crate, HoleSite, WeaveError, Woven};
 use crate::R;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -70,7 +70,7 @@ impl HoleReport {
             None => format!("{} #{}", self.kind, self.n),
         };
         let path = match &self.key {
-            Some(k) if self.kind == "realization" => format!("holes[\"{}\"].realizations[\"{k}\"].args", self.subject),
+            Some(k) if self.kind == "realization" => format!("realizations[\"{k}\"].args, in the crate root's file"),
             Some(k) => format!("holes[\"{}\"].locals[\"{k}\"]", self.subject),
             None => format!("holes[\"{}\"].hints += {{kind: {}, n: {}, type: T}}", self.subject, self.kind, self.n),
         };
@@ -132,6 +132,8 @@ pub struct CrateWeave {
     pub cargo: bool,
     pub cargo_stderr: String,
     pub out: PathBuf,
+    /// The crate's realizations as woven (with check 4, the arguments dropped), from the files that list them.
+    pub realizations: serde_json::Map<String, Value>,
 }
 
 impl CrateWeave {
@@ -325,9 +327,32 @@ fn hole_of<'a>(sites: &'a [HoleSite], bare: &str, bs: usize, be: usize, ok: &dyn
     cand(&|s: &HoleSite| matches!(s.kind, "closure_return") && within(s.full)).min_by_key(|s| s.full.1 - s.full.0)
 }
 
-/// Identifies a hole across weaves: its subject, kind and key or ordinal.
+/// Identifies a hole across weaves: its subject, kind and key or ordinal. A realization is the crate's, not a
+/// function's: its id has no subject.
 pub fn hole_id(subject: &str, kind: &str, key: Option<&str>, n: usize) -> String {
+    let subject = if kind == "realization" { "" } else { subject };
     format!("{subject}|{kind}|{}", key.map_or(n.to_string(), str::to_string))
+}
+
+/// The realizations of a crate: the tables of its files (a crate root's file lists its crate's), merged. A name with
+/// two different entries is refused. Returns the table and, for each name, the file that lists it.
+pub fn crate_realizations(files: &[(PathBuf, Value)]) -> R<(serde_json::Map<String, Value>, BTreeMap<String, PathBuf>)> {
+    let (mut all, mut owner): (serde_json::Map<String, Value>, BTreeMap<String, PathBuf>) = (serde_json::Map::new(), BTreeMap::new());
+    for (rel, js) in files {
+        for (k, v) in js["realizations"].as_object().into_iter().flatten() {
+            match all.get(k) {
+                Some(w) if w != v => {
+                    return Err(format!("realization `{k}` is listed twice with different entries: {} and {}", owner[k.as_str()].display(), rel.display()))
+                }
+                Some(_) => {}
+                None => {
+                    all.insert(k.clone(), v.clone());
+                    owner.insert(k.clone(), rel.clone());
+                }
+            }
+        }
+    }
+    Ok((all, owner))
 }
 
 pub fn hole_report(wf: &WovenFile, s: &HoleSite, code: &str, message: &str, how: &'static str) -> HoleReport {
@@ -368,7 +393,7 @@ fn classify(files: &[WovenFile], diags: &[Diag], cw: &mut CrateWeave) {
     // Pass 2: the others.
     for (_, d) in errs.iter().enumerate().filter(|(i, _)| !handled[*i]) {
         let code = d.code.clone().unwrap_or_default();
-        let mk = |locus: String, bare_start: usize| ErrReport { code: code.clone(), message: d.message.clone(), woven_file: d.file.clone(), woven_line: d.line, woven_col: d.col, locus, bare_start, rendered: d.rendered.clone(), mapped: crate::errmap::map_diag(files.iter().find(|f| f.rel.to_string_lossy() == d.file), d) };
+        let mk = |locus: String, bare_start: usize| ErrReport { code: code.clone(), message: d.message.clone(), woven_file: d.file.clone(), woven_line: d.line, woven_col: d.col, locus, bare_start, rendered: d.rendered.clone(), mapped: crate::errmap::map_diag(files, files.iter().find(|f| f.rel.to_string_lossy() == d.file), d) };
         let Some(wf) = find(d) else {
             let locus = if d.file.is_empty() { "no source span".to_string() } else { format!("{} (not a woven file)", d.file) };
             cw.errors.push(mk(locus, 0));
@@ -429,6 +454,27 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
         return Err(format!("{}: no .brs files", from.display()));
     }
     let mut cw = CrateWeave { cargo: o.cargo, out: out.to_path_buf(), ..Default::default() };
+    // The crate's realizations, from every file that lists some; check 4 drops their arguments, crate-wide.
+    let listed: Vec<(PathBuf, Value)> = brs
+        .iter()
+        .filter_map(|b| {
+            let js: Value = serde_json::from_str(&fs::read_to_string(b.with_extension("constraints.json")).ok()?).ok()?;
+            js.get("realizations").is_some().then(|| (b.strip_prefix(from).unwrap_or(b).with_extension("constraints.json"), js))
+        })
+        .collect();
+    let (mut reals, owners) = crate_realizations(&listed)?;
+    let mut reals_dropped = BTreeSet::new();
+    if o.drop_holes {
+        for (k, v) in reals.iter_mut() {
+            let id = hole_id("", "realization", Some(k), 0);
+            if !o.keep.contains(&id) {
+                // A realization keeps its template and drops its arguments: `parse::<_>()`.
+                let n = v["args"].as_array().map_or(0, Vec::len);
+                v["args"] = serde_json::json!(vec!["_"; n]);
+                reals_dropped.insert(id);
+            }
+        }
+    }
     for b in brs {
         let mut rel = b.strip_prefix(from).unwrap_or(&b).with_extension("rs");
         // A crate directory whose stripped files sit in a `bare/` folder (`strip --out <crate>/bare`): the files belong
@@ -460,18 +506,6 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
                             dropped.insert(id);
                         }
                     }
-                    // A realization keeps its template and drops its arguments: `parse::<_>()`.
-                    let mut reals = serde_json::Map::new();
-                    for (k, v) in h["realizations"].as_object().into_iter().flatten() {
-                        let id = hole_id(sub, "realization", Some(k), 0);
-                        let mut v = v.clone();
-                        if !o.keep.contains(&id) {
-                            let n = v["args"].as_array().map_or(0, Vec::len);
-                            v["args"] = serde_json::json!(vec!["_"; n]);
-                            dropped.insert(id);
-                        }
-                        reals.insert(k.clone(), v);
-                    }
                     for x in h["hints"].as_array().into_iter().flatten() {
                         let id = hole_id(sub, x["kind"].as_str().unwrap_or(""), None, x["n"].as_u64().unwrap_or(0) as usize);
                         if o.keep.contains(&id) {
@@ -484,9 +518,6 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
                     if !locals.is_empty() {
                         e.insert("locals".into(), Value::Object(locals));
                     }
-                    if !reals.is_empty() {
-                        e.insert("realizations".into(), Value::Object(reals));
-                    }
                     if !hints.is_empty() {
                         e.insert("hints".into(), Value::Array(hints));
                     }
@@ -495,8 +526,9 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
                     }
                 }
                 js["holes"] = Value::Object(kept);
+                dropped.extend(reals_dropped.iter().cloned());
             }
-            Ok::<_, WeaveError>((weave_at(&bare, &js)?, js, dropped))
+            Ok::<_, WeaveError>((weave_in_crate(&bare, &js, Some(&reals))?, js, dropped))
         })();
         match r {
             Ok((woven, json, dropped)) => cw.files.push(WovenFile { rel, woven, json, mut_added: 0, dropped }),
@@ -506,6 +538,16 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
             }
         }
     }
+    // A realization that no body of the crate uses binds to nothing: reported with the file that lists it.
+    let used: std::collections::HashSet<String> = cw.files.iter().flat_map(|f| f.woven.realizations_used.iter().cloned()).collect();
+    for u in crate::weave::unused_realizations(Some(&reals), &used, "") {
+        let file = &owners[u.name.as_str()];
+        if let Some(wf) = cw.files.iter_mut().find(|f| file.ends_with(f.rel.with_extension("constraints.json"))) {
+            let owner = crate::weave::base_path(&wf.json);
+            wf.woven.unbound.push(crate::weave::Unbound { subject: owner, ..u });
+        }
+    }
+    cw.realizations = reals;
     let woven_set: BTreeSet<PathBuf> = cw.files.iter().map(|f| f.rel.clone()).collect();
     cw.unwoven = corpus_files(&crate_dir, true).unwrap_or_default().into_iter().filter(|f| !woven_set.contains(f)).collect();
     prepare_out(out, &[from, &crate_dir])?;

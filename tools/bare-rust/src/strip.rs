@@ -72,6 +72,26 @@ struct Stripper<'a> {
     namer: Namer,
     /// (type subject, entry): the impls of a trait whose self type is a type of this file, attached at the end.
     implements: Vec<(String, Value)>,
+    /// Realizations of templates (language 3.5), for the whole file: name -> {template, args}, one name for each
+    /// template with its arguments (`realized`, keyed by `realization_key`), unique among the file's identifiers.
+    paths: crate::paths::Paths,
+    realizations: Obj,
+    realized: HashMap<String, String>,
+    names_used: HashSet<String>,
+    /// Names given in advance, by `realization_key` (strip of a crate: one name across the crate).
+    forced: HashMap<String, String>,
+}
+
+/// What a strip of one file is told from outside it.
+#[derive(Default, Clone)]
+pub struct StripOpts {
+    /// The name of each realization, by `realization_key`, chosen for the whole crate.
+    pub realization_names: HashMap<String, String>,
+}
+
+/// The identity of a realization: its template's full path and its arguments.
+pub fn realization_key(template: &str, args: &Value) -> String {
+    format!("{template}{args}")
 }
 
 fn access(mutable: bool) -> Value {
@@ -533,13 +553,9 @@ impl<'a> Stripper<'a> {
         // The key of each `let`, so that the parameters of a closure it names are keyed `<let>.<parameter>`.
         let mut let_keys: HashMap<usize, String> = HashMap::new();
         let mut param_seen: HashMap<String, usize> = HashMap::new();
-        // Realizations of templates (a turbofish): name -> {template, args}; one name per template and arguments.
-        let mut realizations = Obj::new();
-        let mut realized: HashMap<(String, String), String> = HashMap::new();
         let mut done_targs: HashSet<usize> = HashSet::new();
         // Type arguments named by a realization leave the body, so the turbofish hints after them are numbered without.
         let mut removed_targs = 0;
-        let mut used = crate::bind::idents(text(body, src));
         for s in life::sites(body) {
             let n = match s.kind {
                 SK::Cast => s.n - removed,
@@ -593,16 +609,16 @@ impl<'a> Stripper<'a> {
                                 done_targs.insert(ta.id());
                                 let vals: Vec<Value> =
                                     args.iter().map(|a| if text(*a, src) == "_" { json!("_") } else { self.loose(*a, generics) }).collect();
-                                let key = (template.clone(), vals.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(","));
-                                let name = match realized.get(&key) {
+                                let template = if template.starts_with("<_>::") { template } else { self.paths.full(&template) };
+                                let key = realization_key(&template, &json!(vals));
+                                let name = match self.realized.get(&key).or_else(|| self.forced.get(&key)) {
                                     Some(n) => n.clone(),
-                                    None => {
-                                        let n = realization_name(&base, is_type, &args.iter().map(|a| text(*a, src)).collect::<Vec<_>>(), &mut used);
-                                        realized.insert(key, n.clone());
-                                        realizations.insert(n.clone(), json!({"template": template, "args": vals}));
-                                        n
-                                    }
+                                    None => realization_name(&base, is_type, &args.iter().map(|a| text(*a, src)).collect::<Vec<_>>(), &mut self.names_used),
                                 };
+                                if !self.realized.contains_key(&key) {
+                                    self.realized.insert(key, name.clone());
+                                    self.realizations.insert(name.clone(), json!({"template": template, "args": vals}));
+                                }
                                 self.cuts.push((cut.0, cut.1, name));
                                 removed_targs += 1;
                                 continue;
@@ -661,13 +677,10 @@ impl<'a> Stripper<'a> {
                 }
             }
         }
-        if !locals.is_empty() || !hints.is_empty() || !realizations.is_empty() {
+        if !locals.is_empty() || !hints.is_empty() {
             let mut h = Obj::new();
             if !locals.is_empty() {
                 h.insert("locals".into(), Value::Object(locals));
-            }
-            if !realizations.is_empty() {
-                h.insert("realizations".into(), Value::Object(realizations));
             }
             if !hints.is_empty() {
                 h.insert("hints".into(), Value::Array(hints));
@@ -1244,6 +1257,11 @@ fn collect_comments(n: Node, out: &mut Vec<(usize, usize)>) {
 /// A refusal is an `Err` whose text starts with its category and a colon.
 /// The source is bound first (`crate::bind`), so the bare body and the positions in refusals are those of `bind(src)`.
 pub fn strip(src: &str, krate: &str, module: &str) -> R<(String, Value)> {
+    strip_with(src, krate, module, &StripOpts::default())
+}
+
+/// As `strip`, with what the file is told from outside it (`StripOpts`).
+pub fn strip_with(src: &str, krate: &str, module: &str, opts: &StripOpts) -> R<(String, Value)> {
     if let Some(e) = first_error(&parse_rust(src)) {
         return refuse("parse-error", format!("Rust source, at {e}"));
     }
@@ -1260,7 +1278,14 @@ pub fn strip(src: &str, krate: &str, module: &str) -> R<(String, Value)> {
         holes: Obj::new(),
         namer: Namer::default(),
         implements: vec![],
+        paths: crate::paths::Paths::of_file(tree.root_node(), src, &module_path(module)),
+        realizations: Obj::new(),
+        realized: HashMap::new(),
+        // A realization's name is unique among the file's identifiers (weave turns each use of it back into the template).
+        names_used: crate::bind::idents(src),
+        forced: opts.realization_names.clone(),
     };
+    st.names_used.extend(opts.realization_names.values().cloned());
     let sc = Scope { path: path.join("::"), generics: vec![], self_ty: "Self".into() };
     st.items_in(tree.root_node(), &sc)?;
     for (ty, entry) in std::mem::take(&mut st.implements) {
@@ -1306,32 +1331,41 @@ pub fn strip(src: &str, krate: &str, module: &str) -> R<(String, Value)> {
     if !st.holes.is_empty() {
         out.insert("holes".into(), Value::Object(st.holes));
     }
+    if !st.realizations.is_empty() {
+        out.insert("realizations".into(), Value::Object(st.realizations));
+    }
     Ok((bare, Value::Object(out)))
 }
 
-/// The place of a turbofish that a realization's name replaces, the template as written, and the base of its name:
-/// a method (`s.parse::<u32>` -> `s.parse_u32`), a function (`std::mem::size_of::<u64>` -> `size_of_u64`), or a type in a
-/// path (`Vec::<u8>::new` -> `VecU8::new`).
+/// The place of a turbofish that a realization's name replaces (the template's last segment and its type arguments; a
+/// path before it stays), the template as written, and the base of its name: a method (`s.parse::<u32>` ->
+/// `s.parse_u32`, template `<_>::parse`: its type is the receiver's), a function (`std::mem::size_of::<u64>` ->
+/// `std::mem::size_of_u64`), or a type in a path (`Vec::<u8>::new` -> `VecU8::new`).
 fn realization_site(ta: Node, src: &str) -> Option<((usize, usize), String, String, bool)> {
     let p = ta.parent()?;
+    fn last(n: Node) -> Option<Node> {
+        if n.kind().starts_with("scoped_") { n.child_by_field_name("name") } else { Some(n) }
+    }
     match p.kind() {
         "generic_function" => {
             let f = p.child_by_field_name("function")?;
             match f.kind() {
                 "field_expression" => {
                     let field = f.child_by_field_name("field")?;
-                    Some(((field.start_byte(), ta.end_byte()), text(field, src).to_string(), text(field, src).to_string(), false))
+                    let t = text(field, src);
+                    Some(((field.start_byte(), ta.end_byte()), format!("<_>::{t}"), t.to_string(), false))
                 }
                 "identifier" | "scoped_identifier" => {
-                    let t = text(f, src);
-                    Some(((p.start_byte(), p.end_byte()), t.to_string(), t.rsplit("::").next().unwrap_or(t).to_string(), false))
+                    let name = last(f)?;
+                    Some(((name.start_byte(), ta.end_byte()), text(f, src).to_string(), text(name, src).to_string(), false))
                 }
                 _ => None,
             }
         }
         "generic_type" if p.parent().is_some_and(|s| s.kind() == "scoped_identifier" && s.child_by_field_name("path") == Some(p)) => {
-            let t = text(p.child_by_field_name("type")?, src);
-            Some(((p.start_byte(), p.end_byte()), t.to_string(), t.rsplit("::").next().unwrap_or(t).to_string(), true))
+            let t = p.child_by_field_name("type")?;
+            let name = last(t)?;
+            Some(((name.start_byte(), ta.end_byte()), text(t, src).to_string(), text(name, src).to_string(), true))
         }
         _ => None,
     }

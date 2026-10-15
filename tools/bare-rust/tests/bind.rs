@@ -103,13 +103,76 @@ pub fn f(x: u8, p: &u8, mut v: Vec<u8>) -> usize {
 
 #[test]
 fn a_macro_call_that_states_a_type_is_marked_and_weaves_back() {
-    let src = "pub fn f(x: u32) {\n    println!(\"{}\", x as u8);\n    let s = format!(\"{}\", 1u8);\n    println!(\"{}\", s);\n}\n";
+    // A standard macro's arguments are bound as a call's are; a macro whose syntax the tool does not know is kept as
+    // Rust text.
+    let src = "macro_rules! twice {\n    ($e:expr) => {\n        $e * 2\n    };\n}\npub fn f(x: u32) -> u8 {\n    println!(\"{}\", x as u8);\n    let s = format!(\"{}\", 1u8);\n    println!(\"{}\", s);\n    twice!(x as u8)\n}\n";
     let (bare, json) = bare_rust::strip(src, "demo 0.1.0", "src/lib.rs").unwrap();
-    assert!(bare.contains("rust! { println!(\"{}\", x as u8) };"), "{bare}");
-    assert!(bare.contains("let s = rust! { format!(\"{}\", 1u8) };"), "{bare}");
-    assert!(bare.contains("\n    println!(\"{}\", s);"), "{bare}");
+    assert!(bare.contains("let x_u8 = x;\n    println!(\"{}\", x_u8);"), "{bare}");
+    assert!(bare.contains("let k1_u8 = 1;\n    let s = format!(\"{}\", k1_u8);"), "{bare}");
+    assert!(bare.contains("\n    rust! { twice!(x as u8) }\n"), "{bare}");
     let woven = bare_rust::weave(&bare, &json).unwrap();
-    assert_eq!(woven.trim(), src.trim());
+    assert_eq!(woven.trim(), bind(src).unwrap().trim());
+}
+
+const MACROS: &str = r#"
+pub fn f(x: u32, v: &mut Vec<u64>, c: bool, out: &mut String) -> String {
+    use std::fmt::Write;
+    let mut log = vec![];
+    let mut push = |s: &str, n: u64| { log.push(format!("{s}{n}")); n };
+    println!("{}", x as u8);
+    let s = format!("{} {} {}", push("a", 1), v.iter().sum::<u64>() as u8, push("b", 2));
+    assert_eq!(x as u64 + 0 * push("c", 3), x as u64, "{}", push("never", 4) as u32);
+    assert!(c || x > 0, "{:?}", v.iter().map(|n| n + push("never", 5)).collect::<Vec<_>>());
+    debug_assert!(push("debug", 6) as u8 >= 6);
+    let w = vec![push("d", 7) as u8; x as usize % 3];
+    let w2 = vec![x as u8, push("e", 8) as u8];
+    writeln!(out, "{x} {n} {m}", m = push("f", 9), n = v.len() as u16).unwrap();
+    v.push(x as u64);
+    drop(push);
+    format!("{s}|{}|{}|{}|{}", w.len(), w2.len(), log.join(","), out)
+}
+"#;
+
+#[test]
+fn macro_arguments_are_bound_in_the_order_they_run_and_only_where_they_run() {
+    let (b, left) = bind_report(MACROS).unwrap();
+    for want in [
+        // In order with what runs before it (a turbofish inside a cast goes with the cast's binding).
+        "let push_v = push(\"a\", 1);\n    let sum_u8: u8 = v.iter().sum::<u64>() as u8;",
+        "let x_u64: u64 = x as u64;\n    let value_v = x_u64 + 0 * push(\"c\", 3);\n    let x_u64_2: u64 = x as u64;\n    assert_eq!(value_v, x_u64_2,",
+        "let w = vec![push_u8; x_usize % 3];",
+        "writeln!(out, \"{x} {n} {m}\", m = push_v_2, n = len_u16).unwrap();",
+        // An assertion's message runs only when it fails, and `debug_assert!` only in a debug build: a binding
+        // before the macro would run it always, and one inside it stays in the macro. Left, and reported.
+        "\"{}\", push(\"never\", 4) as u32);",
+        "debug_assert!(push(\"debug\", 6) as u8 >= 6);",
+    ] {
+        assert!(b.contains(want), "missing:\n{want}\nin:\n{b}");
+    }
+    let why: Vec<(&str, &str)> = left.iter().map(|l| (l.what, l.why)).collect();
+    let sometimes = "in a macro argument that runs only sometimes (an assertion's message, `debug_assert!`)";
+    assert_eq!(why, vec![("cast", sometimes), ("macro_arg", sometimes), ("cast", sometimes)], "{b}");
+    let main = "\nfn main() {\n    for (x, c) in [(0u32, true), (3, false), (7, true)] {\n        let (mut v, mut out) = (vec![1u64, 2], String::new());\n        println!(\"{}\", f(x, &mut v, c, &mut out));\n    }\n}\n";
+    let run = |s: &str, name: &str| {
+        let d = scratch(name);
+        std::fs::write(d.join("m.rs"), format!("{s}{main}")).unwrap();
+        let out = Command::new("rustc").args(["--edition", "2021", "-o"]).arg(d.join("m")).arg(d.join("m.rs")).output().unwrap();
+        assert!(out.status.success(), "{}\n{s}", String::from_utf8_lossy(&out.stderr));
+        String::from_utf8(Command::new(d.join("m")).output().unwrap().stdout).unwrap()
+    };
+    assert_eq!(run(&b, "macros-bound"), run(MACROS, "macros-source"));
+    assert_eq!(bind(&b).unwrap(), b);
+}
+
+#[test]
+fn a_json_value_is_bound_in_the_order_it_is_built() {
+    let src = "pub fn f(x: u32, v: &[u64]) -> serde_json::Value {\n    serde_json::json!({ \"a\": x as u8, \"b\": [1, v.iter().collect::<Vec<_>>()], \"c\": { \"d\": g() }, \"e\": v.len() as u64 })\n}\n";
+    // A path before the macro's name stays.
+    let b = bind(src).unwrap();
+    assert!(
+        b.contains("let x_u8: u8 = x as u8;\n    let collect_v = v.iter().collect::<Vec<_>>();\n    let g_v = g();\n    let len_u64: u64 = v.len() as u64;\n    serde_json::json!({ \"a\": x_u8, \"b\": [1, collect_v], \"c\": { \"d\": g_v }, \"e\": len_u64 })"),
+        "{b}"
+    );
 }
 
 #[test]

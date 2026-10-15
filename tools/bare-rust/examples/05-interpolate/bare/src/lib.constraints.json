@@ -113,9 +113,7 @@
     }
   ],
   "holes": {
-    "interpolate::find_cap_ref": {
-      "locals": { "i_usize": { "type": "u64 as 'usize'", "cast": true } },
-      "realizations": { "parse_u32": { "template": "parse", "args": ["u32"] } }
-    }
-  }
+    "interpolate::find_cap_ref": { "locals": { "i_usize": { "type": "u64 as 'usize'", "cast": true } } }
+  },
+  "realizations": { "parse_u32": { "template": "<_>::parse", "args": ["u32"] } }
 }

@@ -78,6 +78,8 @@ pub struct Woven {
     pub sites: Vec<HoleSite>,
     pub bare: String,
     pub unbound: Vec<Unbound>,
+    /// The realizations the bodies use, by name.
+    pub realizations_used: HashSet<String>,
 }
 
 impl Woven {
@@ -99,6 +101,9 @@ struct Weaver<'a> {
     used: HashSet<String>,
     scanned: HashSet<String>,
     unbound: Vec<Unbound>,
+    /// The crate's realizations (language 3.5): the file's own table, or the crate's when the crate is woven.
+    reals: Option<&'a serde_json::Map<String, Value>>,
+    reals_used: HashSet<String>,
     /// Where (a byte of the bare body) the first error came from: the innermost item being woven.
     fail_at: Option<usize>,
 }
@@ -755,10 +760,9 @@ impl<'a> Weaver<'a> {
         for (at, t, origin) in casts_after {
             self.edits.push(((at, at, t), origin));
         }
-        // Realizations: each use of the name is the template with its arguments, `parse_u32` -> `parse::<u32>`.
-        let reals = h["realizations"].as_object();
-        let mut real_used: HashSet<String> = HashSet::new();
-        if let Some(reals) = reals {
+        // Realizations: each use of the name is the template's last segment with its arguments, `parse_u32` ->
+        // `parse::<u32>`; a path before the name stays (`std::mem::size_of_u64` -> `std::mem::size_of::<u64>`).
+        if let Some(reals) = self.reals {
             let mut uses = vec![];
             fn find<'b>(n: Node<'b>, src: &str, names: &serde_json::Map<String, Value>, out: &mut Vec<Node<'b>>) {
                 if crate::is_item_kind(n.kind()) || n.kind() == "token_tree" {
@@ -777,11 +781,12 @@ impl<'a> Weaver<'a> {
             for u in uses {
                 let name = text(u, src).to_string();
                 let r = &reals[&name];
-                let template = r["template"].as_str().ok_or_else(|| format!("{subject} realization `{name}` has no template"))?;
-                let args = r["args"].as_array().ok_or_else(|| format!("{subject} realization `{name}` has no args"))?;
+                let template = r["template"].as_str().ok_or_else(|| format!("realization `{name}` has no template"))?;
+                let template = template.rsplit("::").next().unwrap_or(template);
+                let args = r["args"].as_array().ok_or_else(|| format!("realization `{name}` has no args"))?;
                 let mut ts = vec![];
                 for a in args {
-                    ts.push(if a == "_" { "_".to_string() } else { ty_text(a, &Value::Null, None, false, &format!("{subject} realization `{name}`"))? });
+                    ts.push(if a == "_" { "_".to_string() } else { ty_text(a, &Value::Null, None, false, &format!("realization `{name}`"))? });
                 }
                 // With every argument dropped (check 4) it states nothing, and fills no hole.
                 let all_inferred = ts.iter().all(|t| t == "_");
@@ -791,7 +796,7 @@ impl<'a> Weaver<'a> {
                     self.at_hole(subject, format!("realizations[{name}]"));
                 }
                 self.rep(u.start_byte(), u.end_byte(), format!("{template}::<{}>", ts.join(", ")));
-                real_used.insert(name.clone());
+                self.reals_used.insert(name.clone());
                 self.sites.push(HoleSite {
                     subject: subject.to_string(),
                     kind: "realization",
@@ -803,9 +808,6 @@ impl<'a> Weaver<'a> {
                     filled: !all_inferred,
                 });
             }
-        }
-        for k in reals.into_iter().flatten().map(|(k, _)| k).filter(|k| !real_used.contains(*k)) {
-            self.unbound.push(Unbound { what: "unbound realization", subject: subject.to_string(), name: k.clone() });
         }
         for k in h["locals"].as_object().into_iter().flatten().map(|(k, _)| k).filter(|k| !keys_taken.contains(*k)) {
             self.unbound.push(Unbound { what: "unbound local", subject: subject.to_string(), name: k.clone() });
@@ -868,6 +870,12 @@ pub fn weave_traced(brs: &str, json: &Value) -> R<Woven> {
 
 /// As `weave_traced`, and an error says where in the bare body it comes from.
 pub fn weave_at(brs: &str, json: &Value) -> Result<Woven, WeaveError> {
+    weave_in_crate(brs, json, None)
+}
+
+/// As `weave_at`, for a file of a crate whose realizations are `reals` (the crate's table, from its root's file). A
+/// realization no body uses is then the crate's to report, not the file's.
+pub fn weave_in_crate(brs: &str, json: &Value, reals: Option<&serde_json::Map<String, Value>>) -> Result<Woven, WeaveError> {
     let tree = parse_bare(brs);
     if let Some(e) = crate::first_error(&tree) {
         let at = e.split_once(':').and_then(|(l, c)| Some((l.parse().ok()?, c.parse().ok()?)));
@@ -877,10 +885,10 @@ pub fn weave_at(brs: &str, json: &Value) -> Result<Woven, WeaveError> {
         });
     }
     crate::hints::reject_placeholders(json)?;
-    weave_checked(brs, json, tree).map_err(|(e, off)| WeaveError { at: off.map(|o| line_col(brs, o)), msg: e, short: None })
+    weave_checked(brs, json, tree, reals).map_err(|(e, off)| WeaveError { at: off.map(|o| line_col(brs, o)), msg: e, short: None })
 }
 
-fn weave_checked(brs: &str, json: &Value, tree: tree_sitter::Tree) -> Result<Woven, (String, Option<usize>)> {
+fn weave_checked(brs: &str, json: &Value, tree: tree_sitter::Tree, crate_reals: Option<&serde_json::Map<String, Value>>) -> Result<Woven, (String, Option<usize>)> {
     let krate = json["crate"].as_str().ok_or_else(|| ("slot missing: crate".to_string(), None))?;
     let subjects = json["subjects"].as_array().ok_or_else(|| ("slot missing: subjects".to_string(), None))?;
     let subs: HashMap<String, &Value> = subjects.iter().filter_map(|s| Some((s["name"].as_str()?.to_string(), s))).collect();
@@ -897,6 +905,8 @@ fn weave_checked(brs: &str, json: &Value, tree: tree_sitter::Tree) -> Result<Wov
         used: HashSet::new(),
         scanned: HashSet::new(),
         unbound: vec![],
+        reals: crate_reals.or(json["realizations"].as_object()),
+        reals_used: HashSet::new(),
         fail_at: None,
     };
     if let Err(e) = w.items_in(tree.root_node(), &Scope::new(base_path(json))) {
@@ -911,8 +921,22 @@ fn weave_checked(brs: &str, json: &Value, tree: tree_sitter::Tree) -> Result<Wov
         }
     }
     unbound.extend(stale.into_iter().map(|n| Unbound { what: "unbound subject", subject: n.to_string(), name: String::new() }));
+    if crate_reals.is_none() {
+        unbound.extend(unused_realizations(json["realizations"].as_object(), &w.reals_used, &base_path(json)));
+    }
     let (text, map) = apply_traced(brs, w.edits);
-    Ok(Woven { text, map, sites: w.sites, bare: brs.to_string(), unbound })
+    Ok(Woven { text, map, sites: w.sites, bare: brs.to_string(), unbound, realizations_used: w.reals_used })
+}
+
+/// The realizations of a table that no body uses, reported under `owner` (the crate).
+pub fn unused_realizations(table: Option<&serde_json::Map<String, Value>>, used: &HashSet<String>, owner: &str) -> Vec<Unbound> {
+    table
+        .into_iter()
+        .flatten()
+        .map(|(k, _)| k)
+        .filter(|k| !used.contains(*k))
+        .map(|k| Unbound { what: "unbound realization", subject: owner.to_string(), name: k.clone() })
+        .collect()
 }
 
 /// Weave a bare body and its constraint JSON into Rust.

@@ -197,7 +197,11 @@ pub fn bind(src: &str) -> R<String> {
 
 /// As `bind`, with the sites it left.
 pub fn bind_report(src: &str) -> R<(String, Vec<Left>)> {
-    let mut s = src.to_string();
+    if let Some(e) = first_error(&parse_rust(src)) {
+        return Err(format!("bind: parse-error at {e}"));
+    }
+    // The standard macros' arguments are bound as a call's are (`macros`).
+    let mut s = crate::macros::encode(src);
     let (mut fi, mut left, mut steps) = (0, vec![], 0);
     loop {
         let tree = parse_rust(&s);
@@ -222,7 +226,7 @@ pub fn bind_report(src: &str) -> R<(String, Vec<Left>)> {
             }
         }
     }
-    Ok((s, left))
+    Ok((crate::macros::decode(&s), left))
 }
 
 /// Function bodies, outer before inner.
@@ -254,7 +258,7 @@ fn step(body: Node, src: &str, rel: &Release) -> Step {
             }
             SK::Lit => {
                 if let Some((_, _, suffix)) = life::lit_suffix(text(s.node, src)) {
-                    let neg = s.node.parent().filter(|p| p.kind() == "unary_expression" && text(*p, src).starts_with('-'));
+                    let neg = s.node.parent().filter(|p| matches!(p.kind(), "unary_expression" | "negative_literal") && text(*p, src).starts_with('-'));
                     sites.push((neg.unwrap_or(s.node), "literal", suffix.to_string()));
                 }
             }
@@ -288,6 +292,39 @@ fn step(body: Node, src: &str, rel: &Release) -> Step {
         if typed {
             sites.push((c, "closure", String::new()));
         }
+    }
+    // A macro argument that states a type in a turbofish (`format!("{}", v.iter().sum::<u64>())`): the argument is
+    // named before the macro, where `strip` names the realization.
+    fn turbofish<'a>(n: Node<'a>, src: &str, out: &mut Vec<Node<'a>>) {
+        if crate::is_item_kind(n.kind()) || n.kind() == "token_tree" {
+            return;
+        }
+        if n.kind() == "type_arguments" && src[..n.start_byte()].trim_end().ends_with("::") {
+            let typed = named_children(n).into_iter().any(|a| !is_comment(a) && text(a, src) != "_");
+            let mut cur = n;
+            while typed {
+                if crate::macros::macro_arg(cur, src) {
+                    if !out.iter().any(|o| o.id() == cur.id()) {
+                        out.push(cur);
+                    }
+                    break;
+                }
+                match cur.parent() {
+                    Some(p) if !matches!(p.kind(), "block" | "function_item") => cur = p,
+                    _ => break,
+                }
+            }
+        }
+        for c in named_children(n) {
+            turbofish(c, src, out);
+        }
+    }
+    let mut tf = vec![];
+    for c in named_children(body) {
+        turbofish(c, src, &mut tf);
+    }
+    for a in tf {
+        sites.push((a, "macro_arg", String::new()));
     }
     // Innermost first, then in order: the order the values are computed in.
     sites.sort_by_key(|(e, _, _)| (e.end_byte(), std::cmp::Reverse(e.start_byte())));
@@ -335,13 +372,13 @@ fn fresh(base: &str, used: &mut HashSet<String>) -> String {
 /// A short name for the value of an expression: the variable, field, function or method it comes from.
 fn base_name(n: Node, src: &str) -> String {
     match n.kind() {
-        "identifier" => text(n, src).to_string(),
+        "identifier" => crate::macros::macro_name(text(n, src)).unwrap_or(text(n, src)).to_string(),
         "self" => "this".into(),
         "parenthesized_expression" | "reference_expression" | "unary_expression" | "try_expression" | "await_expression" => {
             named_children(n).into_iter().find(|c| !is_comment(*c)).map_or("value".into(), |c| base_name(c, src))
         }
         "field_expression" => n.child_by_field_name("field").map_or("value".into(), |f| text(f, src).to_string()),
-        "scoped_identifier" => n.child_by_field_name("name").map_or("value".into(), |f| text(f, src).to_string()),
+        "scoped_identifier" => n.child_by_field_name("name").map_or("value".into(), |f| crate::macros::macro_name(text(f, src)).unwrap_or(text(f, src)).to_string()),
         "call_expression" => match n.child_by_field_name("function") {
             // `x.parse().unwrap()` is named for what was unwrapped.
             Some(f) if f.kind() == "field_expression"
@@ -359,16 +396,26 @@ fn base_name(n: Node, src: &str) -> String {
     }
 }
 
-/// Free of effects, as far as the order of evaluation goes: reading places and computing on what was read.
-fn pure(n: Node) -> bool {
+/// Free of effects, as far as the order of evaluation goes: reading places and computing on what was read. With the
+/// source, a JSON value of `json!` is as pure as its parts, and an argument a macro runs only sometimes is never bound
+/// before it.
+fn pure_in(n: Node, src: Option<&str>) -> bool {
+    if let Some(src) = src {
+        if crate::macros::is_json_part(n, src) {
+            return n.child_by_field_name("arguments").is_some_and(|a| named_children(a).into_iter().all(|c| is_comment(c) || pure_in(c, Some(src))));
+        }
+        if crate::macros::is_cond(n, src) {
+            return true;
+        }
+    }
     match n.kind() {
         "identifier" | "self" | "scoped_identifier" | "field_identifier" | "integer_literal" | "float_literal"
         | "boolean_literal" | "char_literal" | "string_literal" | "raw_string_literal" | "unit_expression" | "crate"
         | "super" | "closure_expression" | "shorthand_field_initializer" => true,
-        "field_expression" => n.child_by_field_name("value").is_some_and(pure),
+        "field_expression" => n.child_by_field_name("value").is_some_and(|v| pure_in(v, src)),
         "reference_expression" | "unary_expression" | "parenthesized_expression" | "type_cast_expression"
         | "binary_expression" | "tuple_expression" | "array_expression" | "range_expression" | "negative_literal" => {
-            named_children(n).into_iter().filter(|c| !is_comment(*c)).all(|c| pure(c) || is_type_node(c))
+            named_children(n).into_iter().filter(|c| !is_comment(*c)).all(|c| pure_in(c, src) || is_type_node(c))
         }
         _ => false,
     }
@@ -430,7 +477,14 @@ fn anchor(e: Node) -> Result<Anchor, &'static str> {
 }
 
 /// The expressions in `region` that run before `e`, outermost first, with whether each can be bound by value.
-fn earlier<'a>(e: Node<'a>, region: Node<'a>) -> Vec<(Node<'a>, bool)> {
+fn earlier<'a>(e: Node<'a>, region: Node<'a>, src: &str) -> Vec<(Node<'a>, bool)> {
+    // A JSON value of `json!` runs as its parts, in order.
+    fn parts<'a>(n: Node<'a>, src: &str, out: &mut Vec<Node<'a>>) {
+        match n.child_by_field_name("arguments").filter(|_| crate::macros::is_json_part(n, src)) {
+            Some(a) => named_children(a).into_iter().filter(|c| !is_comment(*c)).for_each(|c| parts(c, src, out)),
+            None => out.push(n),
+        }
+    }
     // One group per level, innermost level first; the outermost level runs first, and each level runs in order.
     let mut levels: Vec<Vec<(Node<'a>, bool)>> = vec![];
     let mut cur = e;
@@ -450,6 +504,11 @@ fn earlier<'a>(e: Node<'a>, region: Node<'a>) -> Vec<(Node<'a>, bool)> {
                         Some(v) => v,
                         None => continue,
                     },
+                    // A named argument of a format macro (`n = e`): what runs is its value.
+                    "assignment_expression" if crate::macros::macro_arg_list(p, src) => match c.child_by_field_name("right") {
+                        Some(v) => v,
+                        None => continue,
+                    },
                     _ => c,
                 };
                 let skip = is_comment(c)
@@ -461,7 +520,9 @@ fn earlier<'a>(e: Node<'a>, region: Node<'a>) -> Vec<(Node<'a>, bool)> {
                     let place = matches!(p.kind(), "field_expression" | "reference_expression" | "index_expression")
                         || (assigns && p.child_by_field_name("left") == Some(c))
                         || (p.kind() == "call_expression" && c.kind() == "field_expression");
-                    out.push((c, !place));
+                    let mut ps = vec![];
+                    parts(c, src, &mut ps);
+                    out.extend(ps.into_iter().map(|x| (x, !place)));
                 }
             }
         }
@@ -471,11 +532,39 @@ fn earlier<'a>(e: Node<'a>, region: Node<'a>) -> Vec<(Node<'a>, bool)> {
     levels.into_iter().rev().flatten().collect()
 }
 
+/// The argument of a standard macro (`macros`) that holds `n`, the nearest, if any.
+fn in_macro_arg<'a>(n: Node<'a>, src: &str) -> Option<Node<'a>> {
+    let mut cur = Some(n);
+    while let Some(c) = cur {
+        if crate::macros::macro_arg(c, src) {
+            return Some(c);
+        }
+        if c.kind() == "function_item" {
+            return None;
+        }
+        cur = c.parent();
+    }
+    None
+}
+
+/// A binding never goes inside a macro's arguments, where `strip` cannot take its type out: the argument is named
+/// first, before the macro, and what is inside it is bound there. An argument the macro runs only sometimes is left.
+fn name_macro_arg_first(a: Node, src: &str, used: &mut HashSet<String>, rel: &Release) -> Result<Vec<Edit>, &'static str> {
+    if crate::macros::is_cond_arg(a, src) {
+        return Err("in a macro argument that runs only sometimes (an assertion's message, `debug_assert!`)");
+    }
+    plan(a, "macro_arg", "", src, used, rel)
+}
+
 /// The edits that bind one site, none if it is already bound, or why it cannot be.
 fn plan(e: Node, what: &'static str, ty: &str, src: &str, used: &mut HashSet<String>, rel: &Release) -> Result<Vec<Edit>, &'static str> {
     match what {
-        "closure_return" => return plan_closure_return(e, src, used),
-        "closure" => return plan_closure_name(e, src, used),
+        "closure_return" | "closure" => {
+            if let Some(a) = in_macro_arg(e, src) {
+                return name_macro_arg_first(a, src, used, rel);
+            }
+            return if what == "closure" { plan_closure_name(e, src, used) } else { plan_closure_return(e, src, used) };
+        }
         _ => {}
     }
     if what == "cast" && !carried_type(ty) {
@@ -489,6 +578,9 @@ fn plan(e: Node, what: &'static str, ty: &str, src: &str, used: &mut HashSet<Str
     };
     // The value of a `let`: the local is the name.
     if let Some(p) = e.parent().filter(|p| p.kind() == "let_declaration" && p.child_by_field_name("value") == Some(e)) {
+        if let Some(a) = in_macro_arg(p, src) {
+            return name_macro_arg_first(a, src, used, rel);
+        }
         let pat = p.child_by_field_name("pattern").ok_or("let without a pattern")?;
         let declared = p.child_by_field_name("type");
         let fits = declared.map_or(true, |t| text(t, src) == ty);
@@ -516,11 +608,14 @@ fn plan(e: Node, what: &'static str, ty: &str, src: &str, used: &mut HashSet<Str
     let region = match anchor {
         Anchor::Stmt(n) | Anchor::Boundary(n) => n,
     };
+    if let Some(a) = in_macro_arg(region, src) {
+        return name_macro_arg_first(a, src, used, rel);
+    }
     let mut lets = vec![];
     let mut inner: Vec<Edit> = vec![];
-    if what == "cast" {
-        for (x, by_value) in earlier(e, region) {
-            if pure(x) {
+    if what != "literal" {
+        for (x, by_value) in earlier(e, region, src) {
+            if pure_in(x, Some(src)) {
                 continue;
             }
             if !by_value {
@@ -533,13 +628,13 @@ fn plan(e: Node, what: &'static str, ty: &str, src: &str, used: &mut HashSet<Str
     }
     // A value inside the cast that releases something at its end (a lock guard) keeps its end where it was: it is
     // named, and the statement goes into a block that ends where the statement did (language 7.3).
-    let held = if what == "cast" { releasing(e, src, rel) } else { vec![] };
+    let held = if what != "literal" { releasing(e, src, rel) } else { vec![] };
     if !held.is_empty() && matches!(anchor, Anchor::Boundary(_)) {
         return Err("a value that releases something at its end, where the statement might not run");
     }
     // A literal is a constant: binding it first changes no order and ends nothing.
-    for (x, _) in if what == "cast" { earlier(e, region) } else { vec![] } {
-        if !pure(x) && !releasing(x, src, rel).is_empty() {
+    for (x, _) in if what != "literal" { earlier(e, region, src) } else { vec![] } {
+        if !pure_in(x, Some(src)) && !releasing(x, src, rel).is_empty() {
             return Err("something before it in the statement holds a value that releases something at its end");
         }
     }
@@ -553,7 +648,9 @@ fn plan(e: Node, what: &'static str, ty: &str, src: &str, used: &mut HashSet<Str
         }
         cast_text = apply(&cast_text, ed);
     }
-    let (name, value) = if what == "cast" {
+    let (name, value) = if what == "macro_arg" {
+        (fresh(&format!("{}_v", base_name(e, src)), used), cast_text)
+    } else if what == "cast" {
         let op = e.child_by_field_name("value").ok_or("cast without a value")?;
         (fresh(&format!("{}_{ty}", base_name(op, src)), used), cast_text)
     } else {
@@ -561,7 +658,7 @@ fn plan(e: Node, what: &'static str, ty: &str, src: &str, used: &mut HashSet<Str
         let base = format!("k{}_{ty}", v.replace('-', "neg"));
         (fresh(&base, used), v)
     };
-    lets.push(format!("let {name}: {ty} = {value};"));
+    lets.push(if ty.is_empty() { format!("let {name} = {value};") } else { format!("let {name}: {ty} = {value};") });
     // `(h as u64).f()` becomes `h_u64.f()`, not `(h_u64).f()`.
     let target = e.parent().filter(|p| p.kind() == "parenthesized_expression" && named_children(*p).len() == 1).unwrap_or(e);
     inner.push((target.start_byte(), target.end_byte(), name));

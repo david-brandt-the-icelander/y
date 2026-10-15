@@ -78,6 +78,22 @@ fn corpora_checks_1_and_2_without_cargo() {
         let _ = weave_crate(&out.join(c), &woven_root.join(c));
     }
 
+    // Check 1 is over a crate: the woven files stripped as `strip` strips a crate (one name per realization across it,
+    // and its table in the root's file).
+    let mut again: std::collections::HashMap<(&str, PathBuf), Result<(String, Value), String>> = Default::default();
+    for (corpus, dir, tests) in [("tool", root(), false), ("strsim", root().join("corpora/src/strsim"), true), ("fnv", root().join("corpora/src/fnv"), true)] {
+        let info = bare_rust::corpus::crate_info(&dir).unwrap();
+        let sources: Vec<(PathBuf, String)> = units
+            .iter()
+            .filter(|u| u.corpus == corpus)
+            .filter_map(|u| Some((u.rel.clone(), fs::read_to_string(woven_root.join(corpus).join(&u.rel)).ok()?)))
+            .collect();
+        let trees = bare_rust::corpus::crate_trees(&dir, tests).unwrap();
+        for (rel, r) in bare_rust::corpus::strip_sources(&format!("{} {}", info.name, info.version), &sources, &trees) {
+            again.insert((corpus, rel), r);
+        }
+    }
+
     let schema: Value = serde_json::from_str(include_str!("../schema/y-constraints-0.schema.json")).unwrap();
     let validator = jsonschema::validator_for(&schema).unwrap();
     let mut rows = vec![];
@@ -115,7 +131,11 @@ fn corpora_checks_1_and_2_without_cargo() {
             }
             Ok(woven) => {
                 // Check 1: strip(weave(b, c)) == (b, c), byte for byte.
-                row.check1 = match strip(&woven, js["crate"].as_str().unwrap(), js["module"].as_str().unwrap()) {
+                let stripped = match again.remove(&(u.corpus, u.rel.clone())) {
+                    Some(r) => r,
+                    None => strip(&woven, js["crate"].as_str().unwrap(), js["module"].as_str().unwrap()),
+                };
+                row.check1 = match stripped {
                     Err(e) => Some(format!("strip(woven): {e}")),
                     Ok((b2, j2)) => {
                         if b2 != bare {
@@ -170,7 +190,6 @@ fn corpora_checks_1_and_2_without_cargo() {
 
 use bare_rust::check::{check_crate, CheckOpts, CheckReport};
 use bare_rust::crate_weave::HoleReport;
-use bare_rust::weave::weave_traced;
 
 /// Check 5 runs strict for a crate with an externals list: an external item without an entry fails the check.
 fn opts(full: bool, tests: bool) -> CheckOpts {
@@ -208,23 +227,23 @@ fn assert_holes_are_sites(r: &CheckReport) {
     let bare = root().join("target/bare-rust-check").join(&r.name).join("bare");
     assert_eq!(r.c4.silently_filled, 0, "weave printed hole entries although the file had none");
     assert!(r.c4.other_errors.is_empty(), "failures that are not holes: {:?}", r.c4.other_errors);
+    // Every hole dropped, as check 4 drops them: the crate's realizations keep their templates, with `_` for each argument.
+    let mut brs_files = vec![];
+    bare_rust::corpus::find_brs(&bare, &mut brs_files);
+    let listed: Vec<(std::path::PathBuf, Value)> = brs_files
+        .iter()
+        .map(|b| (b.clone(), serde_json::from_str::<Value>(&fs::read_to_string(b.with_extension("constraints.json")).unwrap()).unwrap()))
+        .collect();
+    let (mut reals, _) = bare_rust::crate_weave::crate_realizations(&listed).unwrap();
+    for v in reals.values_mut() {
+        v["args"] = json!(vec!["_"; v["args"].as_array().map_or(0, Vec::len)]);
+    }
     let sites_of = |h: &HoleReport| {
         let p = bare.join(&h.file);
         let brs = fs::read_to_string(&p).unwrap();
         let mut js: Value = serde_json::from_str(&fs::read_to_string(p.with_extension("constraints.json")).unwrap()).unwrap();
-        // Every hole dropped, as check 4 drops them: a realization keeps its template, with `_` for each argument.
-        let mut kept = serde_json::Map::new();
-        for (sub, h) in js["holes"].as_object().into_iter().flatten() {
-            if let Some(r) = h["realizations"].as_object() {
-                let r: serde_json::Map<String, Value> = r
-                    .iter()
-                    .map(|(k, v)| (k.clone(), json!({"template": v["template"], "args": vec!["_"; v["args"].as_array().map_or(0, Vec::len)]})))
-                    .collect();
-                kept.insert(sub.clone(), json!({"realizations": r}));
-            }
-        }
-        js["holes"] = Value::Object(kept);
-        let w = weave_traced(&brs, &js).unwrap();
+        js["holes"] = json!({});
+        let w = bare_rust::weave::weave_in_crate(&brs, &js, Some(&reals)).unwrap();
         // The hole as weave sees it: the woven text has nothing at the site.
         assert!(w.map.spans.iter().all(|s| s.origin.kind != bare_rust::trace::Kind::Hole));
         w.sites.iter().filter(|s| s.subject == h.subject && s.kind == h.kind && s.n == h.n && s.key == h.key && !s.filled)

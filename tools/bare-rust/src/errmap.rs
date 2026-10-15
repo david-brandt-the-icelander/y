@@ -86,8 +86,9 @@ pub fn json_path(json: &Value, o: &Origin) -> Option<String> {
             if let Some(key) = o.slot.strip_prefix("locals[").and_then(|s| s.strip_suffix(']')) {
                 return Some(format!("{base}/locals/{}", esc(key)));
             }
+            // A realization is in the crate's table, at the top of the file that lists it (`realization_file`).
             if let Some(key) = o.slot.strip_prefix("realizations[").and_then(|s| s.strip_suffix(']')) {
-                return Some(format!("{base}/realizations/{}/args", esc(key)));
+                return Some(format!("/realizations/{}/args", esc(key)));
             }
             let inner = o.slot.strip_prefix("hints[")?.strip_suffix(']')?;
             let (kind, n) = inner.split_once(" #")?;
@@ -124,8 +125,13 @@ fn base(d: &Diag) -> MappedError {
     }
 }
 
-/// Map one diagnostic. `wf` is the woven file the diagnostic is in, if the weave owns it.
-pub fn map_diag(wf: Option<&WovenFile>, d: &Diag) -> MappedError {
+/// The constraint file that lists a realization of the crate (the crate root's), if a woven file does.
+fn realization_file(files: &[WovenFile], key: &str) -> Option<String> {
+    files.iter().find(|f| f.json["realizations"].get(key).is_some()).map(|f| f.rel.with_extension("constraints.json").display().to_string())
+}
+
+/// Map one diagnostic. `wf` is the woven file the diagnostic is in, if the weave owns it; `files` are the crate's.
+pub fn map_diag(files: &[WovenFile], wf: Option<&WovenFile>, d: &Diag) -> MappedError {
     let mut m = base(d);
     if d.file.is_empty() {
         return m;
@@ -143,6 +149,9 @@ pub fn map_diag(wf: Option<&WovenFile>, d: &Diag) -> MappedError {
             (m.bare_line, m.bare_col) = (l, c);
             m.origin = origin_name(&sp.origin);
             m.json_path = json_path(&wf.json, &sp.origin);
+            if let Some(k) = sp.origin.slot.strip_prefix("realizations[").and_then(|s| s.strip_suffix(']')) {
+                m.constraints_file = realization_file(files, k).or(m.constraints_file);
+            }
         }
         None => {
             let (l, c) = wf.woven.bare_at(map.to_bare(d.start, false));
@@ -197,7 +206,7 @@ pub fn map_hole(files: &[WovenFile], h: &HoleReport) -> MappedError {
         json_path(&wf.json, &o).or_else(|| {
             let base = format!("/holes/{}", esc(&h.subject));
             Some(match &h.key {
-                Some(k) if h.kind == "realization" => format!("{base}/realizations/{}/args", esc(k)),
+                Some(k) if h.kind == "realization" => format!("/realizations/{}/args", esc(k)),
                 Some(k) => format!("{base}/locals/{}", esc(k)),
                 None => format!("{base}/hints/-"),
             })
@@ -206,14 +215,27 @@ pub fn map_hole(files: &[WovenFile], h: &HoleReport) -> MappedError {
     MappedError {
         level: "error".into(),
         code: h.code.clone(),
-        message: format!("hole undetermined: {} of `{}`; fill with: {}", h.key.as_deref().map_or(format!("{} #{}", h.kind, h.n), |k| format!("local `{k}`")), h.subject, h.clause),
+        message: format!(
+            "hole undetermined: {} of `{}`; fill with: {}",
+            match h.key.as_deref() {
+                Some(k) if h.kind == "realization" => format!("realization `{k}`"),
+                Some(k) => format!("local `{k}`"),
+                None => format!("{} #{}", h.kind, h.n),
+            },
+            h.subject,
+            h.clause
+        ),
         woven_file: h.file.replace(".brs", ".rs"),
         woven_line: 0,
         woven_col: 0,
         bare_file: Some(h.file.clone()),
         bare_line: h.line,
         bare_col: h.col,
-        constraints_file: Some(h.file.replace(".brs", ".constraints.json")),
+        constraints_file: match &h.key {
+            Some(k) if h.kind == "realization" => realization_file(files, k),
+            _ => None,
+        }
+        .or_else(|| Some(h.file.replace(".brs", ".constraints.json"))),
         origin: "hole",
         json_path,
         related: vec![],

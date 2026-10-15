@@ -81,6 +81,19 @@
         "$ref": "#/$defs/holes"
       }
     },
+    "realizations": {
+      "type": "object",
+      "description": "The realizations of templates the bodies name (constraint language 3.5): `s.parse_u32()` is the method `parse` realized with `u32`. One table for a crate, in its root's file (`src/lib.constraints.json`, `src/main.constraints.json`, `tests/x.constraints.json`), keyed by the name the bodies use; the same template with the same arguments is one realization.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["template", "args"],
+        "properties": {
+          "template": { "type": "string", "minLength": 1, "description": "The template's full path (`std::mem::size_of`, `std::vec::Vec`), or `<_>::name` for a method, whose type is the receiver's. A body writes the template's last segment with the realization's name in its place; a path before it stays." },
+          "args": { "type": "array", "items": { "$ref": "#/$defs/type" }, "description": "Its type arguments, in order; `_` is left for the host to infer." }
+        }
+      }
+    },
     "views": {
       "type": "array",
       "description": "Views declared for the file: named pure projections of state a value holds beyond its value (language 15's `view(e)`), each bound to a host function. Usable in any clause of the file.",
@@ -516,19 +529,6 @@
                 "properties": { "type": { "$ref": "#/$defs/type" }, "cast": { "const": true } }
               }
             ]
-          }
-        },
-        "realizations": {
-          "type": "object",
-          "description": "Realizations of templates the body names: `s.parse_u32()` is `parse` realized with `u32` (constraint language 3). Keyed by the name the body uses.",
-          "additionalProperties": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["template", "args"],
-            "properties": {
-              "template": { "type": "string", "minLength": 1, "description": "The template as the host source writes it: a method name, a function path or a type path." },
-              "args": { "type": "array", "items": { "$ref": "#/$defs/type" }, "description": "Its type arguments, in order; `_` is left for the host to infer." }
-            }
           }
         },
         "hints": {

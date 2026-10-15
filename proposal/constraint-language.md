@@ -229,7 +229,8 @@ same realization.
   stated of one realization alone, where it promises more than the template does.
 - **Names.** A realization can be named, and is named where a body uses it with arguments written out (§ 11.2):
   `type Bytes = Vec<u8>`, `realize parse_port = 'std::primitive::str::parse'<u16>`. A use whose arguments the host
-  infers states no type, and needs no name.
+  infers states no type, and needs no name. Since two uses with the same arguments are one realization, a name belongs
+  to the program unit that holds them all (a Rust crate), not to the function that happens to use it.
 - **Hosts.** How a host makes realizations is a fact of the host, not of the meaning. Rust and C++ generate code for each
   one when they build. C# makes them at run time. Java and TypeScript check each one and then erase them to one type.
   The meaning is the same in each: every realization is a subject.

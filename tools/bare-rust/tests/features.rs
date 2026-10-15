@@ -132,11 +132,11 @@ fn body_stuff(mut a: u8, (mut b, c): (u8, u8)) -> u32 {
 }
 "#;
     let (b, j) = roundtrip(src);
-    // Casts and suffixed literals are bound (`bind`); the ones inside a macro call are marked as Rust text.
+    // Casts and suffixed literals are bound (`bind`), in the arguments of a standard macro too.
     // A turbofish that states a type is a realization the body names (`collect_vec_u8`, `VecU8`).
     assert!(!b.contains("as _") && !b.contains("::<") && b.contains("(0..3).collect_vec_u8()") && b.contains("VecU8::new()"), "{b}");
     assert!(b.contains("let a_u32 = a;") && b.contains("let x = a_u32 + k1_u8_u32;"), "{b}");
-    assert!(b.contains("rust! { assert_eq!(x as u32, 1u32) };"), "{b}");
+    assert!(b.contains("let x_u32 = x;\n    let k1_u32 = 1;\n    assert_eq!(x_u32, k1_u32);"), "{b}");
     let h = &j["holes"]["demo::body_stuff"];
     assert_eq!(h["locals"]["x"], "u32");
     assert_eq!(h["locals"]["x#2"], "u8");
@@ -145,8 +145,9 @@ fn body_stuff(mut a: u8, (mut b, c): (u8, u8)) -> u32 {
     assert_eq!(h["locals"]["k1_u8"], "u8");
     assert_eq!(h["locals"]["k2_5_f32"], "f32");
     assert!(h["hints"].is_null(), "{h}");
-    assert_eq!(h["realizations"]["collect_vec_u8"], serde_json::json!({"template": "collect", "args": ["list<u8> as 'Vec'"]}));
-    assert_eq!(h["realizations"]["VecU8"], serde_json::json!({"template": "Vec", "args": ["u8"]}));
+    let r = &j["realizations"];
+    assert_eq!(r["collect_vec_u8"], serde_json::json!({"template": "<_>::collect", "args": ["list<u8> as 'Vec'"]}));
+    assert_eq!(r["VecU8"], serde_json::json!({"template": "std::vec::Vec", "args": ["u8"]}));
     assert!(j["subjects"].as_array().unwrap().iter().any(|s| s["name"] == "demo::body_stuff::nested"));
     assert!(j["subjects"].as_array().unwrap().iter().any(|s| s["name"] == "demo::body_stuff::Local"));
 }
@@ -304,13 +305,13 @@ fn stale_entries_are_reported_as_unbound() {
     let (b, mut j) = strip(src, "demo 0.1.0", "src/lib.rs").unwrap();
     // A renamed local, a hint with no site, a realization the body no longer names, a subject with no item, holes of a
     // function that is gone.
+    assert_eq!(j["realizations"]["sum_u8"], serde_json::json!({"template": "<_>::sum", "args": ["u8"]}));
+    j["realizations"]["sum_u64"] = serde_json::json!({"template": "<_>::sum", "args": ["u64"]});
     let h = &mut j["holes"]["demo::f"];
-    assert_eq!(h["realizations"]["sum_u8"], serde_json::json!({"template": "sum", "args": ["u8"]}));
     let ty = h["locals"]["x"].take();
     h["locals"].as_object_mut().unwrap().remove("x");
     h["locals"]["z"] = ty;
     h["hints"] = serde_json::json!([{"kind": "targ", "n": 5, "type": "u64"}]);
-    h["realizations"]["sum_u64"] = serde_json::json!({"template": "sum", "args": ["u64"]});
     let g = subject(&j, "demo::g").clone();
     let mut gone = g.clone();
     gone["name"] = "demo::h".into();
@@ -321,15 +322,16 @@ fn stale_entries_are_reported_as_unbound() {
     assert_eq!(
         w.unbound,
         vec![
-            u("unbound realization", "demo::f", "sum_u64"),
             u("unbound local", "demo::f", "z"),
             u("unbound hint", "demo::f", "targ #5"),
             u("unbound subject", "demo::h", ""),
             u("unbound subject", "demo::k", ""),
+            u("unbound realization", "demo", "sum_u64"),
         ]
     );
-    assert_eq!(w.unbound[1].show(), "unbound local `z` of `demo::f`");
-    assert_eq!(w.unbound[3].show(), "unbound subject `demo::h`");
+    assert_eq!(w.unbound[0].show(), "unbound local `z` of `demo::f`");
+    assert_eq!(w.unbound[2].show(), "unbound subject `demo::h`");
+    assert_eq!(w.unbound[4].show(), "unbound realization `sum_u64` of `demo`");
     // Nothing stale: no warning.
     let (b, j) = strip(src, "demo 0.1.0", "src/lib.rs").unwrap();
     assert!(weave_traced(&b, &j).unwrap().unbound.is_empty());
@@ -704,22 +706,68 @@ fn a_turbofish_is_a_realization_the_body_names() {
 pub fn f(s: &str, v: Vec<i32>) -> Result<usize, std::num::ParseIntError> {
     let port: u16 = s.parse::<u16>()?;
     let n = std::mem::size_of::<u64>();
+    let m = size_of::<u64>();
     let mut bytes = Vec::<u8>::new();
     bytes.push(1);
     let evens = v.iter().filter(|x| *x % 2 == 0).collect::<Vec<_>>();
     let again = v.iter().collect::<Vec<_>>();
     let r = Ok::<_, ()>(1).unwrap_or(0) + Ok::<_, _>(2).unwrap_or(0);
-    Ok(port as usize + n + bytes.len() + evens.len() + again.len() + r as usize)
+    Ok(port as usize + n + m + bytes.len() + evens.len() + again.len() + r as usize)
 }
 "#;
     let (b, j) = roundtrip(src);
-    for want in ["s.parse_u16()?", "let n = size_of_u64();", "VecU8::new()", ".collect_vec();", "ok_unit(1)", "Ok::<_, _>(2)"] {
+    // The name takes the place of the template's last segment; a path before it stays. `size_of` (the prelude's) and
+    // `std::mem::size_of` are one template.
+    for want in ["s.parse_u16()?", "let n = std::mem::size_of_u64();", "let m = size_of_u64();", "VecU8::new()", ".collect_vec();", "ok_unit(1)", "Ok::<_, _>(2)"] {
         assert!(b.contains(want), "missing `{want}` in\n{b}");
     }
-    let r = &j["holes"]["demo::f"]["realizations"];
-    assert_eq!(r["parse_u16"], serde_json::json!({"template": "parse", "args": ["u16"]}));
+    // One table for the file (a crate root's file holds its crate's), with the template's full path; a method's
+    // template is `<_>::name`, its type the receiver's.
+    assert!(j["holes"]["demo::f"]["realizations"].is_null());
+    let r = &j["realizations"];
+    assert_eq!(r["parse_u16"], serde_json::json!({"template": "<_>::parse", "args": ["u16"]}));
     assert_eq!(r["size_of_u64"], serde_json::json!({"template": "std::mem::size_of", "args": ["u64"]}));
-    assert_eq!(r["VecU8"], serde_json::json!({"template": "Vec", "args": ["u8"]}));
-    assert_eq!(r["collect_vec"], serde_json::json!({"template": "collect", "args": ["list<_> as 'Vec'"]}));
+    assert_eq!(r["VecU8"], serde_json::json!({"template": "std::vec::Vec", "args": ["u8"]}));
+    assert_eq!(r["collect_vec"], serde_json::json!({"template": "<_>::collect", "args": ["list<_> as 'Vec'"]}));
+    assert_eq!(r["ok_unit"], serde_json::json!({"template": "std::result::Result::Ok", "args": ["_", "()"]}));
     assert_eq!(r.as_object().unwrap().len(), 5, "{r}");
+}
+
+#[test]
+fn a_crate_has_one_table_of_realizations_in_its_root_file() {
+    // Two modules realize `parse` with `u16`, one of them with a local already called `parse_u16`: one name across the
+    // crate, kept clear of every identifier, and one entry, in `src/lib.constraints.json`.
+    let d = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/bare-rust-test/crate-realizations");
+    let _ = std::fs::remove_dir_all(&d);
+    let w = |p: &str, s: &str| {
+        std::fs::create_dir_all(d.join(p).parent().unwrap()).unwrap();
+        std::fs::write(d.join(p), s).unwrap();
+    };
+    w("Cargo.toml", "[package]\nname = \"demo\"\nversion = \"0.1.0\"\nedition = \"2021\"\n");
+    w("src/lib.rs", "pub mod a;\npub mod b;\n");
+    w("src/a.rs", "use std::mem;\npub fn f(s: &str) -> usize {\n    s.parse::<u16>().unwrap() as usize + mem::size_of::<u8>()\n}\n");
+    w("src/b.rs", "pub fn g(s: &str) -> u16 {\n    let parse_u16 = 1;\n    s.parse::<u16>().unwrap() + parse_u16 + std::mem::size_of::<u8>() as u16\n}\n");
+    let out = d.join("bare");
+    for r in bare_rust::corpus::strip_crate(&d, &out, false).unwrap() {
+        assert!(r.outcome.is_ok(), "{:?}", r.outcome);
+    }
+    let read = |p: &str| std::fs::read_to_string(out.join(p)).unwrap();
+    let js = |p: &str| serde_json::from_str::<Value>(&read(p)).unwrap();
+    assert_eq!(
+        js("src/lib.constraints.json")["realizations"],
+        serde_json::json!({
+            "parse_u16_2": {"template": "<_>::parse", "args": ["u16"]},
+            "size_of_u8": {"template": "std::mem::size_of", "args": ["u8"]}
+        })
+    );
+    assert!(js("src/a.constraints.json")["realizations"].is_null() && js("src/b.constraints.json")["realizations"].is_null());
+    assert!(read("src/a.brs").contains("s.parse_u16_2().unwrap()") && read("src/a.brs").contains("mem::size_of_u8()"), "{}", read("src/a.brs"));
+    assert!(read("src/b.brs").contains("s.parse_u16_2().unwrap() + parse_u16"), "{}", read("src/b.brs"));
+    // The crate weaves back: each module's uses are the template with its arguments.
+    let woven = d.join("woven");
+    for r in bare_rust::corpus::weave_crate(&out, &woven).unwrap() {
+        assert!(r.outcome.is_ok(), "{:?}", r.outcome);
+    }
+    let b = std::fs::read_to_string(woven.join("src/b.rs")).unwrap();
+    assert!(b.contains("s.parse::<u16>().unwrap() + parse_u16"), "{b}");
 }

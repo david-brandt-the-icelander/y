@@ -23,6 +23,8 @@ pub mod conformance;
 pub mod seq;
 pub mod seqexpr;
 pub mod life;
+pub mod macros;
+pub mod paths;
 pub mod report;
 pub mod runcheck;
 pub mod stats;

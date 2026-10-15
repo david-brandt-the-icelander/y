@@ -1,7 +1,9 @@
 //! Crate mode: find a crate's corpus files, strip them into `x.brs` and `x.constraints.json`, weave them back.
 use crate::json::canonical;
-use crate::{named_children, parse_rust, strip, text, weave, R};
+use crate::strip::{realization_key, strip_with, StripOpts};
+use crate::{named_children, parse_rust, strip, text, R};
 use serde_json::{json, Value};
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -71,6 +73,15 @@ fn submodules(file: &Path, root: bool, out: &mut Vec<PathBuf>) {
 /// Every `.rs` file the crate compiles as library, binary or integration test (not benches or examples),
 /// relative to the crate directory.
 pub fn corpus_files(dir: &Path, include_tests: bool) -> R<Vec<PathBuf>> {
+    let mut all: Vec<PathBuf> = crate_trees(dir, include_tests)?.into_iter().flat_map(|(_, fs)| fs).collect();
+    all.sort();
+    all.dedup();
+    Ok(all)
+}
+
+/// The crates of a package: each root (library, binary, integration test) with the files of its module tree (the
+/// root first), relative to the crate directory.
+pub fn crate_trees(dir: &Path, include_tests: bool) -> R<Vec<(PathBuf, Vec<PathBuf>)>> {
     let info = crate_info(dir)?;
     let mut roots: Vec<PathBuf> = vec![];
     let lib = dir.join(info.lib.as_deref().unwrap_or("src/lib.rs"));
@@ -90,13 +101,15 @@ pub fn corpus_files(dir: &Path, include_tests: bool) -> R<Vec<PathBuf>> {
             roots.extend(subs);
         }
     }
-    let mut all = roots.clone();
-    for r in &roots {
-        submodules(r, true, &mut all);
-    }
-    all.sort();
-    all.dedup();
-    Ok(all.into_iter().map(|p| p.strip_prefix(dir).map(Path::to_path_buf).unwrap_or(p)).collect())
+    let rel = |p: PathBuf| p.strip_prefix(dir).map(Path::to_path_buf).unwrap_or(p);
+    Ok(roots
+        .into_iter()
+        .map(|r| {
+            let mut tree = vec![r.clone()];
+            submodules(&r, true, &mut tree);
+            (rel(r), tree.into_iter().map(rel).collect())
+        })
+        .collect())
 }
 
 /// What strip did to one corpus file.
@@ -117,11 +130,14 @@ fn write_file(p: &Path, s: &str) -> R<()> {
 pub fn strip_crate(dir: &Path, out: &Path, include_tests: bool) -> R<Vec<FileResult>> {
     let info = crate_info(dir)?;
     let krate = format!("{} {}", info.name, info.version);
-    let mut results = vec![];
+    let mut sources = vec![];
     for rel in corpus_files(dir, include_tests)? {
         let src = fs::read_to_string(dir.join(&rel)).map_err(|e| format!("{}: {e}", rel.display()))?;
-        let module = rel.to_string_lossy().replace('\\', "/");
-        let outcome = strip(&src, &krate, &module).and_then(|(bare, js)| {
+        sources.push((rel, src));
+    }
+    let mut results = vec![];
+    for (rel, r) in strip_sources(&krate, &sources, &crate_trees(dir, include_tests)?) {
+        let outcome = r.and_then(|(bare, js)| {
             write_file(&out.join(rel.with_extension("brs")), &bare)?;
             write_file(&out.join(rel.with_extension("constraints.json")), &canonical(&js))
         });
@@ -137,6 +153,75 @@ pub fn strip_crate(dir: &Path, out: &Path, include_tests: bool) -> R<Vec<FileRes
         .collect();
     write_file(&out.join("refusals.json"), &canonical(&json!({"refused": refused})))?;
     Ok(results)
+}
+
+/// Strip the files of a package, given as (path relative to the crate directory, source), with the package's crates
+/// (`crate_trees`): each file on its own, then one name for each realization across the package (language 3.5), unique
+/// among the identifiers of every bare body, a file whose own names differ stripped again with these names, and each
+/// crate's realizations in its root's file.
+pub fn strip_sources(krate: &str, sources: &[(PathBuf, String)], trees: &[(PathBuf, Vec<PathBuf>)]) -> Vec<(PathBuf, R<(String, Value)>)> {
+    let mut stripped: Vec<(PathBuf, R<(String, Value)>)> =
+        sources.iter().map(|(rel, src)| (rel.clone(), strip(src, krate, &rel.to_string_lossy().replace('\\', "/")))).collect();
+    let names = crate_realization_names(stripped.iter().filter_map(|s| s.1.as_ref().ok()));
+    for ((rel, src), (_, r)) in sources.iter().zip(stripped.iter_mut()) {
+        let differs = r.as_ref().is_ok_and(|(_, js)| {
+            js["realizations"].as_object().into_iter().flatten().any(|(k, v)| names.get(&realization_key(v["template"].as_str().unwrap_or(""), &v["args"])) != Some(k))
+        });
+        if differs {
+            *r = strip_with(src, krate, &rel.to_string_lossy().replace('\\', "/"), &StripOpts { realization_names: names.clone() });
+        }
+    }
+    for (root, tree) in trees {
+        if !stripped.iter().any(|s| &s.0 == root && s.1.is_ok()) {
+            continue;
+        }
+        let mut table = serde_json::Map::new();
+        for (_, r) in stripped.iter_mut().filter(|s| tree.contains(&s.0) && &s.0 != root) {
+            if let Ok((_, js)) = r {
+                if let Some(Value::Object(t)) = js.as_object_mut().and_then(|o| o.remove("realizations")) {
+                    table.extend(t);
+                }
+            }
+        }
+        if let Some((_, Ok((_, js)))) = stripped.iter_mut().find(|s| &s.0 == root) {
+            if let Some(t) = js["realizations"].as_object() {
+                table.extend(t.clone());
+            }
+            if !table.is_empty() {
+                js["realizations"] = Value::Object(table);
+            }
+        }
+    }
+    stripped
+}
+
+/// The name of each realization of a package, by `realization_key`: the name the first file gave it, unless another
+/// realization has it or it is an identifier of some bare body, then with a number after it.
+pub fn crate_realization_names<'a>(files: impl Iterator<Item = &'a (String, Value)> + Clone) -> HashMap<String, String> {
+    let mut idents: HashSet<String> = HashSet::new();
+    for (bare, js) in files.clone() {
+        let own: HashSet<&String> = js["realizations"].as_object().into_iter().flatten().map(|(k, _)| k).collect();
+        idents.extend(crate::bind::idents(bare).into_iter().filter(|i| !own.contains(i)));
+    }
+    let (mut names, mut taken): (HashMap<String, String>, HashSet<String>) = (HashMap::new(), HashSet::new());
+    for (_, js) in files {
+        for (k, v) in js["realizations"].as_object().into_iter().flatten() {
+            let key = realization_key(v["template"].as_str().unwrap_or(""), &v["args"]);
+            if names.contains_key(&key) {
+                continue;
+            }
+            let ty = k.starts_with(|c: char| c.is_uppercase());
+            let mut n = k.clone();
+            let mut i = 2;
+            while taken.contains(&n) || idents.contains(&n) {
+                n = format!("{k}{}{i}", if ty { "" } else { "_" });
+                i += 1;
+            }
+            taken.insert(n.clone());
+            names.insert(key, n);
+        }
+    }
+    names
 }
 
 pub fn find_brs(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -162,6 +247,13 @@ pub fn weave_crate(from: &Path, out: &Path) -> R<Vec<FileResult>> {
     if brs.is_empty() {
         return Err(format!("{}: no .brs files", from.display()));
     }
+    // The crate's realizations, from the files that list them (a crate root's file).
+    let listed: Vec<(PathBuf, Value)> = brs
+        .iter()
+        .filter_map(|b| Some((b.clone(), serde_json::from_str::<Value>(&fs::read_to_string(b.with_extension("constraints.json")).ok()?).ok()?)))
+        .filter(|(_, js)| js.get("realizations").is_some())
+        .collect();
+    let (reals, _) = crate::crate_weave::crate_realizations(&listed)?;
     let mut results = vec![];
     for b in brs {
         let rel = b.strip_prefix(from).unwrap_or(&b).to_path_buf();
@@ -170,7 +262,8 @@ pub fn weave_crate(from: &Path, out: &Path) -> R<Vec<FileResult>> {
             let cj = b.with_extension("constraints.json");
             let js = fs::read_to_string(&cj).map_err(|e| format!("{}: {e}", cj.display()))?;
             let js: Value = serde_json::from_str(&js).map_err(|e| format!("{}: {e}", cj.display()))?;
-            write_file(&out.join(rel.with_extension("rs")), &weave(&bare, &js)?)
+            let woven = crate::weave::weave_in_crate(&bare, &js, Some(&reals)).map_err(|e| e.msg)?;
+            write_file(&out.join(rel.with_extension("rs")), &woven.text)
         })();
         results.push(FileResult { file: rel, outcome });
     }

@@ -5,7 +5,7 @@ use crate::crate_weave::{hole_id, hole_report, weave_crate_with, CrateWeave, Err
 use crate::weave::HoleSite;
 use crate::json::canonical;
 use crate::trace::Kind;
-use crate::{count_mut, normalise, normalise_nomut, rustfmt, strip, R};
+use crate::{count_mut, normalise, normalise_nomut, rustfmt, R};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -99,12 +99,17 @@ fn first_diff(a: &str, b: &str) -> String {
     "differs".into()
 }
 
-fn check1(cw: &CrateWeave) -> Check1 {
+/// Check 1, over the crate: the woven files stripped as `strip` strips a crate (one name per realization across it,
+/// and its table in the root's file) give the bare files and constraint files back.
+fn check1(cw: &CrateWeave, dir: &Path, tests: bool) -> Check1 {
     let mut c = Check1::default();
-    for f in &cw.files {
+    let krate = cw.files.first().and_then(|f| f.json["crate"].as_str()).unwrap_or("").to_string();
+    let sources: Vec<(PathBuf, String)> = cw.files.iter().map(|f| (f.rel.clone(), f.woven.text.clone())).collect();
+    let trees = crate::corpus::crate_trees(dir, tests).unwrap_or_default();
+    let again = crate::corpus::strip_sources(&krate, &sources, &trees);
+    for (f, (_, r)) in cw.files.iter().zip(again) {
         c.files += 1;
-        let (krate, module) = (f.json["crate"].as_str().unwrap_or(""), f.json["module"].as_str().unwrap_or(""));
-        match strip(&f.woven.text, krate, module) {
+        match r {
             Err(e) => c.failures.push(format!("{}: strip(woven): {e}", f.rel.display())),
             Ok((b2, j2)) => {
                 if b2 != f.woven.bare {
@@ -184,23 +189,24 @@ fn check3(cw: &CrateWeave, dir: &Path, o: &CheckOpts) -> R<Check3> {
     Ok(c)
 }
 
-fn kind_counts(files: &[crate::crate_weave::WovenFile]) -> (BTreeMap<String, usize>, usize, usize) {
-    // Holes in the files as stripped: locals and hints, by kind; and the functions that have any.
+fn kind_counts(cw: &CrateWeave) -> (BTreeMap<String, usize>, usize, usize) {
+    // Holes in the files as stripped: locals and hints, by kind; and the functions that have any. Realizations are
+    // the crate's.
+    let files = &cw.files;
     let (mut by, mut fns, mut silent) = (BTreeMap::new(), 0, 0);
+    if !cw.realizations.is_empty() {
+        by.insert("realization".to_string(), cw.realizations.len());
+    }
     for f in files {
         if let Some(m) = f.json["holes"].as_object() {
             for (_, v) in m {
                 let l = v["locals"].as_object().map_or(0, |o| o.len());
                 let h = v["hints"].as_array().map_or(0, Vec::len);
-                let r = v["realizations"].as_object().map_or(0, |o| o.len());
-                if l + h + r > 0 {
+                if l + h > 0 {
                     fns += 1;
                 }
                 if l > 0 {
                     *by.entry("local".to_string()).or_insert(0) += l;
-                }
-                if r > 0 {
-                    *by.entry("realization".to_string()).or_insert(0) += r;
                 }
                 for x in v["hints"].as_array().into_iter().flatten() {
                     *by.entry(x["kind"].as_str().unwrap_or("?").to_string()).or_insert(0) += 1;
@@ -267,15 +273,17 @@ fn check4(bare: &Path, dir: &Path, o: &CheckOpts, name: &str, originals: &CrateW
     if cw.weave_errors.is_empty() && !cw.errors.is_empty() {
         attribute(bare, dir, o, name, &mut cw)?;
     }
-    let (dropped, dropped_functions, _) = kind_counts(&originals.files);
-    let (_, _, silently_filled) = kind_counts(&cw.files);
+    let (dropped, dropped_functions, _) = kind_counts(originals);
+    let (_, _, silently_filled) = kind_counts(&cw);
     // The holes the file filled, by (file, subject, kind, n/key): to tell which undetermined holes were dropped ones.
     let mut c = Check4 { dropped, dropped_functions, silently_filled, ..Default::default() };
     let filled = |h: &HoleReport| -> bool {
+        if let (Some(k), "realization") = (&h.key, h.kind) {
+            return originals.realizations[k.as_str()]["args"].as_array().is_some_and(|a| a.iter().any(|x| x != "_"));
+        }
         originals.files.iter().filter(|f| f.bare_name() == h.file).any(|f| {
             let e = &f.json["holes"][&h.subject];
             match &h.key {
-                Some(k) if h.kind == "realization" => e["realizations"][k]["args"].as_array().is_some_and(|a| a.iter().any(|x| x != "_")),
                 Some(k) => !e["locals"][k].is_null(),
                 None => e["hints"].as_array().into_iter().flatten().any(|x| x["kind"] == h.kind && x["n"].as_u64() == Some(h.n as u64)),
             }
@@ -305,7 +313,7 @@ pub fn check_crate(dir: &Path, o: &CheckOpts) -> R<CheckReport> {
         results.iter().filter_map(|r| r.outcome.as_ref().err().map(|e| (r.file.display().to_string(), e.clone()))).collect();
     let opts = WeaveOpts { cargo: true, crate_dir: Some(dir.to_path_buf()), target: o.target.clone(), drop_holes: false, keep: Default::default() };
     let cw = weave_crate_with(&bare, &root.join("woven"), &opts)?;
-    let c1 = check1(&cw);
+    let c1 = check1(&cw, dir, o.tests);
     let c2 = check2(&cw, dir);
     let c3 = check3(&cw, dir, o)?;
     let c4 = check4(&bare, dir, o, &name, &cw)?;

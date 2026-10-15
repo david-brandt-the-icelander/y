@@ -117,7 +117,9 @@ parameters is named the same way, and its parameters are keyed by that name (`by
 onto a local in its body. A value that releases something at its end (a type with `lifetime self released at end`,
 language § 7.3: a lock guard, a file) keeps its end where the source has it: `bind` names it and puts the statement in a
 block that ends where the statement did. A turbofish is a realization of a template (language § 3.5), named in the body:
-`s.parse_u16()` for `s.parse::<u16>()`, with `{"template": "parse", "args": ["u16"]}` in the function's `holes`. What
+`s.parse_u16()` for `s.parse::<u16>()`, with `"parse_u16": {"template": "<_>::parse", "args": ["u16"]}` in the
+crate's table of realizations, in the root module's file; the same template with the same arguments has one name across
+the crate. What
 cannot be bound yet (a cast to a non-primitive, a constant context) keeps `_` in the body and a positional hint; `_` in
 casts and type arguments is valid Rust, so the bare form keeps the target's syntax and only its types are erased. The
 proof of concept leaves `Rc`, `Arc`, `Box` and trait objects in the body as written and counts them, and keeps every

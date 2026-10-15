@@ -147,6 +147,16 @@ impl Acc {
         self.slot(f, "fields");
     }
 
+    /// A crate's realizations (in its root's file).
+    fn realizations(&mut self, t: &Value) {
+        for (_, r) in t.as_object().into_iter().flatten() {
+            bump(&mut self.slots, "holes.realizations");
+            for a in r["args"].as_array().into_iter().flatten().filter(|a| *a != "_") {
+                self.ty(a);
+            }
+        }
+    }
+
     fn holes(&mut self, h: &Value, fns: &mut u64) {
         let Some(m) = h.as_object() else { return };
         for (_, v) in m {
@@ -156,12 +166,6 @@ impl Acc {
                     bump(&mut self.slots, "holes.locals");
                     // A cast local carries its type under `type`.
                     self.ty(if t.get("cast").is_some() { &t["type"] } else { t });
-                }
-            }
-            for (_, r) in v["realizations"].as_object().into_iter().flatten() {
-                bump(&mut self.slots, "holes.realizations");
-                for a in r["args"].as_array().into_iter().flatten().filter(|a| *a != "_") {
-                    self.ty(a);
                 }
             }
             for x in v["hints"].as_array().map(|a| a.as_slice()).unwrap_or(&[]) {
@@ -273,6 +277,7 @@ pub fn stats(dir: &Path) -> R<Value> {
             acc.subject(sub);
         }
         acc.holes(&v["holes"], &mut fns_with_holes);
+        acc.realizations(&v["realizations"]);
         let b = p.to_string_lossy().replace(".constraints.json", ".brs");
         if let Ok(bare) = fs::read_to_string(&b) {
             let t = parse_bare(&bare);
