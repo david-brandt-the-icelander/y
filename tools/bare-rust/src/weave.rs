@@ -151,7 +151,16 @@ fn ty_text(v: &Value, acc: &Value, lifetime: Option<&str>, need_access: bool, wh
     if ty.has_ref() && need_access && acc.is_null() {
         return missing(format!("access of {what}"));
     }
-    ty.rust(acc["rights"] == "write", lifetime)
+    ty.rust(ty.writes(acc["rights"].as_str()), lifetime)
+}
+
+/// A `locals` entry: its type, its access, and whether its initialiser is cast (`{"type": T, "access": A, "cast":
+/// true}`, or the type alone).
+fn local_parts(v: &Value) -> (&Value, &Value, bool) {
+    match v.get("type") {
+        Some(t) => (t, &v["access"], v.get("cast").and_then(Value::as_bool) == Some(true)),
+        None => (v, &Value::Null, false),
+    }
 }
 
 fn bounds_text(v: &Value) -> String {
@@ -445,6 +454,16 @@ impl<'a> Weaver<'a> {
         if let Some(v) = n.child_by_field_name("value") {
             self.body_holes(v, &sname)?;
             self.nested(v, &sname)?;
+            // `{"cast": true}`: the value is cast to the item's type, as a cast local's initialiser is.
+            if sub.get("cast").and_then(Value::as_bool) == Some(true) {
+                self.at(&sname, "cast");
+                if life::binds_tighter_than_as(v) {
+                    self.ins(v.end_byte(), format!(" as {t}"));
+                } else {
+                    self.ins(v.start_byte(), "(".into());
+                    self.ins(v.end_byte(), format!(") as {t}"));
+                }
+            }
         }
         Ok(())
     }
@@ -591,7 +610,9 @@ impl<'a> Weaver<'a> {
                 self_ref = true;
             } else {
                 let t = ty_text(&slot["type"], &slot["access"], lt, true, &format!("{sname} type of `{pname}`"))?;
-                if present(&slot["access"]).is_some() {
+                // A pointer is no reference: it gives no lifetime to elide.
+                let ptr = slot["type"].as_str().and_then(|s| Ty::parse(s).ok()).is_some_and(|t| t.has_ptr() && !t.has_ref());
+                if present(&slot["access"]).is_some() && !ptr {
                     ref_params.push(pname.clone());
                 }
                 self.at(&sname, format!("params[{i}].type"));
@@ -638,11 +659,13 @@ impl<'a> Weaver<'a> {
             .collect();
         let mut taken = vec![false; hints.len()];
         let mut keys_taken: HashSet<String> = HashSet::new();
-        let hold = |x: &Value| ty_text(&x["type"], &Value::Null, None, false, &format!("{subject} hint"));
+        let hold = |x: &Value| ty_text(&x["type"], &x["access"], None, false, &format!("{subject} hint"));
         let mut seen: HashMap<String, usize> = HashMap::new();
         let mut casts_after: Vec<(usize, String, Origin)> = vec![];
         let mut let_keys: HashMap<usize, String> = HashMap::new();
         let mut param_seen: HashMap<String, usize> = HashMap::new();
+        // Literals whose type a name over them carries (`n @ 1..=9` with `{"literal": "u8"}`).
+        let mut named_lits: HashSet<usize> = HashSet::new();
         for s in life::sites(body) {
             let node = s.node;
             let mut hint = |k: &str| {
@@ -674,9 +697,8 @@ impl<'a> Weaver<'a> {
                     if let Some(ty) = present(&h["locals"][&key]) {
                         keys_taken.insert(key.clone());
                         // `{"type": T, "cast": true}`: the initialiser is cast to the local's type.
-                        let cast = ty.get("cast").and_then(Value::as_bool) == Some(true);
-                        let ty = if cast { &ty["type"] } else { ty };
-                        let t = ty_text(ty, &Value::Null, None, false, &format!("{subject} local `{key}`"))?;
+                        let (ty, acc, cast) = local_parts(ty);
+                        let t = ty_text(ty, acc, None, false, &format!("{subject} local `{key}`"))?;
                         // A cast local whose type was dropped (check 4) keeps its cast: `let x: _ = e as _;` fills no hole.
                         if cast && t == "_" {
                             self.at(subject, format!("locals[{key}]"));
@@ -711,6 +733,25 @@ impl<'a> Weaver<'a> {
                         site.filled = true;
                     }
                 }
+                SK::At => {
+                    let key = collapse(text(node, src));
+                    let c = seen.entry(key.clone()).or_insert(0);
+                    *c += 1;
+                    let key = if *c == 1 { key } else { format!("{key}#{c}") };
+                    site.kind = "local";
+                    site.key = Some(key.clone());
+                    if let Some(e) = present(&h["locals"][&key]).filter(|e| e.get("literal").is_some()) {
+                        keys_taken.insert(key.clone());
+                        let t = ty_text(&e["literal"], &Value::Null, None, false, &format!("{subject} local `{key}`"))?;
+                        self.at_hole(subject, format!("locals[{key}]"));
+                        for l in life::at_literals(node).1 {
+                            self.ins(l.end_byte(), t.clone());
+                            named_lits.insert(l.id());
+                        }
+                        site.filled = true;
+                    }
+                }
+                SK::Lit if named_lits.contains(&node.id()) => site.kind = "literal",
                 SK::Lit => {
                     site.kind = "literal";
                     if let Some(x) = hint("literal") {
@@ -739,7 +780,8 @@ impl<'a> Weaver<'a> {
                     if let Some(ty) = keyed.as_ref().and_then(|k| present(&h["locals"][k])) {
                         let k = keyed.clone().unwrap();
                         keys_taken.insert(k.clone());
-                        let t = ty_text(ty, &Value::Null, None, false, &format!("{subject} local `{k}`"))?;
+                        let (ty, acc, _) = local_parts(ty);
+                        let t = ty_text(ty, acc, None, false, &format!("{subject} local `{k}`"))?;
                         self.at_hole(subject, format!("locals[{k}]"));
                         self.ins(node.end_byte(), format!(": {t}"));
                         site.filled = true;

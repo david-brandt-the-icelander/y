@@ -175,6 +175,29 @@ fn typed<'a, T>(n: Vec<T>, src: &'a str) -> &'a str {
 }
 
 #[test]
+fn a_lifetime_inside_an_impl_trait_parameter_keeps_its_name() {
+    // Rust has no elided lifetimes inside an `impl Trait` parameter (E0658), and one elided inside `Fn(..)` belongs
+    // to that bound rather than to the function, so `'a` stays where it is written there.
+    let src = r#"
+struct W(u32);
+fn total<'a>(ws: impl Iterator<Item = &'a W>) -> u32 {
+    ws.map(|w| w.0).sum()
+}
+fn some<'a>(ws: Option<impl Into<&'a W>>) -> bool {
+    ws.is_some()
+}
+fn call<'a>(f: impl Fn(&'a W) -> u32, w: &W) -> u32 {
+    0
+}
+"#;
+    let (_, j) = roundtrip(src);
+    assert_eq!(subject(&j, "demo::total")["generics"][0]["name"], "'a");
+    assert_eq!(subject(&j, "demo::total")["params"][0]["type"]["host"], "impl Iterator<Item = &'a W>");
+    assert_eq!(subject(&j, "demo::some")["generics"][0]["name"], "'a");
+    assert_eq!(subject(&j, "demo::call")["generics"][0]["name"], "'a");
+}
+
+#[test]
 fn closure_parameters_are_keyed_by_the_closure_name() {
     // `|_|` has a `_` that tree-sitter-rust leaves anonymous and the bare grammar names: both count it, so the
     // ordinals of the sites after it agree on both sides. A typed parameter of a named closure is keyed by the name.
@@ -347,6 +370,47 @@ fn mut_self_and_mut_bindings_count_alike() {
     let (b, j) = strip(src, "demo 0.1.0", "src/lib.rs").unwrap();
     assert!(b.contains("fn f(self, c)"), "{b}");
     assert_eq!(subject(&j, "demo::S::g")["params"][0]["access"]["rights"], "write");
+}
+
+#[test]
+fn a_pointer_is_ptr_whose_access_says_whether_it_writes() {
+    // `*const T` reads, with no guarantee about other paths; `*mut T` is the same type with that constraint absent.
+    // A pointer is no reference: it gives no lifetime for elision, and a field holds it as it holds any value.
+    let src = r#"
+pub struct Buf {
+    pub at: *const u8,
+    pub to: *mut u8,
+    pub all: Vec<*const u8>,
+}
+pub fn get(b: &Buf, p: *const u8, n: usize) -> *mut u8 {
+    let x: *const u8 = p;
+    let y = p as *const u16;
+    let z = b as *const Buf as usize + n;
+    b.to
+}
+pub fn first(p: *const u8, s: &[u8]) -> &u8 {
+    &s[0]
+}
+pub fn both(q: *mut *const u8) {}
+pub const NULL: *const u8 = std::ptr::null();
+"#;
+    let (b, j) = roundtrip(src);
+    let fields = &subject(&j, "demo::Buf")["fields"];
+    assert_eq!(fields[0]["type"], "ptr<u8>");
+    assert_eq!(fields[0]["access"], serde_json::json!({"rights": "read"}));
+    assert_eq!(fields[1]["type"], "ptr<u8>");
+    assert!(fields[1]["access"].is_null());
+    assert_eq!(fields[2]["type"], "list<ptr<u8>> as 'Vec'");
+    assert_eq!(subject(&j, "demo::get")["result"], serde_json::json!({"type": "ptr<u8>"}));
+    assert_eq!(subject(&j, "demo::NULL")["access"], serde_json::json!({"rights": "read"}));
+    // Two pointers of different access in one slot have no one access to carry.
+    assert_eq!(subject(&j, "demo::both")["params"][0]["type"]["form"], "mixed_refs");
+    // A cast to a pointer is a cast local, with its access.
+    let locals = &j["holes"]["demo::get"]["locals"];
+    assert_eq!(locals["x"], serde_json::json!({"type": "ptr<u8>", "access": {"rights": "read"}}));
+    assert_eq!(locals["y"], serde_json::json!({"type": "ptr<u16>", "access": {"rights": "read"}, "cast": true}));
+    assert_eq!(locals["b_ptr"], serde_json::json!({"type": "ptr<Buf>", "access": {"rights": "read"}, "cast": true}));
+    assert!(b.contains("let b_ptr = b;\n    let b_ptr_usize = b_ptr;\n    let z = b_ptr_usize + n;"), "{b}");
 }
 
 #[test]

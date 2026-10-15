@@ -16,8 +16,12 @@
 //!   the original might not (the right of `&&` or `||`, a match arm or guard, an `else if`, a `while` condition, a
 //!   closure body), the binding goes into a new block at that place instead: `a && { let b_u8: u8 = b as u8; f(b_u8) }`.
 //! - **Order.** A bound value runs before the rest of its statement. Anything in the statement that runs before it
-//!   and could have an effect (a call, an index, a macro) is bound first, in order. Where that is not a plain value
-//!   (a method receiver, a borrowed place, the left of an assignment), the site is left as it is and reported.
+//!   and could have an effect (a call, an index, a macro) is bound first, in order. A method receiver that is a value
+//!   is bound whole; a place (a receiver such as `self.rows[i]`, a borrow, an indexed base) stays where it is, and
+//!   what it computes on the way is bound: `self.rows[next()].push(n as u32)` names `next()`. The right of an
+//!   assignment runs before its left. Where the order depends on types (the two sides of `m[k()] += x as u64`) and
+//!   the left has an effect, the binding goes into a block in the right's place, which runs where the right did; a
+//!   cast in the left, where the right has an effect, is left as it is and reported.
 //! - **Already named.** `let n = e as f64;` gets a type, `let n: f64 = e as f64;`, rather than a second name.
 //! - **Closures.** A closure with typed parameters is bound to a name the same way (its creation has no effect, so
 //!   nothing earlier is bound for it), so that its parameters are keyed `<name>.<parameter>`. A closure's return type
@@ -185,9 +189,25 @@ impl Release {
     }
 }
 
-/// A cast target that a local can carry: a primitive written as such.
+/// A cast target that a local can carry: a primitive written as such, or a pointer (`ptr<T>`, with its access).
 pub fn carried_type(t: &str) -> bool {
-    t != "_" && (crate::types::is_prim(t) || matches!(t, "usize" | "isize" | "char"))
+    t != "_" && (crate::types::is_prim(t) || matches!(t, "usize" | "isize" | "char") || is_pointer(t))
+}
+
+fn is_pointer(t: &str) -> bool {
+    t.strip_prefix('*').is_some_and(|r| {
+        let r = r.trim_start();
+        ["const", "mut"].iter().any(|k| r.strip_prefix(k).is_some_and(|x| x.starts_with(char::is_whitespace)))
+    })
+}
+
+/// The word a cast's name ends with: the primitive (`h_u64`), or `ptr` for a pointer (`p_ptr`).
+fn type_word(t: &str) -> &str {
+    if is_pointer(t) {
+        "ptr"
+    } else {
+        t
+    }
 }
 
 /// The source with every cast and suffixed literal that can be bound, bound.
@@ -229,12 +249,15 @@ pub fn bind_report(src: &str) -> R<(String, Vec<Left>)> {
     Ok((crate::macros::decode(&s), left))
 }
 
-/// Function bodies, outer before inner.
+/// Function bodies and the values of `const` and `static` items, outer before inner.
 fn functions<'a>(n: Node<'a>, out: &mut Vec<Node<'a>>) {
-    if n.kind() == "function_item" {
-        if let Some(b) = n.child_by_field_name("body") {
-            out.push(b);
-        }
+    let field = match n.kind() {
+        "function_item" => Some("body"),
+        "const_item" | "static_item" => Some("value"),
+        _ => None,
+    };
+    if let Some(b) = field.and_then(|f| n.child_by_field_name(f)) {
+        out.push(b);
     }
     for c in named_children(n) {
         functions(c, out);
@@ -326,8 +349,21 @@ fn step(body: Node, src: &str, rel: &Release) -> Step {
     for a in tf {
         sites.push((a, "macro_arg", String::new()));
     }
-    // Innermost first, then in order: the order the values are computed in.
-    sites.sort_by_key(|(e, _, _)| (e.end_byte(), std::cmp::Reverse(e.start_byte())));
+    // Innermost first, then in order: the order the values are computed in. The left of an assignment is computed
+    // after its right, and the pattern of an `if let` is matched after its value is.
+    let after_right = |e: Node| {
+        let (mut end, mut left, mut cur) = (e.end_byte(), false, e);
+        while let Some(p) = cur.parent() {
+            let assignee = matches!(p.kind(), "assignment_expression" | "compound_assignment_expr") && p.child_by_field_name("left") == Some(cur);
+            let pattern = matches!(p.kind(), "let_condition" | "let_declaration") && p.child_by_field_name("pattern") == Some(cur);
+            if assignee || pattern {
+                (end, left) = (p.end_byte(), true);
+            }
+            cur = p;
+        }
+        (end, left)
+    };
+    sites.sort_by_key(|(e, _, _)| (after_right(*e), e.end_byte(), std::cmp::Reverse(e.start_byte())));
     let mut used = idents(text(body, src));
     let mut left = vec![];
     for (e, what, ty) in sites {
@@ -433,7 +469,7 @@ enum Anchor<'a> {
 }
 
 /// Where the bindings for a value at `e` go.
-fn anchor(e: Node) -> Result<Anchor, &'static str> {
+fn anchor<'a>(e: Node<'a>, src: &str) -> Result<Anchor<'a>, &'static str> {
     let mut cur = e;
     loop {
         let Some(p) = cur.parent() else { return Err("not in a function body") };
@@ -441,14 +477,29 @@ fn anchor(e: Node) -> Result<Anchor, &'static str> {
         match p.kind() {
             "block" => return Ok(Anchor::Stmt(cur)),
             "match_pattern" if is("condition") => return Ok(Anchor::Boundary(cur)),
-            "match_pattern" | "let_declaration" if is("pattern") => return Err("in a pattern"),
+            "match_pattern" | "let_declaration" | "let_condition" | "for_expression" if is("pattern") => return Err("in a pattern"),
             "match_pattern" => return Err("in a pattern"),
             k if k.ends_with("_pattern") => return Err("in a pattern"),
             k if k.ends_with("_type") || matches!(k, "type_arguments" | "attribute_item" | "token_tree" | "macro_invocation") => {
                 return Err("in a type or macro")
             }
-            "array_expression" if is("length") => return Err("in a constant context"),
+            // A constant context runs once, when the program is built: the binding goes into a block in its place,
+            // which every constant context allows (`[0; { let n_usize: usize = N as usize; n_usize }]`).
+            "array_expression" if is("length") => return Ok(Anchor::Boundary(cur)),
+            "const_item" | "static_item" if is("value") => return Ok(Anchor::Boundary(cur)),
             "const_item" | "static_item" | "function_item" | "const_block" => return Err("in a constant context"),
+            // `m[k()] += x as u64`: whether the right runs before the left depends on the types (both primitives: the
+            // right first). Where the left has an effect, the binding goes into a block in the right's place, which
+            // runs where the right did either way.
+            "compound_assignment_expr" if is("right") => {
+                let mut ps = vec![];
+                if let Some(l) = p.child_by_field_name("left") {
+                    place_parts(l, src, &mut ps);
+                }
+                if ps.iter().any(|x| !pure_in(*x, Some(src))) {
+                    return Ok(Anchor::Boundary(cur));
+                }
+            }
             "binary_expression" if is("right") => {
                 let op = p.child_by_field_name("operator").map(|o| o.kind());
                 if matches!(op, Some("&&") | Some("||")) {
@@ -476,8 +527,60 @@ fn anchor(e: Node) -> Result<Anchor, &'static str> {
     }
 }
 
-/// The expressions in `region` that run before `e`, outermost first, with whether each can be bound by value.
-fn earlier<'a>(e: Node<'a>, region: Node<'a>, src: &str) -> Vec<(Node<'a>, bool)> {
+/// What runs before a value, as `bind` sees it.
+enum Before<'a> {
+    /// A value that runs before it: bound first, whole, if it has an effect.
+    Value(Node<'a>),
+    /// A value that may run before it or after it, by types `bind` does not know (the other side of a compound
+    /// assignment, `a[i] += x as u32`): it must have no effect.
+    Either(Node<'a>),
+}
+
+/// A place as Rust writes one: a name, a field, an element, or what a reference points to.
+fn is_place(n: Node, src: &str) -> bool {
+    match n.kind() {
+        "identifier" | "self" | "scoped_identifier" | "field_expression" | "index_expression" => true,
+        "unary_expression" => text(n, src).starts_with('*'),
+        "parenthesized_expression" => named_children(n).into_iter().filter(|c| !is_comment(*c)).collect::<Vec<_>>().first().is_some_and(|c| is_place(*c, src)),
+        _ => false,
+    }
+}
+
+/// The values a place computes on its way, in order: an element's index, what a reference points to, a temporary
+/// it is a part of. A place itself is kept where it is (binding it would move out of it, or borrow it longer); these
+/// are bound in its stead: `self.rows[next()].push(x)` keeps `self.rows[..]` and names `next()`.
+fn place_parts<'a>(n: Node<'a>, src: &str, out: &mut Vec<Node<'a>>) {
+    let kids: Vec<Node> = named_children(n).into_iter().filter(|c| !is_comment(*c)).collect();
+    match n.kind() {
+        "identifier" | "self" | "scoped_identifier" => {}
+        "parenthesized_expression" if kids.len() == 1 => place_parts(kids[0], src, out),
+        "field_expression" => {
+            if let Some(v) = n.child_by_field_name("value") {
+                place_parts(v, src, out);
+            }
+        }
+        "index_expression" if kids.len() == 2 => {
+            place_parts(kids[0], src, out);
+            out.push(kids[1]);
+        }
+        "unary_expression" if text(n, src).starts_with('*') && kids.len() == 1 => out.push(kids[0]),
+        // A borrow of a place keeps the place: `f(&mut cells[pick()], ..)` names `pick()`.
+        "reference_expression" => {
+            if let Some(v) = n.child_by_field_name("value") {
+                if is_place(v, src) {
+                    place_parts(v, src, out);
+                } else {
+                    out.push(v);
+                }
+            }
+        }
+        // A value where a place is wanted is a temporary: it is the value that runs.
+        _ => out.push(n),
+    }
+}
+
+/// What runs before `e` in `region`, outermost first.
+fn earlier<'a>(e: Node<'a>, region: Node<'a>, src: &str) -> Vec<Before<'a>> {
     // A JSON value of `json!` runs as its parts, in order.
     fn parts<'a>(n: Node<'a>, src: &str, out: &mut Vec<Node<'a>>) {
         match n.child_by_field_name("arguments").filter(|_| crate::macros::is_json_part(n, src)) {
@@ -486,43 +589,77 @@ fn earlier<'a>(e: Node<'a>, region: Node<'a>, src: &str) -> Vec<(Node<'a>, bool)
         }
     }
     // One group per level, innermost level first; the outermost level runs first, and each level runs in order.
-    let mut levels: Vec<Vec<(Node<'a>, bool)>> = vec![];
+    let mut levels: Vec<Vec<Before<'a>>> = vec![];
     let mut cur = e;
     while cur.id() != region.id() {
         let Some(p) = cur.parent() else { break };
-        let assigns = matches!(p.kind(), "assignment_expression" | "compound_assignment_expr");
         let mut out = vec![];
-        if !(assigns && p.child_by_field_name("right") == Some(cur)) {
-            for c in named_children(p).into_iter().take_while(|c| c.id() != cur.id()) {
-                // `S { a: f(), b: x as u8 }`: what runs is the field's value.
-                let c = match c.kind() {
-                    "field_initializer" => match c.child_by_field_name("value") {
-                        Some(v) => v,
-                        None => continue,
-                    },
-                    "base_field_initializer" => match named_children(c).into_iter().next() {
-                        Some(v) => v,
-                        None => continue,
-                    },
-                    // A named argument of a format macro (`n = e`): what runs is its value.
-                    "assignment_expression" if crate::macros::macro_arg_list(p, src) => match c.child_by_field_name("right") {
-                        Some(v) => v,
-                        None => continue,
-                    },
-                    _ => c,
-                };
-                let skip = is_comment(c)
-                    || is_type_node(c)
-                    || matches!(c.kind(), "field_identifier" | "label" | "mutable_specifier" | "type_arguments")
-                    || ["pattern", "type", "name", "field"].iter().any(|f| p.child_by_field_name(f) == Some(c));
-                if !skip {
-                    // A plain operand can be bound by value; a receiver, a borrowed place or an assignee cannot.
-                    let place = matches!(p.kind(), "field_expression" | "reference_expression" | "index_expression")
-                        || (assigns && p.child_by_field_name("left") == Some(c))
-                        || (p.kind() == "call_expression" && c.kind() == "field_expression");
+        match p.kind() {
+            // `place = value` computes the value first, then the place (the Rust reference, 8.2.14).
+            "assignment_expression" => {
+                if p.child_by_field_name("left") == Some(cur) {
+                    if let Some(r) = p.child_by_field_name("right") {
+                        out.push(Before::Value(r));
+                    }
+                }
+            }
+            // `place op= value` computes the value first when both are primitives, and the place first otherwise.
+            "compound_assignment_expr" => {
+                let other = if p.child_by_field_name("left") == Some(cur) { p.child_by_field_name("right") } else { p.child_by_field_name("left") };
+                if let Some(o) = other {
+                    if p.child_by_field_name("right") == Some(cur) {
+                        let mut ps = vec![];
+                        place_parts(o, src, &mut ps);
+                        out.extend(ps.into_iter().map(Before::Either));
+                    } else {
+                        out.push(Before::Either(o));
+                    }
+                }
+            }
+            _ => {
+                for c in named_children(p).into_iter().take_while(|c| c.id() != cur.id()) {
+                    // `S { a: f(), b: x as u8 }`: what runs is the field's value.
+                    let c = match c.kind() {
+                        "field_initializer" => match c.child_by_field_name("value") {
+                            Some(v) => v,
+                            None => continue,
+                        },
+                        "base_field_initializer" => match named_children(c).into_iter().next() {
+                            Some(v) => v,
+                            None => continue,
+                        },
+                        // A named argument of a format macro (`n = e`): what runs is its value.
+                        "assignment_expression" if crate::macros::macro_arg_list(p, src) => match c.child_by_field_name("right") {
+                            Some(v) => v,
+                            None => continue,
+                        },
+                        _ => c,
+                    };
+                    let skip = is_comment(c)
+                        || is_type_node(c)
+                        || matches!(c.kind(), "field_identifier" | "label" | "mutable_specifier" | "type_arguments")
+                        || ["pattern", "type", "name", "field"].iter().any(|f| p.child_by_field_name(f) == Some(c));
+                    if skip {
+                        continue;
+                    }
                     let mut ps = vec![];
-                    parts(c, src, &mut ps);
-                    out.extend(ps.into_iter().map(|x| (x, !place)));
+                    match (p.kind(), c.kind()) {
+                        // A method call runs its receiver first: a value is bound whole, a place keeps its place.
+                        ("call_expression", "field_expression" | "generic_function") => {
+                            let callee = if c.kind() == "generic_function" { c.child_by_field_name("function") } else { Some(c) };
+                            match callee.filter(|f| f.kind() == "field_expression").and_then(|f| f.child_by_field_name("value")) {
+                                Some(recv) if is_place(recv, src) => place_parts(recv, src, &mut ps),
+                                Some(recv) => ps.push(recv),
+                                None => ps.push(c),
+                            }
+                        }
+                        // `a[i as usize]`: the base is a place.
+                        ("index_expression", _) => place_parts(c, src, &mut ps),
+                        // `f(&mut cells[pick()], x as u32)`: a borrow keeps its place.
+                        (_, "reference_expression") => place_parts(c, src, &mut ps),
+                        _ => parts(c, src, &mut ps),
+                    }
+                    out.extend(ps.into_iter().map(Before::Value));
                 }
             }
         }
@@ -568,7 +705,7 @@ fn plan(e: Node, what: &'static str, ty: &str, src: &str, used: &mut HashSet<Str
         _ => {}
     }
     if what == "cast" && !carried_type(ty) {
-        return Err("the target is not a primitive type");
+        return Err("the target is not a primitive or a pointer");
     }
     let lit_value = |e: Node| -> String {
         let t = text(e, src);
@@ -576,12 +713,13 @@ fn plan(e: Node, what: &'static str, ty: &str, src: &str, used: &mut HashSet<Str
         let _ = suffix;
         if t.starts_with('-') { format!("-{digits}") } else { digits.to_string() }
     };
-    // The value of a `let`: the local is the name.
-    if let Some(p) = e.parent().filter(|p| p.kind() == "let_declaration" && p.child_by_field_name("value") == Some(e)) {
+    // The value of a `let`: the local is the name. The whole value of a `const` or `static`: the item is.
+    let named = |p: &Node| matches!(p.kind(), "let_declaration" | "const_item" | "static_item") && p.child_by_field_name("value") == Some(e);
+    if let Some(p) = e.parent().filter(named) {
         if let Some(a) = in_macro_arg(p, src) {
             return name_macro_arg_first(a, src, used, rel);
         }
-        let pat = p.child_by_field_name("pattern").ok_or("let without a pattern")?;
+        let pat = p.child_by_field_name("pattern").or_else(|| p.child_by_field_name("name")).ok_or("let without a pattern")?;
         let declared = p.child_by_field_name("type");
         let fits = declared.map_or(true, |t| text(t, src) == ty);
         if fits && (declared.is_some() || pat.kind() == "identifier") {
@@ -604,7 +742,10 @@ fn plan(e: Node, what: &'static str, ty: &str, src: &str, used: &mut HashSet<Str
             return Ok(edits);
         }
     }
-    let anchor = anchor(e)?;
+    let anchor = match anchor(e, src) {
+        Err("in a pattern") if what == "literal" => return plan_pattern_literal(e, ty, src, used),
+        a => a?,
+    };
     let region = match anchor {
         Anchor::Stmt(n) | Anchor::Boundary(n) => n,
     };
@@ -613,16 +754,21 @@ fn plan(e: Node, what: &'static str, ty: &str, src: &str, used: &mut HashSet<Str
     }
     let mut lets = vec![];
     let mut inner: Vec<Edit> = vec![];
+    // What runs before it and has an effect: each such value is bound first, in order.
+    let mut before: Vec<Node> = vec![];
     if what != "literal" {
-        for (x, by_value) in earlier(e, region, src) {
-            if pure_in(x, Some(src)) {
-                continue;
+        for b in earlier(e, region, src) {
+            match b {
+                Before::Value(x) if !pure_in(x, Some(src)) => before.push(x),
+                Before::Either(x) if !pure_in(x, Some(src)) => {
+                    return Err("the other side of a compound assignment has an effect, and which side runs first depends on their types")
+                }
+                _ => {}
             }
-            if !by_value {
-                return Err("something before it in the statement has an effect, and is not a plain value");
-            }
-            let name = fresh(&format!("{}_v", base_name(x, src)), used);
-            lets.push(format!("let {name} = {};", text(x, src)));
+        }
+        for x in &before {
+            let name = fresh(&format!("{}_v", base_name(*x, src)), used);
+            lets.push(format!("let {name} = {};", text(*x, src)));
             inner.push((x.start_byte(), x.end_byte(), name));
         }
     }
@@ -633,10 +779,8 @@ fn plan(e: Node, what: &'static str, ty: &str, src: &str, used: &mut HashSet<Str
         return Err("a value that releases something at its end, where the statement might not run");
     }
     // A literal is a constant: binding it first changes no order and ends nothing.
-    for (x, _) in if what != "literal" { earlier(e, region, src) } else { vec![] } {
-        if !pure_in(x, Some(src)) && !releasing(x, src, rel).is_empty() {
-            return Err("something before it in the statement holds a value that releases something at its end");
-        }
+    if before.iter().any(|x| !releasing(*x, src, rel).is_empty()) {
+        return Err("something before it in the statement holds a value that releases something at its end");
     }
     let mut cast_text = text(e, src).to_string();
     if !held.is_empty() {
@@ -652,7 +796,7 @@ fn plan(e: Node, what: &'static str, ty: &str, src: &str, used: &mut HashSet<Str
         (fresh(&format!("{}_v", base_name(e, src)), used), cast_text)
     } else if what == "cast" {
         let op = e.child_by_field_name("value").ok_or("cast without a value")?;
-        (fresh(&format!("{}_{ty}", base_name(op, src)), used), cast_text)
+        (fresh(&format!("{}_{}", base_name(op, src), type_word(ty)), used), cast_text)
     } else {
         let v = lit_value(e);
         let base = format!("k{}_{ty}", v.replace('-', "neg"));
@@ -676,9 +820,8 @@ fn plan(e: Node, what: &'static str, ty: &str, src: &str, used: &mut HashSet<Str
             Ok(vec![(wrap.start_byte(), wrap.end_byte(), format!("{{ {} {body} }}", lets.join(" ")))])
         }
         Anchor::Stmt(s) => {
-            let line_start = src[..s.start_byte()].rfind('\n').map_or(0, |i| i + 1);
-            let indent: String = src[line_start..s.start_byte()].chars().take_while(|c| c.is_whitespace()).collect();
-            let mut edits = vec![(s.start_byte(), s.start_byte(), lets.iter().map(|l| format!("{l}\n{indent}")).collect::<String>())];
+            let sep = line_sep(s, src);
+            let mut edits = vec![(s.start_byte(), s.start_byte(), lets.iter().map(|l| format!("{l}{sep}")).collect::<String>())];
             edits.extend(inner);
             Ok(edits)
         }
@@ -689,6 +832,223 @@ fn plan(e: Node, what: &'static str, ty: &str, src: &str, used: &mut HashSet<Str
             Ok(vec![(b.start_byte(), b.end_byte(), format!("{{ {} {body} }}", lets.join(" ")))])
         }
     }
+}
+
+/// What goes between a binding and the statement after it: a new line at the statement's indent, or a space where the
+/// statement does not start its line (`{ let a: u8 = 1; a }`).
+fn line_sep(stmt: Node, src: &str) -> String {
+    let line_start = src[..stmt.start_byte()].rfind('\n').map_or(0, |i| i + 1);
+    let before = &src[line_start..stmt.start_byte()];
+    if before.chars().all(char::is_whitespace) {
+        format!("\n{before}")
+    } else {
+        " ".into()
+    }
+}
+
+/// A suffixed literal in a pattern (`1u8 => ..`), where no `let` can carry its type. In order of preference:
+///
+/// - Where the value it is matched against is a name whose declared type is the literal's (a parameter `x: u8`, a
+///   typed `let`; through `&`, `*` and the elements of a tuple, `match (a, b) { (1u8, _) => .. }`), the suffix says
+///   nothing the declaration does not, and goes.
+/// - A literal already under a name (`n @ 1u8..=9u8`) is carried by that name; the literals under it all take the
+///   suffix, which `strip` keys by the name's pattern.
+/// - Otherwise the literal, with the range or the alternatives it is part of, gets a name that does nothing else:
+///   `_k1_u8 @ 1u8` (the `_` says that nothing uses it).
+fn plan_pattern_literal(e: Node, ty: &str, src: &str, used: &mut HashSet<String>) -> Result<Vec<Edit>, &'static str> {
+    let lit = if e.kind() == "negative_literal" { named_children(e).into_iter().find(|c| !is_comment(*c)).unwrap_or(e) } else { e };
+    if matched_type(e, src).is_some_and(|t| t == ty) {
+        let digits = life::lit_suffix(text(lit, src)).map_or(0, |(d, _, _)| d.len());
+        return Ok(vec![(lit.start_byte() + digits, lit.end_byte(), String::new())]);
+    }
+    let mut target = e;
+    if let Some(p) = target.parent().filter(|p| p.kind() == "range_pattern") {
+        target = p;
+    }
+    while let Some(p) = target.parent().filter(|p| p.kind() == "or_pattern") {
+        target = p;
+    }
+    let mut up = target;
+    while let Some(p) = up.parent().filter(|p| is_parens_pattern(*p)) {
+        up = p;
+    }
+    // Every literal under the name takes the suffix, so that the name's one type is each one's.
+    let suffixed = |n: Node| -> Result<(Vec<Edit>, Vec<String>), &'static str> {
+        let (mut edits, mut values) = (vec![], vec![]);
+        for l in pattern_literals(n) {
+            let t = text(l, src);
+            let (digits, sep, suffix) = life::lit_suffix(t).unwrap_or((t, false, ty));
+            if suffix != ty {
+                return Err("in a pattern, with literals of different types under one name");
+            }
+            if sep || digits.len() == t.len() {
+                edits.push((l.start_byte(), l.end_byte(), format!("{digits}{ty}")));
+            }
+            let neg = l.parent().is_some_and(|p| p.kind() == "negative_literal");
+            values.push(format!("{}{}", if neg { "neg" } else { "" }, digits.replace('.', "_")));
+        }
+        Ok((edits, values))
+    };
+    if let Some(at) = up.parent().filter(|p| p.kind() == "captured_pattern") {
+        return Ok(suffixed(at)?.0);
+    }
+    let mut root = target;
+    while let Some(p) = root.parent().filter(|p| p.kind().ends_with("_pattern") || p.kind() == "negative_literal") {
+        root = p;
+    }
+    if root.parent().is_some_and(|p| p.kind() == "let_declaration") {
+        return Err("in the pattern of a `let`");
+    }
+    let (edits, values) = suffixed(target)?;
+    let base = target.start_byte();
+    let shifted = edits.into_iter().map(|(a, b, t)| (a - base, b - base, t)).collect();
+    let pat = apply(text(target, src), shifted);
+    let pat = if target.kind() == "or_pattern" { format!("({pat})") } else { pat };
+    let name = fresh(&format!("_k{}_{ty}", values.join("_")), used);
+    Ok(vec![(target.start_byte(), target.end_byte(), format!("{name} @ {pat}"))])
+}
+
+/// The literals under a pattern.
+fn pattern_literals(n: Node) -> Vec<Node> {
+    let mut out = vec![];
+    fn walk<'a>(n: Node<'a>, out: &mut Vec<Node<'a>>) {
+        if matches!(n.kind(), "integer_literal" | "float_literal") {
+            out.push(n);
+        }
+        for c in named_children(n) {
+            walk(c, out);
+        }
+    }
+    walk(n, &mut out);
+    out
+}
+
+/// `(p)`: brackets around a pattern, which tree-sitter reads as a tuple pattern without a comma.
+fn is_parens_pattern(p: Node) -> bool {
+    p.kind() == "tuple_pattern"
+        && named_children(p).into_iter().filter(|c| !is_comment(*c)).count() == 1
+        && !crate::all_children(p).iter().any(|c| matches!(c.kind(), "," | "_"))
+}
+
+/// The declared type of what a pattern literal is matched against, where the pattern's structure reaches a name
+/// through tuples and references: the `u8` of `x` in `fn f(x: &u8) { match (x, y) { (1u8, _) => .. } }`.
+fn matched_type(e: Node, src: &str) -> Option<String> {
+    let mut path = vec![];
+    let mut cur = e;
+    let matched = loop {
+        let p = cur.parent()?;
+        match p.kind() {
+            "range_pattern" | "or_pattern" | "reference_pattern" | "captured_pattern" | "negative_literal" => {}
+            "tuple_pattern" if is_parens_pattern(p) => {}
+            "tuple_pattern" => {
+                let elems: Vec<Node> =
+                    crate::all_children(p).into_iter().filter(|c| !is_comment(*c) && !matches!(c.kind(), "(" | ")" | ",")).collect();
+                if elems.iter().any(|c| c.kind() == "remaining_field_pattern") {
+                    return None;
+                }
+                path.push(elems.iter().position(|c| c.id() == cur.id())?);
+            }
+            "match_pattern" if p.child_by_field_name("condition") != Some(cur) => {
+                break p.parent()?.parent()?.parent()?.child_by_field_name("value")?;
+            }
+            "let_condition" | "let_declaration" if p.child_by_field_name("pattern") == Some(cur) => break p.child_by_field_name("value")?,
+            _ => return None,
+        }
+        cur = p;
+    };
+    fn peel<'a>(mut n: Node<'a>, src: &str) -> Node<'a> {
+        loop {
+            let inner = match n.kind() {
+                "parenthesized_expression" | "reference_expression" => named_children(n).into_iter().rfind(|c| !is_comment(*c)),
+                "unary_expression" if text(n, src).starts_with('*') => named_children(n).into_iter().find(|c| !is_comment(*c)),
+                _ => None,
+            };
+            match inner {
+                Some(i) => n = i,
+                None => return n,
+            }
+        }
+    }
+    let mut m = matched;
+    for i in path.into_iter().rev() {
+        m = peel(m, src);
+        if m.kind() != "tuple_expression" {
+            return None;
+        }
+        m = *named_children(m).into_iter().filter(|c| !is_comment(*c)).collect::<Vec<_>>().get(i)?;
+    }
+    let m = peel(m, src);
+    (m.kind() == "identifier").then(|| declared_type(text(m, src), m, src)).flatten()
+}
+
+/// The type a name is declared with in its function, when the function binds it once, as a parameter or a typed
+/// `let`, with the references taken off: `&'a mut u8` is `u8`. Any other binding of the name makes it unknown.
+fn declared_type(name: &str, at: Node, src: &str) -> Option<String> {
+    let mut f = at;
+    while f.kind() != "function_item" {
+        f = f.parent()?;
+    }
+    let mut found: Vec<Option<String>> = vec![];
+    // Every name a pattern binds; an identifier that is a path's or a struct's is none.
+    fn binds(p: Node, name: &str, src: &str, found: &mut Vec<Option<String>>) {
+        let is_head = p.parent().is_some_and(|q| matches!(q.kind(), "tuple_struct_pattern" | "struct_pattern") && q.child_by_field_name("type") == Some(p));
+        if matches!(p.kind(), "identifier" | "shorthand_field_identifier") && text(p, src) == name && !is_head {
+            found.push(None);
+        }
+        if p.kind() == "scoped_identifier" {
+            return;
+        }
+        for c in named_children(p) {
+            binds(c, name, src, found);
+        }
+    }
+    fn walk(n: Node, name: &str, src: &str, found: &mut Vec<Option<String>>) {
+        if crate::is_item_kind(n.kind()) {
+            return;
+        }
+        let typed = |ty: Option<Node>| ty.map(|t| text(t, src).to_string());
+        match n.kind() {
+            "parameter" | "let_declaration" => {
+                if let Some(p) = n.child_by_field_name("pattern") {
+                    if p.kind() == "identifier" && text(p, src) == name {
+                        found.push(typed(n.child_by_field_name("type")));
+                    } else {
+                        binds(p, name, src, found);
+                    }
+                }
+            }
+            "closure_parameters" | "for_expression" | "let_condition" | "match_pattern" => {
+                let pats: Vec<Node> = match n.kind() {
+                    "closure_parameters" => named_children(n),
+                    "match_pattern" => named_children(n).into_iter().filter(|c| n.child_by_field_name("condition") != Some(*c)).collect(),
+                    _ => n.child_by_field_name("pattern").into_iter().collect(),
+                };
+                for p in pats {
+                    binds(p, name, src, found);
+                }
+            }
+            _ => {}
+        }
+        for c in named_children(n) {
+            if !matches!(n.kind(), "parameter" | "let_declaration") || Some(c) != n.child_by_field_name("pattern") {
+                walk(c, name, src, found);
+            }
+        }
+    }
+    if let Some(ps) = f.child_by_field_name("parameters") {
+        walk(ps, name, src, &mut found);
+    }
+    if let Some(b) = f.child_by_field_name("body") {
+        walk(b, name, src, &mut found);
+    }
+    let [Some(t)] = found.as_slice() else { return None };
+    let mut t = t.trim();
+    while let Some(r) = t.strip_prefix('&') {
+        let r = r.trim_start();
+        let r = if r.starts_with('\'') { r.split_once(char::is_whitespace).map_or("", |x| x.1) } else { r };
+        t = r.trim_start().strip_prefix("mut ").unwrap_or(r).trim_start();
+    }
+    Some(t.to_string())
 }
 
 /// `|x| -> u32 { body }` becomes `|x| { let out: u32 = { body }; out }`: the return type is carried by a local.
@@ -721,11 +1081,9 @@ fn plan_closure_name(c: Node, src: &str, used: &mut HashSet<String>) -> Result<V
     };
     let name = fresh(&base, used);
     let line = format!("let {name} = {};", text(c, src));
-    match anchor(c)? {
+    match anchor(c, src)? {
         Anchor::Stmt(s) => {
-            let line_start = src[..s.start_byte()].rfind('\n').map_or(0, |i| i + 1);
-            let indent: String = src[line_start..s.start_byte()].chars().take_while(|c| c.is_whitespace()).collect();
-            Ok(vec![(s.start_byte(), s.start_byte(), format!("{line}\n{indent}")), (c.start_byte(), c.end_byte(), name)])
+            Ok(vec![(s.start_byte(), s.start_byte(), format!("{line}{}", line_sep(s, src))), (c.start_byte(), c.end_byte(), name)])
         }
         Anchor::Boundary(b) => {
             let base = b.start_byte();

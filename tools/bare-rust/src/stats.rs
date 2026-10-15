@@ -36,6 +36,7 @@ fn form(s: &str) -> String {
         Ok(Ty::Name(_)) => "name".into(),
         Ok(Ty::App(..)) => "generic".into(),
         Ok(Ty::Ref(_)) => "ref".into(),
+        Ok(Ty::Ptr(_)) => "ptr".into(),
         Ok(Ty::Refined(t, _)) => form(&t.show()),
         Ok(Ty::Opt(_)) => "option".into(),
         Ok(Ty::Tuple(_)) => "tuple".into(),
@@ -164,8 +165,9 @@ impl Acc {
             if let Some(l) = v["locals"].as_object() {
                 for (_, t) in l {
                     bump(&mut self.slots, "holes.locals");
-                    // A cast local carries its type under `type`.
-                    self.ty(if t.get("cast").is_some() { &t["type"] } else { t });
+                    // A cast local, or one with an access, carries its type under `type`; a name over literals under
+                    // `literal`.
+                    self.ty(if t.get("type").is_some() { &t["type"] } else if t.get("literal").is_some() { &t["literal"] } else { t });
                 }
             }
             for x in v["hints"].as_array().map(|a| a.as_slice()).unwrap_or(&[]) {

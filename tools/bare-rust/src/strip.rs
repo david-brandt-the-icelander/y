@@ -11,8 +11,8 @@ use std::collections::{HashMap, HashSet};
 type Obj = Map<String, Value>;
 
 /// A cast that is the whole initialiser of a typed `let` is carried by the local: `let x: u8 = (a + b) as u8;` becomes
-/// `let x = a + b;` with `locals: {"x": {"type": "u8", "cast": true}}`. This returns that cast, and the cuts that
-/// remove it. The cast's target must be a primitive written as the local's type, and the brackets around
+/// `let x = a + b;` with `locals: {"x": {"type": "u8", "cast": true}}`. A `const` or `static` whose whole value is a
+/// cast carries it the same way, on its subject. This returns that cast, and the cuts that remove it. The cast's target must be a primitive written as the local's type, and the brackets around
 /// the operand must be exactly those weave puts back.
 fn implicit_cast<'a>(node: Node<'a>, src: &str) -> Option<(Node<'a>, Vec<Edit>)> {
     let ty = node.child_by_field_name("type")?;
@@ -33,6 +33,14 @@ fn implicit_cast<'a>(node: Node<'a>, src: &str) -> Option<(Node<'a>, Vec<Edit>)>
     life::binds_tighter_than_as(operand).then(|| (target, vec![(operand.end_byte(), v.end_byte(), String::new())]))
 }
 
+/// The type a literal's suffix names: `u8`, or `u64 as 'usize'`.
+fn lit_type(suffix: &str) -> String {
+    match suffix {
+        "usize" | "isize" => format!("{} as '{suffix}'", if suffix == "usize" { "u64" } else { "i64" }),
+        s => s.to_string(),
+    }
+}
+
 fn refuse<T>(category: &str, detail: impl std::fmt::Display) -> R<T> {
     Err(format!("{category}: {detail}"))
 }
@@ -44,6 +52,14 @@ struct Scope {
     self_ty: String,
 }
 
+/// A reference or pointer met in a type: what its access and lifetime say.
+#[derive(Clone, PartialEq)]
+struct Mark {
+    ptr: bool,
+    mutable: bool,
+    lt: Option<String>,
+}
+
 /// A type slot: the mapped type, and what its references say about access and holding.
 struct Slot {
     ty: Value,
@@ -51,6 +67,8 @@ struct Slot {
     raw: Option<String>,
     lifetime: Option<String>,
     has_ref: bool,
+    /// Its pointers, all of one access (a pointer is no reference: it has no lifetime and holds nothing).
+    ptr: bool,
     /// A reference inside the bounds of an existential, which the value borrows through.
     bound_ref: bool,
     shares: bool,
@@ -123,7 +141,7 @@ fn is_literal(k: &str) -> bool {
 impl<'a> Stripper<'a> {
     // ----- types -----
 
-    fn to_ty(&self, n: Node, cx: &Cx, refs: &mut Vec<(bool, Option<String>)>) -> Result<Ty, String> {
+    fn to_ty(&self, n: Node, cx: &Cx, refs: &mut Vec<Mark>) -> Result<Ty, String> {
         let src = self.src;
         match n.kind() {
             "primitive_type" => match text(n, src) {
@@ -153,15 +171,14 @@ impl<'a> Stripper<'a> {
                 let lt = lt.filter(|l| l != "'_");
                 let mutable = real_kids(n).iter().any(|c| c.kind() == "mutable_specifier");
                 let inner = n.child_by_field_name("type").ok_or("other_reference")?;
-                refs.push((mutable, lt));
-                let t = if inner.kind() == "primitive_type" && text(inner, src) == "str" {
-                    Ty::Text
-                } else if inner.kind() == "type_identifier" && text(inner, src) == "String" {
-                    Ty::As(Box::new(Ty::Text), "String".into())
-                } else {
-                    self.to_ty(inner, cx, refs)?
-                };
-                Ok(Ty::Ref(Box::new(t)))
+                refs.push(Mark { ptr: false, mutable, lt });
+                Ok(Ty::Ref(Box::new(self.pointee(inner, cx, refs)?)))
+            }
+            "pointer_type" => {
+                let mutable = real_kids(n).iter().any(|c| c.kind() == "mutable_specifier");
+                let inner = n.child_by_field_name("type").ok_or("pointer")?;
+                refs.push(Mark { ptr: true, mutable, lt: None });
+                Ok(Ty::Ptr(Box::new(self.pointee(inner, cx, refs)?)))
             }
             "generic_type" => {
                 let head = n.child_by_field_name("type").ok_or("other_generic")?;
@@ -214,11 +231,21 @@ impl<'a> Stripper<'a> {
             }
             "abstract_type" | "dynamic_type" | "bounded_type" => self.exist(n, cx),
             "function_type" => Err("fn_ptr".into()),
-            "pointer_type" => Err("pointer".into()),
             "never_type" => Err("never".into()),
             "macro_invocation" => Err("macro".into()),
             k => Err(format!("other_{k}")),
         }
+    }
+
+    /// What a reference or a pointer reaches: `str` is `text`, and `String` is `text` held as a `String`.
+    fn pointee(&self, inner: Node, cx: &Cx, refs: &mut Vec<Mark>) -> Result<Ty, String> {
+        Ok(if inner.kind() == "primitive_type" && text(inner, self.src) == "str" {
+            Ty::Text
+        } else if inner.kind() == "type_identifier" && text(inner, self.src) == "String" {
+            Ty::As(Box::new(Ty::Text), "String".into())
+        } else {
+            self.to_ty(inner, cx, refs)?
+        })
     }
 
     /// `impl Trait` and `dyn Trait`, with the bounds that follow a `+`: `some` and `any`. The references inside the
@@ -283,7 +310,7 @@ impl<'a> Stripper<'a> {
                 _ => return Err(form.into()),
             });
         }
-        if inner.iter().any(|(m, l)| *m || l.is_some()) {
+        if inner.iter().any(|m| m.mutable || m.lt.is_some()) {
             return Err(form.into());
         }
         Ok(if any { Ty::Any(bounds) } else { Ty::Some(bounds) })
@@ -320,6 +347,7 @@ impl<'a> Stripper<'a> {
             raw: None,
             lifetime: None,
             has_ref: false,
+            ptr: false,
             bound_ref: false,
             shares: false,
         };
@@ -327,31 +355,76 @@ impl<'a> Stripper<'a> {
             Ok(t) => t,
             Err(f) => return fail(f),
         };
+        // One access for the whole slot: its references alike, or its pointers alike.
         let first = refs.first().cloned();
         if refs.iter().any(|r| Some(r) != first.as_ref()) {
             return fail("mixed_refs".into());
         }
-        let (mutable, raw) = first.clone().unwrap_or((false, None));
+        let ptr = first.as_ref().is_some_and(|m| m.ptr);
+        let mutable = first.as_ref().is_some_and(|m| m.mutable);
+        let raw = first.as_ref().and_then(|m| m.lt.clone());
         let lifetime = raw.clone().filter(|l| !cx.elide.contains(l));
         Slot {
             ty: json!(ty.show()),
-            access: first.map(|_| access(mutable)),
+            // `*const T` reads, with no guarantee about any other path; `*mut T` is the absence of that constraint.
+            access: match (&first, ptr) {
+                (None, _) => None,
+                (Some(_), true) => (!mutable).then(|| json!({"rights": "read"})),
+                (Some(_), false) => Some(access(mutable)),
+            },
             raw,
             lifetime,
-            has_ref: !refs.is_empty(),
+            has_ref: first.is_some() && !ptr,
+            ptr,
             bound_ref: ty.bound_borrows(),
             shares: ty.shares(),
         }
     }
 
-    /// A type in a hole: a reference with an access or a lifetime does not fit, and is carried as host text.
-    fn loose(&self, n: Node, generics: &[String]) -> Value {
+    /// A type in a hole, and the access a local or a hint carries with it (a `*const`'s). A reference with an
+    /// access or a lifetime does not fit, and is carried as host text.
+    fn hole_ty(&self, n: Node, generics: &[String]) -> (Value, Option<Value>) {
         let none = HashSet::new();
         let s = self.map_type(n, &Cx { generics, elide: &none });
         if s.has_ref && (s.lifetime.is_some() || s.access.as_ref().is_some_and(|a| a["rights"] == "write")) {
-            return self.host(n, "ref_hole".into(), &none);
+            return (self.host(n, "ref_hole".into(), &none), None);
         }
-        s.ty
+        (s.ty, s.access.filter(|_| s.ptr))
+    }
+
+    /// A type where nothing carries an access (a turbofish argument, an associated type): a `*const` is host text.
+    fn loose(&self, n: Node, generics: &[String]) -> Value {
+        match self.hole_ty(n, generics) {
+            (_, Some(_)) => self.host(n, "ptr_hole".into(), &HashSet::new()),
+            (t, None) => t,
+        }
+    }
+
+    /// A `locals` entry: the type, with the access and the cast when there are any.
+    fn local_entry(&self, n: Node, generics: &[String], cast: bool) -> Value {
+        let (t, acc) = self.hole_ty(n, generics);
+        if acc.is_none() && !cast {
+            return t;
+        }
+        let mut o = Obj::new();
+        o.insert("type".into(), t);
+        if let Some(a) = acc {
+            o.insert("access".into(), a);
+        }
+        if cast {
+            o.insert("cast".into(), json!(true));
+        }
+        Value::Object(o)
+    }
+
+    /// A hint of `kind` at `n`, with the access of its type when it has one.
+    fn hint(&self, kind: &str, n: usize, ty: Node, generics: &[String]) -> Value {
+        let (t, acc) = self.hole_ty(ty, generics);
+        let mut h = json!({"kind": kind, "n": n, "type": t});
+        if let Some(a) = acc {
+            h["access"] = a;
+        }
+        h
     }
 
     // ----- slots -----
@@ -539,6 +612,11 @@ impl<'a> Stripper<'a> {
     }
 
     fn body_holes(&mut self, body: Node, subject: &str, generics: &[String]) {
+        self.body_holes_carrying(body, subject, generics, None)
+    }
+
+    /// As `body_holes`, with a cast that the subject carries (a `const` whose whole value is cast to its type).
+    fn body_holes_carrying(&mut self, body: Node, subject: &str, generics: &[String], carrying: Option<usize>) {
         let src = self.src;
         // A macro call that states a type, which no binding can carry: marked as Rust text (`rust! { ... }`).
         for m in life::typed_macro_calls(body, src) {
@@ -549,13 +627,15 @@ impl<'a> Stripper<'a> {
         let mut hints: Vec<Value> = vec![];
         let mut seen: HashMap<String, usize> = HashMap::new();
         // Casts carried by a local leave the body, so the casts after them are numbered without them.
-        let (mut carried, mut removed): (HashSet<usize>, usize) = (HashSet::new(), 0);
+        let (mut carried, mut removed): (HashSet<usize>, usize) = (carrying.into_iter().collect(), 0);
         // The key of each `let`, so that the parameters of a closure it names are keyed `<let>.<parameter>`.
         let mut let_keys: HashMap<usize, String> = HashMap::new();
         let mut param_seen: HashMap<String, usize> = HashMap::new();
         let mut done_targs: HashSet<usize> = HashSet::new();
         // Type arguments named by a realization leave the body, so the turbofish hints after them are numbered without.
         let mut removed_targs = 0;
+        // Literals whose type a name over them carries (`n @ 1u8..=9u8`), which need no hint.
+        let mut named_lits: HashSet<usize> = HashSet::new();
         for s in life::sites(body) {
             let n = match s.kind {
                 SK::Cast => s.n - removed,
@@ -578,13 +658,12 @@ impl<'a> Stripper<'a> {
                     let_keys.insert(node.id(), key.clone());
                     if let Some(ty) = node.child_by_field_name("type") {
                         self.cuts.push((pat.end_byte(), ty.end_byte(), String::new()));
-                        let t = self.loose(ty, generics);
                         if let Some((target, cuts)) = implicit_cast(node, src) {
                             carried.insert(target.id());
                             self.cuts.extend(cuts);
-                            locals.insert(key, json!({"type": t, "cast": true}));
+                            locals.insert(key, self.local_entry(ty, generics, true));
                         } else {
-                            locals.insert(key, t);
+                            locals.insert(key, self.local_entry(ty, generics, false));
                         }
                     }
                 }
@@ -592,7 +671,7 @@ impl<'a> Stripper<'a> {
                 SK::Cast => {
                     if text(node, src) != "_" {
                         self.cuts.push((node.start_byte(), node.end_byte(), "_".into()));
-                        hints.push(json!({"kind": "cast", "n": n, "type": self.loose(node, generics)}));
+                        hints.push(self.hint("cast", n, node, generics));
                     }
                 }
                 SK::Targ => {
@@ -628,17 +707,36 @@ impl<'a> Stripper<'a> {
                     let sk = self.skeleton(node);
                     if sk != text(node, src) {
                         self.cuts.push((node.start_byte(), node.end_byte(), sk));
-                        hints.push(json!({"kind": "targ", "n": n, "type": self.loose(node, generics)}));
+                        hints.push(self.hint("targ", n, node, generics));
                     }
                 }
+                SK::At => {
+                    // `n @ 1u8..=9u8`: the name carries the literals' one type, `"n @ 1..=9": {"literal": "u8"}`.
+                    let (Some(_), lits) = life::at_literals(node) else { continue };
+                    let split: Vec<_> = lits.iter().map(|l| life::lit_suffix(text(*l, src))).collect();
+                    let suffix = split.first().copied().flatten().map(|x| x.2);
+                    let one = suffix.is_some() && split.iter().all(|x| x.is_some_and(|(_, sep, s)| !sep && Some(s) == suffix));
+                    let cuts: Vec<Edit> = if one {
+                        lits.iter().zip(&split).map(|(l, x)| (l.start_byte() + x.unwrap().0.len(), l.end_byte(), String::new())).collect()
+                    } else {
+                        vec![]
+                    };
+                    let base = node.start_byte();
+                    let key = collapse(&apply(&src[node.byte_range()], cuts.iter().map(|(a, b, t)| (a - base, b - base, t.clone())).collect()));
+                    let c = seen.entry(key.clone()).or_insert(0);
+                    *c += 1;
+                    let key = if *c == 1 { key } else { format!("{key}#{c}") };
+                    if let (true, Some(suffix)) = (one, suffix) {
+                        self.cuts.extend(cuts);
+                        named_lits.extend(lits.iter().map(|l| l.id()));
+                        locals.insert(key, json!({"literal": lit_type(suffix)}));
+                    }
+                }
+                SK::Lit if named_lits.contains(&node.id()) => {}
                 SK::Lit => {
                     if let Some((digits, sep, suffix)) = life::lit_suffix(text(node, src)) {
                         self.cuts.push((node.start_byte() + digits.len(), node.end_byte(), String::new()));
-                        let ty = match suffix {
-                            "usize" | "isize" => format!("{} as '{suffix}'", if suffix == "usize" { "u64" } else { "i64" }),
-                            s => s.to_string(),
-                        };
-                        let mut h = json!({"kind": "literal", "n": n, "type": ty});
+                        let mut h = json!({"kind": "literal", "n": n, "type": lit_type(suffix)});
                         if sep {
                             h["sep"] = json!("_");
                         }
@@ -650,7 +748,6 @@ impl<'a> Stripper<'a> {
                         life::mut_edits(node, &mut self.cuts);
                         if let (Some(pat), Some(ty)) = (node.child_by_field_name("pattern"), node.child_by_field_name("type")) {
                             self.cuts.push((pat.end_byte(), ty.end_byte(), String::new()));
-                            let t = self.loose(ty, generics);
                             match life::closure_let(node).and_then(|l| let_keys.get(&l.id())) {
                                 Some(k) => {
                                     let mut pe = vec![];
@@ -660,9 +757,9 @@ impl<'a> Stripper<'a> {
                                     let pk = format!("{k}.{}", collapse(&apply(&src[pat.byte_range()], shifted)));
                                     let c = param_seen.entry(pk.clone()).or_insert(0);
                                     *c += 1;
-                                    locals.insert(if *c == 1 { pk } else { format!("{pk}#{c}") }, t);
+                                    locals.insert(if *c == 1 { pk } else { format!("{pk}#{c}") }, self.local_entry(ty, generics, false));
                                 }
-                                None => hints.push(json!({"kind": "closure_param", "n": n, "type": t})),
+                                None => hints.push(self.hint("closure_param", n, ty, generics)),
                             }
                         }
                     } else {
@@ -672,7 +769,7 @@ impl<'a> Stripper<'a> {
                 SK::ClRet => {
                     if let (Some(rt), Some(ps)) = (node.child_by_field_name("return_type"), node.child_by_field_name("parameters")) {
                         self.cuts.push((ps.end_byte(), rt.end_byte(), String::new()));
-                        hints.push(json!({"kind": "closure_return", "n": n, "type": self.loose(rt, generics)}));
+                        hints.push(self.hint("closure_return", n, rt, generics));
                     }
                 }
             }
@@ -919,9 +1016,15 @@ impl<'a> Stripper<'a> {
         let slot = self.map_type(ty, &Cx { generics: &sc.generics, elide: &none });
         self.cuts.push((name.end_byte(), ty.end_byte(), String::new()));
         sub.extend(Self::type_slot_json(&slot, false));
+        // `const W: usize = N as usize;` is `const W = N;` with the cast on the subject, as a cast local is.
+        let carried = implicit_cast(n, src);
+        if let Some((_, cuts)) = &carried {
+            self.cuts.extend(cuts.iter().cloned());
+            sub.insert("cast".into(), json!(true));
+        }
         self.subjects.push(Value::Object(sub));
         if let Some(v) = n.child_by_field_name("value") {
-            self.body_holes(v, &sname, &sc.generics);
+            self.body_holes_carrying(v, &sname, &sc.generics, carried.map(|(t, _)| t.id()));
             self.nested(v, sc, &sname)?;
         }
         Ok(())
@@ -998,7 +1101,7 @@ impl<'a> Stripper<'a> {
     fn trait_ty(&mut self, t: Node, cx: &Cx) -> Value {
         let slot = self.map_type(t, cx);
         let lost = slot.has_ref && (slot.lifetime.is_some() || slot.access.as_ref().is_some_and(|a| a["rights"] == "write"));
-        if lost {
+        if lost || (slot.ptr && slot.access.is_some()) {
             self.host(t, "ref_trait".into(), cx.elide)
         } else {
             slot.ty
@@ -1036,7 +1139,7 @@ impl<'a> Stripper<'a> {
             let slot = self.map_type(ty_n, &cx);
             // a shared, unnamed reference is the type's own `ref`; a `&mut` or a named lifetime has no slot here
             let hosted = slot.has_ref && (slot.lifetime.is_some() || slot.access.as_ref().is_some_and(|a| a["rights"] == "write"));
-            let v = if hosted { self.host(ty_n, "ref_self".into(), &none) } else { slot.ty };
+            let v = if hosted || (slot.ptr && slot.access.is_some()) { self.host(ty_n, "ref_self".into(), &none) } else { slot.ty };
             if let Some(s) = v.as_str() {
                 self_ty = s.to_string();
             } else {
@@ -1199,8 +1302,8 @@ impl<'a> Stripper<'a> {
                 None => self.map_type(rt, &cx),
             };
             res.extend(Self::type_slot_json(&slot, false));
-            // A shared result reference is the default, as in the proposal's example.
-            if res.get("access").is_some_and(|a| a["rights"] == "read") {
+            // A shared result reference is the default, as in the proposal's example; a pointer's access is its own.
+            if !slot.ptr && res.get("access").is_some_and(|a| a["rights"] == "read") {
                 res.remove("access");
             }
             if slot.has_ref || slot.bound_ref {

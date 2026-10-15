@@ -196,7 +196,8 @@ cannot check is reported as such for every subject of that host, never silently 
   of it; `decimal(p, s)`; `f32` and `f64`; `text`; `bytes`; `time`, simulation time at a place in history; `instant`,
   wall-clock time, allowed only in watched constraints; `duration`; `id<T>`, the identity of a row or entity of `T`.
 - **Composite:** records `{ name: T, ... }`; tuples; variants `A | B(T)`, closed unless marked `open`; optional `T?`;
-  `list<T>`, `set<T>` and `map<K, V>`; `ref<T>`, a reference to a host entity, used by the memory clauses.
+  `list<T>`, `set<T>` and `map<K, V>`; `ref<T>`, a reference to a host entity, used by the memory clauses; `ptr<T>`,
+  a host pointer: the address of a `T`, with no guarantee that it is valid or about any other path (§ 8.1).
 - **Refinements:** `T where p`, in which `value` names the value being refined; shorthands `T in a..b` and `T in {a, b,
   c}`; named refinements: `type Quantity = i64 where value >= 0`. A refinement on an optional type applies to the value
   when it is present. `where` always filters: the values of a type here, the rows of a table in an expression (§ 4).
@@ -1613,10 +1614,20 @@ isolation`, so the correspondence for those two holds with that clause added.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `write exclusive` | Only this path reads or writes | `iso` | `&mut T`; an owned value | — | — | `inout` | — |
 | `write readers` | This path writes; others may only read through views | `trn` | — | — | — | — | — |
-| `write any` | This path writes; others may too | `ref`, with confinement | `&RefCell<T>`, `&Cell<T>` | `T&` | Any reference | A class reference | Any reference |
+| `write any` | This path writes; others may too | `ref`, with confinement | `&RefCell<T>`, `&Cell<T>`, `*mut T` | `T&`, `T*` | Any reference | A class reference | Any reference |
 | `read readers` | Nobody writes while this holds: the entity is immutable for the interval | `val` | `&T` without interior mutability | A `const` object, shallowly | A reference to an immutable object | A value type | A reference to a frozen object |
-| `read any` | This path cannot write; others may | `box`, with confinement | — | `const T&`, shallowly | A read-only view or interface | — | A read-only proxy |
+| `read any` | This path cannot write; others may | `box`, with confinement | `*const T` | `const T&`, `const T*`, shallowly | A read-only view or interface | — | A read-only proxy |
 | `identify any` | Identity only | `tag` | An id or handle | An opaque handle | An id | An id | An id |
+
+A host pointer, `ptr<T>`, has rights and never a guarantee, so its access is `read any` or `write any`, and the file
+writes only the rights. `*const T` is `ptr<T>` with `read`, a constraint. `*mut T` is `ptr<T>` with no access: `write
+any` constrains nothing, so writing through a pointer is the absence of the read-only constraint rather than a
+constraint of its own. That is where a pointer and a reference differ: `&mut T` is `write exclusive`, and its
+exclusivity is a constraint that an optimiser relies on and `*mut T` does not have. What a reference adds to a pointer
+is the guarantee and validity: a reference is not null, is aligned, and its target lives while it is used, where a
+pointer may dangle, and whoever reads or writes through it must know otherwise (in Rust, in `unsafe` code). What the two
+share is that each designates a place, so what other paths write shows through it, and that neither constructs nor ends
+what it reaches: a slot holds a pointer as it holds any value.
 
 The distinction between `read readers` and `read any` is the one most languages blur: a `const` reference in C++ and a
 read-only interface in Java promise only that this path does not write, not that the entity does not change. And C++'s

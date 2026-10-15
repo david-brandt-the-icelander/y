@@ -17,20 +17,28 @@ struct Mention<'a> {
     input: bool,
     output: bool,
     decl: bool,
+    /// Where a lifetime cannot be elided without changing what it means: inside an `impl Trait` of an input, where
+    /// Rust has no elided lifetimes, and inside `Fn(..)` or `fn(..)`, where an elided one belongs to that type.
+    named_here: bool,
 }
 
 fn mentions<'a>(n: Node<'a>, src: &str, region: u8, out: &mut Vec<Mention<'a>>) {
+    mentions_in(n, src, region, false, out)
+}
+
+fn mentions_in<'a>(n: Node<'a>, src: &str, region: u8, named_here: bool, out: &mut Vec<Mention<'a>>) {
+    let named_here = named_here || n.kind() == "function_type" || (n.kind() == "abstract_type" && region == 1);
     if n.kind() == "lifetime" {
         let p = n.parent();
         let decl = p.is_some_and(|p| {
             p.kind() == "lifetime_parameter" && p.child_by_field_name("name").is_some_and(|x| x.id() == n.id())
         });
         let on_ref = p.is_some_and(|p| matches!(p.kind(), "reference_type" | "self_parameter"));
-        out.push(Mention { name: text(n, src).to_string(), node: n, on_ref, input: region == 1, output: region == 2, decl });
+        out.push(Mention { name: text(n, src).to_string(), node: n, on_ref, input: region == 1, output: region == 2, decl, named_here });
         return;
     }
     for c in all_children(n) {
-        mentions(c, src, region, out);
+        mentions_in(c, src, region, named_here, out);
     }
 }
 
@@ -67,7 +75,7 @@ pub fn analyse(f: Node, src: &str) -> Life {
         }
     }
     for m in &ms {
-        if !m.decl && (!m.on_ref || !(m.input || m.output)) {
+        if !m.decl && (!m.on_ref || !(m.input || m.output) || m.named_here) {
             bad.insert(m.name.clone());
         }
     }
@@ -283,6 +291,8 @@ pub enum SK {
     ClParam,
     ClRet,
     Let,
+    /// A name over a pattern, `n @ 1..=9`: it carries the type of the literals under it.
+    At,
 }
 
 /// A place in a body where a concrete type is, or can be, a hole. `n` counts sites of the same kind.
@@ -309,13 +319,13 @@ fn is_type_arg(c: Node) -> bool {
         )
 }
 
-fn push<'a>(out: &mut Vec<Site<'a>>, cnt: &mut [usize; 6], kind: SK, node: Node<'a>) {
+fn push<'a>(out: &mut Vec<Site<'a>>, cnt: &mut [usize; 7], kind: SK, node: Node<'a>) {
     let i = kind as usize;
     out.push(Site { kind, n: cnt[i], node });
     cnt[i] += 1;
 }
 
-fn walk<'a>(n: Node<'a>, out: &mut Vec<Site<'a>>, cnt: &mut [usize; 6]) {
+fn walk<'a>(n: Node<'a>, out: &mut Vec<Site<'a>>, cnt: &mut [usize; 7]) {
     match n.kind() {
         "token_tree" => {}
         k if is_item_kind(k) => {}
@@ -343,6 +353,12 @@ fn walk<'a>(n: Node<'a>, out: &mut Vec<Site<'a>>, cnt: &mut [usize; 6]) {
             }
             if let Some(b) = n.child_by_field_name("body") {
                 walk(b, out, cnt);
+            }
+        }
+        "captured_pattern" => {
+            push(out, cnt, SK::At, n);
+            for c in named_children(n) {
+                walk(c, out, cnt);
             }
         }
         "let_declaration" => {
@@ -438,8 +454,27 @@ pub fn closure_let(param: Node) -> Option<Node> {
 /// The sites of a body (or of an initialiser), in source order.
 pub fn sites(body: Node) -> Vec<Site> {
     let mut out = vec![];
-    walk(body, &mut out, &mut [0; 6]);
+    walk(body, &mut out, &mut [0; 7]);
     out
+}
+
+/// The pattern under a name, `1..=9` in `n @ 1..=9`, and the literals in it.
+pub fn at_literals<'a>(at: Node<'a>) -> (Option<Node<'a>>, Vec<Node<'a>>) {
+    fn lits<'a>(n: Node<'a>, out: &mut Vec<Node<'a>>) {
+        if matches!(n.kind(), "integer_literal" | "float_literal") {
+            out.push(n);
+        }
+        for c in named_children(n) {
+            lits(c, out);
+        }
+    }
+    let kids: Vec<Node> = named_children(at).into_iter().filter(|c| !is_comment(*c)).collect();
+    let pat = kids.last().copied().filter(|_| kids.len() >= 2);
+    let mut out = vec![];
+    if let Some(p) = pat {
+        lits(p, &mut out);
+    }
+    (pat, out)
 }
 
 /// Split a numeric literal into its digits and its type suffix: (digits, separator `_`?, suffix).

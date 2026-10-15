@@ -113,7 +113,7 @@
   },
   "$defs": {
     "type": {
-      "description": "A type string (`u64 as 'usize'`, `ref<Entry>?`, `map<K, V> as 'std::collections::HashMap'`, `Chars<'a>`, `some std::iter::Iterator { Item = u8 }`, `any std::error::Error as 'std::boxed::Box'`), or host text for a type the language has no form for.",
+      "description": "A type string (`u64 as 'usize'`, `ref<Entry>?`, `ptr<u8>`, `map<K, V> as 'std::collections::HashMap'`, `Chars<'a>`, `some std::iter::Iterator { Item = u8 }`, `any std::error::Error as 'std::boxed::Box'`), or host text for a type the language has no form for.",
       "oneOf": [
         {
           "type": "string",
@@ -141,10 +141,10 @@
     "access": {
       "type": "object",
       "required": [
-        "rights",
-        "guarantee"
+        "rights"
       ],
       "additionalProperties": false,
+      "description": "The access of a slot's references (`ref<T>`: rights and a guarantee, always both) or of its pointers (`ptr<T>`: `rights: read` for `*const`, and never a guarantee; a pointer without an access is `*mut`).",
       "properties": {
         "rights": {
           "enum": [
@@ -389,6 +389,10 @@
         "access": {
           "$ref": "#/$defs/access"
         },
+        "cast": {
+          "const": true,
+          "description": "On a `const` or `static`: its value is cast to its type, as a cast local's initialiser is. `const W = N;` weaves to `const W: T = N as T;`."
+        },
         "hold": {
           "$ref": "#/$defs/hold"
         },
@@ -523,10 +527,17 @@
               { "$ref": "#/$defs/type" },
               {
                 "type": "object",
-                "description": "A local whose initialiser is cast to its type: `let x = e;` weaves to `let x: T = e as T;`.",
+                "description": "A local with the access of its pointers, or whose initialiser is cast to its type: `let x = e;` weaves to `let x: T = e as T;`.",
                 "additionalProperties": false,
-                "required": ["type", "cast"],
-                "properties": { "type": { "$ref": "#/$defs/type" }, "cast": { "const": true } }
+                "required": ["type"],
+                "properties": { "type": { "$ref": "#/$defs/type" }, "access": { "$ref": "#/$defs/access" }, "cast": { "const": true } }
+              },
+              {
+                "type": "object",
+                "description": "A name over literals, keyed by its pattern (`n @ 1..=9`): the type of the literals under it, which weaves back as their suffix (`n @ 1u8..=9u8`).",
+                "additionalProperties": false,
+                "required": ["literal"],
+                "properties": { "literal": { "$ref": "#/$defs/type" } }
               }
             ]
           }
@@ -558,6 +569,9 @@
               },
               "type": {
                 "$ref": "#/$defs/type"
+              },
+              "access": {
+                "$ref": "#/$defs/access"
               },
               "sep": {
                 "const": "_",

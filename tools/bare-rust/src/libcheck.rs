@@ -470,13 +470,17 @@ fn ty_rust(v: &Value, access: &Value, lt: Option<&str>) -> Result<String, String
         return Ok(host_with(h, lt));
     }
     let s = v.as_str().ok_or("a type slot is missing")?;
-    Ty::parse(s)?.rust(access["rights"] == "write", lt)
+    let t = Ty::parse(s)?;
+    t.rust(t.writes(access["rights"].as_str()), lt)
 }
 
 /// The same, with each `some I` turned into a generic parameter: a function pointer type cannot hold `impl Trait`.
 fn ty_rust_lowered(v: &Value, access: &Value, lt: Option<&str>, lower: &mut Lower) -> Result<String, String> {
     match v.as_str() {
-        Some(s) => Ty::parse(s)?.rust_lowered(access["rights"] == "write", lt, lower),
+        Some(s) => {
+            let t = Ty::parse(s)?;
+            t.rust_lowered(t.writes(access["rights"].as_str()), lt, lower)
+        }
         None => ty_rust(v, access, lt),
     }
 }

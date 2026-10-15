@@ -119,9 +119,12 @@ language § 7.3: a lock guard, a file) keeps its end where the source has it: `b
 block that ends where the statement did. A turbofish is a realization of a template (language § 3.5), named in the body:
 `s.parse_u16()` for `s.parse::<u16>()`, with `"parse_u16": {"template": "<_>::parse", "args": ["u16"]}` in the
 crate's table of realizations, in the root module's file; the same template with the same arguments has one name across
-the crate. What
-cannot be bound yet (a cast to a non-primitive, a constant context) keeps `_` in the body and a positional hint; `_` in
-casts and type arguments is valid Rust, so the bare form keeps the target's syntax and only its types are erased. The
+the crate. A cast to a pointer is a cast local of type `ptr<T>` with its access. A constant context gets a block in
+its place, and a `const` whose whole value is a cast carries it on its subject. A suffixed literal in a pattern loses
+its suffix where the value it matches is a name declared with that type, and otherwise is named, `_k1_u8 @ 1`, with
+the type keyed by that pattern. What cannot be bound yet (a cast to a type alias, the left of a compound assignment whose right
+has an effect) keeps `_` in the body and a positional hint; `_` in casts and type arguments is valid Rust, so the bare
+form keeps the target's syntax and only its types are erased. The
 proof of concept leaves `Rc`, `Arc`, `Box` and trait objects in the body as written and counts them, and keeps every
 `.unwrap()` and `.expect()` in the body, as decided (§ 3.2).
 
@@ -279,6 +282,7 @@ Every emptied production is a slot, and every slot maps to a clause:
 | `Vec<T>`, `HashMap<K, V>`, `BTreeMap<K, V>`, `HashSet<T>` | `list<T>`, `map<K, V>`, `set<T>`, with `as` naming the host type as written | |
 | `(A, B)` | `(A, B)` | |
 | `&T`, `&mut T` | `ref<T>`, with `access : read readers` or `write exclusive` | |
+| `*const T`, `*mut T` | `ptr<T>`, with `access : read` or no access | A pointer has no guarantee and no lifetime (language § 8.1) |
 | A lifetime | `hold … : borrows from p`, `outlives` | Elided lifetimes are expanded by Rust's rules before mapping |
 | `Box<T>`, `Rc<T>`, `Arc<T>` | `T`, with `as` naming the wrapper, and `hold : owns` or `shares` | The choice stays named until the trial opens the hole (§ 2.2) |
 | `[T; N]`, `impl Trait`, `dyn Trait`, function pointers, associated types | Host text only: `{ "host": "<text>" }` | Counted per form (§ 10, E1) |

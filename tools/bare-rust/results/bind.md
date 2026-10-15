@@ -22,10 +22,29 @@ say. A mid-expression type is treated as an obfuscation that `bind` undoes once.
   - In some places the statement would run the value when the source might not, or would run it once where the
     source runs it many times: the right of `&&` or `||`, a match arm or guard, an `else if`, a `while` condition, a
     closure body. There the binding goes into a new block in that place: `c && { let h_u8: u8 = h as u8; h_u8 > 3 }`.
+  - A constant context (an array's length, the value of a `const` or `static`) runs once, when the program is built.
+    Every constant context allows a block with a `let`, so the binding goes into one in its place:
+    `[0; { let n_usize: usize = N as usize; n_usize }]`. A `const` or `static` whose whole value is the cast is the
+    name itself, as a `let` is: `const W: usize = N as usize;` is `const W = N;` with `"cast": true` on its subject.
 - **Order.** A bound value now runs before the rest of its statement. Anything earlier in the statement that could have
   an effect (a call, an index, a macro) is bound first, in order: `g(1) + g(h) as u32` becomes `let g_v = g(1);` and
-  then `let g_u32: u32 = g(h) as u32;`. Where that earlier thing is not a plain value, the site is left as it is and
-  reported. That covers a method receiver, a borrowed place, and the left of an assignment.
+  then `let g_u32: u32 = g(h) as u32;`. Rust runs a method's receiver before its arguments, and how it is bound
+  depends on what it is:
+  - **A value** is bound whole: `v.iter().max().copied().unwrap_or(0).max(a as u8)` becomes
+    `let unwrap_or_v = v.iter().max().copied().unwrap_or(0);`, `let a_u8: u8 = a as u8;` and `unwrap_or_v.max(a_u8)`.
+  - **A place** (a name, a field, an element, what a reference points to) stays where it is, because binding it would
+    move out of it or borrow it for longer. What it computes on the way is bound instead:
+    `self.rows[next_row()].push(n as u32)` becomes `let next_row_v = next_row();`, then the cast, then
+    `self.rows[next_row_v].push(n_u32)`. A borrow keeps its place the same way: `update(&mut cells[pick()], n as u32)`
+    names `pick()`.
+  - **An assignment** runs its right before its left (the Rust reference, 8.2.14), so a cast in the left has the right
+    bound first. `bind` used to bind it after, which changed the order of `v[f() as usize] = g()`.
+  - **A compound assignment** runs its right first when both sides are primitives, and its left first otherwise.
+    `bind` cannot see which. So where the left has an effect, a cast in the right is bound in a block in the right's
+    place, which runs where the right did either way: `*m.entry(k).or_insert(0) += { let len_u64: u64 = b.len() as
+    u64; len_u64 }`. A cast in the left whose right has an effect is left and reported.
+
+  `tests/bind.rs` logs every call in such statements, and checks that the bound program logs the same sequence.
 - **Already named.** `let n = e as f64;` gets a type, `let n: f64 = e as f64;`, rather than a second name. Brackets
   that weave would not put back are dropped: `(x) as u16` becomes `x as u16`.
 - **Macros.** The standard macros' arguments are bound as a call's are: the format family (`format!`, `println!`,
@@ -41,16 +60,55 @@ say. A mid-expression type is treated as an obfuscation that `bind` undoes once.
   - A macro whose syntax the tool does not know, and that states a type, is kept as Rust text in the bare body:
     `rust! { twice!(x as u8) }`, which weaves back to the call. It is never the preferred form.
 - **Left as hints, and reported by `bare-rust bind`:**
-  - a cast to a type that is not a primitive (`p as *const u8`);
-  - a cast in a constant context (`[0; N as usize]`, a `const` item);
-  - a suffixed literal in a pattern (`1u8 => ...`);
-  - a cast after a receiver, borrowed place or assignee that has an effect;
+  - a cast to a type that is neither a primitive nor a pointer (a type alias, a `fn` pointer);
+  - a cast in the left of a compound assignment whose right has an effect (`v[i as usize] += f()`);
+  - a suffixed literal in the pattern of a `let ... else`, or under one name with literals of another type;
   - a cast in a `while let` condition or a let chain;
   - a cast or a turbofish in a macro argument that runs only sometimes.
+- **Left as written:** a cast in an enum's discriminant (`A = N as isize`), which stays in the bare body as before.
+  A discriminant is not a body that `strip` takes holes from.
 
 `tests/bind.rs` compiles a function with every kind of position, before and after `bind`, runs both on the same
 inputs, and checks that they print the same. It also checks the placements above and that a second `bind` changes
 nothing.
+
+## Suffixed literals in patterns
+
+A pattern has no `let` to carry a literal's type, and the suffix cannot simply go, because it can decide what the
+program computes. In `match s.parse().unwrap() { 200u8 => .. }` the pattern is what makes `parse` produce a `u8`.
+`bind` uses the first of these that applies:
+
+- **The value matched is a name declared with that type.** That covers a parameter `x: u8` or a typed `let`, and it
+  reaches through `&`, `*` and a tuple's elements: in `match (x, y) { (7u8, 9u16) => .. }` with `x: u8` and `y: &u16`,
+  the declarations already say both types, so the suffixes go: `(7, 9)`. The name must be bound once in the function,
+  so that the declaration is the one in scope. A cast in an `if let` value is named before the pattern is looked at,
+  so `if let -1i8 = x as i8` becomes `let x_i8: i8 = x as i8;` and `if let -1 = x_i8`.
+- **A name is already over the literal.** In `n @ 4u8..=6` the name carries the type for every literal under it, and
+  each takes the suffix (`n @ 4u8..=6u8`). `strip` keys the type by the name's pattern, as a `let`'s is keyed:
+  `"n @ 4..=6": {"literal": "u8"}`, which weaves back to the suffixes.
+- **Otherwise the literal gets a name** that does nothing else, together with the range or the alternatives it is part
+  of: `Some(1u8)` becomes `Some(_k1_u8 @ 1u8)`, and `Some(2u8 | 3u8)` becomes `Some(_k2_3_u8 @ (2u8 | 3u8))`. The `_`
+  says that nothing uses it, and the compiler gives no warning for it.
+
+`bind` also found that a top-level literal pattern of an `if let` or `while let` (`if let -1i8 = x`) was read as an
+expression and bound to a `let`, which made the pattern a name that always matches. Patterns there are now patterns.
+
+## Pointers
+
+A cast to a raw pointer (`p as *const u8`) used to be left as a hint, because the language had no type for one. It has
+`ptr<T>` now (constraint language § 3.4, § 8.1): the address of a `T`, with no guarantee that it is valid or about any
+other path. The slot's `access` gives only rights: `*const T` reads (`{"rights": "read"}`, the table's `read any`),
+and `*mut T` has no access, since `write any` constrains nothing. So the cast is an ordinary cast local:
+`let p_ptr: *const u8 = p as *const u8;` is `let p_ptr = p;` with
+`{"type": "ptr<u8>", "access": {"rights": "read"}, "cast": true}`.
+
+- **Parameters, results, fields and `const`s** take `ptr<T>` too. They used to be host text with the form `pointer`.
+  A result keeps its access, since a pointer has no default as a shared reference does, and a pointer gives no
+  lifetime to elision.
+- **Where nothing carries an access** (a turbofish argument, an associated type, an impl's self type), a `*const`
+  stays host text, as a `&mut` does there.
+- **A slot with two accesses** (`*mut *const u8`, or a pointer and a reference) stays host text, as two references of
+  different access do.
 
 ## Closures
 
@@ -129,9 +187,12 @@ instead:
 | strsim | 30 | 13 | 0 | 2 | 0 (was 1) | 0 |
 | fnv | 1 | 0 | 0 | 0 | 0 | 0 |
 | examples | 1 | 0 | 0 | 2 | 0 | 0 |
-| the tool's own source | 49 | 335 | 158 | 16 | 0 (was 43) | 0 |
+| the tool's own source | 49 | 344 | 162 | 16 | 0 (was 43) | 0 |
 
-Closure return types are among the typed locals, as `out`. The `rust!` markers were all standard macros: `json!` (14),
+Closure return types are among the typed locals, as `out`. The tool's own source grew with this round's code, which is
+where its new typed locals and closure parameters come from. None of the corpora has a pattern literal, a pointer cast
+or a cast in a constant context. The tool's one raw pointer, `*const ()` from the grammar, is `ptr<()>` now where it was
+host text, and its three casts in a compound assignment whose left has an effect are bound in place. The `rust!` markers were all standard macros: `json!` (14),
 `format!` (8), `assert_eq!` (6), `writeln!` (5), `vec!` (3) and `println!` (1) in the tool's source, and most of them
 for a turbofish (`collect::<Vec<_>>()`) in an argument.
 
@@ -210,3 +271,11 @@ realizations. (The other 335 typed locals and 158 closure parameters are named i
 **The experiment crates.** One more agent named strsim's 31 mechanical locals and its 2 realizations, and fnv's one
 local (`experiments/renames/`). E6 runs on workspaces renamed with these maps.
 
+
+## Also fixed: a lifetime inside an `impl Trait` parameter
+
+`fn total<'a>(ws: impl Iterator<Item = &'a W>)` lost its `'a`. The lifetime appears once among the inputs, so `strip`
+took it for one that elision could give back, and wove `impl Iterator<Item = &W>`, which Rust rejects (E0658:
+anonymous lifetimes in `impl Trait` are unstable). A lifetime there now keeps its name, and so does one inside
+`Fn(&'a W)` or `fn(&'a W)`. There elision would compile, but it would make the lifetime the function type's own
+(higher-ranked) rather than the function's.

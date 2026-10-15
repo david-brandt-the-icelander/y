@@ -84,21 +84,201 @@ fn bindings_go_before_the_statement_in_order_or_into_a_new_scope() {
 #[test]
 fn sites_that_cannot_be_bound_are_reported() {
     let src = r#"
+type Word = usize;
 pub fn f(x: u8, p: &u8, mut v: Vec<u8>) -> usize {
     let a = match x { 1u8 => 0, _ => 1 };
-    let q = p as *const u8;
+    let q = p as *const u8 as Word;
     v.iter_mut().next().map(|e| *e = 1);
     let n = [0u8; 4 as usize].len();
+    v[a as usize] += g();
+    let 1u8 = v[0] else { return 0 };
     v.first().copied().unwrap_or(0).max(a as u8) as usize + q as usize + n
 }
 "#;
     let (b, left) = bind_report(src).unwrap();
     let why: Vec<(&str, &str)> = left.iter().map(|l| (l.what, l.why)).collect();
-    assert!(why.contains(&("literal", "in a pattern")), "{why:?}");
-    assert!(why.contains(&("cast", "the target is not a primitive type")), "{why:?}");
-    assert!(why.contains(&("cast", "in a constant context")), "{why:?}");
-    // `v.first()...max(a as u8)`: the receiver chain runs first and is not a plain value.
-    assert!(why.iter().any(|w| w.1.starts_with("something before it")), "{why:?}\n{b}");
+    // `x` is a `u8`, so `1u8` says nothing more and loses its suffix.
+    assert!(b.contains("match x { 1 => 0, _ => 1 }"), "{b}");
+    assert!(why.contains(&("literal", "in the pattern of a `let`")), "{why:?}");
+    // A type alias names a type `bind` cannot see; a pointer is carried (`ptr<u8>`, with its access).
+    assert!(why.contains(&("cast", "the target is not a primitive or a pointer")), "{why:?}");
+    assert!(b.contains("let p_ptr: *const u8 = p as *const u8;"), "{b}");
+    // `v[a as usize] += g()`: with primitives the right runs first, otherwise the left; which, the types say.
+    assert!(why.iter().any(|w| w.1.starts_with("the other side of a compound assignment")), "{why:?}\n{b}");
+}
+
+const CONSTANTS: &str = r#"
+pub const N: u32 = 4;
+pub const W: usize = N as usize;
+pub const H: usize = N as usize * 2 + 1usize;
+pub static S: u64 = (N + 1) as u64;
+pub const Z: [u8; 3] = [7u8; 3];
+pub struct T;
+impl T {
+    pub const K: u16 = N as u16 + 1;
+}
+pub fn f(x: u32) -> usize {
+    const L: u8 = N as u8;
+    let a = [0u8; N as usize];
+    let b = [x; N as usize + 1];
+    a.len() + b.len() + L as usize + W + H + S as usize + T::K as usize + Z[0] as usize
+}
+"#;
+
+#[test]
+fn a_cast_in_a_constant_context_is_bound_in_place_or_carried_by_its_item() {
+    let (b, left) = bind_report(CONSTANTS).unwrap();
+    assert!(left.is_empty(), "{left:?}\n{b}");
+    for want in [
+        // The whole value of a `const` or `static`: the item is the name.
+        "pub const W: usize = N as usize;",
+        "pub static S: u64 = (N + 1) as u64;",
+        "    const L: u8 = N as u8;",
+        // Anywhere else in a constant context, a block in its place.
+        "pub const H: usize = { let n_usize: usize = N as usize; let k1_usize: usize = 1; n_usize * 2 + k1_usize };",
+        "pub const Z: [u8; 3] = { let k7_u8: u8 = 7; [k7_u8; 3] };",
+        "pub const K: u16 = { let n_u16: u16 = N as u16; n_u16 + 1 };",
+        "let a = [k0_u8; { let n_usize: usize = N as usize; n_usize }];",
+        "let b = [x; { let n_usize_2: usize = N as usize; n_usize_2 + 1 }];",
+    ] {
+        assert!(b.contains(want), "missing:\n{want}\nin:\n{b}");
+    }
+    let (bare, json) = bare_rust::strip(CONSTANTS, "demo 0.1.0", "src/lib.rs").unwrap();
+    assert!(bare.contains("const W = N;") && bare.contains("static S = N + 1;") && bare.contains("const L = N;"), "{bare}");
+    let w = json["subjects"].as_array().unwrap().iter().find(|s| s["name"] == "demo::W").unwrap();
+    assert_eq!(w["cast"], true);
+    assert_eq!(json["holes"]["demo::H"]["locals"]["n_usize"], serde_json::json!({"type": "u64 as 'usize'", "cast": true}));
+    let main = "\nfn main() {\n    println!(\"{}\", f(3));\n}\n";
+    let run = |s: &str, name: &str| {
+        let d = scratch(name);
+        std::fs::write(d.join("m.rs"), format!("{s}{main}")).unwrap();
+        let out = Command::new("rustc").args(["--edition", "2021", "-o"]).arg(d.join("m")).arg(d.join("m.rs")).output().unwrap();
+        assert!(out.status.success(), "{}\n{s}", String::from_utf8_lossy(&out.stderr));
+        String::from_utf8(Command::new(d.join("m")).output().unwrap().stdout).unwrap()
+    };
+    assert_eq!(run(&b, "constants-bound"), run(CONSTANTS, "constants-source"));
+    let woven = bare_rust::weave(&bare, &json).unwrap();
+    assert_eq!(bare_rust::rustfmt(&woven).unwrap(), bare_rust::rustfmt(&b).unwrap());
+    assert_eq!(bind(&b).unwrap(), b);
+}
+
+const PATTERNS: &str = r#"
+pub fn f(x: u8, y: &u16, v: &[u8], s: &str) -> u32 {
+    let a = match x { 1u8 => 10, 2u8..=5u8 => 20, _ => 0 };
+    let b = match (x, y) { (7u8, 9u16) => 1, (_, 3u16) => 2, _ => 0 };
+    let c = match v.iter().next().copied() { Some(1u8) => 1, Some(2u8 | 3u8) => 2, Some(n @ 4u8..=6) => n as u32, _ => 0 };
+    let d = match s.parse().unwrap_or(0) { 200u8 => 1, _ => 2 };
+    let e = if let -1i8 = x as i8 { 1 } else { 0 };
+    let g = match v.first() { Some(&9u8) => 1, _ => 0 };
+    a + b + c + d + e + g
+}
+"#;
+
+#[test]
+fn a_pattern_literal_loses_a_suffix_its_value_states_or_gets_a_name() {
+    let (b, left) = bind_report(PATTERNS).unwrap();
+    assert!(left.is_empty(), "{left:?}\n{b}");
+    for want in [
+        // What it is matched against is declared with that type, through a tuple and a reference.
+        "let a = match x { 1 => 10, 2..=5 => 20, _ => 0 };",
+        "let b = match (x, y) { (7, 9) => 1, (_, 3) => 2, _ => 0 };",
+        "let x_i8: i8 = x as i8;\n    let e = if let -1 = x_i8 { 1 } else { 0 };",
+        // A name already over it carries it; every literal under the name takes the suffix.
+        "Some(n @ 4u8..=6u8) =>",
+        // Otherwise a name that does nothing else, over the literal, its range or its alternatives.
+        "Some(_k1_u8 @ 1u8) => 1, Some(_k2_3_u8 @ (2u8 | 3u8)) => 2,",
+        // Where the pattern's type decides what `parse` makes, dropping the suffix would change the program.
+        "match s.parse().unwrap_or(0) { _k200_u8 @ 200u8 => 1, _ => 2 }",
+        "Some(&_k9_u8 @ 9u8) => 1",
+    ] {
+        assert!(b.contains(want), "missing:\n{want}\nin:\n{b}");
+    }
+    let (bare, json) = bare_rust::strip(PATTERNS, "demo 0.1.0", "src/lib.rs").unwrap();
+    assert!(bare.contains("{ _k200_u8 @ 200 => 1, _ => 2 }") && bare.contains("Some(n @ 4..=6)"), "{bare}");
+    let locals = &json["holes"]["demo::f"]["locals"];
+    assert_eq!(locals["_k2_3_u8 @ (2 | 3)"], serde_json::json!({"literal": "u8"}));
+    assert_eq!(locals["n @ 4..=6"], serde_json::json!({"literal": "u8"}));
+    assert!(json["holes"]["demo::f"]["hints"].is_null(), "{json}");
+    let woven = bare_rust::weave(&bare, &json).unwrap();
+    assert_eq!(bare_rust::rustfmt(&woven).unwrap(), bare_rust::rustfmt(&b).unwrap());
+    let main = "\nfn main() {\n    for x in [0u8, 1, 3, 7, 255] {\n        for v in [vec![], vec![1u8], vec![3], vec![5], vec![9]] {\n            println!(\"{}\", f(x, &3, &v, \"200\") + f(x, &9, &v, \"7\"));\n        }\n    }\n}\n";
+    let run = |s: &str, name: &str| {
+        let d = scratch(name);
+        std::fs::write(d.join("m.rs"), format!("{s}{main}")).unwrap();
+        let out = Command::new("rustc").args(["--edition", "2021", "-o"]).arg(d.join("m")).arg(d.join("m.rs")).output().unwrap();
+        assert!(out.status.success(), "{}\n{s}", String::from_utf8_lossy(&out.stderr));
+        assert!(!String::from_utf8_lossy(&out.stderr).contains("warning"), "{}", String::from_utf8_lossy(&out.stderr));
+        String::from_utf8(Command::new(d.join("m")).output().unwrap().stdout).unwrap()
+    };
+    assert_eq!(run(&b, "patterns-bound"), run(PATTERNS, "patterns-source"));
+    assert_eq!(bind(&b).unwrap(), b);
+}
+
+const RECEIVERS: &str = r#"
+use std::cell::RefCell;
+thread_local!(static LOG: RefCell<Vec<String>> = RefCell::new(vec![]));
+fn note<T: std::fmt::Debug>(s: &str, t: T) -> T { LOG.with(|l| l.borrow_mut().push(format!("{s}={t:?}"))); t }
+pub struct T { pub rows: Vec<Vec<u32>>, pub at: usize }
+#[derive(Debug, Clone, Copy)]
+pub struct W(u32);
+impl std::ops::AddAssign<u32> for W { fn add_assign(&mut self, o: u32) { self.0 += o; } }
+impl T {
+    fn rows_mut(&mut self) -> &mut Vec<Vec<u32>> { note("rows_mut", 0); &mut self.rows }
+    pub fn f(&mut self, v: &[u8], a: u32, n: u64) -> String {
+        let m = v.iter().max().copied().unwrap_or(note("default", 0)).max(a as u8);
+        let i = note("i", 1);
+        self.rows[next_row(&self.at)].push(n as u32);
+        self.rows_mut()[i].push(note("pushed", n) as u32 + 1);
+        update(&mut self.rows[note("borrowed", 1)][0], self.at as u32);
+        self.rows[note("left", 0)][0] = note("right", n) as u32;
+        self.rows[note("left", 1) as usize][0] = note("right", 7);
+        self.rows[0][0] += a as u32;
+        // Which side of `+=` runs first depends on the types: here the left (`W`), there the right (`u32`).
+        let mut w = [W(0), W(1)];
+        w[note("w_left", 1)] += note("w_right", 3) as u32;
+        self.rows[note("u_left", 0)][0] += note("u_right", 4) as u32;
+        let s: String = self.rows.iter().map(|r| r.len()).sum::<usize>().to_string();
+        format!("{m} {s} {:?} {w:?} {}", self.rows, LOG.with(|l| l.borrow_mut().join(",")))
+    }
+}
+fn update(c: &mut u32, n: u32) { *c += note("update", n); }
+fn next_row(at: &usize) -> usize { note("next_row", (at + 1) % 2) }
+"#;
+
+#[test]
+fn a_method_receiver_that_is_a_value_is_bound_whole_and_a_place_keeps_its_place() {
+    let (b, left) = bind_report(RECEIVERS).unwrap();
+    assert!(left.is_empty(), "{left:?}\n{b}");
+    for want in [
+        // A value receiver runs first, so it is named first.
+        "let unwrap_or_v = v.iter().max().copied().unwrap_or(note(\"default\", 0));\n        let a_u8: u8 = a as u8;\n        let m = unwrap_or_v.max(a_u8);",
+        // A place keeps its place; what it computes on the way is named.
+        "let next_row_v = next_row(&self.at);\n        let n_u32: u32 = n as u32;\n        self.rows[next_row_v].push(n_u32);",
+        "let rows_mut_v = self.rows_mut();\n        let note_u32: u32 = note(\"pushed\", n) as u32;\n        rows_mut_v[i].push(note_u32 + 1);",
+        "let note_v = note(\"borrowed\", 1);\n        let at_u32: u32 = self.at as u32;\n        update(&mut self.rows[note_v][0], at_u32);",
+        // The right of an assignment runs before its left.
+        "let note_u32_2: u32 = note(\"right\", n) as u32;\n        self.rows[note(\"left\", 0)][0] = note_u32_2;",
+        "let note_v_2 = note(\"right\", 7);\n        let note_usize: usize = note(\"left\", 1) as usize;\n        self.rows[note_usize][0] = note_v_2;",
+        // The other side of a compound assignment has no effect here.
+        "let a_u32: u32 = a as u32;\n        self.rows[0][0] += a_u32;",
+        // Here it has: the binding goes in the right's place, which runs where the right did.
+        "w[note(\"w_left\", 1)] += { let note_u32_3: u32 = note(\"w_right\", 3) as u32; note_u32_3 };",
+    ] {
+        assert!(b.contains(want), "missing:\n{want}\nin:\n{b}");
+    }
+    let main = "\nfn main() {\n    let mut t = T { rows: vec![vec![1], vec![2]], at: 0 };\n    println!(\"{}\", t.f(&[3, 9], 300, 5));\n}\n";
+    let run = |s: &str, name: &str| {
+        let d = scratch(name);
+        std::fs::write(d.join("m.rs"), format!("{s}{main}")).unwrap();
+        let out = Command::new("rustc").args(["--edition", "2021", "-o"]).arg(d.join("m")).arg(d.join("m.rs")).output().unwrap();
+        assert!(out.status.success(), "{}\n{s}", String::from_utf8_lossy(&out.stderr));
+        String::from_utf8(Command::new(d.join("m")).output().unwrap().stdout).unwrap()
+    };
+    let (before, after) = (run(RECEIVERS, "receivers-source"), run(&b, "receivers-bound"));
+    assert_eq!(after, before);
+    assert!(before.contains("right=5,left=0") && before.contains("right=7,left=1"), "{before}");
+    assert!(before.contains("w_left=1,w_right=3") && before.contains("u_right=4,u_left=0"), "{before}");
+    assert_eq!(bind(&b).unwrap(), b);
 }
 
 #[test]
