@@ -365,6 +365,7 @@ see the code behind it. `strip` now chooses the builds a crate is checked in (`s
 | miniz_oxide | default, wasm32, features `block-boundary`, `serde`, `simd`, `std`, no default features | 186, 0 | none (`rustc-dep-of-std` and `--all-features` do not compile on stable) |
 | png | default, i686 (library only), feature `benchmarks`, wasm32 (library only), `--cfg doc`, release | 53, 21 | the `unstable` feature, which needs nightly Rust; 32-bit tests |
 | itoa, fnv | one extra build each (feature `no-panic`, no default features) | 0, 0 | none |
+| the tool's own source | default | 0, 0 | `not(unix)`, which has no binding: the Windows and WebAssembly builds need a C compiler for that target, for tree-sitter |
 
 All six crates pass checks 1 to 4 with their builds. Check 2 is exact on every file of memchr, miniz_oxide and png,
 `mut` included.
