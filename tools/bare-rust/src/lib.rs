@@ -2,6 +2,7 @@
 use tree_sitter::{Language, Node, Parser, Tree};
 
 pub mod bind;
+pub mod builds;
 pub mod cargo;
 pub mod check;
 pub mod clause;

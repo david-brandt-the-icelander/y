@@ -14,8 +14,11 @@ Rules that cover most edits:
 - Types are written in the constraint type syntax (`text`, `list<T> as 'Vec'`, `map<K, V> as 'HashMap'`, `ref<T>`,
   `ptr<T>` for a raw pointer, `T?` for `Option<T>`, `u32`, a plain name for any other type); `{ "host": "..." }` is
   Rust text for a type that has no such form.
-- `mut` is not written: the weave derives it through rustc. The exception is code a `#[cfg(..)]` may leave out of the
-  build (other than `cfg(test)`), which rustc does not see; there the bare body keeps its `mut`. A `let` has no type in
+- `mut` is not written: the weave derives it through rustc, in every build the crate is checked in. Besides the
+  default build, `strip` chooses a few others (another target, a feature, a `--cfg`, a release build, listed in
+  `builds.json`) so that each piece of code a `#[cfg(..)]` guards is compiled in one of them, where the original crate
+  compiles on stable Rust. The exception is code that no such build compiles (a feature that needs nightly Rust, a
+  target that is not installed); there the bare body keeps its `mut`. A `let` has no type in
   the bare body; where rustc cannot infer it, it goes under `"holes"` (a local, a cast local; see the last example), and
   a realization of a generic goes in the crate's table, `"realizations"`, in the crate root's file.
 - A field or parameter whose type is a `ref<...>` needs an `access`; a result that borrows says `"hold": {"kind":

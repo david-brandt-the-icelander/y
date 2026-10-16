@@ -1,6 +1,6 @@
 //! Checks 1 to 4 of proposal 9 for one crate: strip it, weave it back through cargo, and compare.
 use crate::cargo::{self, Diag};
-use crate::corpus::strip_crate;
+use crate::corpus::strip_crate_with;
 use crate::crate_weave::{hole_id, hole_report, weave_crate_with, CrateWeave, ErrReport, HoleReport, WeaveOpts};
 use crate::weave::HoleSite;
 use crate::json::canonical;
@@ -84,6 +84,8 @@ pub struct CheckReport {
     /// Check 5, mechanical half: `None` when the crate has no externals list among the libraries.
     pub c5: Option<crate::libcheck::LibReport>,
     pub strict_libraries: bool,
+    /// The builds the crate was checked in, and the gated code none of them compiles.
+    pub reach: crate::builds::Reach,
 }
 
 /// The number of tests that passed, from `cargo test`'s `test result:` lines.
@@ -108,7 +110,7 @@ fn check1(cw: &CrateWeave, dir: &Path, tests: bool) -> Check1 {
     let krate = cw.files.first().and_then(|f| f.json["crate"].as_str()).unwrap_or("").to_string();
     let sources: Vec<(PathBuf, String)> = cw.files.iter().map(|f| (f.rel.clone(), f.woven.text.clone())).collect();
     let trees = crate::corpus::crate_trees(dir, tests).unwrap_or_default();
-    let again = crate::corpus::strip_sources(&krate, &sources, &trees);
+    let again = crate::corpus::strip_sources_in(&krate, &sources, &trees, Some(&cw.reach));
     for (f, (_, r)) in cw.files.iter().zip(again) {
         c.files += 1;
         match r {
@@ -170,9 +172,17 @@ fn new_warnings(orig: &[Diag], new: &[Diag]) -> Vec<String> {
 }
 
 fn check3(cw: &CrateWeave, dir: &Path, o: &CheckOpts) -> R<Check3> {
-    let orig = cargo::diagnostics(dir, &o.target, "check")?;
-    let had: BTreeSet<(String, String, String)> =
-        orig.diags.iter().filter(|d| d.is_error()).map(|d| (d.file.clone(), d.code.clone().unwrap_or_default(), d.message.clone())).collect();
+    // The original in each build the woven crate was checked in: its errors, and its warnings, to compare with the
+    // woven crate's in the same build.
+    let mut origs: Vec<(&crate::builds::Build, cargo::Run)> = vec![];
+    for b in &cw.reach.builds {
+        origs.push((b, cargo::diagnostics_in(dir, &o.target, "check", b)?));
+    }
+    let had: BTreeSet<(String, String, String)> = origs
+        .iter()
+        .flat_map(|(_, r)| r.diags.iter().filter(|d| d.is_error()))
+        .map(|d| (d.file.clone(), d.code.clone().unwrap_or_default(), d.message.clone()))
+        .collect();
     let mut c = Check3::default();
     c.check_failures = cw.weave_errors.iter().map(|(f, e)| format!("weave refused {}: {e}", f.display())).collect();
     c.check_failures.extend(cw.holes.iter().map(|h| h.show()));
@@ -185,13 +195,26 @@ fn check3(cw: &CrateWeave, dir: &Path, o: &CheckOpts) -> R<Check3> {
             c.check_failures.push(e.show());
         }
     }
-    c.check_warnings_new = new_warnings(&orig.diags, &cw.warnings);
+    let label = |b: &crate::builds::Build, w: Vec<String>| -> Vec<String> {
+        if b.is_default() { w } else { w.into_iter().map(|x| format!("[build {}] {x}", b.name)).collect() }
+    };
+    for (b, orig) in &origs {
+        let woven = cw.runs.iter().find(|(n, _)| *n == b.name).map(|(_, d)| d.as_slice()).unwrap_or(&[]);
+        c.check_warnings_new.extend(label(b, new_warnings(&orig.diags, woven)));
+    }
     if o.full && c.check_failures.is_empty() {
-        let before = cargo::diagnostics(dir, &o.target, "clippy")?;
-        let after = cargo::diagnostics(&cw.out, &o.target, "clippy")?;
-        let new = new_warnings(&before.diags, &after.diags);
-        let count = |r: &cargo::Run| r.diags.iter().filter(|d| d.level == "warning").count();
-        c.clippy = Some((count(&before), count(&after), new));
+        let (mut nb, mut na, mut new) = (0, 0, vec![]);
+        for b in &cw.reach.builds {
+            let before = cargo::diagnostics_in(dir, &o.target, "clippy", b)?;
+            let after = cargo::diagnostics_in(&cw.out, &o.target, "clippy", b)?;
+            let count = |r: &cargo::Run| r.diags.iter().filter(|d| d.level == "warning").count();
+            if b.is_default() {
+                (nb, na) = (count(&before), count(&after));
+            }
+            new.extend(label(b, new_warnings(&before.diags, &after.diags)));
+        }
+        c.clippy = Some((nb, na, new));
+        // The tests run in the default build: another target's code does not run on this machine.
         c.test = Some(cargo::test(&cw.out, &o.target)?);
     }
     Ok(c)
@@ -316,7 +339,7 @@ pub fn check_crate(dir: &Path, o: &CheckOpts) -> R<CheckReport> {
     let root = o.work.join(&name);
     let _ = fs::remove_dir_all(&root);
     let bare = root.join("bare");
-    let results = strip_crate(dir, &bare, o.tests)?;
+    let results = strip_crate_with(dir, &bare, o.tests, Some(&o.target))?;
     let refused: Vec<(String, String)> =
         results.iter().filter_map(|r| r.outcome.as_ref().err().map(|e| (r.file.display().to_string(), e.clone()))).collect();
     let opts = WeaveOpts { cargo: true, crate_dir: Some(dir.to_path_buf()), target: o.target.clone(), drop_holes: false, keep: Default::default() };
@@ -341,6 +364,7 @@ pub fn check_crate(dir: &Path, o: &CheckOpts) -> R<CheckReport> {
         c4,
         c5,
         strict_libraries: o.strict_libraries,
+        reach: cw.reach.clone(),
     };
     let _ = fs::write(root.join("check.json"), crate::json::ordered(&report.to_json()));
     Ok(report)
@@ -391,6 +415,7 @@ impl CheckReport {
             "unbound": {"locals": self.unbound.0, "hints": self.unbound.1, "subjects": self.unbound.2},
             "mut": {"original": self.c2.mut_original, "derived": self.c2.mut_derived, "inserted_by_rustc": self.mut_added,
                     "files_differing": self.c2.mut_differs.len()},
+            "builds": self.reach.to_json(),
             "check1": {"files": self.c1.files, "failures": self.c1.failures},
             "check2": {"files": self.c2.files, "exact": self.c2.exact, "mut_differs": self.c2.mut_differs.iter().map(|d| json!({"file": d.0, "original": d.1, "derived": d.2, "first_difference": d.3})).collect::<Vec<_>>(), "failures": self.c2.failures},
             "check3": {
@@ -421,6 +446,16 @@ impl CheckReport {
         println!("  strip    {} corpus files, {} refused", self.files, self.refused.len());
         for (f, e) in &self.refused {
             println!("             refused {f}: {e}");
+        }
+        let r = &self.reach;
+        println!(
+            "  builds   {}{}{}",
+            r.names().join(", "),
+            if r.unreached.is_empty() { String::new() } else { format!("; gated code no build compiles (its mut stays): {}", r.unreached.join("; ")) },
+            if r.skipped.is_empty() { String::new() } else { format!("; {} builds not usable", r.skipped.len()) }
+        );
+        for s in &r.skipped {
+            println!("             {}: {}", s.build, s.why);
         }
         println!("  weave    {} unbound entries (locals {}, hints {}, subjects {})", self.unbound.0 + self.unbound.1 + self.unbound.2, self.unbound.0, self.unbound.1, self.unbound.2);
         println!("  check 1  {}  bare round trip, {} files", st(self.c1_ok()), self.c1.files);

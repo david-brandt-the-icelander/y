@@ -54,7 +54,8 @@ fn corpora_checks_1_and_2_without_cargo() {
         ("strsim", root().join("corpora/src/strsim"), true),
         ("fnv", root().join("corpora/src/fnv"), true),
     ] {
-        let results = strip_crate(&dir, &out.join(corpus), tests).unwrap();
+        // Without cargo: the default build only (the `cargo_*` tests choose the builds).
+        let results = bare_rust::corpus::strip_crate_with(&dir, &out.join(corpus), tests, None).unwrap();
         for r in results {
             units.push(Unit { corpus, original: dir.join(&r.file), rel: r.file });
         }
@@ -90,7 +91,8 @@ fn corpora_checks_1_and_2_without_cargo() {
             .filter_map(|u| Some((u.rel.clone(), fs::read_to_string(woven_root.join(corpus).join(&u.rel)).ok()?)))
             .collect();
         let trees = bare_rust::corpus::crate_trees(&dir, tests).unwrap();
-        for (rel, r) in bare_rust::corpus::strip_sources(&format!("{} {}", info.name, info.version), &sources, &trees) {
+        let reach = bare_rust::builds::Reach::load(&out.join(corpus));
+        for (rel, r) in bare_rust::corpus::strip_sources_in(&format!("{} {}", info.name, info.version), &sources, &trees, reach.as_ref()) {
             again.insert((corpus, rel), r);
         }
     }

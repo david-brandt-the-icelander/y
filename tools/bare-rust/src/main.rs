@@ -1,4 +1,4 @@
-use bare_rust::corpus::{strip_crate, FileResult};
+use bare_rust::corpus::FileResult;
 use bare_rust::check::{check_crate, CheckOpts};
 use bare_rust::crate_weave::{weave_crate_with, WeaveOpts};
 use bare_rust::json::canonical;
@@ -6,7 +6,10 @@ use std::{fs, path::PathBuf, process::exit};
 
 const USAGE: &str = "usage:
   bare-rust strip <file.rs> --crate <name> --module <path> [--out <dir>]
-  bare-rust strip <crate-dir> [--out <dir>] [--src-only]
+  bare-rust strip <crate-dir> [--out <dir>] [--src-only] [--no-cargo]
+      also chooses the builds the crate is checked in (another target, a feature, a --cfg), so that each piece of
+      code a #[cfg(..)] guards is compiled in one of them, and writes them to builds.json; --no-cargo: the default
+      build only (gated code keeps its mut)
       a cast that is the whole initialiser of a typed `let` goes into the local's entry: `let x: u8 = (a + b) as u8;`
       becomes `let x = a + b;` and `x: {type: u8, cast: true}`
   bare-rust bind <file.rs>
@@ -110,7 +113,9 @@ fn run(args: Vec<String>) -> Result<(), String> {
         Some("strip") if PathBuf::from(target).is_dir() => {
             let dir = PathBuf::from(target);
             let out = out_dir.unwrap_or_else(|| dir.clone());
-            report("strip", &strip_crate(&dir, &out, !args.iter().any(|a| a == "--src-only"))?)
+            let target = bare_rust::cargo::target_dir(&std::env::current_dir().map_err(|e| e.to_string())?);
+            let target = (!args.iter().any(|a| a == "--no-cargo")).then_some(target.as_path());
+            report("strip", &bare_rust::corpus::strip_crate_with(&dir, &out, !args.iter().any(|a| a == "--src-only"), target)?)
         }
         Some("strip") => {
             let krate = arg(&args, "--crate").ok_or("--crate is required")?;

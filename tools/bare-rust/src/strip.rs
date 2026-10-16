@@ -100,6 +100,7 @@ struct Stripper<'a> {
     forced: HashMap<String, String>,
     /// The file may be left out of the build (`StripOpts::cfg_gated`).
     file_gated: bool,
+    gate: Option<crate::builds::FileGate>,
 }
 
 /// What a strip of one file is told from outside it.
@@ -108,7 +109,11 @@ pub struct StripOpts {
     /// The name of each realization, by `realization_key`, chosen for the whole crate.
     pub realization_names: HashMap<String, String>,
     /// The whole file may be left out of the build: its `mod` (or one around it) has a `#[cfg(..)]`. Its `mut`s stay.
+    /// (Without `gate`.)
     pub cfg_gated: bool,
+    /// The builds the crate is checked in, and the file's conditions: code that one of them compiles loses its `mut`s,
+    /// which rustc derives there; code that none compiles keeps them.
+    pub gate: Option<crate::builds::FileGate>,
 }
 
 /// The identity of a realization: its template's full path and its arguments.
@@ -601,9 +606,13 @@ impl<'a> Stripper<'a> {
         o
     }
 
-    /// Whether rustc may not see the code at `n`, and so cannot derive its `mut`s (`life::cfg_gated`).
+    /// Whether rustc may not see the code at `n`, and so cannot derive its `mut`s: no build compiles it, or, with no
+    /// builds known, it has a cfg (`life::cfg_gated`).
     fn gated(&self, n: Node) -> bool {
-        self.file_gated || life::cfg_gated(n, self.src)
+        match &self.gate {
+            Some(g) => !g.reached(n, self.src),
+            None => self.file_gated || life::cfg_gated(n, self.src),
+        }
     }
 
     // ----- holes -----
@@ -1415,6 +1424,7 @@ pub fn strip_with(src: &str, krate: &str, module: &str, opts: &StripOpts) -> R<(
         names_used: crate::bind::idents(src),
         forced: opts.realization_names.clone(),
         file_gated: opts.cfg_gated,
+        gate: opts.gate.clone(),
     };
     st.names_used.extend(opts.realization_names.values().cloned());
     let sc = Scope { path: path.join("::"), generics: vec![], self_ty: "Self".into() };

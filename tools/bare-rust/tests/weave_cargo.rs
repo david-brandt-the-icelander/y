@@ -247,3 +247,44 @@ fn an_error_in_a_body_maps_to_the_bare_line_and_its_related_slot() {
 fn crate_errors(cw: &CrateWeave) -> Vec<bare_rust::errmap::MappedError> {
     bare_rust::errmap::map_crate(cw)
 }
+
+#[test]
+fn gated_code_is_checked_in_a_build_that_compiles_it() {
+    // Code under a feature, a `--cfg` and a release build's condition loses its `mut`s, which the build that compiles it
+    // derives; code under a feature the crate does not declare is in no build, and keeps them.
+    let top = root().join("target/bare-rust-test/wc_builds");
+    let _ = fs::remove_dir_all(&top);
+    let dir = top.join("crate");
+    let w = |p: &str, s: &str| {
+        fs::create_dir_all(dir.join(p).parent().unwrap()).unwrap();
+        fs::write(dir.join(p), s).unwrap();
+    };
+    let body = |name: &str| format!("pub fn {name}() -> u32 {{\n    let mut n = 0;\n    n += 1;\n    n\n}}\n");
+    w(
+        "Cargo.toml",
+        "[package]\nname = \"wc_builds\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[features]\nx = []\n\n[lints.rust]\nunexpected_cfgs = { level = \"warn\", check-cfg = ['cfg(my_cfg)', 'cfg(feature, values(\"undeclared\"))'] }\n",
+    );
+    w(
+        "src/lib.rs",
+        &format!(
+            "#[cfg(feature = \"x\")]\npub mod gated;\n#[cfg(feature = \"undeclared\")]\npub mod never;\n\n#[cfg(my_cfg)]\n{}\n#[cfg(not(debug_assertions))]\n{}",
+            body("c"),
+            body("r")
+        ),
+    );
+    w("src/gated.rs", &body("g"));
+    w("src/never.rs", &body("v"));
+    let o = bare_rust::check::CheckOpts { work: top.join("work"), target: bare_rust::cargo::target_dir(&root()), tests: false, full: false, ..Default::default() };
+    let r = bare_rust::check::check_crate(&dir, &o).unwrap();
+    let names = r.reach.names();
+    for b in ["default", "feature-x", "cfg-my_cfg", "release"] {
+        assert!(names.contains(&b), "{names:?}");
+    }
+    assert_eq!(r.reach.unreached, ["feature = \"undeclared\""]);
+    let bare = |p: &str| fs::read_to_string(top.join("work/wc_builds/bare").join(p)).unwrap();
+    assert!(bare("src/gated.brs").contains("let n = 0;") && bare("src/lib.brs").matches("let n = 0;").count() == 2, "{}", bare("src/lib.brs"));
+    assert!(bare("src/never.brs").contains("let mut n = 0;"));
+    assert!(r.ok(), "{}", serde_json::to_string_pretty(&r.to_json()).unwrap());
+    assert_eq!((r.c2.exact, r.c2.files), (3, 3));
+    assert_eq!(r.mut_added, 3);
+}

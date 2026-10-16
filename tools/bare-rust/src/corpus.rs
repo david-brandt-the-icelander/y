@@ -126,8 +126,16 @@ fn write_file(p: &Path, s: &str) -> R<()> {
 }
 
 /// Strip every corpus file of a crate into `out` (beside the sources if `out` is the crate directory).
-/// Writes `refusals.json` into `out` when `out` is not the crate directory.
+/// Writes `refusals.json` into `out` when `out` is not the crate directory, and `builds.json`, the builds the crate is
+/// checked in (`crate::builds`), chosen with cargo in the default target directory, unless the default build is all.
 pub fn strip_crate(dir: &Path, out: &Path, include_tests: bool) -> R<Vec<FileResult>> {
+    let target = crate::cargo::target_dir(&std::env::current_dir().map_err(|e| e.to_string())?);
+    strip_crate_with(dir, out, include_tests, Some(&target))
+}
+
+/// As `strip_crate`, choosing the builds with cargo in `target`; with `None`, the default build only (and gated code
+/// keeps its `mut`s).
+pub fn strip_crate_with(dir: &Path, out: &Path, include_tests: bool, target: Option<&Path>) -> R<Vec<FileResult>> {
     let info = crate_info(dir)?;
     let krate = format!("{} {}", info.name, info.version);
     let mut sources = vec![];
@@ -135,8 +143,10 @@ pub fn strip_crate(dir: &Path, out: &Path, include_tests: bool) -> R<Vec<FileRes
         let src = fs::read_to_string(dir.join(&rel)).map_err(|e| format!("{}: {e}", rel.display()))?;
         sources.push((rel, src));
     }
+    let trees = crate_trees(dir, include_tests)?;
+    let reach = crate::builds::choose(dir, &sources, &trees, target.unwrap_or(Path::new("target")), target.is_some()).ok();
     let mut results = vec![];
-    for (rel, r) in strip_sources(&krate, &sources, &crate_trees(dir, include_tests)?) {
+    for (rel, r) in strip_sources_in(&krate, &sources, &trees, reach.as_ref()) {
         let outcome = r.and_then(|(bare, js)| {
             write_file(&out.join(rel.with_extension("brs")), &bare)?;
             write_file(&out.join(rel.with_extension("constraints.json")), &canonical(&js))
@@ -152,6 +162,9 @@ pub fn strip_crate(dir: &Path, out: &Path, include_tests: bool) -> R<Vec<FileRes
         })
         .collect();
     write_file(&out.join("refusals.json"), &canonical(&json!({"refused": refused})))?;
+    if let Some(r) = reach.as_ref().filter(|r| r.worth_writing()) {
+        write_file(&out.join(crate::builds::FILE), &crate::json::ordered(&r.to_json()))?;
+    }
     Ok(results)
 }
 
@@ -160,8 +173,20 @@ pub fn strip_crate(dir: &Path, out: &Path, include_tests: bool) -> R<Vec<FileRes
 /// among the identifiers of every bare body, a file whose own names differ stripped again with these names, and each
 /// crate's realizations in its root's file.
 pub fn strip_sources(krate: &str, sources: &[(PathBuf, String)], trees: &[(PathBuf, Vec<PathBuf>)]) -> Vec<(PathBuf, R<(String, Value)>)> {
+    strip_sources_in(krate, sources, trees, None)
+}
+
+/// As `strip_sources`, with the builds the crate is checked in: gated code that one of them compiles loses its `mut`s.
+/// Without them, all gated code keeps its `mut`s.
+pub fn strip_sources_in(krate: &str, sources: &[(PathBuf, String)], trees: &[(PathBuf, Vec<PathBuf>)], reach: Option<&crate::builds::Reach>) -> Vec<(PathBuf, R<(String, Value)>)> {
     let gated = gated_files(sources, trees);
-    let opts = |rel: &PathBuf, names: HashMap<String, String>| StripOpts { realization_names: names, cfg_gated: gated.contains(rel) };
+    let reach = reach.map(|r| std::sync::Arc::new(r.clone()));
+    let files = crate::builds::file_conditions(sources, trees);
+    let opts = |rel: &PathBuf, names: HashMap<String, String>| StripOpts {
+        realization_names: names,
+        cfg_gated: gated.contains(rel),
+        gate: reach.as_ref().map(|r| crate::builds::FileGate { file: files.get(rel).cloned().unwrap_or_default(), reach: r.clone() }),
+    };
     let mut stripped: Vec<(PathBuf, R<(String, Value)>)> = sources
         .iter()
         .map(|(rel, src)| (rel.clone(), strip_with(src, krate, &rel.to_string_lossy().replace('\\', "/"), &opts(rel, HashMap::new()))))

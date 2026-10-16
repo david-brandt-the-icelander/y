@@ -264,7 +264,7 @@ Every emptied production is a slot, and every slot maps to a clause:
 | A field's type | `fields[f].type`, `fields[f].hold` | `field f : T`; `hold f : owns \| shares \| borrows` |
 | A tuple field's type (`A(_)`) | `fields[i].type` | As above |
 | A `let`'s type | `holes.locals[name]` | `local name : T` |
-| `mut` on a binding | Not stored: derived (§ 2.3) | Kept in the body where a `#[cfg]` may leave the code out of the build, which rustc cannot derive from |
+| `mut` on a binding | Not stored: derived (§ 2.3), in each build the crate is checked in | Kept in the body only where no build compiles the code (a `#[cfg]` that needs nightly Rust, or a target that is not installed), as rustc cannot derive it there |
 | `#[must_use]`, `#[non_exhaustive]` | Clauses | `result must be used`; `open` |
 | `const fn`, `unsafe fn` | Host text only (§ 12) | — |
 | A hole in an expression | `holes.hints`, by position | Body hint (§ 2.4) |
@@ -340,6 +340,14 @@ where elision cannot express them, and § 14.9 now shows the elided form.
 4. Parse the bare body with the bare parser, and refuse the file if it fails.
 5. Run the lint (§ 3.2) and record what it finds.
 6. Write `x.brs` and `x.constraints.json`.
+7. For a crate, choose the builds it is checked in, and write them to `builds.json`. A `#[cfg(..)]` leaves code out of
+   a build, and rustc says nothing about code it does not compile. So besides the default build (this machine's
+   target, the default features), strip takes, while some gated code is in none of the builds so far, the candidate
+   that compiles most of it: another target (32-bit x86, aarch64, a big-endian CPU, WebAssembly, Windows, macOS, a
+   microcontroller), a feature, `--no-default-features`, a target feature, a `--cfg` the code names, or a release
+   build for `debug_assertions`. A candidate is taken only if the original crate compiles in it on stable Rust; a
+   target whose standard library is not installed is reported, not installed. Gated code that no build compiles keeps
+   its `mut` in the bare body (step 2), and `builds.json` lists its conditions.
 
 ## 6. `weave`
 
@@ -347,7 +355,8 @@ where elision cannot express them, and § 14.9 now shows the elided form.
 2. Walk the tree, copying every byte. At each emptied production, print the slot from the file; where a slot has no
    value, print nothing if Rust allows that (no visibility means private) and otherwise fail with the slot named.
 3. Fill expression holes from `holes`, and leave the rest as `_`.
-4. Run `cargo check --message-format=json`. Apply the suggestions that add `mut` (§ 2.3). Map every remaining error back
+4. Run `cargo check --message-format=json` in each build listed in `builds.json` (the default build without it). Apply
+   the suggestions that add `mut` (§ 2.3), in any build, until no build asks for one. Map every remaining error back
    to the bare line or the JSON slot it concerns, through a map of every inserted span; an inference error at a hole is
    reported as "hole undetermined" (§ 2.4).
 5. Write `x.rs` and the map.
@@ -470,8 +479,9 @@ the tooling draws on three sources.
 1. **Bare round trip.** `strip(weave(b, c)) == (b, c)` exactly.
 2. **Source round trip.** `weave(strip(s)) == bind(s)` after `rustfmt` on both sides and with lifetimes elided where
    Rust allows.
-3. **Compiles and behaves.** The woven crate passes `cargo check`, `cargo clippy` with the corpus's settings, and its
-   tests.
+3. **Compiles and behaves.** The woven crate passes `cargo check` and `cargo clippy` with the corpus's settings in
+   every build of `builds.json`, with no warning the original lacks in that build, and its tests in the default build
+   (another target's code does not run on this machine).
 4. **Holes.** Every hole is either filled or reported (§ 2.4); none is filled silently by a guess.
 5. **Library files.** Every external item the corpora call has an agent-written entry; `bare-rust libcheck` passes
    (coverage, schema, clause syntax, and each signature compiled against the real item); and a second agent has

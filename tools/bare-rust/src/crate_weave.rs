@@ -134,6 +134,10 @@ pub struct CrateWeave {
     pub out: PathBuf,
     /// The crate's realizations as woven (with check 4, the arguments dropped), from the files that list them.
     pub realizations: serde_json::Map<String, Value>,
+    /// The builds the crate is checked in (`builds.json` beside the bare files; the default build without it).
+    pub reach: crate::builds::Reach,
+    /// The diagnostics of the last `cargo check` in each build, by the build's name.
+    pub runs: Vec<(String, Vec<Diag>)>,
 }
 
 impl CrateWeave {
@@ -216,7 +220,7 @@ fn skip(rel: &Path, woven: &BTreeSet<PathBuf>) -> bool {
     (first.starts_with("target") || matches!(first, ".git" | "node_modules"))
         || rel.starts_with("corpora/src") // linked in, not copied: see `link_corpora`
         || name == MARKER
-        || (rel.parent().is_none_or(|p| p.as_os_str().is_empty()) && name == "refusals.json")
+        || (rel.parent().is_none_or(|p| p.as_os_str().is_empty()) && (name == "refusals.json" || name == crate::builds::FILE))
         || woven.contains(rel)
         || rel.to_str().is_some_and(|r| {
             // The stripped files of a corpus file: x.brs and x.constraints.json beside x.rs.
@@ -226,6 +230,7 @@ fn skip(rel: &Path, woven: &BTreeSet<PathBuf>) -> bool {
                 || under_bare.is_some_and(|st| woven.contains(Path::new(&format!("{st}.rs"))))
         })
         || rel == Path::new("bare/refusals.json")
+        || rel == Path::new("bare").join(crate::builds::FILE)
 }
 
 fn copy_tree(src: &Path, base: &Path, dst: &Path, woven: &BTreeSet<PathBuf>) -> R<()> {
@@ -522,6 +527,47 @@ fn write_map(out: &Path, files: &[WovenFile]) -> R<()> {
     write(&out.join(".bare-rust-map.json"), &crate::json::ordered(&Value::Object(m)))
 }
 
+/// The diagnostics of every build, each once: the same error in two builds is one error.
+fn merged(runs: &[(String, Vec<Diag>)]) -> Vec<Diag> {
+    let mut out: Vec<Diag> = vec![];
+    for d in runs.iter().flat_map(|(_, ds)| ds) {
+        if !out.iter().any(|o| o.key() == d.key() && o.start == d.start && o.end == d.end) {
+            out.push(d.clone());
+        }
+    }
+    out
+}
+
+/// The positions where rustc's errors E0384, E0594 and E0596 ask for `mut`, by file.
+fn mut_insertions(files: &[WovenFile], diags: &[Diag], ins: &mut BTreeMap<String, BTreeSet<usize>>) {
+    for d in diags.iter().filter(|d| d.is_error() && d.code.as_deref().is_some_and(|c| MUT_CODES.contains(&c))) {
+        let before = ins.values().map(BTreeSet::len).sum::<usize>();
+        for fx in &d.fixes {
+            let Some(wf) = files.iter().find(|f| f.rel.to_string_lossy() == fx.file) else { continue };
+            // Either an insertion of `mut ` before the binding, or the binding replaced by `mut <binding>`.
+            let orig = wf.woven.text.get(fx.start..fx.end).unwrap_or("");
+            let adds_mut = if fx.start == fx.end {
+                fx.replacement == "mut " && wf.woven.text.is_char_boundary(fx.start)
+            } else {
+                !orig.is_empty() && fx.replacement == format!("mut {orig}")
+            };
+            if adds_mut {
+                ins.entry(fx.file.clone()).or_default().insert(fx.start);
+            }
+        }
+        // rustc does not always suggest the `mut` (for `&mut x` it may suggest removing the `&mut`): the binding
+        // the message names, the nearest one in scope before the use, takes it.
+        if ins.values().map(BTreeSet::len).sum::<usize>() == before {
+            let name = d.message.split('`').nth(1).map(|n| n.trim_start_matches('*').split(['.', '[']).next().unwrap_or(n).to_string());
+            if let (Some(name), Some(wf)) = (name, files.iter().find(|f| f.rel.to_string_lossy() == d.file)) {
+                if let Some(at) = binding_before(&wf.woven.text, &name, d.start) {
+                    ins.entry(d.file.clone()).or_default().insert(at);
+                }
+            }
+        }
+    }
+}
+
 /// Weave every `x.brs` below `from` and, with `cargo`, check the crate and derive `mut`.
 pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave> {
     let crate_dir = o.crate_dir.clone().unwrap_or_else(|| from.to_path_buf());
@@ -530,7 +576,8 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
     if brs.is_empty() {
         return Err(format!("{}: no .brs files", from.display()));
     }
-    let mut cw = CrateWeave { cargo: o.cargo, out: out.to_path_buf(), ..Default::default() };
+    let reach = crate::builds::Reach::load(from).unwrap_or_else(crate::builds::Reach::default_only);
+    let mut cw = CrateWeave { cargo: o.cargo, out: out.to_path_buf(), reach, ..Default::default() };
     // The crate's realizations, from every file that lists some; check 4 drops their arguments, crate-wide.
     let listed: Vec<(PathBuf, Value)> = brs
         .iter()
@@ -641,43 +688,29 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
         write_map(out, &cw.files)?;
         return Ok(cw);
     }
-    // Derive `mut`: apply rustc's suggestions for E0384, E0594 and E0596 that add `mut` to a binding, until none remain.
+    // Derive `mut`: apply rustc's suggestions for E0384, E0594 and E0596 that add `mut` to a binding, until none remain,
+    // in every build: a binding needs `mut` if some build mutates it.
+    let builds = cw.reach.builds.clone();
     let diags = loop {
         cw.iterations += 1;
         if cw.iterations > 40 {
             return Err("mut derivation did not converge after 40 cargo runs".into());
         }
-        let run = cargo::diagnostics(out, &o.target, "check")?;
-        cw.cargo_stderr = run.stderr.clone();
         let mut ins: BTreeMap<String, BTreeSet<usize>> = BTreeMap::new();
-        for d in run.diags.iter().filter(|d| d.is_error() && d.code.as_deref().is_some_and(|c| MUT_CODES.contains(&c))) {
-            let before = ins.values().map(BTreeSet::len).sum::<usize>();
-            for fx in &d.fixes {
-                let Some(wf) = cw.files.iter().find(|f| f.rel.to_string_lossy() == fx.file) else { continue };
-                // Either an insertion of `mut ` before the binding, or the binding replaced by `mut <binding>`.
-                let orig = wf.woven.text.get(fx.start..fx.end).unwrap_or("");
-                let adds_mut = if fx.start == fx.end {
-                    fx.replacement == "mut " && wf.woven.text.is_char_boundary(fx.start)
-                } else {
-                    !orig.is_empty() && fx.replacement == format!("mut {orig}")
-                };
-                if adds_mut {
-                    ins.entry(fx.file.clone()).or_default().insert(fx.start);
-                }
+        let mut runs = vec![];
+        for b in &builds {
+            let run = cargo::diagnostics_in(out, &o.target, "check", b)?;
+            if b.is_default() {
+                cw.cargo_stderr = run.stderr.clone();
+            } else if !run.stderr.is_empty() && cw.cargo_stderr.is_empty() {
+                cw.cargo_stderr = format!("[build {}] {}", b.name, run.stderr);
             }
-            // rustc does not always suggest the `mut` (for `&mut x` it may suggest removing the `&mut`): the binding
-            // the message names, the nearest one in scope before the use, takes it.
-            if ins.values().map(BTreeSet::len).sum::<usize>() == before {
-                let name = d.message.split('`').nth(1).map(|n| n.trim_start_matches('*').split(['.', '[']).next().unwrap_or(n).to_string());
-                if let (Some(name), Some(wf)) = (name, cw.files.iter().find(|f| f.rel.to_string_lossy() == d.file)) {
-                    if let Some(at) = binding_before(&wf.woven.text, &name, d.start) {
-                        ins.entry(d.file.clone()).or_default().insert(at);
-                    }
-                }
-            }
+            mut_insertions(&cw.files, &run.diags, &mut ins);
+            runs.push((b.name.clone(), run.diags));
         }
         if ins.is_empty() {
-            break run.diags;
+            cw.runs = runs;
+            break merged(&cw.runs);
         }
         for (file, set) in ins {
             let wf = cw.files.iter_mut().find(|f| f.rel.to_string_lossy() == file).unwrap();

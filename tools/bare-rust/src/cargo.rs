@@ -1,4 +1,5 @@
 //! Running cargo on a woven crate and reading its JSON diagnostics.
+use crate::builds::Build;
 use crate::R;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -60,6 +61,21 @@ fn command(dir: &Path, target: &Path, args: &[&str]) -> Command {
     c.args(args).current_dir(dir).env("CARGO_TARGET_DIR", target).env("CARGO_TERM_COLOR", "never");
     // strsim's benches need `#![feature(test)]`: compile them on stable the same way for the original and the woven.
     c.env("RUSTC_BOOTSTRAP", "1");
+    c
+}
+
+/// `cargo <sub>` in a build (`crate::builds`): the default one as `command` runs it, with all targets; another with
+/// its own arguments and flags, its own target directory, and stable Rust only (no `RUSTC_BOOTSTRAP`).
+fn command_in(dir: &Path, target: &Path, sub: &str, build: &Build, extra: &[&str]) -> Command {
+    if build.is_default() {
+        let mut args = vec![sub, "--all-targets"];
+        args.extend(extra);
+        return command(dir, target, &args);
+    }
+    let mut c = Command::new("cargo");
+    c.arg(sub).args(build.cargo_args()).args(extra).current_dir(dir);
+    c.env("CARGO_TARGET_DIR", target.join("builds").join(&build.name)).env("CARGO_TERM_COLOR", "never").env_remove("RUSTC_BOOTSTRAP");
+    c.env_remove("RUSTFLAGS").env("CARGO_ENCODED_RUSTFLAGS", build.rustflags().join("\x1f"));
     c
 }
 
@@ -161,9 +177,12 @@ fn parse(stdout: &str, dir: &Path) -> Vec<Diag> {
 
 /// `cargo check` or `cargo clippy` with `--all-targets`, reading the JSON diagnostics.
 pub fn diagnostics(dir: &Path, target: &Path, sub: &str) -> R<Run> {
-    let out = command(dir, target, &[sub, "--all-targets", "--message-format=json"])
-        .output()
-        .map_err(|e| format!("cargo {sub}: {e}"))?;
+    diagnostics_in(dir, target, sub, &Build::default_build())
+}
+
+/// `cargo check` or `cargo clippy` in a build, reading the JSON diagnostics.
+pub fn diagnostics_in(dir: &Path, target: &Path, sub: &str, build: &Build) -> R<Run> {
+    let out = command_in(dir, target, sub, build, &["--message-format=json"]).output().map_err(|e| format!("cargo {sub}: {e}"))?;
     Ok(Run {
         diags: parse(&String::from_utf8_lossy(&out.stdout), dir),
         success: out.status.success(),
