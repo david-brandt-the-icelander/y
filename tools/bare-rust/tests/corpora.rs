@@ -3,7 +3,7 @@
 //! `corpora_checks_1_and_2_without_cargo` runs strip and weave in memory (check 2 ignores `mut`); the `cargo_*` tests
 //! run checks 1 to 4 with cargo and rustc, for each crate.
 //! Needs the pinned crates: run `corpora/fetch.sh` first.
-use bare_rust::corpus::{strip_crate, weave_crate};
+use bare_rust::corpus::weave_crate;
 use bare_rust::json::canonical;
 use bare_rust::{normalise_nomut, rustfmt, strip};
 use serde_json::{json, Value};
