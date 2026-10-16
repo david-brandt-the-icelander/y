@@ -217,7 +217,9 @@ impl CrateWeave {
 fn skip(rel: &Path, woven: &BTreeSet<PathBuf>) -> bool {
     let first = rel.components().next().and_then(|c| c.as_os_str().to_str()).unwrap_or("");
     let name = rel.file_name().and_then(|n| n.to_str()).unwrap_or("");
-    (first.starts_with("target") || matches!(first, ".git" | "node_modules"))
+    (first.starts_with("target") || first == ".git")
+        // An npm package's links would be copied as files, and `.bin/tree-sitter` would then run itself.
+        || rel.components().any(|c| c.as_os_str() == "node_modules")
         || rel.starts_with("corpora/src") // linked in, not copied: see `link_corpora`
         || name == MARKER
         || (rel.parent().is_none_or(|p| p.as_os_str().is_empty()) && (name == "refusals.json" || name == crate::builds::FILE))
@@ -248,6 +250,11 @@ fn copy_tree(src: &Path, base: &Path, dst: &Path, woven: &BTreeSet<PathBuf>) -> 
             copy_tree(&p, base, dst, woven)?;
         } else {
             fs::copy(&p, &to).map_err(|e| format!("{}: {e}", p.display()))?;
+            // The copy keeps the file's time: a build script that compares times (a grammar newer than the parser made
+            // from it) sees what it sees in the crate.
+            if let Ok(t) = fs::metadata(&p).and_then(|m| m.modified()) {
+                let _ = fs::File::options().write(true).open(&to).and_then(|f| f.set_modified(t));
+            }
         }
     }
     Ok(())

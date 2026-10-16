@@ -303,7 +303,7 @@ a constant context. Four crates that do are now corpora, pinned in `corpora/fetc
 |---|---:|---:|---|
 | itoa | 3 | 13 | pointer casts (2, cast locals of type `ptr<u8>`), an impl for a primitive type |
 | memchr | 45 | 166 | pointers in signatures (366 `ptr<..>` slots), a `const` whose whole value is a cast (2), a union, impls for pointer types |
-| miniz_oxide | 16 | 55 | casts in array lengths (4 blocks in place), modules behind `#[cfg(feature = ..)]` |
+| miniz_oxide | 16 | 55 | casts in array lengths (4 blocks in place), modules behind `#[cfg(feature = ..)]` and code for wasm32 |
 | png | 24 | 117 | suffixed literals in patterns that decide what a generic call reads: `match buf.read_be()? { 0u8 => .. }` (3 names) |
 
 All four pass checks 1 to 4. Getting there needed these, each with a test:
@@ -321,9 +321,9 @@ All four pass checks 1 to 4. Getting there needed these, each with a test:
 - **`mut` that rustc does not derive.**
   - For `&mut x` of an immutable `x`, rustc may suggest removing the `&mut` rather than adding the `mut`. The weave now
     puts `mut` on the binding the message names when rustc suggests none.
-  - Code a `#[cfg(..)]` leaves out of the build (other than `cfg(test)`) is never compiled, so its `mut` cannot be
-    derived. The bare body keeps it there, and in a file whose `mod` has such a `cfg`. This is the case for 186 of
-    miniz_oxide's 222 `mut`s, whose modules sit behind `#[cfg(feature = "with-alloc")]`, and for 53 of png's 457.
+  - Code a `#[cfg(..)]` leaves out of the build is never compiled, so its `mut` cannot be derived there. This round
+    kept the `mut` in the bare body for all such code (186 of miniz_oxide's 222, 53 of png's 457). The next section
+    replaces that with builds that compile the code.
 - **Brackets bind kept.** Binding the value `(a << 9)` kept its brackets, `let v = (a << 9);`, and a block put where a
   bracketed `||` operand was ended in `(..)`. Both gave `unused_parens` warnings.
 - **The checks.**
@@ -337,6 +337,48 @@ All four pass checks 1 to 4. Getting there needed these, each with a test:
   - Check 4 counts an inference error at a realization, `TryInto::<_>::try_into(x)` with its arguments dropped, as
     that realization's hole.
   - `rustfmt` falls back to edition 2024 for what only it parses (let chains).
+
+## Builds: gated code is compiled, so its `mut` is derived
+
+A `#[cfg(..)]` changes what the program is, so it stays in the bare body. What changes is how the tool gets rustc to
+see the code behind it. `strip` now chooses the builds a crate is checked in (`src/builds.rs`, written to
+`builds.json`):
+
+- **The candidates.** Besides the default build, each feature on its own, `--no-default-features`, `--all-features`,
+  other targets (32-bit x86, aarch64 on Linux and macOS, Windows, WebAssembly, big-endian s390x and PowerPC, 32-bit
+  ARM, RISC-V, a microcontroller without `std`), the target features the code names, each `--cfg` the code names
+  (`miri`, `doc`), and a release build where it names `debug_assertions`.
+- **The choice.** The tool reads every cfg condition of the crate's code, and what each candidate sets
+  (`rustc --print cfg`, the features cargo turns on). While some gated code is in none of the chosen builds, it takes
+  the candidate that compiles most of it. A candidate is used only if the original crate compiles in it on stable Rust,
+  with its tests or, failing that, as a library alone (a test dependency without WebAssembly support). A target whose
+  standard library is not installed is reported, not installed (`corpora/fetch.sh` installs the corpora's).
+- **The weave** derives `mut` in every build: a binding gets it if any build asks for it. Check 3 compares warnings and
+  clippy in each build with the original's in the same build. The tests run in the default build only, as another
+  target's code does not run here.
+- **What is left.** Gated code that no build compiles keeps its `mut`, and `builds.json` lists its conditions: nightly
+  features and conditions that can never hold together.
+
+| crate | builds | `mut` kept in the bare body: before, now | not reached |
+|---|---|---|---|
+| memchr | default, aarch64, s390x, wasm32 with `simd128` (library only), no default features, x86_64 with `avx2`, `--cfg miri` | 4, 0 | code for aarch64 without NEON, x86_64 without SSE2, conditions that contradict |
+| miniz_oxide | default, wasm32, features `block-boundary`, `serde`, `simd`, `std`, no default features | 186, 0 | none (`rustc-dep-of-std` and `--all-features` do not compile on stable) |
+| png | default, i686 (library only), feature `benchmarks`, wasm32 (library only), `--cfg doc`, release | 53, 21 | the `unstable` feature, which needs nightly Rust; 32-bit tests |
+| itoa, fnv | one extra build each (feature `no-panic`, no default features) | 0, 0 | none |
+
+All six crates pass checks 1 to 4 with their builds. Check 2 is exact on every file of memchr, miniz_oxide and png,
+`mut` included.
+
+- **Found on the way.**
+  - In `if let Some(pre) = pre.as_mut()` the weave's fallback put the `mut` on the pattern, for an error at the
+    scrutinee, which names the outer `pre`. A pattern no longer binds in its own value.
+  - The woven copy of a crate copied an npm package's links as files, and gave every file a new time. In the tool's
+    own copy the grammar then looked newer than its parser, the build script regenerated it, and the copied
+    `.bin/tree-sitter`, a script that starts the program beside it, started itself until memory ran out. The copy now
+    leaves `node_modules` out and keeps each file's time.
+- **The cost.** Each build is another `cargo check` in each round of the `mut` derivation, and another check and
+  clippy run in check 3. Check 4 weaves again for each hole it attributes, each time in every build. png's check now
+  takes about 40 minutes.
 
 ## Also fixed: a lifetime inside an `impl Trait` parameter
 
