@@ -358,6 +358,8 @@ fn binding_before(src: &str, name: &str, at: usize) -> Option<usize> {
     found
         .into_iter()
         .filter(|(n, b)| n.start_byte() <= at && scope(*b).is_some_and(|(s, e)| s <= at && at < e))
+        // A pattern does not bind in its own value: in `if let Some(pre) = pre.as_mut()` the use is the outer `pre`.
+        .filter(|(_, b)| !b.child_by_field_name("value").is_some_and(|v| v.start_byte() <= at && at < v.end_byte()))
         .filter(|(n, _)| !n.prev_sibling().is_some_and(|p| p.kind() == "mutable_specifier"))
         .max_by_key(|(n, _)| n.start_byte())
         .map(|(n, _)| n.start_byte())
@@ -728,4 +730,17 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
     cw.files = files;
     write_map(out, &cw.files)?;
     Ok(cw)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_binding_a_use_names_is_the_one_in_scope_there() {
+        // `pre.as_mut()` is the outer `pre`: the pattern binds only in the `if let`'s block.
+        let src = "fn f(o: Option<u8>) {\n    let pre = o;\n    if let Some(pre) = pre.as_mut() {\n        *pre += 1;\n    }\n}\n";
+        let at = src.find("pre.as_mut").unwrap();
+        assert_eq!(super::binding_before(src, "pre", at), Some(src.find("pre = o").unwrap()));
+        let inner = src.find("*pre").unwrap() + 1;
+        assert_eq!(super::binding_before(src, "pre", inner), Some(src.find("pre) =").unwrap()));
+    }
 }
