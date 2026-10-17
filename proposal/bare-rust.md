@@ -347,7 +347,8 @@ where elision cannot express them, and § 14.9 now shows the elided form.
    microcontroller), a feature, `--no-default-features`, a target feature, a `--cfg` the code names, or a release
    build for `debug_assertions`. A candidate is taken only if the original crate compiles in it on stable Rust; a
    target whose standard library is not installed is reported, not installed. Gated code that no build compiles keeps
-   its `mut` in the bare body (step 2), and `builds.json` lists its conditions.
+   its `mut` in the bare body (step 2), and `builds.json` lists its conditions. Each build is a platform (language
+   § 3.6): the facts it fixes hold for every subject checked in it.
 
 ## 6. `weave`
 
