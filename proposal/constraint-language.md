@@ -40,7 +40,8 @@ code.
   protocols and state machines; order in time and statistics; budgets; concurrency; information flow; compatibility and
   visibility; memory: lifetime, mutability and aliasing; independence, the facts that let work run in parallel or in
   another order; freedoms, what may vary; named algebraic properties; facts about a collection's contents; and
-  expectations, what usually happens, which never decide correctness. Beside them, a platform states what every
+  expectations, what usually happens, which never decide correctness; and the exits of every callable, each way a
+  call can end. Beside them, a platform states what every
   subject of a build may assume (§ 3.6), a profile what the build's traffic was measured to do (§ 3.7), and the facts
   that hold at each point of a body are derived, never written (§ 11.1.1).
 - **Memory, written once for every model.** Lifetime, mutability and aliasing are stated over a core that belongs to no
@@ -417,7 +418,7 @@ Clauses are of two sorts, and the difference decides how they are checked.
 | Family | Clauses | Says | Sort | Section |
 | --- | --- | --- | --- | --- |
 | Values and shapes | parameter and result types, `field`, `type … where`, `quantity`, `unit`, `layout` | What values may cross a boundary, and how they are laid out | Predicate | 6.1 |
-| Calls | `from`, `require … else`, `ensure`, `on failure`, `fails … when`, `fails only`, `never fails runtime`, `result must be used`, `callback`, `law` | Who may call, what must hold before and after, how a call may fail | Predicate; laws are properties | 6.2 |
+| Calls | `from`, `require … else`, `ensure`, `on failure`, `on cancel`, `fails … when`, `fails only`, `never fails runtime`, `exits only`, `result must be used`, `callback`, `law` | Who may call, what must hold before and after, how a call may fail | Predicate; laws are properties | 6.2 |
 | Bounds on effects | `reads only`, `writes only`, `emits only`, `sends only`, `calls only`, `effects only`, `effects none`, `pure`, `no io`, `no device`, `devices only`, `no clock`, `no randomness`, `no suspension`, `deterministic`, `idempotent by`, `depends only on`, `terminates`, and `when` on any of them | What a call must not do | Property | 6.3 |
 | State | `invariant`, `unique`, `reference … on end`, `acyclic`, `conserve`, `faucet`, `sink` | What must hold of stored state | Predicate | 6.4 |
 | Protocols | `states`, `initial`, `protocol` | Which changes and calls may follow which | Predicate for `states`; property for `protocol` | 6.5 |
@@ -539,6 +540,7 @@ function rust 'eve_net::frame::decode'(b: bytes) -> Frame?
   hosts with panics is `never panics`. `never panics except exhausted` leaves open the one failure of running out of what the platform gives
   (§ 6.14.5). A promise that holds only given what an implementation or the build does is qualified by
   `given` (§ 6.12).
+- Together these state a part of the subject's **exits** (§ 6.21), which every callable has, written or not.
 - `result must be used` binds the callers: a call whose result is discarded is a build error where the host can see it,
   and a lint elsewhere. A type can say `must be used` for every subject that returns it (§ 6.14.2).
 - `callback c : called exactly once | at most once | at least once [before return]` states how a function argument is
@@ -812,6 +814,7 @@ function python 'eve.market.MarketMgr.PlaceOrder'
 
 function rust 'eve_client::net::Session::reconnect'
     cancellation safe              -- dropping the future at any await leaves the session usable
+                                   -- (a cancellation is one of the call's exits, § 6.21)
 ```
 
 - In the engine, requests run in a fixed order and procedures cannot share mutable state, so most of these are proven by
@@ -1742,6 +1745,55 @@ function rust 'eve::admin::rebuild_index'()
 - **Harvested:** from the profiles: a candidate expectation for each subject whose measured use is narrow, which a person
   turns into a statement of intent, or leaves to the profile.
 
+### 6.21 Exits: every way a call can end
+
+**Meaning.** A call ends in one of a few ways: it returns; it fails with a failure the subject names, as a thrown
+exception, an error value (`Err`, Go's `error`, a T-SQL `THROW`) or a rejected request; it panics or raises what its
+host does not check (an unwinding panic, an unchecked exception, a Python exception nobody declared); it is cancelled
+at a point where it suspends (an `await`, a `yield`, a tasklet switch, a check of a cancellation token, a timeout that
+fires there); or it runs out of what the platform gives (§ 6.14.5). These are the subject's **exits**, and every
+callable has a set of them. An optimizer, a prover and a translator need it for every call they see: a call that may
+exit early is a point where the state the body has built so far becomes visible to whoever handles the exit, so what
+may move across it, and what a caller may assume after it, depend on it.
+
+```text
+function rust 'eve_net::frame::encode'(f: Frame) -> bytes
+    exits only return                              -- never fails, panics or suspends
+
+function rust 'eve::market::Book::place'(self: ref<Book>, o: Order) -> Result<OrderID, PlaceError>
+    exits only return, fails PlaceError
+    on failure unchanged
+
+function rust 'eve_client::net::Session::send'(self: ref<Session>, m: Message) -> Result<(), NetError>
+    exits only return, fails NetError, cancelled
+    on cancel unchanged                            -- cancelled before the frame is written, or not at all
+```
+
+- **The set is never absent.** A subject's exits are what its clauses state: `fails only` and `fails … when` name its
+  failures; `never fails runtime` and `never panics` remove panics and runtime failures; `no suspension` (§ 6.3) removes
+  cancellation; `never panics except exhausted` leaves exhaustion alone. `exits only` states the whole set at once, in
+  the words `return`, `fails F`, `panics`, `cancelled` and `exhausted`. Where nothing is stated, the set is computed from
+  the body, as read and write sets are (§ 6.16): the union of the exits of the calls it makes, of the failures it
+  raises, and `cancelled` if it suspends. A callable whose body is not seen and whose file says nothing (a foreign
+  function, an unannotated library) has every exit its host allows. The set is recorded in the catalog for every
+  subject, so that no consumer has to guess.
+- **Cancellation is an exit, not a failure the body raises.** It happens only at a suspension point, and only if the
+  subject's caller or runtime cancels it there. `on cancel unchanged` and `on cancel ensure name : p` state what holds
+  after it, as `on failure` does after a failure; `cancellation safe` (§ 6.8) is the weakest of them: what is left is
+  still usable.
+- **The platform decides some exits.** Under `panic abort` (§ 3.6) a panic ends the process, so no caller in it sees the
+  state the panic left; a host without exceptions has no unchecked exit but its panics and aborts.
+- **Exits compose.** A call's exits are its callee's, mapped: a failure the caller handles is no exit of the caller, one
+  it passes on (`?`, a rethrow, an unhandled exception) is. A subject that states a narrower set than its body has fails
+  the build, as a stated read set does.
+- **Fails:** an exit that the set does not hold is a bug in the subject: a call of `encode` that panics breaks `exits
+  only return`.
+- **Checked:** by computing the set from the body, where the host lets the compiler see every call; Rust's `Result`
+  types and `?`, Java's checked exceptions and Swift's `throws` give the failures, and the panics are found as for
+  `never panics`; cancellation from the suspension points of the body. Watched on replays for hosts that cannot be
+  analysed (Python), from the exits each call was seen to take.
+- **Harvested:** from the manifests at exit, as failures are (§ 6.2), and from the bodies.
+
 ---
 
 ## 7. Lifetime
@@ -2193,7 +2245,9 @@ freedom allows. There is no clause that forbids an optimization as such. What a 
 must not be removed, a comparison that must not exit early, a device read that must not be merged) is a constraint
 about something someone can observe: memory after an end (`cleared on end`, § 7.3), timing (`time independent of`,
 § 6.9), or a device (an effect, § 6.3). Stated as such, it is kept by every optimizer that keeps constraints, and
-checked as constraints are.
+checked as constraints are. Exit points (§ 11.1.1) are kept the same way: an effect is not moved across a point where
+the call may fail, panic or be cancelled, because the state at that exit is observable, unless what the subject states
+for that exit (`on failure unchanged`, `on cancel unchanged`) makes the two orders look the same from there.
 
 **Diagnostics** name the constraint, its subject and version, its status, the place it ran, and the inputs that broke
 it, redacted by their labels.
@@ -2218,6 +2272,12 @@ At a point of a body, these hold:
    the fact that an earlier call did not fail, where its failures are stated.
 6. **What an earlier `assert!` checked,** after it: a fact the author wrote by hand on an intermediate value, which the
    bare body keeps (bare Rust § 2.1).
+
+**Exit points.** Every call whose callee's exits (§ 6.21) hold more than `return`, and every suspension point, is a
+point where the body may stop and the state it has built so far becomes visible to whoever handles the exit: a caller's
+handler, a retry, the runtime that cancelled it. After such a point, on the path where the body goes on, the fact that
+the call returned (and with what) holds; on the exit path, only what the callee states for that exit (`on failure`,
+`on cancel`). A call whose exits are `return` alone is no exit point, which is why the set matters for every call.
 
 **Facts survive what does not write them.** A fact holds until something writes what it reads. A call ends only the
 facts that read a path in the call's write set (`mutates only`, `writes only`, § 6.16); a call whose write set is not
@@ -2736,6 +2796,8 @@ clause        = "let" ( NAME | pattern ) "=" expr
               | "require" [ NAME ":" ] expr [ "else" NAME [ payload ] ]
               | "ensure" [ NAME ":" ] expr
               | "on failure" ( "unchanged" | NAME "ensure" NAME ":" expr )
+              | "on cancel" ( "unchanged" | "ensure" NAME ":" expr )
+              | "exits only" exit { "," exit }
               | "fails" NAME [ "in" later ] "when" expr | "fails only" NAME { "," NAME } [ "open" ]
               | "never fails runtime" | "never panics" [ "except exhausted" ]
               | "result must be used" | "must be used" | "obliges caller" ":" expr "because" STRING
@@ -2760,6 +2822,7 @@ clause        = "let" ( NAME | pattern ) "=" expr
               | "pin" NAME status "because" STRING
               | "not at" place { "," place }
               | "model" MODEL ;
+exit          = "return" | "fails" NAME | "panics" | "cancelled" | "exhausted" ;
 qualifiable   = (* a clause of the form "ensure", "fails … when", "never panics", or a bound, including "terminates" *) ;
 condition     = "default" | "build" BUILD | NAME "." NAME { "," NAME "." NAME } ( "never panic" | "terminate" | "effects none" ) ;
 BUILD         = "overflow_checks" | "debug_assertions" | "panic=unwind" | "panic=abort"
