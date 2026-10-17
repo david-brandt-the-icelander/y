@@ -38,7 +38,9 @@ code.
 - **Clauses in families.** Values and shapes; calls (authority, preconditions, postconditions, failures, callbacks,
   laws); bounds on effects (what a call must not do); state (invariants, uniqueness, references, conservation);
   protocols and state machines; order in time and statistics; budgets; concurrency; information flow; compatibility and
-  visibility; and memory: lifetime, mutability and aliasing.
+  visibility; memory: lifetime, mutability and aliasing; and independence, the facts that let work run in parallel or
+  in another order. Beside them, a platform states what every subject of a build may assume (§ 3.6), and the facts that
+  hold at each point of a body are derived, never written (§ 11.1.1).
 - **Memory, written once for every model.** Lifetime, mutability and aliasing are stated over a core that belongs to no
   host: entities with lifetimes; references that own, share, borrow, observe or only identify what they point to; and
   paths that carry access rights and a guarantee about every other path. A memory model per host gives the core a
@@ -196,14 +198,15 @@ cannot check is reported as such for every subject of that host, never silently 
   of it; `decimal(p, s)`; `f32` and `f64`; `text`; `bytes`; `time`, simulation time at a place in history; `instant`,
   wall-clock time, allowed only in watched constraints; `duration`; `id<T>`, the identity of a row or entity of `T`.
 - **Composite:** records `{ name: T, ... }`; tuples; variants `A | B(T)`, closed unless marked `open`; optional `T?`;
-  `list<T>`, `set<T>` and `map<K, V>`; `ref<T>`, a reference to a host entity, used by the memory clauses.
+  `list<T>`, `set<T>` and `map<K, V>`; `ref<T>`, a reference to a host entity, used by the memory clauses; `ptr<T>`,
+  a host pointer: the address of a `T`, with no guarantee that it is valid or about any other path (§ 8.1).
 - **Refinements:** `T where p`, in which `value` names the value being refined; shorthands `T in a..b` and `T in {a, b,
   c}`; named refinements: `type Quantity = i64 where value >= 0`. A refinement on an optional type applies to the value
   when it is present. `where` always filters: the values of a type here, the rows of a table in an expression (§ 4).
 - **Units and quantities:** `unit m`, `unit s`; `quantity Distance : decimal in m`; arithmetic checks dimensions, and
   conversion between units is an explicit named function.
-- **Generics:** `for T where T: Comparable` binds a type parameter and its bounds; bounds name interfaces, so they are
-  checked as behavioural subtyping (§ 6.10). `for 'a` binds a lifetime, and a host subject of any kind may bind both
+- **Generics:** a subject with type parameters is a template (§ 3.5). `for T where T: Comparable` binds a type
+  parameter and its bounds; bounds name interfaces, so they are checked as behavioural subtyping (§ 6.10). `for 'a` binds a lifetime, and a host subject of any kind may bind both
   (§ 6.11). **Existential types:** `some I` is a value of one type, fixed by the subject, that implements `I`; `any I` is a
   value of any type that implements `I` (§ 6.11).
 - **Representation.** A type in the language says which values are allowed. When a host needs a representation the
@@ -211,6 +214,80 @@ cannot check is reported as such for every subject of that host, never silently 
 
 A host type maps onto these through its profile: T-SQL `INT` to `i32`, `NVARCHAR(50)` to `text where utf16_length(value)
 <= 50`, C# `int?` to `i32?`, Rust `Option<u64>` to `u64?`, Python `int` to `int`.
+
+### 3.5 Templates and realizations
+
+A subject with type parameters is a **template**, not a type or a function. Writing it with arguments makes a
+**realization**: `Vec<u8>` is a *realized type*, `parse<u32>` a *realized function*. A realization is a subject of its
+own, made by putting each argument in place of its parameter everywhere in the template: its fields, its signature and
+its clauses. It exists as soon as something uses it; nothing declares it. Two uses with the same arguments are the
+same realization.
+
+- **A realized type** is a type like any other: `Vec<u8>` has the fields and methods of `Vec` with `u8` for `T`.
+- **A realized function** has the template's signature with the arguments in place: `parse<u32>` is
+  `(self: ref<str>) -> Result<u32, ParseIntError>`. A method of a realized type is realized with it: `Vec<u8>::push`.
+- **Bounds** say which arguments a template accepts: `T: Ord` is a condition for the realization to exist. A use that
+  breaks it does not realize anything; it is an error.
+- **Clauses.** A clause of the template holds of every realization, with the arguments in place. A clause can also be
+  stated of one realization alone, where it promises more than the template does.
+- **Names.** A realization can be named, and is named where a body uses it with arguments written out (§ 11.2):
+  `type Bytes = Vec<u8>`, `realize parse_port = 'std::primitive::str::parse'<u16>`. A use whose arguments the host
+  infers states no type, and needs no name. Since two uses with the same arguments are one realization, a name belongs
+  to the program unit that holds them all (a Rust crate), not to the function that happens to use it.
+- **Hosts.** How a host makes realizations is a fact of the host, not of the meaning. Rust and C++ generate code for each
+  one when they build. C# makes them at run time. Java and TypeScript check each one and then erase them to one type.
+  The meaning is the same in each: every realization is a subject.
+
+A trait object or interface value (`any I`, § 6.11) is not a template: it is one value whose type is chosen at run
+time, and nothing is realized for it.
+
+### 3.6 Platforms: what every subject of a build may assume
+
+**Meaning.** A platform is what a build fixes before any subject is compiled: the target's pointer width and byte
+order, the target features the code may use, the widest atomic operation, the panic strategy, whether arithmetic checks
+for overflow, whether debug assertions run, and the features the build turns on. Choosing a platform is not a
+constraint. A `#[cfg(..)]` chooses which code exists, which is behaviour, and it stays in the body. What the choice
+leaves is a set of facts that hold for every subject compiled under it. They are added to each subject's own
+constraints, and every consumer may use them: a checker discharges checks with them, an optimizer removes the checks
+they make redundant (the range check of `usize as u64` on a 64-bit target, a byte swap on a little-endian one, a lock
+around an atomic the target has), and a translator chooses the target's representations from them.
+
+```text
+platform rust 'x86_64-unknown-linux-gnu'
+    pointer width 64
+    endian little
+    target features fxsr, sse, sse2
+    atomics up to 64
+    panic unwind
+    build overflow_checks on, debug_assertions on
+    features std, alloc
+
+platform rust 'wasm32-unknown-unknown+simd128'
+    pointer width 32
+    endian little
+    target features simd128
+    atomics up to 64
+    panic abort
+    features alloc
+```
+
+- **A declaration, not a clause.** A platform names no subject: every subject built under it is under it, additively.
+  A subject cannot weaken a platform fact, and a platform cannot add a requirement to one subject alone.
+- **Facts come from the toolchain, not from people.** For Rust they are what `rustc --print cfg` and cargo's feature
+  resolution give for the build. The file states them so that a reviewer sees what each build assumes, and the
+  compiler compares the declaration with the toolchain at build: a fact the toolchain does not give fails the build. A
+  wrong fact would let an optimizer remove a check that is needed, so a platform fact is never `assumed`.
+- **A promise without condition holds on every platform** the subject is built for. A promise that holds only on some
+  says so with `given build` (§ 6.12), which names a platform fact: `given build pointer width 64`, `given build
+  overflow_checks on`.
+- **Gated code holds under more.** Code that a `#[cfg(..)]` guards runs under the platform's facts and the guard's
+  condition, which the build has decided: under `#[cfg(target_endian = "little")]` the code may rely on little endian
+  on every platform that compiles it (§ 11.1.1).
+- **A crate's platforms are its builds.** The builds a crate is checked in (bare Rust's `builds.json`: the default
+  build, and those that compile its gated code) are its platforms, and every check runs under each of them.
+- **Per host.** Each host profile (§ 3.3) lists the facts its builds fix. The JVM and .NET fix no pointer width and
+  little else; C and C++ fix the most, through the target and the compiler's flags; T-SQL's facts are the server's
+  version and its settings (`ANSI_NULLS`, the collation).
 
 ---
 
@@ -305,23 +382,25 @@ Clauses are of two sorts, and the difference decides how they are checked.
 | --- | --- | --- | --- | --- |
 | Values and shapes | parameter and result types, `field`, `type … where`, `quantity`, `unit`, `layout` | What values may cross a boundary, and how they are laid out | Predicate | 6.1 |
 | Calls | `from`, `require … else`, `ensure`, `on failure`, `fails … when`, `fails only`, `never fails runtime`, `result must be used`, `callback`, `law` | Who may call, what must hold before and after, how a call may fail | Predicate; laws are properties | 6.2 |
-| Bounds on effects | `reads only`, `writes only`, `emits only`, `sends only`, `calls only`, `effects only`, `effects none`, `no io`, `no clock`, `no randomness`, `no suspension`, `deterministic`, `idempotent by`, `commutes with`, `depends only on`, `terminates` | What a call must not do | Property | 6.3 |
+| Bounds on effects | `reads only`, `writes only`, `emits only`, `sends only`, `calls only`, `effects only`, `effects none`, `pure`, `no io`, `no clock`, `no randomness`, `no suspension`, `deterministic`, `idempotent by`, `depends only on`, `terminates`, and `when` on any of them | What a call must not do | Property | 6.3 |
 | State | `invariant`, `unique`, `reference … on end`, `acyclic`, `conserve`, `faucet`, `sink` | What must hold of stored state | Predicate | 6.4 |
 | Protocols | `states`, `initial`, `protocol` | Which changes and calls may follow which | Predicate for `states`; property for `protocol` | 6.5 |
 | Time and statistics | `always`, `never`, `after … within`, `before`, `since`, `until`, `eventually`, `rate`, `statistic` | What must hold over history | Predicate for `always`, `never` and `rate`; property otherwise | 6.6 |
 | Budgets | `budget` | How much time, work, memory and traffic | Property | 6.7 |
-| Concurrency | `confined to`, `sendable`, `shareable`, `guarded by`, `lock order`, `atomic`, `linearizable`, `no suspension while holding`, `no blocking in`, `not reentrant`, `cancellation safe`, `publishes` | Who may touch what, from where, in what order | Property | 6.8 |
+| Concurrency | `confined to`, `guarded by`, `lock order`, `atomic`, `linearizable`, `no suspension while holding`, `no blocking in`, `not reentrant`, `cancellation safe`, `publishes` | Who may touch what, from where, in what order: rules a correct program keeps | Property | 6.8 |
 | Information | `label`, `flows only to`, `never flows … to`, `declassify … when … because`, `sanitised by` | Where information may go | Property | 6.9 |
 | Compatibility and visibility | `version`, `compatible with`, `replaces`, `was`, `deprecated`, `stable`, `visible to` | What may change between versions, and who may refer to what | Checked at build | 6.10 |
 | Interfaces and implementations | `implements`, `assoc`, `for`, `some`, `any`, `hold … borrows for` | Which interfaces a type implements, what an implementation adds, and what a host subject is parameterised by | Checked at build | 6.11 |
 | Conditional promises | `given` | What a promise relies on: a bound's implementations, the default body, a build setting | Checked at build, as the promise is | 6.12 |
 | Callbacks and calls | `callback … when / with / returning`, `callback … called by`, `fails … in`, `final(e)`, `protocol` over calls | When a function argument is called, with what, what it returned, in what order, and by the calls a result makes later | Checked by wrappers or in CI | 6.13 |
+| Independence | `pure`, read sets (`reads only`), write sets (`mutates only`, `writes only`), `disjoint`, `commutes with`, `sendable`, `shareable` | What may run in parallel or in another order: facts an optimizer, scheduler or translator may use | Property | 6.16 |
 | Sequences | `yields(it)`, `xs[i]`, `present`, `xs[i..j]`, `++`, `reverse`, `take`, `skip`, `zip`, `enumerate`, `select`, `while_true`, `flatten`, `map`, `filter` | What an iterator yields, and the order of a list's elements | Expressions: predicates when finite, properties for infinite sequences | 6.15 |
 | Small additions | `evaluable at compile time`, `must be used`, `moved from`, `ends in call`, `survive call`, `except exhausted`, `expected`, `amortised`, `result.0`, `mutates only p[e]`, `obliges caller` | Compile-time evaluation, must-use types, moves, drops, exhaustion, expected cost, tuple parts, an element frame, what a caller must establish | As the section each extends | 6.14 |
 | Lifetime | `hold`, `lifetime …`, `instances …`, `no strong cycle`, `model` | How long entities live and who keeps them | Property | 7 |
 | Mutability and aliasing | `access`, `readonly`, `immutable`, `frozen after`, `write once`, `append only`, `monotonic`, `mutates only`, `interior`, `unchanged`, `exclusive`, `sole`, `disjoint`, `shared readonly` | Who may change what, and through how many paths | Property; predicate for columns | 8 |
 | Derived languages | `local` | A type a woven host needs inside a body | Checked at weave | 11.2 |
 | Status and placement | `assume … because`, `pin … because`, `not at` | What is taken on trust, what a person fixed, where a clause may not run | — | 10 |
+| Platforms | `platform`, with `pointer width`, `endian`, `target features`, `atomics up to`, `panic`, `build`, `features` | What every subject of a build may assume | Checked at build, against the toolchain | 3.6 |
 
 ---
 
@@ -463,17 +542,41 @@ procedure wallet.Credit(requestID: id<Requests>, amount: decimal(19, 2))
 -- economy/bounds.constraints: a rule, not a description
 interface rust 'eve_market::Procedure'
     writes only market.*, wallet.Escrow
+
+function rust 'eve::fitting::apply'(ship: ref<Ship>, fit: ref<Fit>)
+    reads only ship.modules, ship.cargo, fit
+    mutates only ship.modules              when not docked(ship)
+    mutates only ship.modules, ship.cargo  when docked(ship)    -- docked, the unfitted modules go to the cargo
+
+function rust 'eve::dogma::falloff'(range: f64, optimal: f64, falloff: f64) -> f64
+    pure
 ```
 
 - `effects none` is purity: no reads of mutable state, no writes, input and output, clock or randomness. Allocating what
   it returns is not an effect.
+- `pure` is `effects none`, `depends only on` every parameter, and `deterministic`, in one word: the subject reads only
+  its inputs, writes none of them, has no other effect, and gives the same result for the same inputs. It adds no
+  meaning, but it is the word optimizers and translators look for: a pure call may be computed once, moved, left out
+  when its result is unused, and run in parallel with anything (§ 6.16).
+- `reads only p` and `writes only p` take rows of tables (`market.*`, `wallet.Escrow`) or paths in memory reachable
+  from the inputs (`ship.fit`, `self.items[k]`). With `mutates only` (§ 8.2), the in-memory form of `writes only`, they
+  are the subject's **read set** and **write set**: everything it may read or write beyond its own locals and what it
+  allocates. A subject whose sets are stated says nothing of any other path, which is what makes the sets usable by
+  someone who cannot see the body (§ 6.16).
+- **`when c`** makes any bound conditional on its inputs: `mutates only ship.cargo when docked(ship)`. The bound holds
+  in every call in which `c` held at entry. `c` is an expression over the inputs, as a precondition is, never over a
+  local (principle 5). Several bounds hold together, conditional or not, so a bound for one case is written with the
+  condition of that case, as below, and an unconditional bound limits every case. A call in which no condition holds is
+  bounded by the unconditional bounds alone. A branch in the body on the inputs is what makes such a bound true:
+  `when` is that branch seen from the boundary, and it is how a subject that writes different things in different
+  cases states a write set for each.
 - `effects only p` says every effect goes through the named path, as the engine's sealed interface requires of a Rust
   procedure.
 - `deterministic` says the same inputs and the same snapshot give the same result, writes and failures. `no randomness
   except rolls` permits the engine's keyed rolls, which are deterministic given the log.
 - `no suspension` forbids `await`, `yield` and tasklet switches between entry and exit.
 - `commutes with` says two subjects' effects may be applied in either order with the same outcome, which is what lets
-  the engine treat them as reductions.
+  the engine treat them as reductions. It is one of the facts of independence (§ 6.16).
 - `depends only on` is the information-flow form of a bound (as SPARK's `Depends`): the result is a function of the
   named inputs alone.
 - `evaluable at compile time` says the body may run in a constant context (§ 6.14.1).
@@ -669,7 +772,9 @@ function rust 'eve_client::net::Session::reconnect'
 - `confined to` takes a context: `thread [name]`, `task`, `isolation name` (a Swift actor, an Erlang process, any unit
   that owns its state alone), `shard` or `process`.
 - `sendable` and `shareable` correspond to Rust's `Send` and `Sync` and Swift's `Sendable`, and are defined by access
-  (§ 8): a shareable entity is immutable while shared, or every write to it is guarded.
+  (§ 8): a shareable entity is immutable while shared, or every write to it is guarded. They are facts of independence
+  and are listed there (§ 6.16); the clauses of this section are rules that a correct program keeps whether or not
+  anything runs in parallel, and a breach of one is a bug.
 - `atomic` says no other execution observes an intermediate state of the subject; `linearizable` is its watched form for
   concurrent data structures.
 - `publishes f` is the release-and-acquire rule that `volatile`, atomics with ordering and safe publication express in
@@ -869,9 +974,10 @@ function rust 'std::cmp::Ord::max'(self: Self, other: Self) -> Self
   implementation fixed by the subject is checked as the subject's own body. A condition is a promise of the same
   family as the clauses it qualifies, so that it can be assumed by a checker and is asked of the caller.
 - **`given default`** may qualify the clause of a method of an interface (or an impl, § 6.11); it names no method,
-  because the method is the subject. **`given build S`** names one setting, `S`, of the host profile: for Rust,
-  `overflow_checks`, `debug_assertions`, `panic=unwind` and `panic=abort`. The list is fixed by the profile, as the
-  panic strategy is, and a name outside it is an error rather than a new setting.
+  because the method is the subject. **`given build S`** names one fact of the platform (§ 3.6): for Rust,
+  `overflow_checks`, `debug_assertions`, `panic=unwind` and `panic=abort` (the forms this section first had), and any
+  platform fact, `pointer width 64`, `endian little`, `target features avx2`, `features std`. The kinds of fact are
+  fixed by the host profile, and a name outside them is an error rather than a new setting.
 - **Several conditions** are joined by `and`, and hold together. Two clauses of one kind with different conditions are
   two promises, and the caller may rely on whichever condition it has.
 - **A law over a generic parameter** (§ 6.2) is a requirement, not a promise: it says what a type must satisfy to be
@@ -1356,6 +1462,58 @@ impls of `Result` and `String` state theirs, as subjects of their own). The life
 yet given is stated by `lifetime every item of yields(it) ends with it` (§ 7.3); the calls an adapter makes of its closure
 by `called by` (§ 6.13.1).
 
+### 6.16 Independence: what lets work run in parallel or in another order
+
+**Meaning.** Some constraints are rules a correct program keeps: `atomic`, a lock order, a confinement (§ 6.8). Others
+are facts about what a subject touches, which a compiler, a scheduler or a translator may use to run work in parallel,
+in another order, once instead of many times, or on another core or host. This section gathers the second kind. A
+fact of independence is a bound like any other (§ 6.3, § 8): a body that breaks it has a bug. What sets it apart is
+its use: it is relied on by someone who does not see the body, across a library boundary, a separately compiled unit,
+or a translation into another host, and a later edit that breaks it is caught instead of silently undoing an
+optimization.
+
+The facts are:
+
+- **`pure`** (§ 6.3): reads only its inputs, writes none of them, has no other effect, deterministic.
+- **The read set**, `reads only p, q`, and **the write set**, `mutates only p, q` in memory and `writes only` for rows
+  (§ 6.3, § 8.2), each with `when c` where they differ by case.
+- **`disjoint a, b`** (§ 8.3): no entity is reachable from both, so writes through one are not seen through the other.
+- **`commutes with S`** (§ 6.3): the two subjects' effects give the same outcome in either order, even where their
+  write sets meet (two additions to one balance).
+- **`sendable`** and **`shareable`** (§ 6.8): an entity may move to another thread, or be read from several at once.
+
+**Two calls are independent** when neither's write set meets the other's read set or write set (on the entities their
+arguments reach, with `disjoint` deciding whether two paths can meet), or when they commute; when neither has another
+effect that the other observes (input and output, a clock, an emitted event, a message) unless both are bounded to
+none; and when nothing orders them (a `protocol`, § 6.5; a lock order, § 6.8). Independent calls may run in parallel or
+in either order, and the outcome is the one of program order.
+
+```text
+function rust 'eve::dogma::Fitting::recalc_cpu'(self: ref<Fitting>)
+    reads only self.modules
+    mutates only self.cpu
+
+function rust 'eve::dogma::Fitting::recalc_power'(self: ref<Fitting>)
+    reads only self.modules
+    mutates only self.power
+    -- the two read the same field and write different ones: they may run at the same time
+```
+
+- **Composed.** A caller's read set includes the read sets of the calls it makes, with the callee's parameters
+  replaced by the caller's arguments; likewise its write set. A call into a subject with no stated sets has the
+  largest sets its access allows (everything it can reach through `read` and `write` paths, § 8.1), which is why a
+  library's sets are worth stating.
+- **Derived where it can be.** A body's read and write sets can be computed from the body, as weave derives `mut`
+  through rustc. A computed set is `proven`; a stated set that the computed one exceeds fails the build. Stating a set
+  is still worth it at a boundary that others rely on, for the reason in the meaning above.
+- **What a consumer may rely on.** An optimization may rely only on a fact that is `proven` or `enforced`, never on one
+  that is `observed` or `watched`: a fact that is wrong once makes an optimized program wrong every time.
+- **Checked:** by computing the sets from the body where the host allows it (Rust's borrows give most of them: a
+  `&T` parameter is in no write set); by comparing what a call touches with its sets on replays, as for any bound;
+  `commutes with` by property tests that run both orders.
+- **Harvested:** from the manifests and replays (§ 8.6): the paths each call read and wrote, as the union of what was
+  seen; `pure` from a body whose computed sets are its parameters' reads alone and that has no other effect.
+
 ---
 
 ## 7. Lifetime
@@ -1438,6 +1596,13 @@ Each predicate is defined over the core; § 7.4 and § 7.5 give its meaning unde
 - **`lifetime e released by f exactly once`:** release happens through `f`, once, on every path. `released before end`
   forbids leaving release to finalisation. `ends by f exactly once` is the linear form: the entity is consumed exactly
   once.
+- **`lifetime self released at end`:** said of a type: the end of each value of it is also its release (§ 7.1). It
+  gives back something other than memory: a lock is unlocked, a file closed, a buffer flushed, a borrow flag reset, a
+  connection closed. The moment a value ends is then part of what the program does, and a rewrite that moves it
+  changes the program, where moving the end of any other value only changes when memory is reclaimed. A type has it
+  when its host says so through a destructor (Rust's `Drop`, a C++ destructor under RAII, Swift's `deinit`), or when it
+  owns a value of a type that has it. `bind` keeps the end of such a value where the source has it (bare-rust
+  proposal § 2.2).
 - **`lifetime e no use after end`:** no reference is used to reach `e` after `end(e)`; for resources, `no use after
   release`.
 - **`lifetime e reachable only from p, q`:** every strong path to `e` from a root passes through one of the named
@@ -1580,10 +1745,20 @@ isolation`, so the correspondence for those two holds with that clause added.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `write exclusive` | Only this path reads or writes | `iso` | `&mut T`; an owned value | — | — | `inout` | — |
 | `write readers` | This path writes; others may only read through views | `trn` | — | — | — | — | — |
-| `write any` | This path writes; others may too | `ref`, with confinement | `&RefCell<T>`, `&Cell<T>` | `T&` | Any reference | A class reference | Any reference |
+| `write any` | This path writes; others may too | `ref`, with confinement | `&RefCell<T>`, `&Cell<T>`, `*mut T` | `T&`, `T*` | Any reference | A class reference | Any reference |
 | `read readers` | Nobody writes while this holds: the entity is immutable for the interval | `val` | `&T` without interior mutability | A `const` object, shallowly | A reference to an immutable object | A value type | A reference to a frozen object |
-| `read any` | This path cannot write; others may | `box`, with confinement | — | `const T&`, shallowly | A read-only view or interface | — | A read-only proxy |
+| `read any` | This path cannot write; others may | `box`, with confinement | `*const T` | `const T&`, `const T*`, shallowly | A read-only view or interface | — | A read-only proxy |
 | `identify any` | Identity only | `tag` | An id or handle | An opaque handle | An id | An id | An id |
+
+A host pointer, `ptr<T>`, has rights and never a guarantee, so its access is `read any` or `write any`, and the file
+writes only the rights. `*const T` is `ptr<T>` with `read`, a constraint. `*mut T` is `ptr<T>` with no access: `write
+any` constrains nothing, so writing through a pointer is the absence of the read-only constraint rather than a
+constraint of its own. That is where a pointer and a reference differ: `&mut T` is `write exclusive`, and its
+exclusivity is a constraint that an optimiser relies on and `*mut T` does not have. What a reference adds to a pointer
+is the guarantee and validity: a reference is not null, is aligned, and its target lives while it is used, where a
+pointer may dangle, and whoever reads or writes through it must know otherwise (in Rust, in `unsafe` code). What the two
+share is that each designates a place, so what other paths write shows through it, and that neither constructs nor ends
+what it reaches: a slot holds a pointer as it holds any value.
 
 The distinction between `read readers` and `read any` is the one most languages blur: a `const` reference in C++ and a
 read-only interface in Java promise only that this path does not write, not that the entity does not change. And C++'s
@@ -1606,7 +1781,8 @@ read-only interface in Java promise only that this path does not write, not that
   ticks.
 - **`mutates only p, q`:** the in-memory counterpart of `writes only`: the subject writes nothing reachable from its
   inputs except through the named paths. A path may name one element of a collection, `self[key]`: every other element
-  is unchanged (§ 6.14.8).
+  is unchanged (§ 6.14.8). It is the subject's write set (§ 6.16), may be conditional (`when`, § 6.3), and decides
+  which facts survive a call to it (§ 11.1.1).
 - **`interior p`** names hidden mutable state inside an otherwise immutable entity (a cache, a memo, a lazily computed
   field), and **`unchanged view(e) = …`** states what must stay the same despite it: the entity is immutable as seen
   through the named pure projection. This is how Rust's `Cell` and `OnceCell` and C++'s `mutable` are stated honestly.
@@ -1677,7 +1853,7 @@ path that breaks it before it is enforced.
 - **Refinement types.** `type Quantity = i64 where value >= 0` and `type ShipName = text where …` are named and reused
   in every signature.
 - **Generics.** `for T where T: Comparable` binds a type parameter; a clause stated for every `T` applies to every
-  instance.
+  realization (§ 3.5).
 - **Interfaces.** Clauses on an `interface` bind every implementation, under the rules of behavioural subtyping
   (§ 6.10). "Every implementation of `Repository.save` is idempotent by its id" is one clause. What one implementation
   adds is an `impl` subject (§ 6.11).
@@ -1772,10 +1948,56 @@ disagreement fails the build.
 
 **Proof.** A constraint is `proven` when a host compiler proves it (a borrow in Rust, a non-escaping closure in Swift),
 when a static analysis does, or when the compiler discharges it from earlier clauses and declared types (a range already
-implied by a parameter's type). The reason is recorded.
+implied by a parameter's type), or from the facts that hold where the check is made (§ 11.1.1). The reason is recorded.
 
 **Diagnostics** name the constraint, its subject and version, its status, the place it ran, and the inputs that broke
 it, redacted by their labels.
+
+#### 11.1.1 Facts at a point of a body
+
+**Meaning.** A branch does not only choose a path: the code it chooses runs under its condition. In `if i < v.len() {
+v[i] }`, the index runs where `i < v.len()` holds, and in `if x > 0 { a(x) }` the call runs where `x > 0` holds. The
+facts that hold at a point of a body are defined, so that every consumer uses the same ones. They are derived from the
+body and the files, never written: writing them would repeat the body, and could contradict it (principle 5).
+
+At a point of a body, these hold:
+
+1. **The platform's facts** for the build (§ 3.6).
+2. **The conditions of every `#[cfg(..)]`** around the point, which the build has decided.
+3. **The subject's preconditions,** in order, and the presence that order narrows (principle 6), where they are
+   `lifted`, `enforced` or `proven`: a precondition that is only watched does not make anything hold.
+4. **The conditions of every enclosing branch:** an `if` condition in its first branch and its negation in the other;
+   a match arm's pattern and guard, and the failure of every earlier arm's; a loop's condition in its body and its
+   negation after it; a `let … else`, whose pattern holds after it.
+5. **The postconditions of the calls made earlier on the path,** with their arguments in place (`ensure`, § 6.2), and
+   the fact that an earlier call did not fail, where its failures are stated.
+6. **What an earlier `assert!` checked,** after it: a fact the author wrote by hand on an intermediate value, which the
+   bare body keeps (bare Rust § 2.1).
+
+**Facts survive what does not write them.** A fact holds until something writes what it reads. A call ends only the
+facts that read a path in the call's write set (`mutates only`, `writes only`, § 6.16); a call whose write set is not
+known ends every fact about what its arguments reach. This is the frame rule, and it is why write sets belong here as
+well as in § 6.16: `i < v.len()` survives `log(x)`, whose write set is empty, and does not survive `v.clear()`.
+
+```text
+-- body (bare Rust)                       -- the facts that hold on each line
+if x > 0 {                                --   x > 0
+    let n = count(&ws);                   --   x > 0; result of count (its ensure)
+    a(x, n)                               --   a's `require x > 0` is discharged here
+}
+```
+
+- **Used by checks.** A generated check (a callee's precondition, an index in range, an arithmetic result that fits,
+  § 11.2) is discharged where the facts at its point imply it, and the reason recorded names the facts.
+- **Used by optimizers,** which remove the same checks at run time, and by **independence** (§ 6.16): a branch's
+  condition is in the read set of the code it guards, and a write set that differs by branch is stated at the
+  boundary with `when` (§ 6.3) wherever the condition is on the inputs.
+- **Used by translators.** A host with flow typing (TypeScript's narrowing, Kotlin's smart casts, Swift's `if let`)
+  carries some of the facts as types; a host without it keeps them as the checks they discharge.
+- **Computed** by the constraint compiler from the bare body, the files and the platform, as a set of expressions in
+  the language of § 4 at each point where a check or a call is; a fact that is not an expression of the language (a
+  property of a closure, a value of a type the language cannot name) is not a fact here, and the check it would
+  discharge stays.
 
 ### 11.2 Derived languages: the host, bare
 
@@ -1828,6 +2050,12 @@ its file, and two rules hold:
 
 `weave` therefore prints and never infers: the file is authoritative, and where it says `access self : write
 exclusive`, `weave` writes `&mut self`. Each profile lists its holes, and how each is filled.
+
+**Every written type has a name.** A type that the host's source writes in the middle of an expression has nothing to
+attach to there, so the bare form names the value or the realization that carries it: a cast or a literal's type goes
+onto a local (`let n = len;` with `n` a cast local to `f64`), a closure's parameter types are keyed by the closure's
+name, and a turbofish is a realization the body names (`s.parse_port()` for `s.parse::<u16>()`, § 3.5). The names are
+the file's, so the body reads as if the host had no generics at the place of use.
 
 | Host | Moves to the constraint file | Stays in the bare body | Woven into |
 | --- | --- | --- | --- |
@@ -2222,7 +2450,12 @@ path.
 ```text
 file          = [ "module" QNAME NL ] { "use" QNAME NL } { declaration } ;
 declaration   = subject | failure | predicate | block | label | scope | quantity | unit | typedef | variantdef
-              | conserve ;
+              | conserve | platform ;
+platform      = "platform" [ HOST ] STABLE NL INDENT { platform_fact NL } DEDENT ;
+platform_fact = "pointer width" NUMBER | "endian" ( "little" | "big" ) | "target features" NAME { "," NAME }
+              | "atomics up to" NUMBER | "panic" ( "unwind" | "abort" )
+              | "build" NAME ( "on" | "off" ) { "," NAME ( "on" | "off" ) } | "features" NAME { "," NAME } ;
+                                                       (* a NAME of a target feature or a feature may hold "-": "bulk-memory" *)
 
 subject       = subject_head NL INDENT { clause NL } DEDENT ;
 subject_head  = ( "procedure" | "method" ) QNAME params [ "->" type ]
@@ -2267,7 +2500,8 @@ clause        = "let" ( NAME | pattern ) "=" expr
               | "assoc" NAME "=" type
               | "layout" ( "c" | "packed" | "transparent" ) | "size" NUMBER | "align" NUMBER
               | "local" NAME ":" type
-              | bound | state | protocol | temporal | budget | concurrency | flow | compat | memory | access
+              | bound [ "when" expr ] | state | protocol | temporal | budget | concurrency | flow | compat | memory
+              | access
               | "use" NAME "(" [ expr { "," expr } ] ")"
               | "assume" NAME ":" expr "because" STRING
               | "pin" NAME status "because" STRING
@@ -2275,7 +2509,8 @@ clause        = "let" ( NAME | pattern ) "=" expr
               | "model" MODEL ;
 qualifiable   = (* a clause of the form "ensure", "fails … when", "never panics", or a bound, including "terminates" *) ;
 condition     = "default" | "build" BUILD | NAME "." NAME { "," NAME "." NAME } ( "never panic" | "terminate" | "effects none" ) ;
-BUILD         = "overflow_checks" | "debug_assertions" | "panic=unwind" | "panic=abort" ;   (* the host profile's list, § 3.3 *)
+BUILD         = "overflow_checks" | "debug_assertions" | "panic=unwind" | "panic=abort"
+              | platform_fact ;                       (* a fact of the platform, § 3.6, of a kind the host profile lists *)
 pattern       = "(" ( NAME | "_" ) { "," ( NAME | "_" ) } ")" ;   (* a tuple's parts, also after "is": e is (a, b) *)
 later         = ( "result" | NAME ) "." NAME ;      (* the run of a method of the result or of a parameter, § 6.13.1 *)
 arg           = expr | NAME ;                       (* a new NAME names the argument for the clauses that follow; "with" and "returning" need "exactly once" or "at most once"; after "called by" a NAME is a list, one item per call *)
@@ -2293,7 +2528,7 @@ LIFETIME      = "'" NAME ;
 
 bound         = ( "reads only" | "writes only" | "emits only" | "sends only" | "calls only" | "effects only" )
                   path_list
-              | "effects none" | "no io" | "no clock" | "no randomness" [ "except rolls" ] | "no suspension"
+              | "effects none" | "pure" | "no io" | "no clock" | "no randomness" [ "except rolls" ] | "no suspension"
               | "deterministic" | "idempotent by" path | "commutes with" QNAME
               | "depends only on" path_list | "terminates" | "evaluable at compile time" ;
 state         = "invariant" NAME ":" expr [ "holds" ( "at write" | "at commit" | "between calls" | "always" ) ]
@@ -2345,7 +2580,7 @@ access        = "access" path ":" ( "identify" | "read" | "write" ) ( "exclusive
               | "immutable" path [ "deep" | "shallow" ] [ "after" event ] | "frozen after" event
               | "write once" path | "append only" [ path ]
               | "monotonic" path ( "increasing" | "non-decreasing" | "decreasing" | "non-increasing" )
-              | "mutates only" path_list | "interior" path | "unchanged" "view(" path ")" [ "=" expr ]
+              | "mutates only" path_list [ "when" expr ] | "interior" path | "unchanged" "view(" path ")" [ "=" expr ]
               | "exclusive" path | "sole" path | "disjoint" path "," path { "," path } | "shared readonly" path ;
 
 path          = ( NAME | "owner" "(" path ")" ) { "." ( NAME | NUMBER ) | "[" expr "]" } [ ".*" ] | STABLE ;
@@ -2399,7 +2634,8 @@ handle_expr   = "current" "(" expr ")"                     (* the value at the p
 - **What a function computes,** in general. Formulas are reference functions compared by output; laws and postconditions
   can pin properties of them, never the whole.
 - **Anything about a body's intermediate values.** A rule over one becomes a named pure function, or stays in the code;
-  `local` gives a woven host a type, never a condition.
+  `local` gives a woven host a type, never a condition. The facts that hold at a point of a body are derived from the
+  body (§ 11.1.1), and are not written.
 - **How anything is done.** No control flow, no assignment, no effects.
 - **Unbounded quantification where it is enforced.** A predicate over every row of a table is an invariant checked row
   by row, or is watched on a replica; properties are never evaluated on the request path.
@@ -2455,5 +2691,15 @@ handle_expr   = "current" "(" expr ")"                     (* the value at the p
     ([`bare-rust.md`](bare-rust.md), experiment E2).
 15. **Macros and generated code.** Types produced by macros, derives and code generators stay where they are generated.
     Leaning: treat a generator's input as its subject, so its constraints are stated once for everything it generates.
+16. **How much of independence is written.** Read and write sets can be computed from most bodies, and stating them
+    everywhere would repeat the body. Leaning: compute them always; state them at boundaries that others rely on
+    without the body (a library, an interface, a procedure the engine schedules), where the stated set is the promise
+    and the computed set checks it.
+17. **Platforms as files.** Should a platform be written by hand, or only generated from the toolchain for each build
+    and shown in review? Leaning: generated, as `builds.json` is now, with a hand-written platform only for a target a
+    build cannot run on here, which the toolchain still describes (`rustc --print cfg --target`).
+18. **Facts at a point, and how far to compute them.** Branch conditions and preconditions are cheap; postconditions of
+    earlier calls and the frame rule need the callees' files and write sets. Leaning: branches, preconditions, `cfg` and
+    the platform first, with the frame rule only where every call on the path has a known write set.
 
 

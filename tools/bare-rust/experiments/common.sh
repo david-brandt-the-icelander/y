@@ -19,13 +19,21 @@ materialize_ref() {
   cp -r "$EXP/crates/$crate/." "$dir/"
   if [ -s "$EXP/tasks/$task/ref.patch" ]; then (cd "$dir" && patch -s -p1 < "$EXP/tasks/$task/ref.patch"); fi
 }
-# strip_into <crate-src-dir> <dest-dir>: .brs/.constraints.json of the crate, plus Cargo.toml and every non-.rs file
-strip_into() {
+# strip_into <crate-src-dir> <dest-dir> [strip options]: .brs/.constraints.json of the crate, plus Cargo.toml and every non-.rs file
+strip_into() { # [strip options...]
   local src="$1" dest="$2" tmp
+  shift 2
   tmp="$(mktemp -d)"
-  "$BARE_RUST" strip "$src" --out "$tmp/strip" >/dev/null
+  "$BARE_RUST" strip "$src" --out "$tmp/strip" "$@" >/dev/null
   mkdir -p "$dest"
   (cd "$src" && find . -type f ! -name '*.rs' ! -path './target/*' ! -path './.git/*' -print0 | xargs -0 -I{} cp --parents {} "$dest/")
   (cd "$tmp/strip" && find . -type f ! -name refusals.json -print0 | xargs -0 -I{} cp --parents {} "$dest/")
   rm -rf "$tmp"
+}
+# rename_into <bare-dir> <crate>: the stored names for the crate's mechanical names (renames/<crate>.json), where they
+# apply (a task's base may lack some of them)
+rename_into() {
+  local dir="$1" crate="$2"
+  [ -f "$EXP/renames/$crate.json" ] && "$BARE_RUST" rename "$dir" "$EXP/renames/$crate.json" --lenient >/dev/null
+  return 0
 }

@@ -10,6 +10,37 @@ use std::collections::{HashMap, HashSet};
 
 type Obj = Map<String, Value>;
 
+/// A cast that is the whole initialiser of a typed `let` is carried by the local: `let x: u8 = (a + b) as u8;` becomes
+/// `let x = a + b;` with `locals: {"x": {"type": "u8", "cast": true}}`. A `const` or `static` whose whole value is a
+/// cast carries it the same way, on its subject. This returns that cast, and the cuts that remove it. The cast's target must be a primitive written as the local's type, and the brackets around
+/// the operand must be exactly those weave puts back.
+fn implicit_cast<'a>(node: Node<'a>, src: &str) -> Option<(Node<'a>, Vec<Edit>)> {
+    let ty = node.child_by_field_name("type")?;
+    let v = node.child_by_field_name("value")?;
+    let target = v.child_by_field_name("type").filter(|_| v.kind() == "type_cast_expression")?;
+    let operand = v.child_by_field_name("value")?;
+    let t = text(ty, src);
+    if text(target, src) != t || !crate::bind::carried_type(t) {
+        return None;
+    }
+    if operand.kind() == "parenthesized_expression" {
+        let inner = named_children(operand).into_iter().find(|c| !is_comment(*c))?;
+        if life::binds_tighter_than_as(inner) || named_children(operand).len() != 1 {
+            return None;
+        }
+        return Some((target, vec![(v.start_byte(), inner.start_byte(), String::new()), (inner.end_byte(), v.end_byte(), String::new())]));
+    }
+    life::binds_tighter_than_as(operand).then(|| (target, vec![(operand.end_byte(), v.end_byte(), String::new())]))
+}
+
+/// The type a literal's suffix names: `u8`, or `u64 as 'usize'`.
+fn lit_type(suffix: &str) -> String {
+    match suffix {
+        "usize" | "isize" => format!("{} as '{suffix}'", if suffix == "usize" { "u64" } else { "i64" }),
+        s => s.to_string(),
+    }
+}
+
 fn refuse<T>(category: &str, detail: impl std::fmt::Display) -> R<T> {
     Err(format!("{category}: {detail}"))
 }
@@ -21,6 +52,14 @@ struct Scope {
     self_ty: String,
 }
 
+/// A reference or pointer met in a type: what its access and lifetime say.
+#[derive(Clone, PartialEq)]
+struct Mark {
+    ptr: bool,
+    mutable: bool,
+    lt: Option<String>,
+}
+
 /// A type slot: the mapped type, and what its references say about access and holding.
 struct Slot {
     ty: Value,
@@ -28,6 +67,8 @@ struct Slot {
     raw: Option<String>,
     lifetime: Option<String>,
     has_ref: bool,
+    /// Its pointers, all of one access (a pointer is no reference: it has no lifetime and holds nothing).
+    ptr: bool,
     /// A reference inside the bounds of an existential, which the value borrows through.
     bound_ref: bool,
     shares: bool,
@@ -49,6 +90,35 @@ struct Stripper<'a> {
     namer: Namer,
     /// (type subject, entry): the impls of a trait whose self type is a type of this file, attached at the end.
     implements: Vec<(String, Value)>,
+    /// Realizations of templates (language 3.5), for the whole file: name -> {template, args}, one name for each
+    /// template with its arguments (`realized`, keyed by `realization_key`), unique among the file's identifiers.
+    paths: crate::paths::Paths,
+    realizations: Obj,
+    realized: HashMap<String, String>,
+    names_used: HashSet<String>,
+    /// Names given in advance, by `realization_key` (strip of a crate: one name across the crate).
+    forced: HashMap<String, String>,
+    /// The file may be left out of the build (`StripOpts::cfg_gated`).
+    file_gated: bool,
+    gate: Option<crate::builds::FileGate>,
+}
+
+/// What a strip of one file is told from outside it.
+#[derive(Default, Clone)]
+pub struct StripOpts {
+    /// The name of each realization, by `realization_key`, chosen for the whole crate.
+    pub realization_names: HashMap<String, String>,
+    /// The whole file may be left out of the build: its `mod` (or one around it) has a `#[cfg(..)]`. Its `mut`s stay.
+    /// (Without `gate`.)
+    pub cfg_gated: bool,
+    /// The builds the crate is checked in, and the file's conditions: code that one of them compiles loses its `mut`s,
+    /// which rustc derives there; code that none compiles keeps them.
+    pub gate: Option<crate::builds::FileGate>,
+}
+
+/// The identity of a realization: its template's full path and its arguments.
+pub fn realization_key(template: &str, args: &Value) -> String {
+    format!("{template}{args}")
 }
 
 fn access(mutable: bool) -> Value {
@@ -80,7 +150,7 @@ fn is_literal(k: &str) -> bool {
 impl<'a> Stripper<'a> {
     // ----- types -----
 
-    fn to_ty(&self, n: Node, cx: &Cx, refs: &mut Vec<(bool, Option<String>)>) -> Result<Ty, String> {
+    fn to_ty(&self, n: Node, cx: &Cx, refs: &mut Vec<Mark>) -> Result<Ty, String> {
         let src = self.src;
         match n.kind() {
             "primitive_type" => match text(n, src) {
@@ -110,15 +180,14 @@ impl<'a> Stripper<'a> {
                 let lt = lt.filter(|l| l != "'_");
                 let mutable = real_kids(n).iter().any(|c| c.kind() == "mutable_specifier");
                 let inner = n.child_by_field_name("type").ok_or("other_reference")?;
-                refs.push((mutable, lt));
-                let t = if inner.kind() == "primitive_type" && text(inner, src) == "str" {
-                    Ty::Text
-                } else if inner.kind() == "type_identifier" && text(inner, src) == "String" {
-                    Ty::As(Box::new(Ty::Text), "String".into())
-                } else {
-                    self.to_ty(inner, cx, refs)?
-                };
-                Ok(Ty::Ref(Box::new(t)))
+                refs.push(Mark { ptr: false, mutable, lt });
+                Ok(Ty::Ref(Box::new(self.pointee(inner, cx, refs)?)))
+            }
+            "pointer_type" => {
+                let mutable = real_kids(n).iter().any(|c| c.kind() == "mutable_specifier");
+                let inner = n.child_by_field_name("type").ok_or("pointer")?;
+                refs.push(Mark { ptr: true, mutable, lt: None });
+                Ok(Ty::Ptr(Box::new(self.pointee(inner, cx, refs)?)))
             }
             "generic_type" => {
                 let head = n.child_by_field_name("type").ok_or("other_generic")?;
@@ -171,11 +240,21 @@ impl<'a> Stripper<'a> {
             }
             "abstract_type" | "dynamic_type" | "bounded_type" => self.exist(n, cx),
             "function_type" => Err("fn_ptr".into()),
-            "pointer_type" => Err("pointer".into()),
             "never_type" => Err("never".into()),
             "macro_invocation" => Err("macro".into()),
             k => Err(format!("other_{k}")),
         }
+    }
+
+    /// What a reference or a pointer reaches: `str` is `text`, and `String` is `text` held as a `String`.
+    fn pointee(&self, inner: Node, cx: &Cx, refs: &mut Vec<Mark>) -> Result<Ty, String> {
+        Ok(if inner.kind() == "primitive_type" && text(inner, self.src) == "str" {
+            Ty::Text
+        } else if inner.kind() == "type_identifier" && text(inner, self.src) == "String" {
+            Ty::As(Box::new(Ty::Text), "String".into())
+        } else {
+            self.to_ty(inner, cx, refs)?
+        })
     }
 
     /// `impl Trait` and `dyn Trait`, with the bounds that follow a `+`: `some` and `any`. The references inside the
@@ -240,7 +319,7 @@ impl<'a> Stripper<'a> {
                 _ => return Err(form.into()),
             });
         }
-        if inner.iter().any(|(m, l)| *m || l.is_some()) {
+        if inner.iter().any(|m| m.mutable || m.lt.is_some()) {
             return Err(form.into());
         }
         Ok(if any { Ty::Any(bounds) } else { Ty::Some(bounds) })
@@ -277,6 +356,7 @@ impl<'a> Stripper<'a> {
             raw: None,
             lifetime: None,
             has_ref: false,
+            ptr: false,
             bound_ref: false,
             shares: false,
         };
@@ -284,31 +364,76 @@ impl<'a> Stripper<'a> {
             Ok(t) => t,
             Err(f) => return fail(f),
         };
+        // One access for the whole slot: its references alike, or its pointers alike.
         let first = refs.first().cloned();
         if refs.iter().any(|r| Some(r) != first.as_ref()) {
             return fail("mixed_refs".into());
         }
-        let (mutable, raw) = first.clone().unwrap_or((false, None));
+        let ptr = first.as_ref().is_some_and(|m| m.ptr);
+        let mutable = first.as_ref().is_some_and(|m| m.mutable);
+        let raw = first.as_ref().and_then(|m| m.lt.clone());
         let lifetime = raw.clone().filter(|l| !cx.elide.contains(l));
         Slot {
             ty: json!(ty.show()),
-            access: first.map(|_| access(mutable)),
+            // `*const T` reads, with no guarantee about any other path; `*mut T` is the absence of that constraint.
+            access: match (&first, ptr) {
+                (None, _) => None,
+                (Some(_), true) => (!mutable).then(|| json!({"rights": "read"})),
+                (Some(_), false) => Some(access(mutable)),
+            },
             raw,
             lifetime,
-            has_ref: !refs.is_empty(),
+            has_ref: first.is_some() && !ptr,
+            ptr,
             bound_ref: ty.bound_borrows(),
             shares: ty.shares(),
         }
     }
 
-    /// A type in a hole: a reference with an access or a lifetime does not fit, and is carried as host text.
-    fn loose(&self, n: Node, generics: &[String]) -> Value {
+    /// A type in a hole, and the access a local or a hint carries with it (a `*const`'s). A reference with an
+    /// access or a lifetime does not fit, and is carried as host text.
+    fn hole_ty(&self, n: Node, generics: &[String]) -> (Value, Option<Value>) {
         let none = HashSet::new();
         let s = self.map_type(n, &Cx { generics, elide: &none });
         if s.has_ref && (s.lifetime.is_some() || s.access.as_ref().is_some_and(|a| a["rights"] == "write")) {
-            return self.host(n, "ref_hole".into(), &none);
+            return (self.host(n, "ref_hole".into(), &none), None);
         }
-        s.ty
+        (s.ty, s.access.filter(|_| s.ptr))
+    }
+
+    /// A type where nothing carries an access (a turbofish argument, an associated type): a `*const` is host text.
+    fn loose(&self, n: Node, generics: &[String]) -> Value {
+        match self.hole_ty(n, generics) {
+            (_, Some(_)) => self.host(n, "ptr_hole".into(), &HashSet::new()),
+            (t, None) => t,
+        }
+    }
+
+    /// A `locals` entry: the type, with the access and the cast when there are any.
+    fn local_entry(&self, n: Node, generics: &[String], cast: bool) -> Value {
+        let (t, acc) = self.hole_ty(n, generics);
+        if acc.is_none() && !cast {
+            return t;
+        }
+        let mut o = Obj::new();
+        o.insert("type".into(), t);
+        if let Some(a) = acc {
+            o.insert("access".into(), a);
+        }
+        if cast {
+            o.insert("cast".into(), json!(true));
+        }
+        Value::Object(o)
+    }
+
+    /// A hint of `kind` at `n`, with the access of its type when it has one.
+    fn hint(&self, kind: &str, n: usize, ty: Node, generics: &[String]) -> Value {
+        let (t, acc) = self.hole_ty(ty, generics);
+        let mut h = json!({"kind": kind, "n": n, "type": t});
+        if let Some(a) = acc {
+            h["access"] = a;
+        }
+        h
     }
 
     // ----- slots -----
@@ -350,6 +475,8 @@ impl<'a> Stripper<'a> {
     fn generics(&mut self, item: Node, cut_from: usize, cut: bool, elide: &HashSet<String>) -> R<(Vec<Value>, Vec<Value>, Vec<String>)> {
         let src = self.src;
         let mut ents: Vec<(String, Vec<String>, Vec<String>)> = vec![];
+        // A parameter's default: a type for a type parameter, the value (host text) for a const one.
+        let mut defaults: Vec<Option<Value>> = vec![];
         if let Some(tp) = item.child_by_field_name("type_parameters") {
             if cut {
                 self.cuts.push((cut_from, tp.end_byte(), String::new()));
@@ -357,21 +484,17 @@ impl<'a> Stripper<'a> {
             for c in named_children(tp) {
                 match c.kind() {
                     "type_parameter" | "lifetime_parameter" => {
-                        if c.child_by_field_name("default_type").is_some() {
-                            return refuse("generic-default", text(c, src));
-                        }
                         let name = text(c.child_by_field_name("name").unwrap(), src).to_string();
                         let b = c.child_by_field_name("bounds").map(|b| self.bound_list(b)).unwrap_or_default();
                         ents.push((name, b, vec![]));
+                        defaults.push(c.child_by_field_name("default_type").map(|d| self.loose(d, &[])));
                     }
                     // `const K: usize` is carried as a generic named `const K` whose one bound is the host-text type `usize`
                     "const_parameter" => {
-                        if c.child_by_field_name("value").is_some() {
-                            return refuse("generic-default", text(c, src));
-                        }
                         let name = text(c.child_by_field_name("name").ok_or("parse-error: const parameter")?, src);
                         let ty = c.child_by_field_name("type").ok_or("parse-error: const parameter")?;
                         ents.push((format!("const {name}"), vec![collapse(text(ty, src))], vec![]));
+                        defaults.push(c.child_by_field_name("value").map(|v| json!({"host": collapse(text(v, src)), "form": "const_default"})));
                     }
                     k if is_comment(c) => {
                         let _ = k;
@@ -421,13 +544,17 @@ impl<'a> Stripper<'a> {
         let names: Vec<String> = ents.iter().map(|e| e.0.strip_prefix("const ").unwrap_or(&e.0).to_string()).collect();
         let gens = ents
             .into_iter()
-            .filter(|e| !elide.contains(&e.0))
-            .map(|(name, bounds, wh)| {
+            .zip(defaults)
+            .filter(|(e, _)| !elide.contains(&e.0))
+            .map(|((name, bounds, wh), default)| {
                 let mut o = Obj::new();
                 o.insert("name".into(), json!(name));
                 o.insert("bounds".into(), json!(bounds));
                 if !wh.is_empty() {
                     o.insert("where".into(), json!(wh));
+                }
+                if let Some(d) = default {
+                    o.insert("default".into(), d);
                 }
                 Value::Object(o)
             })
@@ -479,6 +606,15 @@ impl<'a> Stripper<'a> {
         o
     }
 
+    /// Whether rustc may not see the code at `n`, and so cannot derive its `mut`s: no build compiles it, or, with no
+    /// builds known, it has a cfg (`life::cfg_gated`).
+    fn gated(&self, n: Node) -> bool {
+        match &self.gate {
+            Some(g) => !g.reached(n, self.src),
+            None => self.file_gated || life::cfg_gated(n, self.src),
+        }
+    }
+
     // ----- holes -----
 
     fn skeleton(&self, t: Node) -> String {
@@ -496,63 +632,168 @@ impl<'a> Stripper<'a> {
     }
 
     fn body_holes(&mut self, body: Node, subject: &str, generics: &[String]) {
+        self.body_holes_carrying(body, subject, generics, None)
+    }
+
+    /// As `body_holes`, with a cast that the subject carries (a `const` whose whole value is cast to its type).
+    fn body_holes_carrying(&mut self, body: Node, subject: &str, generics: &[String], carrying: Option<usize>) {
         let src = self.src;
+        // A macro call that states a type, which no binding can carry: marked as Rust text (`rust! { ... }`).
+        for m in life::typed_macro_calls(body, src) {
+            self.cuts.push((m.start_byte(), m.start_byte(), "rust! { ".into()));
+            self.cuts.push((m.end_byte(), m.end_byte(), " }".into()));
+        }
         let mut locals = Obj::new();
         let mut hints: Vec<Value> = vec![];
         let mut seen: HashMap<String, usize> = HashMap::new();
+        // Casts carried by a local leave the body, so the casts after them are numbered without them.
+        let (mut carried, mut removed): (HashSet<usize>, usize) = (carrying.into_iter().collect(), 0);
+        // The key of each `let`, so that the parameters of a closure it names are keyed `<let>.<parameter>`.
+        let mut let_keys: HashMap<usize, String> = HashMap::new();
+        let mut param_seen: HashMap<String, usize> = HashMap::new();
+        let mut done_targs: HashSet<usize> = HashSet::new();
+        // Type arguments named by a realization leave the body, so the turbofish hints after them are numbered without.
+        let mut removed_targs = 0;
+        // Literals whose type a name over them carries (`n @ 1u8..=9u8`), which need no hint.
+        let mut named_lits: HashSet<usize> = HashSet::new();
         for s in life::sites(body) {
-            let n = s.n;
+            let n = match s.kind {
+                SK::Cast => s.n - removed,
+                SK::Targ => s.n - removed_targs,
+                _ => s.n,
+            };
             let node = s.node;
             match s.kind {
                 SK::Let => {
-                    life::mut_edits(node, &mut self.cuts);
+                    // `mut` is derived through rustc, which does not see code a `#[cfg]` leaves out: there it stays.
+                    if !self.gated(node) {
+                        life::mut_edits(node, &mut self.cuts);
+                    }
                     let Some(pat) = node.child_by_field_name("pattern") else { continue };
                     let mut pe = vec![];
                     life::pat_mut_edits(pat, &mut pe);
+                    // A literal in the pattern (`let Some(_k0_u8 @ 0u8) = it.next() else { .. }`) has no suffix in
+                    // the bare body, which the key is the text of.
+                    for l in life::at_literals_in(pat) {
+                        if let Some((digits, _, _)) = life::lit_suffix(text(l, src)) {
+                            pe.push((l.start_byte() + digits.len(), l.end_byte(), String::new()));
+                        }
+                    }
                     let base = pat.start_byte();
                     let shifted = pe.into_iter().map(|(a, b, t)| (a - base, b - base, t)).collect();
                     let key = collapse(&apply(&src[pat.byte_range()], shifted));
                     let c = seen.entry(key.clone()).or_insert(0);
                     *c += 1;
                     let key = if *c == 1 { key } else { format!("{key}#{c}") };
+                    let_keys.insert(node.id(), key.clone());
                     if let Some(ty) = node.child_by_field_name("type") {
                         self.cuts.push((pat.end_byte(), ty.end_byte(), String::new()));
-                        locals.insert(key, self.loose(ty, generics));
+                        if let Some((target, cuts)) = implicit_cast(node, src) {
+                            carried.insert(target.id());
+                            self.cuts.extend(cuts);
+                            locals.insert(key, self.local_entry(ty, generics, true));
+                        } else {
+                            locals.insert(key, self.local_entry(ty, generics, false));
+                        }
                     }
                 }
+                SK::Cast if carried.contains(&node.id()) => removed += 1,
                 SK::Cast => {
                     if text(node, src) != "_" {
                         self.cuts.push((node.start_byte(), node.end_byte(), "_".into()));
-                        hints.push(json!({"kind": "cast", "n": n, "type": self.loose(node, generics)}));
+                        hints.push(self.hint("cast", n, node, generics));
                     }
                 }
                 SK::Targ => {
+                    // A turbofish that states a type is a realization of a template, named in the body (language 3).
+                    if let Some(ta) = node.parent().filter(|p| p.kind() == "type_arguments") {
+                        if done_targs.contains(&ta.id()) {
+                            removed_targs += 1;
+                            continue;
+                        }
+                        if let Some((cut, template, base, is_type)) = realization_site(ta, src) {
+                            let args: Vec<Node> = named_children(ta).into_iter().filter(|c| !is_comment(*c)).collect();
+                            let plain = args.iter().all(|a| !matches!(a.kind(), "lifetime" | "type_binding") && !is_literal(a.kind()));
+                            if plain && args.iter().any(|a| text(*a, src) != "_") {
+                                done_targs.insert(ta.id());
+                                let vals: Vec<Value> =
+                                    args.iter().map(|a| if text(*a, src) == "_" { json!("_") } else { self.loose(*a, generics) }).collect();
+                                let template = if template.starts_with("<_>::") { template } else { self.paths.full(&template) };
+                                let key = realization_key(&template, &json!(vals));
+                                let name = match self.realized.get(&key).or_else(|| self.forced.get(&key)) {
+                                    Some(n) => n.clone(),
+                                    None => realization_name(&base, is_type, &args.iter().map(|a| text(*a, src)).collect::<Vec<_>>(), &mut self.names_used),
+                                };
+                                if !self.realized.contains_key(&key) {
+                                    self.realized.insert(key, name.clone());
+                                    self.realizations.insert(name.clone(), json!({"template": template, "args": vals}));
+                                }
+                                self.cuts.push((cut.0, cut.1, name));
+                                removed_targs += 1;
+                                continue;
+                            }
+                        }
+                    }
                     let sk = self.skeleton(node);
                     if sk != text(node, src) {
                         self.cuts.push((node.start_byte(), node.end_byte(), sk));
-                        hints.push(json!({"kind": "targ", "n": n, "type": self.loose(node, generics)}));
+                        hints.push(self.hint("targ", n, node, generics));
                     }
                 }
+                SK::At => {
+                    // `n @ 1u8..=9u8`: the name carries the literals' one type, `"n @ 1..=9": {"literal": "u8"}`.
+                    let (Some(_), lits) = life::at_literals(node) else { continue };
+                    let split: Vec<_> = lits.iter().map(|l| life::lit_suffix(text(*l, src))).collect();
+                    let suffix = split.first().copied().flatten().map(|x| x.2);
+                    let one = suffix.is_some() && split.iter().all(|x| x.is_some_and(|(_, sep, s)| !sep && Some(s) == suffix));
+                    let cuts: Vec<Edit> = if one {
+                        lits.iter().zip(&split).map(|(l, x)| (l.start_byte() + x.unwrap().0.len(), l.end_byte(), String::new())).collect()
+                    } else {
+                        vec![]
+                    };
+                    let base = node.start_byte();
+                    let key = collapse(&apply(&src[node.byte_range()], cuts.iter().map(|(a, b, t)| (a - base, b - base, t.clone())).collect()));
+                    let c = seen.entry(key.clone()).or_insert(0);
+                    *c += 1;
+                    let key = if *c == 1 { key } else { format!("{key}#{c}") };
+                    if let (true, Some(suffix)) = (one, suffix) {
+                        self.cuts.extend(cuts);
+                        named_lits.extend(lits.iter().map(|l| l.id()));
+                        locals.insert(key, json!({"literal": lit_type(suffix)}));
+                    }
+                }
+                SK::Lit if named_lits.contains(&node.id()) => {}
                 SK::Lit => {
                     if let Some((digits, sep, suffix)) = life::lit_suffix(text(node, src)) {
                         self.cuts.push((node.start_byte() + digits.len(), node.end_byte(), String::new()));
-                        let ty = match suffix {
-                            "usize" | "isize" => format!("{} as '{suffix}'", if suffix == "usize" { "u64" } else { "i64" }),
-                            s => s.to_string(),
-                        };
-                        let mut h = json!({"kind": "literal", "n": n, "type": ty});
+                        let mut h = json!({"kind": "literal", "n": n, "type": lit_type(suffix)});
                         if sep {
                             h["sep"] = json!("_");
                         }
                         hints.push(h);
                     }
                 }
+                SK::ClParam if self.gated(node) && node.kind() != "parameter" => {}
                 SK::ClParam => {
                     if node.kind() == "parameter" {
-                        life::mut_edits(node, &mut self.cuts);
+                        if !self.gated(node) {
+                            life::mut_edits(node, &mut self.cuts);
+                        }
                         if let (Some(pat), Some(ty)) = (node.child_by_field_name("pattern"), node.child_by_field_name("type")) {
                             self.cuts.push((pat.end_byte(), ty.end_byte(), String::new()));
-                            hints.push(json!({"kind": "closure_param", "n": n, "type": self.loose(ty, generics)}));
+                            match life::closure_let(node).and_then(|l| let_keys.get(&l.id())) {
+                                Some(k) => {
+                                    let mut pe = vec![];
+                                    life::pat_mut_edits(pat, &mut pe);
+                                    let base = pat.start_byte();
+                                    let shifted = pe.into_iter().map(|(a, b, t)| (a - base, b - base, t)).collect();
+                                    let pk = format!("{k}.{}", collapse(&apply(&src[pat.byte_range()], shifted)));
+                                    let c = param_seen.entry(pk.clone()).or_insert(0);
+                                    *c += 1;
+                                    locals.insert(if *c == 1 { pk } else { format!("{pk}#{c}") }, self.local_entry(ty, generics, false));
+                                }
+                                None => hints.push(self.hint("closure_param", n, ty, generics)),
+                            }
                         }
                     } else {
                         life::pat_mut_edits(node, &mut self.cuts);
@@ -561,7 +802,7 @@ impl<'a> Stripper<'a> {
                 SK::ClRet => {
                     if let (Some(rt), Some(ps)) = (node.child_by_field_name("return_type"), node.child_by_field_name("parameters")) {
                         self.cuts.push((ps.end_byte(), rt.end_byte(), String::new()));
-                        hints.push(json!({"kind": "closure_return", "n": n, "type": self.loose(rt, generics)}));
+                        hints.push(self.hint("closure_return", n, rt, generics));
                     }
                 }
             }
@@ -590,9 +831,9 @@ impl<'a> Stripper<'a> {
     fn item(&mut self, n: Node, sc: &Scope) -> R<()> {
         match n.kind() {
             "function_item" | "function_signature_item" => self.func(n, sc),
-            "struct_item" => self.strukt(n, sc),
+            // A union is a type with fields as a struct is; the bare body keeps the keyword that says which.
+            "struct_item" | "union_item" => self.strukt(n, sc),
             "enum_item" => self.enm(n, sc),
-            "union_item" => refuse("union", "unions are not supported"),
             "foreign_mod_item" => match n.child_by_field_name("body") {
                 Some(b) => self.items_in(b, sc),
                 None => Ok(()),
@@ -808,9 +1049,15 @@ impl<'a> Stripper<'a> {
         let slot = self.map_type(ty, &Cx { generics: &sc.generics, elide: &none });
         self.cuts.push((name.end_byte(), ty.end_byte(), String::new()));
         sub.extend(Self::type_slot_json(&slot, false));
+        // `const W: usize = N as usize;` is `const W = N;` with the cast on the subject, as a cast local is.
+        let carried = implicit_cast(n, src);
+        if let Some((_, cuts)) = &carried {
+            self.cuts.extend(cuts.iter().cloned());
+            sub.insert("cast".into(), json!(true));
+        }
         self.subjects.push(Value::Object(sub));
         if let Some(v) = n.child_by_field_name("value") {
-            self.body_holes(v, &sname, &sc.generics);
+            self.body_holes_carrying(v, &sname, &sc.generics, carried.map(|(t, _)| t.id()));
             self.nested(v, sc, &sname)?;
         }
         Ok(())
@@ -872,9 +1119,10 @@ impl<'a> Stripper<'a> {
     fn head(&self, n: Node) -> R<(String, bool)> {
         let src = self.src;
         match n.kind() {
-            "type_identifier" | "scoped_type_identifier" => Ok((collapse(text(n, src)), false)),
+            // `impl Unsigned for u128`: a primitive is its own head, as a type's name is.
+            "type_identifier" | "scoped_type_identifier" | "primitive_type" => Ok((collapse(text(n, src)), false)),
             "generic_type" => Ok((collapse(text(n.child_by_field_name("type").unwrap(), src)), true)),
-            "reference_type" => {
+            "reference_type" | "pointer_type" => {
                 let (h, _) = self.head(n.child_by_field_name("type").ok_or("parse-error: reference")?)?;
                 Ok((h, true))
             }
@@ -887,7 +1135,7 @@ impl<'a> Stripper<'a> {
     fn trait_ty(&mut self, t: Node, cx: &Cx) -> Value {
         let slot = self.map_type(t, cx);
         let lost = slot.has_ref && (slot.lifetime.is_some() || slot.access.as_ref().is_some_and(|a| a["rights"] == "write"));
-        if lost {
+        if lost || (slot.ptr && slot.access.is_some()) {
             self.host(t, "ref_trait".into(), cx.elide)
         } else {
             slot.ty
@@ -925,7 +1173,7 @@ impl<'a> Stripper<'a> {
             let slot = self.map_type(ty_n, &cx);
             // a shared, unnamed reference is the type's own `ref`; a `&mut` or a named lifetime has no slot here
             let hosted = slot.has_ref && (slot.lifetime.is_some() || slot.access.as_ref().is_some_and(|a| a["rights"] == "write"));
-            let v = if hosted { self.host(ty_n, "ref_self".into(), &none) } else { slot.ty };
+            let v = if hosted || (slot.ptr && slot.access.is_some()) { self.host(ty_n, "ref_self".into(), &none) } else { slot.ty };
             if let Some(s) = v.as_str() {
                 self_ty = s.to_string();
             } else {
@@ -1045,7 +1293,9 @@ impl<'a> Stripper<'a> {
                     if pat.kind() == "self" {
                         return refuse("typed-self", text(p, src));
                     }
-                    life::mut_edits(p, &mut self.cuts);
+                    if !self.gated(f) {
+                        life::mut_edits(p, &mut self.cuts);
+                    }
                     let mut pe = vec![];
                     life::pat_mut_edits(pat, &mut pe);
                     let base = pat.start_byte();
@@ -1088,8 +1338,8 @@ impl<'a> Stripper<'a> {
                 None => self.map_type(rt, &cx),
             };
             res.extend(Self::type_slot_json(&slot, false));
-            // A shared result reference is the default, as in the proposal's example.
-            if res.get("access").is_some_and(|a| a["rights"] == "read") {
+            // A shared result reference is the default, as in the proposal's example; a pointer's access is its own.
+            if !slot.ptr && res.get("access").is_some_and(|a| a["rights"] == "read") {
                 res.remove("access");
             }
             if slot.has_ref || slot.bound_ref {
@@ -1144,11 +1394,19 @@ fn collect_comments(n: Node, out: &mut Vec<(usize, usize)>) {
 
 /// Strip Rust source into (bare body, constraint JSON). `krate` is "name version"; `module` the file's path.
 /// A refusal is an `Err` whose text starts with its category and a colon.
+/// The source is bound first (`crate::bind`), so the bare body and the positions in refusals are those of `bind(src)`.
 pub fn strip(src: &str, krate: &str, module: &str) -> R<(String, Value)> {
-    let tree = parse_rust(src);
-    if let Some(e) = first_error(&tree) {
+    strip_with(src, krate, module, &StripOpts::default())
+}
+
+/// As `strip`, with what the file is told from outside it (`StripOpts`).
+pub fn strip_with(src: &str, krate: &str, module: &str, opts: &StripOpts) -> R<(String, Value)> {
+    if let Some(e) = first_error(&parse_rust(src)) {
         return refuse("parse-error", format!("Rust source, at {e}"));
     }
+    let bound = crate::bind::bind(src)?;
+    let src = bound.as_str();
+    let tree = parse_rust(src);
     let name = krate.split_whitespace().next().unwrap_or(krate).replace('-', "_");
     let mut path = vec![name];
     path.extend(module_path(module));
@@ -1159,13 +1417,36 @@ pub fn strip(src: &str, krate: &str, module: &str) -> R<(String, Value)> {
         holes: Obj::new(),
         namer: Namer::default(),
         implements: vec![],
+        paths: crate::paths::Paths::of_file(tree.root_node(), src, &module_path(module)),
+        realizations: Obj::new(),
+        realized: HashMap::new(),
+        // A realization's name is unique among the file's identifiers (weave turns each use of it back into the template).
+        names_used: crate::bind::idents(src),
+        forced: opts.realization_names.clone(),
+        file_gated: opts.cfg_gated,
+        gate: opts.gate.clone(),
     };
+    st.names_used.extend(opts.realization_names.values().cloned());
     let sc = Scope { path: path.join("::"), generics: vec![], self_ty: "Self".into() };
     st.items_in(tree.root_node(), &sc)?;
     for (ty, entry) in std::mem::take(&mut st.implements) {
         let Some(sub) = st.subjects.iter_mut().find(|s| s["kind"] == "type" && s["name"] == ty.as_str()) else { continue };
         let list = sub.as_object_mut().unwrap().entry("implements").or_insert_with(|| json!([]));
         list.as_array_mut().unwrap().push(entry);
+    }
+    // A type whose end releases something (language 7.3): its own `impl Drop`, or a field of such a type.
+    let rel = crate::bind::Release::of_source(tree.root_node(), src);
+    for sub in st.subjects.iter_mut().filter(|s| s["kind"] == "type") {
+        let name = sub["name"].as_str().unwrap_or("").rsplit("::").next().unwrap_or("").to_string();
+        if rel.types.contains(&name) {
+            let (source, observed) = if rel.drops.contains(&name) {
+                ("impl Drop", "from its Drop impl")
+            } else {
+                ("a field of a type that releases at its end", "from its fields")
+            };
+            let c = json!({"kind": "hold", "text": "lifetime self released at end", "source": source, "status": {"observed": observed}});
+            sub.as_object_mut().unwrap().entry("clauses").or_insert_with(|| json!([])).as_array_mut().unwrap().push(c);
+        }
     }
     // A comment inside a span that strip cuts would be dropped: refuse the file (proposal 2.6, 2.7).
     let mut comments = vec![];
@@ -1179,7 +1460,8 @@ pub fn strip(src: &str, krate: &str, module: &str) -> R<(String, Value)> {
     }
     let bare = apply(src, std::mem::take(&mut st.cuts));
     if let Some(e) = first_error(&parse_bare(&bare)) {
-        return refuse("bare-parse", format!("stripped body does not parse as bare Rust, at {e}"));
+        let line = e.split(':').next().and_then(|l| l.parse::<usize>().ok()).and_then(|l| bare.lines().nth(l - 1)).unwrap_or("");
+        return refuse("bare-parse", format!("stripped body does not parse as bare Rust, at {e}: `{}`", line.trim()));
     }
     let mut out = Obj::new();
     out.insert("format".into(), json!("y-constraints/0"));
@@ -1191,5 +1473,88 @@ pub fn strip(src: &str, krate: &str, module: &str) -> R<(String, Value)> {
     if !st.holes.is_empty() {
         out.insert("holes".into(), Value::Object(st.holes));
     }
+    if !st.realizations.is_empty() {
+        out.insert("realizations".into(), Value::Object(st.realizations));
+    }
     Ok((bare, Value::Object(out)))
+}
+
+/// The place of a turbofish that a realization's name replaces (the template's last segment and its type arguments; a
+/// path before it stays), the template as written, and the base of its name: a method (`s.parse::<u32>` ->
+/// `s.parse_u32`, template `<_>::parse`: its type is the receiver's), a function (`std::mem::size_of::<u64>` ->
+/// `std::mem::size_of_u64`), or a type in a path (`Vec::<u8>::new` -> `VecU8::new`).
+fn realization_site(ta: Node, src: &str) -> Option<((usize, usize), String, String, bool)> {
+    let p = ta.parent()?;
+    fn last(n: Node) -> Option<Node> {
+        if n.kind().starts_with("scoped_") { n.child_by_field_name("name") } else { Some(n) }
+    }
+    match p.kind() {
+        "generic_function" => {
+            let f = p.child_by_field_name("function")?;
+            match f.kind() {
+                "field_expression" => {
+                    let field = f.child_by_field_name("field")?;
+                    let t = text(field, src);
+                    Some(((field.start_byte(), ta.end_byte()), format!("<_>::{t}"), t.to_string(), false))
+                }
+                "identifier" | "scoped_identifier" => {
+                    let name = last(f)?;
+                    Some(((name.start_byte(), ta.end_byte()), text(f, src).to_string(), text(name, src).to_string(), false))
+                }
+                _ => None,
+            }
+        }
+        "generic_type" if p.parent().is_some_and(|s| s.kind() == "scoped_identifier" && s.child_by_field_name("path") == Some(p)) => {
+            let t = p.child_by_field_name("type")?;
+            let name = last(t)?;
+            Some(((name.start_byte(), ta.end_byte()), text(t, src).to_string(), text(name, src).to_string(), true))
+        }
+        _ => None,
+    }
+}
+
+/// A mechanical name for a realization: the template's last segment and the words of its arguments (`parse_u32`,
+/// `collect_vec_i32`), in upper camel case for a type (`VecU8`), unique in the function.
+fn realization_name(base: &str, ty: bool, args: &[&str], used: &mut HashSet<String>) -> String {
+    let mut words = vec![];
+    for a in args {
+        if a.trim() == "()" {
+            words.push("unit".to_string());
+            continue;
+        }
+        // The last segment of each path: `serde_json::Map<_, _>` gives `map`.
+        let mut cur = String::new();
+        let chars: Vec<char> = a.chars().collect();
+        for (i, c) in chars.iter().enumerate() {
+            if c.is_alphanumeric() || *c == '_' {
+                cur.push(*c);
+            } else {
+                let path = *c == ':' && chars.get(i + 1) == Some(&':');
+                if !cur.is_empty() && !path && cur != "_" {
+                    words.push(cur.clone());
+                }
+                cur.clear();
+            }
+        }
+        if !cur.is_empty() && cur != "_" {
+            words.push(cur);
+        }
+    }
+    // A type's name keeps the words' own capitals (`HashMapRowId`); a function's is lower case (`collect_vec`).
+    let name = if ty {
+        std::iter::once(base.to_string()).chain(words.iter().map(|w| {
+            let mut c = w.chars();
+            c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default()
+        })).collect::<String>()
+    } else {
+        std::iter::once(base.to_lowercase()).chain(words.iter().map(|w| w.to_lowercase())).collect::<Vec<_>>().join("_")
+    };
+    let mut n = name.clone();
+    let mut i = 2;
+    while used.contains(&n) {
+        n = format!("{name}{}{i}", if ty { "" } else { "_" });
+        i += 1;
+    }
+    used.insert(n.clone());
+    n
 }

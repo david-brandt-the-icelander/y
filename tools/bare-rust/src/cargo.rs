@@ -1,4 +1,5 @@
 //! Running cargo on a woven crate and reading its JSON diagnostics.
+use crate::builds::Build;
 use crate::R;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -63,12 +64,45 @@ fn command(dir: &Path, target: &Path, args: &[&str]) -> Command {
     c
 }
 
+/// `cargo <sub>` in a build (`crate::builds`): the default one as `command` runs it, with all targets; another with
+/// its own arguments and flags, its own target directory, and stable Rust only (no `RUSTC_BOOTSTRAP`).
+fn command_in(dir: &Path, target: &Path, sub: &str, build: &Build, extra: &[&str]) -> Command {
+    if build.is_default() {
+        let mut args = vec![sub, "--all-targets"];
+        args.extend(extra);
+        return command(dir, target, &args);
+    }
+    let mut c = Command::new("cargo");
+    c.arg(sub).args(build.cargo_args()).args(extra).current_dir(dir);
+    c.env("CARGO_TARGET_DIR", target.join("builds").join(&build.name)).env("CARGO_TERM_COLOR", "never").env_remove("RUSTC_BOOTSTRAP");
+    c.env_remove("RUSTFLAGS").env("CARGO_ENCODED_RUSTFLAGS", build.rustflags().join("\x1f"));
+    c
+}
+
+/// A span's file relative to the crate directory: cargo gives a workspace member's from the workspace's root
+/// (`member/src/x.rs`), so a path that is not under the crate is tried from the directories above it.
+fn rebase(f: &str, dir: &Path) -> Option<String> {
+    let p = Path::new(f);
+    if !p.is_relative() {
+        return None;
+    }
+    if dir.join(p).is_file() {
+        return Some(f.to_string());
+    }
+    let dir = dir.canonicalize().ok()?;
+    dir.ancestors().skip(1).find_map(|a| {
+        let full = a.join(p).canonicalize().ok()?;
+        let rel = full.strip_prefix(&dir).ok()?;
+        full.is_file().then(|| rel.to_string_lossy().into_owned())
+    })
+}
+
 fn local(span: &Value, dir: &Path) -> Option<Value> {
     let mut s = span.clone();
     for _ in 0..16 {
         let f = s["file_name"].as_str()?;
-        let p = Path::new(f);
-        if p.is_relative() && dir.join(p).is_file() {
+        if let Some(r) = rebase(f, dir) {
+            s["file_name"] = Value::String(r);
             return Some(s);
         }
         s = s["expansion"]["span"].clone();
@@ -82,9 +116,9 @@ fn local(span: &Value, dir: &Path) -> Option<Value> {
 fn fixes(m: &Value, dir: &Path, out: &mut Vec<Fix>) {
     for sp in m["spans"].as_array().into_iter().flatten() {
         if let (Some(r), Some(f)) = (sp["suggested_replacement"].as_str(), sp["file_name"].as_str()) {
-            if Path::new(f).is_relative() && dir.join(f).is_file() {
+            if let Some(f) = rebase(f, dir) {
                 out.push(Fix {
-                    file: f.to_string(),
+                    file: f,
                     start: sp["byte_start"].as_u64().unwrap_or(0) as usize,
                     end: sp["byte_end"].as_u64().unwrap_or(0) as usize,
                     replacement: r.to_string(),
@@ -143,9 +177,12 @@ fn parse(stdout: &str, dir: &Path) -> Vec<Diag> {
 
 /// `cargo check` or `cargo clippy` with `--all-targets`, reading the JSON diagnostics.
 pub fn diagnostics(dir: &Path, target: &Path, sub: &str) -> R<Run> {
-    let out = command(dir, target, &[sub, "--all-targets", "--message-format=json"])
-        .output()
-        .map_err(|e| format!("cargo {sub}: {e}"))?;
+    diagnostics_in(dir, target, sub, &Build::default_build())
+}
+
+/// `cargo check` or `cargo clippy` in a build, reading the JSON diagnostics.
+pub fn diagnostics_in(dir: &Path, target: &Path, sub: &str, build: &Build) -> R<Run> {
+    let out = command_in(dir, target, sub, build, &["--message-format=json"]).output().map_err(|e| format!("cargo {sub}: {e}"))?;
     Ok(Run {
         diags: parse(&String::from_utf8_lossy(&out.stdout), dir),
         success: out.status.success(),

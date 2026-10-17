@@ -5971,6 +5971,434 @@
           "status": { "observed": "from the impl blocks" }
         }
       ]
+    },
+    {
+      "kind": "type",
+      "name": "std::sync::MutexGuard",
+      "visible": "public",
+      "generics": [{ "name": "'a", "bounds": [] }, { "name": "T", "bounds": ["?Sized", "'a"] }],
+      "clauses": [
+        {
+          "kind": "hold",
+          "text": "lifetime self released at end",
+          "source": "1.97.0 std/src/sync/poison/mutex.rs:741-748, body: impl Drop for MutexGuard { fn drop(&mut self) { self.lock.poison.done(&self.poison); self.lock.inner.unlock(); } }",
+          "status": { "observed": "from the Drop impl at std/src/sync/poison/mutex.rs:741" }
+        },
+        {
+          "kind": "hold",
+          "text": "hold : borrows for 'a",
+          "source": "1.97.0 std/src/sync/poison/mutex.rs:277, body: struct MutexGuard<'a, T: ?Sized + 'a> { lock: &'a Mutex<T>, poison: poison::Guard }",
+          "status": { "observed": "from the declaration" }
+        },
+        {
+          "kind": "result must be used",
+          "text": "must be used",
+          "source": "1.97.0 std/src/sync/poison/mutex.rs:270, attribute #[must_use = \"if unused the Mutex will immediately unlock\"]",
+          "status": { "lifted": "std/src/sync/poison/mutex.rs: #[must_use] on the type" }
+        }
+      ],
+      "hold": { "kind": "borrows", "for": ["'a"] }
+    },
+    {
+      "kind": "type",
+      "name": "std::sync::RwLockReadGuard",
+      "visible": "public",
+      "generics": [{ "name": "'rwlock", "bounds": [] }, { "name": "T", "bounds": ["?Sized", "'rwlock"] }],
+      "clauses": [
+        {
+          "kind": "hold",
+          "text": "lifetime self released at end",
+          "source": "1.97.0 std/src/sync/poison/rwlock.rs:1118-1125, body: impl Drop for RwLockReadGuard { fn drop(&mut self) { unsafe { self.inner_lock.read_unlock(); } } }",
+          "status": { "observed": "from the Drop impl at std/src/sync/poison/rwlock.rs:1118" }
+        },
+        {
+          "kind": "hold",
+          "text": "hold : borrows for 'rwlock",
+          "source": "1.97.0 std/src/sync/poison/rwlock.rs:128, body: struct RwLockReadGuard<'rwlock, T: ?Sized + 'rwlock> { data: NonNull<T>, inner_lock: &'rwlock sys::RwLock }",
+          "status": { "observed": "from the declaration" }
+        },
+        {
+          "kind": "result must be used",
+          "text": "must be used",
+          "source": "1.97.0 std/src/sync/poison/rwlock.rs:121, attribute #[must_use = \"if unused the RwLock will immediately unlock\"]",
+          "status": { "lifted": "std/src/sync/poison/rwlock.rs: #[must_use] on the type" }
+        }
+      ],
+      "hold": { "kind": "borrows", "for": ["'rwlock"] }
+    },
+    {
+      "kind": "type",
+      "name": "std::sync::RwLockWriteGuard",
+      "visible": "public",
+      "generics": [{ "name": "'rwlock", "bounds": [] }, { "name": "T", "bounds": ["?Sized", "'rwlock"] }],
+      "clauses": [
+        {
+          "kind": "hold",
+          "text": "lifetime self released at end",
+          "source": "1.97.0 std/src/sync/poison/rwlock.rs:1128-1136, body: impl Drop for RwLockWriteGuard { fn drop(&mut self) { self.lock.poison.done(&self.poison); unsafe { self.lock.inner.write_unlock(); } } }",
+          "status": { "observed": "from the Drop impl at std/src/sync/poison/rwlock.rs:1128" }
+        },
+        {
+          "kind": "hold",
+          "text": "hold : borrows for 'rwlock",
+          "source": "1.97.0 std/src/sync/poison/rwlock.rs:160, body: struct RwLockWriteGuard<'rwlock, T: ?Sized + 'rwlock> { lock: &'rwlock RwLock<T>, poison: poison::Guard }",
+          "status": { "observed": "from the declaration" }
+        },
+        {
+          "kind": "result must be used",
+          "text": "must be used",
+          "source": "1.97.0 std/src/sync/poison/rwlock.rs:153, attribute #[must_use = \"if unused the RwLock will immediately unlock\"]",
+          "status": { "lifted": "std/src/sync/poison/rwlock.rs: #[must_use] on the type" }
+        }
+      ],
+      "hold": { "kind": "borrows", "for": ["'rwlock"] }
+    },
+    {
+      "kind": "type",
+      "name": "std::cell::Ref",
+      "visible": "public",
+      "generics": [{ "name": "'b", "bounds": [] }, { "name": "T", "bounds": ["?Sized", "'b"] }],
+      "clauses": [
+        {
+          "kind": "hold",
+          "text": "lifetime self released at end",
+          "source": "1.97.0 core/src/cell.rs:1582-1589, body: impl Drop for BorrowRef { fn drop(&mut self) { let borrow = self.borrow.get(); self.borrow.replace(borrow - 1); } }, the field `borrow: BorrowRef<'b>` of Ref at core/src/cell.rs:1619",
+          "status": {
+            "observed": "from the Drop impl at core/src/cell.rs:1582, on the field `borrow` of Ref"
+          }
+        },
+        {
+          "kind": "hold",
+          "text": "hold : borrows for 'b",
+          "source": "1.97.0 core/src/cell.rs:1614, body: struct Ref<'b, T: ?Sized + 'b> { value: NonNull<T>, borrow: BorrowRef<'b> }",
+          "status": { "observed": "from the declaration" }
+        }
+      ],
+      "hold": { "kind": "borrows", "for": ["'b"] }
+    },
+    {
+      "kind": "type",
+      "name": "std::cell::RefMut",
+      "visible": "public",
+      "generics": [{ "name": "'b", "bounds": [] }, { "name": "T", "bounds": ["?Sized", "'b"] }],
+      "clauses": [
+        {
+          "kind": "hold",
+          "text": "lifetime self released at end",
+          "source": "1.97.0 core/src/cell.rs:2050-2057, body: impl Drop for BorrowRefMut { fn drop(&mut self) { let borrow = self.borrow.get(); self.borrow.replace(borrow + 1); } }, the field `borrow: BorrowRefMut<'b>` of RefMut at core/src/cell.rs:2101",
+          "status": {
+            "observed": "from the Drop impl at core/src/cell.rs:2050, on the field `borrow` of RefMut"
+          }
+        },
+        {
+          "kind": "hold",
+          "text": "hold : borrows for 'b",
+          "source": "1.97.0 core/src/cell.rs:2097, body: struct RefMut<'b, T: ?Sized + 'b> { value: NonNull<T>, borrow: BorrowRefMut<'b>, marker: PhantomData<&'b mut T> }",
+          "status": { "observed": "from the declaration" }
+        }
+      ],
+      "hold": { "kind": "borrows", "for": ["'b"] }
+    },
+    {
+      "kind": "type",
+      "name": "std::fs::File",
+      "visible": "public",
+      "clauses": [
+        {
+          "kind": "hold",
+          "text": "lifetime self released at end",
+          "source": "1.97.0 std/src/fs.rs:58-59, doc: \"Files are automatically closed when they go out of scope.  Errors detected on closing are ignored by the implementation of `Drop`.\"",
+          "status": { "assumed": "documentation" }
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "std::io::BufWriter",
+      "visible": "public",
+      "generics": [{ "name": "W", "bounds": ["?Sized", "std::io::Write"] }],
+      "clauses": [
+        {
+          "kind": "hold",
+          "text": "lifetime self released at end",
+          "source": "1.97.0 std/src/io/buffered/bufwriter.rs:687-694, body: impl Drop for BufWriter<W> { fn drop(&mut self) { if !self.panicked { let _r = self.flush_buf(); } } }",
+          "status": { "observed": "from the Drop impl at std/src/io/buffered/bufwriter.rs:687" }
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "std::io::StdoutLock",
+      "visible": "public",
+      "generics": [{ "name": "'a", "bounds": [] }],
+      "clauses": [
+        {
+          "kind": "hold",
+          "text": "lifetime self released at end",
+          "source": "1.97.0 std/src/io/stdio.rs:749, doc: \"The lock is released when the returned lock goes out of scope.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "hold",
+          "text": "hold : borrows for 'a",
+          "source": "1.97.0 std/src/io/stdio.rs:641, body: struct StdoutLock<'a> { inner: ReentrantLockGuard<'a, RefCell<LineWriter<StdoutRaw>>> }",
+          "status": { "observed": "from the declaration" }
+        },
+        {
+          "kind": "result must be used",
+          "text": "must be used",
+          "source": "1.97.0 std/src/io/stdio.rs:639, attribute #[must_use = \"if unused stdout will immediately unlock\"]",
+          "status": { "lifted": "std/src/io/stdio.rs: #[must_use] on the type" }
+        }
+      ],
+      "hold": { "kind": "borrows", "for": ["'a"] }
+    },
+    {
+      "kind": "type",
+      "name": "std::io::StderrLock",
+      "visible": "public",
+      "generics": [{ "name": "'a", "bounds": [] }],
+      "clauses": [
+        {
+          "kind": "hold",
+          "text": "lifetime self released at end",
+          "source": "1.97.0 std/src/io/stdio.rs:980, doc: \"The lock is released when the returned lock goes out of scope.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "hold",
+          "text": "hold : borrows for 'a",
+          "source": "1.97.0 std/src/io/stdio.rs:915, body: struct StderrLock<'a> { inner: ReentrantLockGuard<'a, RefCell<StderrRaw>> }",
+          "status": { "observed": "from the declaration" }
+        },
+        {
+          "kind": "result must be used",
+          "text": "must be used",
+          "source": "1.97.0 std/src/io/stdio.rs:913, attribute #[must_use = \"if unused stderr will immediately unlock\"]",
+          "status": { "lifted": "std/src/io/stdio.rs: #[must_use] on the type" }
+        }
+      ],
+      "hold": { "kind": "borrows", "for": ["'a"] }
+    },
+    {
+      "kind": "type",
+      "name": "std::io::StdinLock",
+      "visible": "public",
+      "generics": [{ "name": "'a", "bounds": [] }],
+      "clauses": [
+        {
+          "kind": "hold",
+          "text": "lifetime self released at end",
+          "source": "1.97.0 std/src/io/stdio.rs:354, doc: \"The lock is released when the returned lock goes out of scope.\"",
+          "status": { "assumed": "documentation" }
+        },
+        {
+          "kind": "hold",
+          "text": "hold : borrows for 'a",
+          "source": "1.97.0 std/src/io/stdio.rs:289, body: struct StdinLock<'a> { inner: MutexGuard<'a, BufReader<StdinRaw>> }",
+          "status": { "observed": "from the declaration" }
+        },
+        {
+          "kind": "result must be used",
+          "text": "must be used",
+          "source": "1.97.0 std/src/io/stdio.rs:286, attribute #[must_use = \"if unused stdin will immediately unlock\"]",
+          "status": { "lifted": "std/src/io/stdio.rs: #[must_use] on the type" }
+        }
+      ],
+      "hold": { "kind": "borrows", "for": ["'a"] }
+    },
+    {
+      "kind": "type",
+      "name": "std::net::TcpStream",
+      "visible": "public",
+      "clauses": [
+        {
+          "kind": "hold",
+          "text": "lifetime self released at end",
+          "source": "1.97.0 std/src/net/tcp.rs:28, doc: \"The connection will be closed when the value is dropped.\"",
+          "status": { "assumed": "documentation" }
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "std::sync::Mutex::lock",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": ["?Sized"] }],
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<std::sync::Mutex<T>>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": {
+        "type": "std::sync::LockResult<std::sync::MutexGuard<'_, T>>",
+        "hold": { "kind": "borrows", "from": "self" }
+      },
+      "clauses": []
+    },
+    {
+      "kind": "function",
+      "name": "std::sync::Mutex::try_lock",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": ["?Sized"] }],
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<std::sync::Mutex<T>>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": {
+        "type": "std::sync::TryLockResult<std::sync::MutexGuard<'_, T>>",
+        "hold": { "kind": "borrows", "from": "self" }
+      },
+      "clauses": []
+    },
+    {
+      "kind": "function",
+      "name": "std::sync::RwLock::read",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": ["?Sized"] }],
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<std::sync::RwLock<T>>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": {
+        "type": "std::sync::LockResult<std::sync::RwLockReadGuard<'_, T>>",
+        "hold": { "kind": "borrows", "from": "self" }
+      },
+      "clauses": []
+    },
+    {
+      "kind": "function",
+      "name": "std::sync::RwLock::write",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": ["?Sized"] }],
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<std::sync::RwLock<T>>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": {
+        "type": "std::sync::LockResult<std::sync::RwLockWriteGuard<'_, T>>",
+        "hold": { "kind": "borrows", "from": "self" }
+      },
+      "clauses": []
+    },
+    {
+      "kind": "function",
+      "name": "std::cell::RefCell::borrow",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": ["?Sized"] }],
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<std::cell::RefCell<T>>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "std::cell::Ref<'_, T>", "hold": { "kind": "borrows", "from": "self" } },
+      "clauses": []
+    },
+    {
+      "kind": "function",
+      "name": "std::cell::RefCell::borrow_mut",
+      "visible": "public",
+      "generics": [{ "name": "T", "bounds": ["?Sized"] }],
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<std::cell::RefCell<T>>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "std::cell::RefMut<'_, T>", "hold": { "kind": "borrows", "from": "self" } },
+      "clauses": []
+    },
+    {
+      "kind": "function",
+      "name": "std::fs::File::open",
+      "visible": "public",
+      "generics": [{ "name": "P", "bounds": ["std::convert::AsRef<std::path::Path>"] }],
+      "params": [{ "name": "path", "type": "P" }],
+      "result": { "type": "std::io::Result<std::fs::File>" },
+      "clauses": []
+    },
+    {
+      "kind": "function",
+      "name": "std::fs::File::create",
+      "visible": "public",
+      "generics": [{ "name": "P", "bounds": ["std::convert::AsRef<std::path::Path>"] }],
+      "params": [{ "name": "path", "type": "P" }],
+      "result": { "type": "std::io::Result<std::fs::File>" },
+      "clauses": []
+    },
+    {
+      "kind": "function",
+      "name": "std::io::BufWriter::new",
+      "visible": "public",
+      "generics": [{ "name": "W", "bounds": ["std::io::Write"] }],
+      "params": [{ "name": "inner", "type": "W" }],
+      "result": { "type": "std::io::BufWriter<W>" },
+      "clauses": []
+    },
+    {
+      "kind": "function",
+      "name": "std::io::Stdout::lock",
+      "visible": "public",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<std::io::Stdout>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "std::io::StdoutLock<'static>" },
+      "clauses": []
+    },
+    {
+      "kind": "function",
+      "name": "std::io::Stderr::lock",
+      "visible": "public",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<std::io::Stderr>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "std::io::StderrLock<'static>" },
+      "clauses": []
+    },
+    {
+      "kind": "function",
+      "name": "std::io::Stdin::lock",
+      "visible": "public",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<std::io::Stdin>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "std::io::StdinLock<'static>" },
+      "clauses": []
+    },
+    {
+      "kind": "function",
+      "name": "std::net::TcpStream::connect",
+      "visible": "public",
+      "generics": [{ "name": "A", "bounds": ["std::net::ToSocketAddrs"] }],
+      "params": [{ "name": "addr", "type": "A" }],
+      "result": { "type": "std::io::Result<std::net::TcpStream>" },
+      "clauses": []
     }
   ]
 }

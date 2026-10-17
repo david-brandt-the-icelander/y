@@ -3,7 +3,7 @@
 use crate::cargo::{self, Diag};
 use crate::corpus::{corpus_files, find_brs};
 use crate::trace::Kind;
-use crate::weave::{weave_traced, HoleSite, Woven};
+use crate::weave::{weave_in_crate, HoleSite, WeaveError, Woven};
 use crate::R;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -65,10 +65,12 @@ pub struct HoleReport {
 impl HoleReport {
     pub fn show(&self) -> String {
         let what = match &self.key {
+            Some(k) if self.kind == "realization" => format!("realization `{k}`"),
             Some(k) => format!("local `{k}`"),
             None => format!("{} #{}", self.kind, self.n),
         };
         let path = match &self.key {
+            Some(k) if self.kind == "realization" => format!("realizations[\"{k}\"].args, in the crate root's file"),
             Some(k) => format!("holes[\"{}\"].locals[\"{k}\"]", self.subject),
             None => format!("holes[\"{}\"].hints += {{kind: {}, n: {}, type: T}}", self.subject, self.kind, self.n),
         };
@@ -116,6 +118,8 @@ impl ErrReport {
 pub struct CrateWeave {
     pub files: Vec<WovenFile>,
     pub weave_errors: Vec<(PathBuf, String)>,
+    /// The same refusals mapped to the bare file, with the hint that names the fix (see `hints`).
+    pub weave_diags: Vec<crate::errmap::MappedError>,
     /// Corpus files with no bare file (strip refused them): copied as they are.
     pub unwoven: Vec<PathBuf>,
     pub iterations: usize,
@@ -128,6 +132,12 @@ pub struct CrateWeave {
     pub cargo: bool,
     pub cargo_stderr: String,
     pub out: PathBuf,
+    /// The crate's realizations as woven (with check 4, the arguments dropped), from the files that list them.
+    pub realizations: serde_json::Map<String, Value>,
+    /// The builds the crate is checked in (`builds.json` beside the bare files; the default build without it).
+    pub reach: crate::builds::Reach,
+    /// The diagnostics of the last `cargo check` in each build, by the build's name.
+    pub runs: Vec<(String, Vec<Diag>)>,
 }
 
 impl CrateWeave {
@@ -166,8 +176,8 @@ impl CrateWeave {
     }
 
     pub fn print(&self) {
-        for (f, e) in &self.weave_errors {
-            eprintln!("weave refused {}: {e}", f.display());
+        for d in &self.weave_diags {
+            eprintln!("{}", d.show());
         }
         for h in &self.holes {
             eprintln!("{}", h.show());
@@ -207,10 +217,12 @@ impl CrateWeave {
 fn skip(rel: &Path, woven: &BTreeSet<PathBuf>) -> bool {
     let first = rel.components().next().and_then(|c| c.as_os_str().to_str()).unwrap_or("");
     let name = rel.file_name().and_then(|n| n.to_str()).unwrap_or("");
-    (first.starts_with("target") || matches!(first, ".git" | "node_modules"))
+    (first.starts_with("target") || first == ".git")
+        // An npm package's links would be copied as files, and `.bin/tree-sitter` would then run itself.
+        || rel.components().any(|c| c.as_os_str() == "node_modules")
         || rel.starts_with("corpora/src") // linked in, not copied: see `link_corpora`
         || name == MARKER
-        || (rel.parent().is_none_or(|p| p.as_os_str().is_empty()) && name == "refusals.json")
+        || (rel.parent().is_none_or(|p| p.as_os_str().is_empty()) && (name == "refusals.json" || name == crate::builds::FILE))
         || woven.contains(rel)
         || rel.to_str().is_some_and(|r| {
             // The stripped files of a corpus file: x.brs and x.constraints.json beside x.rs.
@@ -220,6 +232,7 @@ fn skip(rel: &Path, woven: &BTreeSet<PathBuf>) -> bool {
                 || under_bare.is_some_and(|st| woven.contains(Path::new(&format!("{st}.rs"))))
         })
         || rel == Path::new("bare/refusals.json")
+        || rel == Path::new("bare").join(crate::builds::FILE)
 }
 
 fn copy_tree(src: &Path, base: &Path, dst: &Path, woven: &BTreeSet<PathBuf>) -> R<()> {
@@ -237,6 +250,11 @@ fn copy_tree(src: &Path, base: &Path, dst: &Path, woven: &BTreeSet<PathBuf>) -> 
             copy_tree(&p, base, dst, woven)?;
         } else {
             fs::copy(&p, &to).map_err(|e| format!("{}: {e}", p.display()))?;
+            // The copy keeps the file's time: a build script that compares times (a grammar newer than the parser made
+            // from it) sees what it sees in the crate.
+            if let Ok(t) = fs::metadata(&p).and_then(|m| m.modified()) {
+                let _ = fs::File::options().write(true).open(&to).and_then(|f| f.set_modified(t));
+            }
         }
     }
     Ok(())
@@ -259,6 +277,29 @@ fn link_corpora(crate_dir: &Path, out: &Path) -> R<()> {
     linked.map_err(|e| format!("{}: {e}", to.display()))
 }
 
+/// A crate that is a member of a workspace finds the workspace's other files beside it (`../data/x`, the workspace's
+/// `clippy.toml`): the woven copy gets them too, as links beside it, all but the workspace's own manifest, which would
+/// make the copy a member.
+fn link_workspace(crate_dir: &Path, out: &Path) -> R<()> {
+    let (Some(ws), Some(beside)) = (crate_dir.parent(), out.parent()) else { return Ok(()) };
+    let is_ws = fs::read_to_string(ws.join("Cargo.toml")).is_ok_and(|t| t.lines().any(|l| l.trim() == "[workspace]"));
+    if !is_ws {
+        return Ok(());
+    }
+    let own = fs::canonicalize(crate_dir).unwrap_or(crate_dir.to_path_buf());
+    for e in fs::read_dir(ws).map_err(|e| format!("{}: {e}", ws.display()))?.filter_map(|e| e.ok()) {
+        let name = e.file_name();
+        let skip = matches!(name.to_str(), Some("Cargo.toml" | "Cargo.lock" | "target" | ".git"));
+        let to = beside.join(&name);
+        if skip || fs::canonicalize(e.path()).is_ok_and(|p| p == own) || to.exists() || fs::symlink_metadata(&to).is_ok() {
+            continue;
+        }
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(e.path().canonicalize().unwrap_or(e.path()), &to).map_err(|err| format!("{}: {err}", to.display()))?;
+    }
+    Ok(())
+}
+
 fn prepare_out(out: &Path, dirs: &[&Path]) -> R<()> {
     let canon = |p: &Path| fs::canonicalize(p).unwrap_or(p.to_path_buf());
     if out.exists() {
@@ -274,6 +315,61 @@ fn prepare_out(out: &Path, dirs: &[&Path]) -> R<()> {
     }
     fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
     fs::write(out.join(MARKER), "").map_err(|e| e.to_string())
+}
+
+/// The position of the binding of `name` that a diagnostic at `at` (the binding itself, or a use) refers to: the
+/// nearest binding of it at or before `at` whose scope (the block, function, closure, loop or arm it is bound in)
+/// holds `at`. `None` if it already has `mut`.
+fn binding_before(src: &str, name: &str, at: usize) -> Option<usize> {
+    use tree_sitter::Node;
+    let tree = crate::parse_rust(src);
+    fn bound(n: Node) -> Option<Node> {
+        // The construct that binds: up from the identifier through the pattern to a `pattern` field or the parameters.
+        let mut cur = n;
+        while let Some(p) = cur.parent() {
+            let in_pattern = p.child_by_field_name("pattern") == Some(cur) || matches!(p.kind(), "closure_parameters" | "match_pattern");
+            if in_pattern {
+                return Some(p);
+            }
+            if p.kind().ends_with("_expression") || matches!(p.kind(), "block" | "arguments") || crate::is_item_kind(p.kind()) {
+                return None;
+            }
+            cur = p;
+        }
+        None
+    }
+    fn walk<'a>(n: Node<'a>, src: &str, name: &str, out: &mut Vec<(Node<'a>, Node<'a>)>) {
+        if n.kind() == "identifier" && crate::text(n, src) == name {
+            if let Some(b) = bound(n) {
+                out.push((n, b));
+            }
+        }
+        for c in crate::named_children(n) {
+            walk(c, src, name, out);
+        }
+    }
+    let mut found = vec![];
+    walk(tree.root_node(), src, name, &mut found);
+    let scope = |b: Node| -> Option<(usize, usize)> {
+        let s = match b.kind() {
+            // A `let` binds to the end of its block; a parameter, for its function or closure; a pattern, for its arm,
+            // loop or `if let`.
+            "let_declaration" => b.parent(),
+            "parameter" => b.parent().and_then(|ps| ps.parent()),
+            "closure_parameters" => b.parent(),
+            "match_pattern" => b.parent(),
+            _ => b.parent(),
+        }?;
+        Some((s.start_byte(), s.end_byte()))
+    };
+    found
+        .into_iter()
+        .filter(|(n, b)| n.start_byte() <= at && scope(*b).is_some_and(|(s, e)| s <= at && at < e))
+        // A pattern does not bind in its own value: in `if let Some(pre) = pre.as_mut()` the use is the outer `pre`.
+        .filter(|(_, b)| !b.child_by_field_name("value").is_some_and(|v| v.start_byte() <= at && at < v.end_byte()))
+        .filter(|(n, _)| !n.prev_sibling().is_some_and(|p| p.kind() == "mutable_specifier"))
+        .max_by_key(|(n, _)| n.start_byte())
+        .map(|(n, _)| n.start_byte())
 }
 
 fn write(p: &Path, s: &str) -> R<()> {
@@ -307,9 +403,10 @@ fn hole_of<'a>(sites: &'a [HoleSite], bare: &str, bs: usize, be: usize, ok: &dyn
             return found;
         }
     }
-    // 3. a cast, type argument or closure site inside the error span (only for inference errors, which name no site).
+    // 3. a cast, type argument, realization or closure site inside the error span (only for inference errors, which
+    // name no site): `TryInto::<_>::try_into(x)` with the realization's arguments dropped.
     if infer {
-        if let Some(s) = cand(&|s: &HoleSite| matches!(s.kind, "cast" | "targ" | "closure_param") && bs <= s.range.0 && s.range.1 <= be).min_by_key(|s| s.range.0) {
+        if let Some(s) = cand(&|s: &HoleSite| matches!(s.kind, "cast" | "targ" | "closure_param" | "realization") && bs <= s.range.0 && s.range.1 <= be).min_by_key(|s| s.range.0) {
             return Some(s);
         }
     }
@@ -321,9 +418,32 @@ fn hole_of<'a>(sites: &'a [HoleSite], bare: &str, bs: usize, be: usize, ok: &dyn
     cand(&|s: &HoleSite| matches!(s.kind, "closure_return") && within(s.full)).min_by_key(|s| s.full.1 - s.full.0)
 }
 
-/// Identifies a hole across weaves: its subject, kind and key or ordinal.
+/// Identifies a hole across weaves: its subject, kind and key or ordinal. A realization is the crate's, not a
+/// function's: its id has no subject.
 pub fn hole_id(subject: &str, kind: &str, key: Option<&str>, n: usize) -> String {
+    let subject = if kind == "realization" { "" } else { subject };
     format!("{subject}|{kind}|{}", key.map_or(n.to_string(), str::to_string))
+}
+
+/// The realizations of a crate: the tables of its files (a crate root's file lists its crate's), merged. A name with
+/// two different entries is refused. Returns the table and, for each name, the file that lists it.
+pub fn crate_realizations(files: &[(PathBuf, Value)]) -> R<(serde_json::Map<String, Value>, BTreeMap<String, PathBuf>)> {
+    let (mut all, mut owner): (serde_json::Map<String, Value>, BTreeMap<String, PathBuf>) = (serde_json::Map::new(), BTreeMap::new());
+    for (rel, js) in files {
+        for (k, v) in js["realizations"].as_object().into_iter().flatten() {
+            match all.get(k) {
+                Some(w) if w != v => {
+                    return Err(format!("realization `{k}` is listed twice with different entries: {} and {}", owner[k.as_str()].display(), rel.display()))
+                }
+                Some(_) => {}
+                None => {
+                    all.insert(k.clone(), v.clone());
+                    owner.insert(k.clone(), rel.clone());
+                }
+            }
+        }
+    }
+    Ok((all, owner))
 }
 
 pub fn hole_report(wf: &WovenFile, s: &HoleSite, code: &str, message: &str, how: &'static str) -> HoleReport {
@@ -364,7 +484,7 @@ fn classify(files: &[WovenFile], diags: &[Diag], cw: &mut CrateWeave) {
     // Pass 2: the others.
     for (_, d) in errs.iter().enumerate().filter(|(i, _)| !handled[*i]) {
         let code = d.code.clone().unwrap_or_default();
-        let mk = |locus: String, bare_start: usize| ErrReport { code: code.clone(), message: d.message.clone(), woven_file: d.file.clone(), woven_line: d.line, woven_col: d.col, locus, bare_start, rendered: d.rendered.clone(), mapped: crate::errmap::map_diag(files.iter().find(|f| f.rel.to_string_lossy() == d.file), d) };
+        let mk = |locus: String, bare_start: usize| ErrReport { code: code.clone(), message: d.message.clone(), woven_file: d.file.clone(), woven_line: d.line, woven_col: d.col, locus, bare_start, rendered: d.rendered.clone(), mapped: crate::errmap::map_diag(files, files.iter().find(|f| f.rel.to_string_lossy() == d.file), d) };
         let Some(wf) = find(d) else {
             let locus = if d.file.is_empty() { "no source span".to_string() } else { format!("{} (not a woven file)", d.file) };
             cw.errors.push(mk(locus, 0));
@@ -416,6 +536,47 @@ fn write_map(out: &Path, files: &[WovenFile]) -> R<()> {
     write(&out.join(".bare-rust-map.json"), &crate::json::ordered(&Value::Object(m)))
 }
 
+/// The diagnostics of every build, each once: the same error in two builds is one error.
+fn merged(runs: &[(String, Vec<Diag>)]) -> Vec<Diag> {
+    let mut out: Vec<Diag> = vec![];
+    for d in runs.iter().flat_map(|(_, ds)| ds) {
+        if !out.iter().any(|o| o.key() == d.key() && o.start == d.start && o.end == d.end) {
+            out.push(d.clone());
+        }
+    }
+    out
+}
+
+/// The positions where rustc's errors E0384, E0594 and E0596 ask for `mut`, by file.
+fn mut_insertions(files: &[WovenFile], diags: &[Diag], ins: &mut BTreeMap<String, BTreeSet<usize>>) {
+    for d in diags.iter().filter(|d| d.is_error() && d.code.as_deref().is_some_and(|c| MUT_CODES.contains(&c))) {
+        let before = ins.values().map(BTreeSet::len).sum::<usize>();
+        for fx in &d.fixes {
+            let Some(wf) = files.iter().find(|f| f.rel.to_string_lossy() == fx.file) else { continue };
+            // Either an insertion of `mut ` before the binding, or the binding replaced by `mut <binding>`.
+            let orig = wf.woven.text.get(fx.start..fx.end).unwrap_or("");
+            let adds_mut = if fx.start == fx.end {
+                fx.replacement == "mut " && wf.woven.text.is_char_boundary(fx.start)
+            } else {
+                !orig.is_empty() && fx.replacement == format!("mut {orig}")
+            };
+            if adds_mut {
+                ins.entry(fx.file.clone()).or_default().insert(fx.start);
+            }
+        }
+        // rustc does not always suggest the `mut` (for `&mut x` it may suggest removing the `&mut`): the binding
+        // the message names, the nearest one in scope before the use, takes it.
+        if ins.values().map(BTreeSet::len).sum::<usize>() == before {
+            let name = d.message.split('`').nth(1).map(|n| n.trim_start_matches('*').split(['.', '[']).next().unwrap_or(n).to_string());
+            if let (Some(name), Some(wf)) = (name, files.iter().find(|f| f.rel.to_string_lossy() == d.file)) {
+                if let Some(at) = binding_before(&wf.woven.text, &name, d.start) {
+                    ins.entry(d.file.clone()).or_default().insert(at);
+                }
+            }
+        }
+    }
+}
+
 /// Weave every `x.brs` below `from` and, with `cargo`, check the crate and derive `mut`.
 pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave> {
     let crate_dir = o.crate_dir.clone().unwrap_or_else(|| from.to_path_buf());
@@ -424,7 +585,29 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
     if brs.is_empty() {
         return Err(format!("{}: no .brs files", from.display()));
     }
-    let mut cw = CrateWeave { cargo: o.cargo, out: out.to_path_buf(), ..Default::default() };
+    let reach = crate::builds::Reach::load(from).unwrap_or_else(crate::builds::Reach::default_only);
+    let mut cw = CrateWeave { cargo: o.cargo, out: out.to_path_buf(), reach, ..Default::default() };
+    // The crate's realizations, from every file that lists some; check 4 drops their arguments, crate-wide.
+    let listed: Vec<(PathBuf, Value)> = brs
+        .iter()
+        .filter_map(|b| {
+            let js: Value = serde_json::from_str(&fs::read_to_string(b.with_extension("constraints.json")).ok()?).ok()?;
+            js.get("realizations").is_some().then(|| (b.strip_prefix(from).unwrap_or(b).with_extension("constraints.json"), js))
+        })
+        .collect();
+    let (mut reals, owners) = crate_realizations(&listed)?;
+    let mut reals_dropped = BTreeSet::new();
+    if o.drop_holes {
+        for (k, v) in reals.iter_mut() {
+            let id = hole_id("", "realization", Some(k), 0);
+            if !o.keep.contains(&id) {
+                // A realization keeps its template and drops its arguments: `parse::<_>()`.
+                let n = v["args"].as_array().map_or(0, Vec::len);
+                v["args"] = serde_json::json!(vec!["_"; n]);
+                reals_dropped.insert(id);
+            }
+        }
+    }
     for b in brs {
         let mut rel = b.strip_prefix(from).unwrap_or(&b).with_extension("rs");
         // A crate directory whose stripped files sit in a `bare/` folder (`strip --out <crate>/bare`): the files belong
@@ -435,10 +618,10 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
             }
         }
         let r = (|| {
-            let bare = fs::read_to_string(&b).map_err(|e| format!("{}: {e}", b.display()))?;
+            let bare = fs::read_to_string(&b).map_err(|e| WeaveError::from(format!("{}: {e}", b.display())))?;
             let cj = b.with_extension("constraints.json");
-            let js = fs::read_to_string(&cj).map_err(|e| format!("{}: {e}", cj.display()))?;
-            let mut js: Value = serde_json::from_str(&js).map_err(|e| format!("{}: {e}", cj.display()))?;
+            let js = fs::read_to_string(&cj).map_err(|e| WeaveError::from(format!("{}: {e}", cj.display())))?;
+            let mut js: Value = serde_json::from_str(&js).map_err(|e| WeaveError::from(format!("{}: {e}", cj.display())))?;
             let mut dropped = BTreeSet::new();
             if o.drop_holes {
                 let mut kept = serde_json::Map::new();
@@ -449,6 +632,10 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
                         if o.keep.contains(&id) {
                             locals.insert(k.clone(), v.clone());
                         } else {
+                            // A cast local drops its type, not its cast: `let x: _ = e as _;`.
+                            if v["cast"] == true {
+                                locals.insert(k.clone(), serde_json::json!({"type": "_", "cast": true}));
+                            }
                             dropped.insert(id);
                         }
                     }
@@ -472,19 +659,37 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
                     }
                 }
                 js["holes"] = Value::Object(kept);
+                dropped.extend(reals_dropped.iter().cloned());
             }
-            Ok::<_, String>((weave_traced(&bare, &js)?, js, dropped))
+            Ok::<_, WeaveError>((weave_in_crate(&bare, &js, Some(&reals))?, js, dropped))
         })();
         match r {
             Ok((woven, json, dropped)) => cw.files.push(WovenFile { rel, woven, json, mut_added: 0, dropped }),
-            Err(e) => cw.weave_errors.push((rel, e)),
+            Err(e) => {
+                cw.weave_diags.push(crate::errmap::map_weave_error(&rel.with_extension("brs").display().to_string(), &rel.with_extension("constraints.json").display().to_string(), &e));
+                cw.weave_errors.push((rel, e.msg));
+            }
         }
     }
+    // A realization that no body of the crate uses binds to nothing: reported with the file that lists it.
+    let used: std::collections::HashSet<String> = cw.files.iter().flat_map(|f| f.woven.realizations_used.iter().cloned()).collect();
+    for u in crate::weave::unused_realizations(Some(&reals), &used, "") {
+        let file = &owners[u.name.as_str()];
+        if let Some(wf) = cw.files.iter_mut().find(|f| file.ends_with(f.rel.with_extension("constraints.json"))) {
+            let owner = crate::weave::base_path(&wf.json);
+            wf.woven.unbound.push(crate::weave::Unbound { subject: owner, ..u });
+        }
+    }
+    cw.realizations = reals;
     let woven_set: BTreeSet<PathBuf> = cw.files.iter().map(|f| f.rel.clone()).collect();
     cw.unwoven = corpus_files(&crate_dir, true).unwrap_or_default().into_iter().filter(|f| !woven_set.contains(f)).collect();
     prepare_out(out, &[from, &crate_dir])?;
     copy_tree(&crate_dir, &crate_dir, out, &woven_set)?;
     link_corpora(&crate_dir, out)?;
+    link_workspace(&crate_dir, out)?;
+    // The build goes to a target directory of its own; a test that writes under `target/`, as a crate's own build
+    // would have made it, finds the directory there.
+    fs::create_dir_all(out.join("target")).map_err(|e| format!("{}: {e}", out.display()))?;
     for f in &cw.files {
         write(&out.join(&f.rel), &f.woven.text)?;
     }
@@ -492,32 +697,29 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
         write_map(out, &cw.files)?;
         return Ok(cw);
     }
-    // Derive `mut`: apply rustc's suggestions for E0384, E0594 and E0596 that add `mut` to a binding, until none remain.
+    // Derive `mut`: apply rustc's suggestions for E0384, E0594 and E0596 that add `mut` to a binding, until none remain,
+    // in every build: a binding needs `mut` if some build mutates it.
+    let builds = cw.reach.builds.clone();
     let diags = loop {
         cw.iterations += 1;
         if cw.iterations > 40 {
             return Err("mut derivation did not converge after 40 cargo runs".into());
         }
-        let run = cargo::diagnostics(out, &o.target, "check")?;
-        cw.cargo_stderr = run.stderr.clone();
         let mut ins: BTreeMap<String, BTreeSet<usize>> = BTreeMap::new();
-        for d in run.diags.iter().filter(|d| d.is_error() && d.code.as_deref().is_some_and(|c| MUT_CODES.contains(&c))) {
-            for fx in &d.fixes {
-                let Some(wf) = cw.files.iter().find(|f| f.rel.to_string_lossy() == fx.file) else { continue };
-                // Either an insertion of `mut ` before the binding, or the binding replaced by `mut <binding>`.
-                let orig = wf.woven.text.get(fx.start..fx.end).unwrap_or("");
-                let adds_mut = if fx.start == fx.end {
-                    fx.replacement == "mut " && wf.woven.text.is_char_boundary(fx.start)
-                } else {
-                    !orig.is_empty() && fx.replacement == format!("mut {orig}")
-                };
-                if adds_mut {
-                    ins.entry(fx.file.clone()).or_default().insert(fx.start);
-                }
+        let mut runs = vec![];
+        for b in &builds {
+            let run = cargo::diagnostics_in(out, &o.target, "check", b)?;
+            if b.is_default() {
+                cw.cargo_stderr = run.stderr.clone();
+            } else if !run.stderr.is_empty() && cw.cargo_stderr.is_empty() {
+                cw.cargo_stderr = format!("[build {}] {}", b.name, run.stderr);
             }
+            mut_insertions(&cw.files, &run.diags, &mut ins);
+            runs.push((b.name.clone(), run.diags));
         }
         if ins.is_empty() {
-            break run.diags;
+            cw.runs = runs;
+            break merged(&cw.runs);
         }
         for (file, set) in ins {
             let wf = cw.files.iter_mut().find(|f| f.rel.to_string_lossy() == file).unwrap();
@@ -535,4 +737,17 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
     cw.files = files;
     write_map(out, &cw.files)?;
     Ok(cw)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_binding_a_use_names_is_the_one_in_scope_there() {
+        // `pre.as_mut()` is the outer `pre`: the pattern binds only in the `if let`'s block.
+        let src = "fn f(o: Option<u8>) {\n    let pre = o;\n    if let Some(pre) = pre.as_mut() {\n        *pre += 1;\n    }\n}\n";
+        let at = src.find("pre.as_mut").unwrap();
+        assert_eq!(super::binding_before(src, "pre", at), Some(src.find("pre = o").unwrap()));
+        let inner = src.find("*pre").unwrap() + 1;
+        assert_eq!(super::binding_before(src, "pre", inner), Some(src.find("pre) =").unwrap()));
+    }
 }

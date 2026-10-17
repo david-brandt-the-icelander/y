@@ -17,20 +17,28 @@ struct Mention<'a> {
     input: bool,
     output: bool,
     decl: bool,
+    /// Where a lifetime cannot be elided without changing what it means: inside an `impl Trait` of an input, where
+    /// Rust has no elided lifetimes, and inside `Fn(..)` or `fn(..)`, where an elided one belongs to that type.
+    named_here: bool,
 }
 
 fn mentions<'a>(n: Node<'a>, src: &str, region: u8, out: &mut Vec<Mention<'a>>) {
+    mentions_in(n, src, region, false, out)
+}
+
+fn mentions_in<'a>(n: Node<'a>, src: &str, region: u8, named_here: bool, out: &mut Vec<Mention<'a>>) {
+    let named_here = named_here || n.kind() == "function_type" || (n.kind() == "abstract_type" && region == 1);
     if n.kind() == "lifetime" {
         let p = n.parent();
         let decl = p.is_some_and(|p| {
             p.kind() == "lifetime_parameter" && p.child_by_field_name("name").is_some_and(|x| x.id() == n.id())
         });
         let on_ref = p.is_some_and(|p| matches!(p.kind(), "reference_type" | "self_parameter"));
-        out.push(Mention { name: text(n, src).to_string(), node: n, on_ref, input: region == 1, output: region == 2, decl });
+        out.push(Mention { name: text(n, src).to_string(), node: n, on_ref, input: region == 1, output: region == 2, decl, named_here });
         return;
     }
     for c in all_children(n) {
-        mentions(c, src, region, out);
+        mentions_in(c, src, region, named_here, out);
     }
 }
 
@@ -67,7 +75,7 @@ pub fn analyse(f: Node, src: &str) -> Life {
         }
     }
     for m in &ms {
-        if !m.decl && (!m.on_ref || !(m.input || m.output)) {
+        if !m.decl && (!m.on_ref || !(m.input || m.output) || m.named_here) {
             bad.insert(m.name.clone());
         }
     }
@@ -218,6 +226,31 @@ fn text_starts_with_ref(n: Node) -> bool {
 }
 
 /// Edits that remove `mut` from a `let`, a `parameter` or the parameters of a closure.
+/// Whether a `#[cfg(..)]` on the node or around it may leave it out of the build (`#[cfg(test)]` and
+/// `#[cfg(not(test))]` aside, which a check of all targets builds): then rustc does not see it, and cannot say where it
+/// needs `mut`.
+pub fn cfg_gated(n: Node, src: &str) -> bool {
+    let gates = |a: Node| {
+        let t: String = text(a, src).chars().filter(|c| !c.is_whitespace()).collect();
+        (t.starts_with("#[cfg(") || t.starts_with("#![cfg(")) && !matches!(t.as_str(), "#[cfg(test)]" | "#[cfg(not(test))]" | "#![cfg(test)]")
+    };
+    let mut cur = Some(n);
+    while let Some(c) = cur {
+        let mut p = c.prev_sibling();
+        while let Some(a) = p.filter(|a| a.kind() == "attribute_item" || is_comment(*a)) {
+            if a.kind() == "attribute_item" && gates(a) {
+                return true;
+            }
+            p = a.prev_sibling();
+        }
+        if named_children(c).into_iter().any(|a| a.kind() == "inner_attribute_item" && gates(a)) {
+            return true;
+        }
+        cur = c.parent();
+    }
+    false
+}
+
 pub fn mut_edits(n: Node, out: &mut Vec<Edit>) {
     match n.kind() {
         "let_declaration" | "parameter" => {
@@ -254,6 +287,12 @@ pub fn normalise_edits(n: Node, src: &str, out: &mut Vec<Edit>, strip_mut: bool)
         "token_tree" => return,
         "function_item" | "function_signature_item" => out.extend(analyse(n, src).cuts),
         "let_declaration" | "parameter" | "closure_parameters" | "self_parameter" if strip_mut => mut_edits(n, out),
+        // `&'_ T` is `&T`: the anonymous lifetime is the elided one.
+        "lifetime" if text(n, src) == "'_" && n.parent().is_some_and(|p| p.kind() == "reference_type") => {
+            if let Some(next) = n.next_sibling() {
+                out.push((n.start_byte(), next.start_byte(), String::new()));
+            }
+        }
         _ => {}
     }
     for c in named_children(n) {
@@ -283,6 +322,8 @@ pub enum SK {
     ClParam,
     ClRet,
     Let,
+    /// A name over a pattern, `n @ 1..=9`: it carries the type of the literals under it.
+    At,
 }
 
 /// A place in a body where a concrete type is, or can be, a hole. `n` counts sites of the same kind.
@@ -309,13 +350,13 @@ fn is_type_arg(c: Node) -> bool {
         )
 }
 
-fn push<'a>(out: &mut Vec<Site<'a>>, cnt: &mut [usize; 6], kind: SK, node: Node<'a>) {
+fn push<'a>(out: &mut Vec<Site<'a>>, cnt: &mut [usize; 7], kind: SK, node: Node<'a>) {
     let i = kind as usize;
     out.push(Site { kind, n: cnt[i], node });
     cnt[i] += 1;
 }
 
-fn walk<'a>(n: Node<'a>, out: &mut Vec<Site<'a>>, cnt: &mut [usize; 6]) {
+fn walk<'a>(n: Node<'a>, out: &mut Vec<Site<'a>>, cnt: &mut [usize; 7]) {
     match n.kind() {
         "token_tree" => {}
         k if is_item_kind(k) => {}
@@ -345,6 +386,12 @@ fn walk<'a>(n: Node<'a>, out: &mut Vec<Site<'a>>, cnt: &mut [usize; 6]) {
                 walk(b, out, cnt);
             }
         }
+        "captured_pattern" => {
+            push(out, cnt, SK::At, n);
+            for c in named_children(n) {
+                walk(c, out, cnt);
+            }
+        }
         "let_declaration" => {
             push(out, cnt, SK::Let, n);
             let ty = n.child_by_field_name("type").map(|t| t.id());
@@ -362,11 +409,107 @@ fn walk<'a>(n: Node<'a>, out: &mut Vec<Site<'a>>, cnt: &mut [usize; 6]) {
     }
 }
 
+/// An expression that binds tighter than `as`, so `<e> as T` needs no brackets around `<e>`.
+pub fn binds_tighter_than_as(n: Node) -> bool {
+    matches!(
+        n.kind(),
+        "identifier"
+            | "scoped_identifier"
+            | "self"
+            | "field_expression"
+            | "call_expression"
+            | "index_expression"
+            | "parenthesized_expression"
+            | "integer_literal"
+            | "float_literal"
+            | "boolean_literal"
+            | "char_literal"
+            | "unary_expression"
+            | "reference_expression"
+            | "type_cast_expression"
+            | "try_expression"
+            | "await_expression"
+            | "macro_invocation"
+    )
+}
+
+/// The macro calls of a body (not of the items nested in it) whose tokens state a type: a cast, a suffixed literal or
+/// a turbofish. `strip` cannot reach into them, so it marks them `rust! { ... }`.
+pub fn typed_macro_calls<'a>(body: Node<'a>, src: &str) -> Vec<Node<'a>> {
+    fn typed(tt: Node, src: &str) -> bool {
+        let toks = all_children(tt);
+        toks.iter().enumerate().any(|(i, t)| match t.kind() {
+            "token_tree" => typed(*t, src),
+            "as" => true,
+            "integer_literal" | "float_literal" => lit_suffix(text(*t, src)).is_some(),
+            "::" => toks.get(i + 1).is_some_and(|n| n.kind() == "<"),
+            _ => false,
+        })
+    }
+    fn walk<'a>(n: Node<'a>, src: &str, out: &mut Vec<Node<'a>>) {
+        if is_item_kind(n.kind()) {
+            return;
+        }
+        if n.kind() == "macro_invocation" {
+            if all_children(n).into_iter().any(|c| c.kind() == "token_tree" && typed(c, src)) {
+                out.push(n);
+            }
+            return;
+        }
+        for c in named_children(n) {
+            walk(c, src, out);
+        }
+    }
+    let mut out = vec![];
+    for c in named_children(body) {
+        walk(c, src, &mut out);
+    }
+    out
+}
+
+/// `rust! { <text> }`: the Rust text it carries, if `n` is that marker.
+pub fn rust_marker<'a>(n: Node, src: &'a str) -> Option<&'a str> {
+    if n.kind() != "macro_invocation" || n.child_by_field_name("macro").map(|m| text(m, src)) != Some("rust") {
+        return None;
+    }
+    let tt = all_children(n).into_iter().find(|c| c.kind() == "token_tree")?;
+    let t = text(tt, src);
+    Some(t.get(1..t.len().saturating_sub(1))?.trim())
+}
+
+/// For a closure parameter: the `let` whose value is the closure, if the closure is one.
+pub fn closure_let(param: Node) -> Option<Node> {
+    let closure = param.parent().filter(|p| p.kind() == "closure_parameters")?.parent()?;
+    closure.parent().filter(|l| l.kind() == "let_declaration" && l.child_by_field_name("value") == Some(closure))
+}
+
 /// The sites of a body (or of an initialiser), in source order.
 pub fn sites(body: Node) -> Vec<Site> {
     let mut out = vec![];
-    walk(body, &mut out, &mut [0; 6]);
+    walk(body, &mut out, &mut [0; 7]);
     out
+}
+
+/// The literals under a node.
+pub fn at_literals_in(n: Node) -> Vec<Node> {
+    fn lits<'a>(n: Node<'a>, out: &mut Vec<Node<'a>>) {
+        if matches!(n.kind(), "integer_literal" | "float_literal") {
+            out.push(n);
+        }
+        for c in named_children(n) {
+            lits(c, out);
+        }
+    }
+    let mut out = vec![];
+    lits(n, &mut out);
+    out
+}
+
+/// The pattern under a name, `1..=9` in `n @ 1..=9`, and the literals in it.
+pub fn at_literals(at: Node) -> (Option<Node>, Vec<Node>) {
+    let kids: Vec<Node> = named_children(at).into_iter().filter(|c| !is_comment(*c)).collect();
+    let pat = kids.last().copied().filter(|_| kids.len() >= 2);
+    (pat, pat.map(at_literals_in).unwrap_or_default())
 }
 
 /// Split a numeric literal into its digits and its type suffix: (digits, separator `_`?, suffix).

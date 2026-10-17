@@ -8,8 +8,16 @@ fn run(dir: &Path, prog: &str, args: &[&str]) {
 fn main() {
     let g = Path::new("grammar");
     let src = g.join("src");
-    if !src.join("parser.c").exists() {
-        run(g, "npm", &["ci"]);
+    // The parser is generated, not committed: made when missing, and again when the grammar is newer than it.
+    let modified = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
+    let stale = match (modified(&src.join("parser.c")), modified(&g.join("grammar.js"))) {
+        (Some(parser), Some(grammar)) => grammar > parser,
+        _ => true,
+    };
+    if stale {
+        if !g.join("node_modules").exists() {
+            run(g, "npm", &["ci"]);
+        }
         run(g, "npx", &["tree-sitter", "generate"]);
     }
     cc::Build::new()

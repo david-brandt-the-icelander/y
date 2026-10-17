@@ -1,0 +1,53 @@
+{
+ "realizations": {
+  "GrowingHashmapMapElemCharValueType": "ValueSlot",
+  "HybridGrowingHashmapCharRowId": "RowIdMap"
+ },
+ "strsim::GrowingHashmapChar::grow": {
+  "as_mut_v": "map_slots",
+  "default_v": "empty_slot",
+  "new_size_usize": "slot_count"
+ },
+ "strsim::GrowingHashmapChar::lookup": {
+  "hash_usize": "slot_hash",
+  "mask_usize": "table_mask",
+  "mask_usize_2": "probe_mask",
+  "perturb_usize": "probe_perturb"
+ },
+ "strsim::damerau_levenshtein_impl": {
+  "fr_item_v": "fr_saved",
+  "i_isize": "first_cell",
+  "i_isize_2": "row_pos",
+  "i_isize_3": "row_cmp",
+  "i_isize_4": "row_mark",
+  "j_isize": "match_col",
+  "j_isize_2": "col_cmp",
+  "j_isize_3": "col_pos",
+  "max_isize": "longer_len",
+  "r_item_usize": "dl_dist",
+  "value_isize": "row_end"
+ },
+ "strsim::generic_jaro": {
+  "a_len_f64": "a_total",
+  "b_len_f64": "b_total",
+  "matches_f64": "a_matches",
+  "matches_f64_2": "b_matches",
+  "matches_f64_3": "pair_matches",
+  "value_f64": "untransposed"
+ },
+ "strsim::generic_jaro_winkler": {
+  "prefix_length_f64": "common_prefix"
+ },
+ "strsim::normalized_damerau_levenshtein": {
+  "dist_f64": "edits",
+  "max_f64": "longest"
+ },
+ "strsim::normalized_levenshtein": {
+  "levenshtein_f64": "edits",
+  "max_f64": "longest"
+ },
+ "strsim::sorensen_dice": {
+  "value_f64": "twice_shared",
+  "value_f64_2": "total_bigrams"
+ }
+}

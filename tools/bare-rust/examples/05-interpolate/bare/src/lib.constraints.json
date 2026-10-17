@@ -113,11 +113,7 @@
     }
   ],
   "holes": {
-    "interpolate::find_cap_ref": {
-      "hints": [
-        { "kind": "targ", "n": 0, "type": "u32" },
-        { "kind": "cast", "n": 0, "type": "u64 as 'usize'" }
-      ]
-    }
-  }
+    "interpolate::find_cap_ref": { "locals": { "i_usize": { "type": "u64 as 'usize'", "cast": true } } }
+  },
+  "realizations": { "parse_u32": { "template": "<_>::parse", "args": ["u32"] } }
 }

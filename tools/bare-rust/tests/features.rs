@@ -132,12 +132,22 @@ fn body_stuff(mut a: u8, (mut b, c): (u8, u8)) -> u32 {
 }
 "#;
     let (b, j) = roundtrip(src);
-    assert!(b.contains("as _") && b.contains("collect::<Vec<_>>()") && b.contains("Vec::<_>::new()"), "{b}");
+    // Casts and suffixed literals are bound (`bind`), in the arguments of a standard macro too.
+    // A turbofish that states a type is a realization the body names (`collect_vec_u8`, `VecU8`).
+    assert!(!b.contains("as _") && !b.contains("::<") && b.contains("(0..3).collect_vec_u8()") && b.contains("VecU8::new()"), "{b}");
+    assert!(b.contains("let a_u32 = a;") && b.contains("let x = a_u32 + k1_u8_u32;"), "{b}");
+    assert!(b.contains("let x_u32 = x;\n    let k1_u32 = 1;\n    assert_eq!(x_u32, k1_u32);"), "{b}");
     let h = &j["holes"]["demo::body_stuff"];
     assert_eq!(h["locals"]["x"], "u32");
     assert_eq!(h["locals"]["x#2"], "u8");
     assert_eq!(h["locals"]["(m, n)"], "(u8, u8)");
-    assert_eq!(h["hints"].as_array().unwrap().iter().filter(|x| x["kind"] == "literal").count(), 4);
+    assert_eq!(h["locals"]["a_u32"], serde_json::json!({"type": "u32", "cast": true}));
+    assert_eq!(h["locals"]["k1_u8"], "u8");
+    assert_eq!(h["locals"]["k2_5_f32"], "f32");
+    assert!(h["hints"].is_null(), "{h}");
+    let r = &j["realizations"];
+    assert_eq!(r["collect_vec_u8"], serde_json::json!({"template": "<_>::collect", "args": ["list<u8> as 'Vec'"]}));
+    assert_eq!(r["VecU8"], serde_json::json!({"template": "std::vec::Vec", "args": ["u8"]}));
     assert!(j["subjects"].as_array().unwrap().iter().any(|s| s["name"] == "demo::body_stuff::nested"));
     assert!(j["subjects"].as_array().unwrap().iter().any(|s| s["name"] == "demo::body_stuff::Local"));
 }
@@ -165,9 +175,32 @@ fn typed<'a, T>(n: Vec<T>, src: &'a str) -> &'a str {
 }
 
 #[test]
-fn closure_sites_count_underscore_parameters() {
+fn a_lifetime_inside_an_impl_trait_parameter_keeps_its_name() {
+    // Rust has no elided lifetimes inside an `impl Trait` parameter (E0658), and one elided inside `Fn(..)` belongs
+    // to that bound rather than to the function, so `'a` stays where it is written there.
+    let src = r#"
+struct W(u32);
+fn total<'a>(ws: impl Iterator<Item = &'a W>) -> u32 {
+    ws.map(|w| w.0).sum()
+}
+fn some<'a>(ws: Option<impl Into<&'a W>>) -> bool {
+    ws.is_some()
+}
+fn call<'a>(f: impl Fn(&'a W) -> u32, w: &W) -> u32 {
+    0
+}
+"#;
+    let (_, j) = roundtrip(src);
+    assert_eq!(subject(&j, "demo::total")["generics"][0]["name"], "'a");
+    assert_eq!(subject(&j, "demo::total")["params"][0]["type"]["host"], "impl Iterator<Item = &'a W>");
+    assert_eq!(subject(&j, "demo::some")["generics"][0]["name"], "'a");
+    assert_eq!(subject(&j, "demo::call")["generics"][0]["name"], "'a");
+}
+
+#[test]
+fn closure_parameters_are_keyed_by_the_closure_name() {
     // `|_|` has a `_` that tree-sitter-rust leaves anonymous and the bare grammar names: both count it, so the
-    // ordinals of the hints after it agree on both sides.
+    // ordinals of the sites after it agree on both sides. A typed parameter of a named closure is keyed by the name.
     let src = r#"
 fn f(v: Vec<u8>) -> usize {
     let a = v.iter().filter(|_| true).count();
@@ -177,8 +210,8 @@ fn f(v: Vec<u8>) -> usize {
 "#;
     let (b, j) = roundtrip(src);
     assert!(b.contains("|_| true") && b.contains("|x| x"), "{b}");
-    let hints = j["holes"]["demo::f"]["hints"].as_array().unwrap();
-    assert!(hints.iter().any(|h| h["kind"] == "closure_param" && h["n"] == 1), "{hints:?}");
+    assert_eq!(j["holes"]["demo::f"]["locals"]["g.x"], "u8");
+    assert!(j["holes"]["demo::f"]["hints"].is_null(), "{}", j["holes"]);
 }
 
 #[test]
@@ -221,12 +254,10 @@ fn os() -> u8 {
 
 #[test]
 fn unsupported_is_refused_with_a_reason() {
-    let e = strip("union U { a: u8 }", "demo 0.1.0", "src/lib.rs").unwrap_err();
-    assert!(e.starts_with("union:"), "{e}");
+    let e = strip("struct U;\nimpl !Send for U {}", "demo 0.1.0", "src/lib.rs").unwrap_err();
+    assert!(e.starts_with("negative-impl:"), "{e}");
     let e = strip("fn f(x: u8", "demo 0.1.0", "src/lib.rs").unwrap_err();
     assert!(e.starts_with("parse-error:"), "{e}");
-    let e = strip("struct S<const N: usize = 3>;", "demo 0.1.0", "src/lib.rs").unwrap_err();
-    assert!(e.starts_with("generic-default:"), "{e}");
 }
 
 #[test]
@@ -291,16 +322,17 @@ fn use_visibility_moves_to_the_file() {
 #[test]
 fn stale_entries_are_reported_as_unbound() {
     use bare_rust::weave::{weave_traced, Unbound};
-    let src = "fn f(a: u8) -> u8 {\n    let x: u16 = 1;\n    let y: u32 = 2;\n    (a as u32 + y) as u8\n}\nfn g() {}\n";
+    let src = "fn f(a: u8) -> u8 {\n    let x: u16 = 1;\n    let y: u32 = 2;\n    (0..a).sum::<u8>() + y as u8\n}\nfn g() {}\n";
     let (b, mut j) = strip(src, "demo 0.1.0", "src/lib.rs").unwrap();
-    // A renamed local, one hint too many, a duplicate of a hint, a subject with no item, holes of a function that is gone.
+    // A renamed local, a hint with no site, a realization the body no longer names, a subject with no item, holes of a
+    // function that is gone.
+    assert_eq!(j["realizations"]["sum_u8"], serde_json::json!({"template": "<_>::sum", "args": ["u8"]}));
+    j["realizations"]["sum_u64"] = serde_json::json!({"template": "<_>::sum", "args": ["u64"]});
     let h = &mut j["holes"]["demo::f"];
     let ty = h["locals"]["x"].take();
     h["locals"].as_object_mut().unwrap().remove("x");
     h["locals"]["z"] = ty;
-    h["hints"].as_array_mut().unwrap().push(serde_json::json!({"kind": "cast", "n": 5, "type": "u64"}));
-    let dup = h["hints"][0].clone();
-    h["hints"].as_array_mut().unwrap().push(dup);
+    h["hints"] = serde_json::json!([{"kind": "targ", "n": 5, "type": "u64"}]);
     let g = subject(&j, "demo::g").clone();
     let mut gone = g.clone();
     gone["name"] = "demo::h".into();
@@ -312,14 +344,15 @@ fn stale_entries_are_reported_as_unbound() {
         w.unbound,
         vec![
             u("unbound local", "demo::f", "z"),
-            u("unbound hint", "demo::f", "cast #5"),
-            u("unbound hint", "demo::f", "cast #0"),
+            u("unbound hint", "demo::f", "targ #5"),
             u("unbound subject", "demo::h", ""),
             u("unbound subject", "demo::k", ""),
+            u("unbound realization", "demo", "sum_u64"),
         ]
     );
     assert_eq!(w.unbound[0].show(), "unbound local `z` of `demo::f`");
-    assert_eq!(w.unbound[3].show(), "unbound subject `demo::h`");
+    assert_eq!(w.unbound[2].show(), "unbound subject `demo::h`");
+    assert_eq!(w.unbound[4].show(), "unbound realization `sum_u64` of `demo`");
     // Nothing stale: no warning.
     let (b, j) = strip(src, "demo 0.1.0", "src/lib.rs").unwrap();
     assert!(weave_traced(&b, &j).unwrap().unbound.is_empty());
@@ -335,6 +368,85 @@ fn mut_self_and_mut_bindings_count_alike() {
     let (b, j) = strip(src, "demo 0.1.0", "src/lib.rs").unwrap();
     assert!(b.contains("fn f(self, c)"), "{b}");
     assert_eq!(subject(&j, "demo::S::g")["params"][0]["access"]["rights"], "write");
+}
+
+#[test]
+fn a_pointer_is_ptr_whose_access_says_whether_it_writes() {
+    // `*const T` reads, with no guarantee about other paths; `*mut T` is the same type with that constraint absent.
+    // A pointer is no reference: it gives no lifetime for elision, and a field holds it as it holds any value.
+    let src = r#"
+pub struct Buf {
+    pub at: *const u8,
+    pub to: *mut u8,
+    pub all: Vec<*const u8>,
+}
+pub fn get(b: &Buf, p: *const u8, n: usize) -> *mut u8 {
+    let x: *const u8 = p;
+    let y = p as *const u16;
+    let z = b as *const Buf as usize + n;
+    b.to
+}
+pub fn first(p: *const u8, s: &[u8]) -> &u8 {
+    &s[0]
+}
+pub fn both(q: *mut *const u8) {}
+pub const NULL: *const u8 = std::ptr::null();
+"#;
+    let (b, j) = roundtrip(src);
+    let fields = &subject(&j, "demo::Buf")["fields"];
+    assert_eq!(fields[0]["type"], "ptr<u8>");
+    assert_eq!(fields[0]["access"], serde_json::json!({"rights": "read"}));
+    assert_eq!(fields[1]["type"], "ptr<u8>");
+    assert!(fields[1]["access"].is_null());
+    assert_eq!(fields[2]["type"], "list<ptr<u8>> as 'Vec'");
+    assert_eq!(subject(&j, "demo::get")["result"], serde_json::json!({"type": "ptr<u8>"}));
+    assert_eq!(subject(&j, "demo::NULL")["access"], serde_json::json!({"rights": "read"}));
+    // Two pointers of different access in one slot have no one access to carry.
+    assert_eq!(subject(&j, "demo::both")["params"][0]["type"]["form"], "mixed_refs");
+    // A cast to a pointer is a cast local, with its access.
+    let locals = &j["holes"]["demo::get"]["locals"];
+    assert_eq!(locals["x"], serde_json::json!({"type": "ptr<u8>", "access": {"rights": "read"}}));
+    assert_eq!(locals["y"], serde_json::json!({"type": "ptr<u16>", "access": {"rights": "read"}, "cast": true}));
+    assert_eq!(locals["b_ptr"], serde_json::json!({"type": "ptr<Buf>", "access": {"rights": "read"}, "cast": true}));
+    assert!(b.contains("let b_ptr = b;\n    let b_ptr_usize = b_ptr;\n    let z = b_ptr_usize + n;"), "{b}");
+}
+
+#[test]
+fn an_impl_for_a_primitive_type_keeps_its_head() {
+    let src = "pub trait Unsigned {\n    fn bits(self) -> u32;\n}\nimpl Unsigned for u128 {\n    fn bits(self) -> u32 {\n        128\n    }\n}\nimpl Unsigned for &str {\n    fn bits(self) -> u32 {\n        8\n    }\n}\n";
+    let (b, j) = roundtrip(src);
+    assert!(b.contains("impl Unsigned for u128 {") && b.contains("impl Unsigned for str {"), "{b}");
+    assert_eq!(subject(&j, "demo::u128 as Unsigned::bits")["params"][0]["type"], "u128");
+}
+
+#[test]
+fn a_union_is_a_type_with_fields_and_an_impl_may_be_for_a_pointer() {
+    let src = "pub union Word {\n    pub n: u32,\n    b: [u8; 4],\n}\npub trait Pointer {\n    fn is_null(self) -> bool;\n}\nimpl<T> Pointer for *const T {\n    fn is_null(self) -> bool {\n        self.is_null()\n    }\n}\nimpl<T> Pointer for *mut T {\n    fn is_null(self) -> bool {\n        self.is_null()\n    }\n}\n";
+    let (b, j) = roundtrip(src);
+    assert!(b.contains("union Word {\n    n,\n    b,\n}"), "{b}");
+    assert_eq!(subject(&j, "demo::Word")["fields"][0]["type"], "u32");
+    // The self type of an impl has no slot for an access: a `*const` there is host text, as a `&mut` is.
+    assert_eq!(subject(&j, "demo::T as Pointer")["self"]["host"], "*const T");
+    assert_eq!(subject(&j, "demo::T as Pointer#2")["self"], "ptr<T>");
+}
+
+#[test]
+fn a_generic_parameter_keeps_its_default() {
+    let src = "pub struct Error;\npub type Result<T, E = Error> = core::result::Result<T, E>;\npub struct Buf<T = u8, const N: usize = 3>([T; N]);\n";
+    let (_, j) = roundtrip(src);
+    assert_eq!(subject(&j, "demo::Result")["generics"][1], serde_json::json!({"name": "E", "bounds": [], "default": "Error"}));
+    assert_eq!(subject(&j, "demo::Buf")["generics"][0]["default"], "u8");
+    assert_eq!(subject(&j, "demo::Buf")["generics"][1]["default"]["host"], "3");
+}
+
+#[test]
+fn a_mut_the_compiler_cannot_see_stays_in_the_bare_body() {
+    // `mut` is derived through rustc, which does not compile what a `#[cfg]` leaves out; there the bare body keeps it.
+    let src = "#[cfg(feature = \"simd\")]\npub fn sum(v: &[u8], mut n: u32) -> u32 {\n    let mut t = 0;\n    for x in v {\n        t += *x as u32;\n    }\n    n += t;\n    n\n}\npub fn plain(v: &[u8]) -> usize {\n    let mut t = 0;\n    t += v.len();\n    #[cfg(test)]\n    let mut u = 1;\n    t\n}\n";
+    let (b, j) = roundtrip(src);
+    assert!(b.contains("fn sum(v, mut n) {\n    let mut t = 0;"), "{b}");
+    assert!(b.contains("fn plain(v) {\n    let t = 0;") && b.contains("    let u = 1;"), "{b}");
+    assert_eq!(subject(&j, "demo::sum")["params"][1]["name"], "n");
 }
 
 #[test]
@@ -650,4 +762,145 @@ fn item_level_macro_invocations_stay_as_host_text() {
     std::fs::write(d.join("lib.constraints.json"), canonical(&j)).unwrap();
     let st = bare_rust::stats::stats(&d).unwrap();
     assert_eq!(st["left_in_body"]["macros"]["macro items kept as host text"], 2, "{st}");
+}
+
+#[test]
+fn a_type_that_releases_at_its_end_says_so() {
+    // Its own `impl Drop`, or a field of such a type (language 7.3, `lifetime self released at end`).
+    let src = r#"
+use std::cell::Cell;
+pub struct Guard<'a>(&'a Cell<bool>);
+impl Drop for Guard<'_> {
+    fn drop(&mut self) {
+        self.0.set(false);
+    }
+}
+pub struct Holder<'a> {
+    g: Guard<'a>,
+    n: u8,
+}
+pub struct Plain {
+    n: u8,
+}
+"#;
+    let (_, j) = roundtrip(src);
+    let says = |n: &str| subject(&j, n)["clauses"].as_array().into_iter().flatten().any(|c| c["text"] == "lifetime self released at end");
+    assert!(says("demo::Guard") && says("demo::Holder") && !says("demo::Plain"), "{}", j["subjects"]);
+}
+
+#[test]
+fn a_type_of_the_crate_shadows_a_standard_one_of_the_same_name() {
+    // `Ref` here is the crate's own, not `std::cell::Ref`, so a field of it releases nothing.
+    // A variant named `Ref` is not a field of type `Ref` either.
+    let src = "pub struct Ref {\n    n: u8,\n}\npub struct Holder {\n    r: Ref,\n}\npub enum Kind {\n    File,\n    Mut,\n}\n";
+    let (_, j) = roundtrip(src);
+    assert!(subject(&j, "demo::Holder")["clauses"].is_null(), "{}", j["subjects"]);
+    assert!(subject(&j, "demo::Kind")["clauses"].is_null(), "{}", j["subjects"]);
+}
+
+#[test]
+fn a_turbofish_is_a_realization_the_body_names() {
+    // A method (`parse::<u16>`), a function by path (`std::mem::size_of::<u64>`), a type in a path (`Vec::<u8>`); the
+    // same template and arguments twice are one realization; a turbofish of only `_` states nothing and stays.
+    let src = r#"
+pub fn f(s: &str, v: Vec<i32>) -> Result<usize, std::num::ParseIntError> {
+    let port: u16 = s.parse::<u16>()?;
+    let n = std::mem::size_of::<u64>();
+    let m = size_of::<u64>();
+    let mut bytes = Vec::<u8>::new();
+    bytes.push(1);
+    let evens = v.iter().filter(|x| *x % 2 == 0).collect::<Vec<_>>();
+    let again = v.iter().collect::<Vec<_>>();
+    let r = Ok::<_, ()>(1).unwrap_or(0) + Ok::<_, _>(2).unwrap_or(0);
+    Ok(port as usize + n + m + bytes.len() + evens.len() + again.len() + r as usize)
+}
+"#;
+    let (b, j) = roundtrip(src);
+    // The name takes the place of the template's last segment; a path before it stays. `size_of` (the prelude's) and
+    // `std::mem::size_of` are one template.
+    for want in ["s.parse_u16()?", "let n = std::mem::size_of_u64();", "let m = size_of_u64();", "VecU8::new()", ".collect_vec();", "ok_unit(1)", "Ok::<_, _>(2)"] {
+        assert!(b.contains(want), "missing `{want}` in\n{b}");
+    }
+    // One table for the file (a crate root's file holds its crate's), with the template's full path; a method's
+    // template is `<_>::name`, its type the receiver's.
+    assert!(j["holes"]["demo::f"]["realizations"].is_null());
+    let r = &j["realizations"];
+    assert_eq!(r["parse_u16"], serde_json::json!({"template": "<_>::parse", "args": ["u16"]}));
+    assert_eq!(r["size_of_u64"], serde_json::json!({"template": "std::mem::size_of", "args": ["u64"]}));
+    assert_eq!(r["VecU8"], serde_json::json!({"template": "std::vec::Vec", "args": ["u8"]}));
+    assert_eq!(r["collect_vec"], serde_json::json!({"template": "<_>::collect", "args": ["list<_> as 'Vec'"]}));
+    assert_eq!(r["ok_unit"], serde_json::json!({"template": "std::result::Result::Ok", "args": ["_", "()"]}));
+    assert_eq!(r.as_object().unwrap().len(), 5, "{r}");
+}
+
+#[test]
+fn a_file_whose_mod_has_a_cfg_keeps_its_muts() {
+    // `#[cfg(feature = "x")] mod gated;`: rustc may never see `gated.rs`, nor what is under it, so its `mut`s stay.
+    let d = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/bare-rust-test/cfg-gated-file");
+    let _ = std::fs::remove_dir_all(&d);
+    let w = |p: &str, s: &str| {
+        std::fs::create_dir_all(d.join(p).parent().unwrap()).unwrap();
+        std::fs::write(d.join(p), s).unwrap();
+    };
+    let body = "pub fn f() -> u32 {\n    let mut n = 0;\n    n += 1;\n    n\n}\n";
+    w("Cargo.toml", "[package]\nname = \"demo\"\nversion = \"0.1.0\"\nedition = \"2021\"\n");
+    w("src/lib.rs", "pub mod open;\n#[cfg(feature = \"x\")]\npub mod gated;\n");
+    w("src/open.rs", body);
+    w("src/gated.rs", &format!("pub mod inner;\n{body}"));
+    w("src/gated/inner.rs", body);
+    let out = d.join("bare");
+    for r in bare_rust::corpus::strip_crate(&d, &out, false).unwrap() {
+        assert!(r.outcome.is_ok(), "{:?}", r.outcome);
+    }
+    let read = |p: &str| std::fs::read_to_string(out.join(p)).unwrap();
+    assert!(read("src/open.brs").contains("let n = 0;"));
+    assert!(read("src/gated.brs").contains("let mut n = 0;"));
+    assert!(read("src/gated/inner.brs").contains("let mut n = 0;"));
+}
+
+#[test]
+fn a_crate_has_one_table_of_realizations_in_its_root_file() {
+    // Two modules realize `parse` with `u16`, one of them with a local already called `parse_u16`: one name across the
+    // crate, kept clear of every identifier, and one entry, in `src/lib.constraints.json`.
+    let d = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/bare-rust-test/crate-realizations");
+    let _ = std::fs::remove_dir_all(&d);
+    let w = |p: &str, s: &str| {
+        std::fs::create_dir_all(d.join(p).parent().unwrap()).unwrap();
+        std::fs::write(d.join(p), s).unwrap();
+    };
+    w("Cargo.toml", "[package]\nname = \"demo\"\nversion = \"0.1.0\"\nedition = \"2021\"\n");
+    w("src/lib.rs", "pub mod a;\npub mod b;\n");
+    w("src/a.rs", "use std::mem;\npub fn f(s: &str) -> usize {\n    s.parse::<u16>().unwrap() as usize + mem::size_of::<u8>()\n}\n");
+    w("src/b.rs", "pub fn g(s: &str) -> u16 {\n    let parse_u16 = 1;\n    s.parse::<u16>().unwrap() + parse_u16 + std::mem::size_of::<u8>() as u16\n}\n");
+    let out = d.join("bare");
+    for r in bare_rust::corpus::strip_crate(&d, &out, false).unwrap() {
+        assert!(r.outcome.is_ok(), "{:?}", r.outcome);
+    }
+    let read = |p: &str| std::fs::read_to_string(out.join(p)).unwrap();
+    let js = |p: &str| serde_json::from_str::<Value>(&read(p)).unwrap();
+    assert_eq!(
+        js("src/lib.constraints.json")["realizations"],
+        serde_json::json!({
+            "parse_u16_2": {"template": "<_>::parse", "args": ["u16"]},
+            "size_of_u8": {"template": "std::mem::size_of", "args": ["u8"]}
+        })
+    );
+    assert!(js("src/a.constraints.json")["realizations"].is_null() && js("src/b.constraints.json")["realizations"].is_null());
+    assert!(read("src/a.brs").contains("s.parse_u16_2().unwrap()") && read("src/a.brs").contains("mem::size_of_u8()"), "{}", read("src/a.brs"));
+    assert!(read("src/b.brs").contains("s.parse_u16_2().unwrap() + parse_u16"), "{}", read("src/b.brs"));
+    // The crate weaves back: each module's uses are the template with its arguments.
+    let woven = d.join("woven");
+    for r in bare_rust::corpus::weave_crate(&out, &woven).unwrap() {
+        assert!(r.outcome.is_ok(), "{:?}", r.outcome);
+    }
+    let b = std::fs::read_to_string(woven.join("src/b.rs")).unwrap();
+    assert!(b.contains("s.parse::<u16>().unwrap() + parse_u16"), "{b}");
+}
+
+#[test]
+fn a_const_fn_written_in_the_body_and_as_a_clause_weaves_with_one_const() {
+    let (b, j) = strip("pub const fn f(x: u8) -> u8 {\n    x\n}\n", "demo 0.1.0", "src/lib.rs").unwrap();
+    assert!(b.starts_with("fn f(x)"), "{b}");
+    let w = weave(&b.replacen("fn f", "const fn f", 1), &j).unwrap();
+    assert!(w.contains("pub const fn f(x: u8) -> u8") && !w.contains("const const"), "{w}");
 }

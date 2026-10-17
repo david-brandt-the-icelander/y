@@ -84,7 +84,7 @@ fn parse_human_readable_size(size) {
         return Err(ParseSizeError::format(size));
     }
     let value =
-        digits.parse::<_>().map_err(|e| ParseSizeError::int(size, e))?;
+        digits.parse_u64().map_err(|e| ParseSizeError::int(size, e))?;
 
     let suffix = &size[digits_end..];
     if suffix.is_empty() {

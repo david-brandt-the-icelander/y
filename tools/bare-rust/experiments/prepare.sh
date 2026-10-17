@@ -1,5 +1,5 @@
 #!/bin/bash
-# prepare.sh <task> <arm> <trial> <outdir>   arms: rust | bare | bare-nolib | bare-nounexpressed
+# prepare.sh <task> <arm> <trial> <outdir>   arms: rust | bare | bare-renamed | bare-nolib | bare-nounexpressed | bare-castlocal
 set -euo pipefail
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 task="${1:?task}"; arm="${2:?arm}"; trial="${3:?trial}"; out="${4:?outdir}"
@@ -25,11 +25,20 @@ case "$arm" in
     cp -r "$base/." "$out/"
     render "$EXP/templates/rust.md"
     ;;
-  bare|bare-nolib|bare-nounexpressed)
+  bare|bare-renamed|bare-nolib|bare-nounexpressed|bare-castlocal)
     strip_into "$base" "$out"
     sed "s|@BARE_RUST@|$BARE_RUST|" "$EXP/templates/weave.sh" > "$out/weave.sh"; chmod +x "$out/weave.sh"
+    cp "$EXP/../docs/bare-format.md" "$out/FORMAT.md"
     case "$arm" in
+      bare-castlocal)
+        # the arm of the cast comparison (results/e4-e5.md); its FORMAT.md section (templates/format-castlocal.md) is
+        # now the reference's own, so it is the bare arm
+        mkdir -p "$out/libraries"; cp "$LIBFILE" "$out/libraries/"; render "$EXP/templates/bare-castlocal.md" ;;
       bare) mkdir -p "$out/libraries"; cp "$LIBFILE" "$out/libraries/"; render "$EXP/templates/bare.md" ;;
+      bare-renamed)
+        # the bare arm with the mechanical names renamed (renames/<crate>.json): what an agent sees after the rename pass
+        rename_into "$out" "$crate"
+        mkdir -p "$out/libraries"; cp "$LIBFILE" "$out/libraries/"; render "$EXP/templates/bare.md" ;;
       bare-nounexpressed)
         mkdir -p "$out/libraries"
         # drop every clause of kind "unexpressed", at any depth

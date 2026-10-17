@@ -52,8 +52,10 @@ and a constraint file, which says what must hold, and that `strip` and `weave` m
 
 ## 1. What the trial must show
 
-1. **Lossless.** `strip(weave(b, c)) == (b, c)` exactly, and `weave(strip(s)) == s` up to `rustfmt` and lifetime
-   elision, for every file in the corpora; the woven code compiles and passes its tests.
+1. **Lossless.** `strip(weave(b, c)) == (b, c)` exactly, and `weave(strip(s)) == bind(s)` up to `rustfmt` and
+   lifetime elision, for every file in the corpora; the woven code compiles and passes its tests. `bind` (§ 2.2) gives
+   every value that carries a written type a name, without changing what the program does; it is the one rewrite of
+   the source the round trip allows.
 2. **Host-neutral.** Most of what moves maps onto the constraint language's own clauses and types, not onto Rust text
    carried along unread. What does not map is a list of gaps in the language, with a count for each (§ 12).
 3. **Bare in practice.** Bodies need few types of their own. The trial measures how many holes a body leaves that only
@@ -103,9 +105,28 @@ that kept such a construct ("C#'s `ref`, Rust's trait objects") whole in the bod
 | `Rc` or `Arc`, `Box` | Sharing; owning | Which one, from `shares` and `sendable`; `Box` where an owned recursive type needs it |
 | `Box<dyn T>` or a generic `T` | Dispatch through the interface | The set of implementations allowed |
 
-`_` in casts and type arguments is already valid Rust, so the bare form of an expression keeps the target's syntax and
-only its types are erased. The proof of concept leaves `Rc`, `Arc`, `Box` and trait objects in the body as written and
-counts them, and keeps every `.unwrap()` and `.expect()` in the body, as decided (§ 3.2).
+**Every constraint has a binding.** A cast or a literal's suffix states a type in the middle of an expression, where
+nothing is named for it to attach to. `strip` first binds each one (`bind`): the value initialises a typed `let`, before
+its statement or, where the statement would compute it when the source might not, in a new block in that place; and
+anything earlier in the statement that has an effect is bound first, in order. The local then carries the type (a cast
+local, `{"type": "u64", "cast": true}`, weaves `let x = e;` back to `let x: u64 = e as u64;`). The names are mechanical,
+and are renamed once by an agent or a person who knows what the values are. A mid-expression form is an obfuscation in
+this view: the round trip is exact on the bound source, not on the original. A macro call whose tokens state a type is
+kept as Rust text, `rust! { ... }`, and should be rewritten by hand to name the value first. A closure with typed
+parameters is named the same way, and its parameters are keyed by that name (`by_len.a`); a closure's return type goes
+onto a local in its body. A value that releases something at its end (a type with `lifetime self released at end`,
+language § 7.3: a lock guard, a file) keeps its end where the source has it: `bind` names it and puts the statement in a
+block that ends where the statement did. A turbofish is a realization of a template (language § 3.5), named in the body:
+`s.parse_u16()` for `s.parse::<u16>()`, with `"parse_u16": {"template": "<_>::parse", "args": ["u16"]}` in the
+crate's table of realizations, in the root module's file; the same template with the same arguments has one name across
+the crate. A cast local carries any target, a pointer as `ptr<T>` with its access. A constant context gets a block in
+its place, and a `const` whose whole value is a cast carries it on its subject. A suffixed literal in a pattern loses
+its suffix where the value it matches is a name declared with that type, and otherwise is named, `_k1_u8 @ 1`, with
+the type keyed by that pattern. What cannot be bound yet (a cast in a macro argument that runs only sometimes, a value
+that releases something at its end where the statement might not run) keeps `_` in the body and a positional hint; `_` in casts and type arguments is valid Rust, so the bare
+form keeps the target's syntax and only its types are erased. The
+proof of concept leaves `Rc`, `Arc`, `Box` and trait objects in the body as written and counts them, and keeps every
+`.unwrap()` and `.expect()` in the body, as decided (§ 3.2).
 
 ### 2.3 The file is authoritative, and the weaver does no type inference
 
@@ -243,7 +264,7 @@ Every emptied production is a slot, and every slot maps to a clause:
 | A field's type | `fields[f].type`, `fields[f].hold` | `field f : T`; `hold f : owns \| shares \| borrows` |
 | A tuple field's type (`A(_)`) | `fields[i].type` | As above |
 | A `let`'s type | `holes.locals[name]` | `local name : T` |
-| `mut` on a binding | Not stored: derived (§ 2.3) | — |
+| `mut` on a binding | Not stored: derived (§ 2.3), in each build the crate is checked in | Kept in the body only where no build compiles the code (a `#[cfg]` that needs nightly Rust, or a target that is not installed), as rustc cannot derive it there |
 | `#[must_use]`, `#[non_exhaustive]` | Clauses | `result must be used`; `open` |
 | `const fn`, `unsafe fn` | Host text only (§ 12) | — |
 | A hole in an expression | `holes.hints`, by position | Body hint (§ 2.4) |
@@ -261,6 +282,7 @@ Every emptied production is a slot, and every slot maps to a clause:
 | `Vec<T>`, `HashMap<K, V>`, `BTreeMap<K, V>`, `HashSet<T>` | `list<T>`, `map<K, V>`, `set<T>`, with `as` naming the host type as written | |
 | `(A, B)` | `(A, B)` | |
 | `&T`, `&mut T` | `ref<T>`, with `access : read readers` or `write exclusive` | |
+| `*const T`, `*mut T` | `ptr<T>`, with `access : read` or no access | A pointer has no guarantee and no lifetime (language § 8.1) |
 | A lifetime | `hold … : borrows from p`, `outlives` | Elided lifetimes are expanded by Rust's rules before mapping |
 | `Box<T>`, `Rc<T>`, `Arc<T>` | `T`, with `as` naming the wrapper, and `hold : owns` or `shares` | The choice stays named until the trial opens the hole (§ 2.2) |
 | `[T; N]`, `impl Trait`, `dyn Trait`, function pointers, associated types | Host text only: `{ "host": "<text>" }` | Counted per form (§ 10, E1) |
@@ -318,6 +340,15 @@ where elision cannot express them, and § 14.9 now shows the elided form.
 4. Parse the bare body with the bare parser, and refuse the file if it fails.
 5. Run the lint (§ 3.2) and record what it finds.
 6. Write `x.brs` and `x.constraints.json`.
+7. For a crate, choose the builds it is checked in, and write them to `builds.json`. A `#[cfg(..)]` leaves code out of
+   a build, and rustc says nothing about code it does not compile. So besides the default build (this machine's
+   target, the default features), strip takes, while some gated code is in none of the builds so far, the candidate
+   that compiles most of it: another target (32-bit x86, aarch64, a big-endian CPU, WebAssembly, Windows, macOS, a
+   microcontroller), a feature, `--no-default-features`, a target feature, a `--cfg` the code names, or a release
+   build for `debug_assertions`. A candidate is taken only if the original crate compiles in it on stable Rust; a
+   target whose standard library is not installed is reported, not installed. Gated code that no build compiles keeps
+   its `mut` in the bare body (step 2), and `builds.json` lists its conditions. Each build is a platform (language
+   § 3.6): the facts it fixes hold for every subject checked in it.
 
 ## 6. `weave`
 
@@ -325,7 +356,8 @@ where elision cannot express them, and § 14.9 now shows the elided form.
 2. Walk the tree, copying every byte. At each emptied production, print the slot from the file; where a slot has no
    value, print nothing if Rust allows that (no visibility means private) and otherwise fail with the slot named.
 3. Fill expression holes from `holes`, and leave the rest as `_`.
-4. Run `cargo check --message-format=json`. Apply the suggestions that add `mut` (§ 2.3). Map every remaining error back
+4. Run `cargo check --message-format=json` in each build listed in `builds.json` (the default build without it). Apply
+   the suggestions that add `mut` (§ 2.3), in any build, until no build asks for one. Map every remaining error back
    to the bare line or the JSON slot it concerns, through a map of every inserted span; an inference error at a hole is
    reported as "hole undetermined" (§ 2.4).
 5. Write `x.rs` and the map.
@@ -446,10 +478,11 @@ the tooling draws on three sources.
 ## 9. Checks
 
 1. **Bare round trip.** `strip(weave(b, c)) == (b, c)` exactly.
-2. **Source round trip.** `weave(strip(s)) == s` after `rustfmt` on both sides and with lifetimes elided where Rust
-   allows.
-3. **Compiles and behaves.** The woven crate passes `cargo check`, `cargo clippy` with the corpus's settings, and its
-   tests.
+2. **Source round trip.** `weave(strip(s)) == bind(s)` after `rustfmt` on both sides and with lifetimes elided where
+   Rust allows.
+3. **Compiles and behaves.** The woven crate passes `cargo check` and `cargo clippy` with the corpus's settings in
+   every build of `builds.json`, with no warning the original lacks in that build, and its tests in the default build
+   (another target's code does not run on this machine).
 4. **Holes.** Every hole is either filled or reported (§ 2.4); none is filled silently by a guess.
 5. **Library files.** Every external item the corpora call has an agent-written entry; `bare-rust libcheck` passes
    (coverage, schema, clause syntax, and each signature compiled against the real item); and a second agent has

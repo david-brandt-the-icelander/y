@@ -174,7 +174,7 @@ pub fn report(dirs: &[&Path], provenance: &str) -> R<String> {
     let rows = r.rows_under("types.host_text_by_form.", &[]);
     r.section("Host text forms", "form", rows);
 
-    let mut rows = vec![r.row("locals", "holes.locals"), r.row("hints", "holes.hints")];
+    let mut rows = vec![r.row("locals", "holes.locals"), r.row("realizations", "holes.realizations"), r.row("hints", "holes.hints")];
     rows.extend(r.rows_under("holes.hints_by_kind.", &[]).into_iter().map(|mut x| {
         x[0] = format!("hints: {}", x[0]);
         x

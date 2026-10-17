@@ -1,6 +1,8 @@
 //! Bare Rust: strip Rust into a bare body plus constraint JSON, and weave them back (proposal/bare-rust.md).
 use tree_sitter::{Language, Node, Parser, Tree};
 
+pub mod bind;
+pub mod builds;
 pub mod cargo;
 pub mod check;
 pub mod clause;
@@ -11,7 +13,9 @@ pub mod e3;
 pub mod errmap;
 pub mod crate_weave;
 pub mod externals;
+pub mod hints;
 pub mod host;
+pub mod scaffold;
 pub mod json;
 pub mod libcheck;
 pub mod libstats;
@@ -20,6 +24,9 @@ pub mod conformance;
 pub mod seq;
 pub mod seqexpr;
 pub mod life;
+pub mod macros;
+pub mod paths;
+pub mod rename;
 pub mod report;
 pub mod runcheck;
 pub mod stats;
@@ -164,11 +171,14 @@ pub fn normalise_nomut(src: &str) -> R<String> {
     normalise_with(src, true)
 }
 
+/// Round trips compare bound sources: `weave(strip(s))` is `bind(s)` (see `bind`), up to the rest of `normalise`.
 fn normalise_with(src: &str, strip_mut: bool) -> R<String> {
-    let tree = parse_rust(src);
-    if let Some(e) = first_error(&tree) {
+    if let Some(e) = first_error(&parse_rust(src)) {
         return Err(format!("parse-error: {e}"));
     }
+    let bound = bind::bind(src)?;
+    let src = bound.as_str();
+    let tree = parse_rust(src);
     let mut edits = vec![];
     life::normalise_edits(tree.root_node(), src, &mut edits, strip_mut);
     Ok(apply(src, edits))
@@ -181,9 +191,18 @@ pub fn count_mut(src: &str) -> usize {
 
 /// Run `rustfmt` on a source text.
 pub fn rustfmt(src: &str) -> R<String> {
+    // Edition 2021 first (2024 reserves `gen`), then 2024 for what only it parses (let chains). Both sides of a
+    // comparison go through the same, so the edition only has to parse them.
+    match rustfmt_in(src, "2021") {
+        Err(e) if e.contains("2024") => rustfmt_in(src, "2024"),
+        r => r,
+    }
+}
+
+fn rustfmt_in(src: &str, edition: &str) -> R<String> {
     use std::io::Write;
     let mut child = std::process::Command::new("rustfmt")
-        .args(["--edition", "2021", "--config", "max_width=100"])
+        .args(["--edition", edition, "--config", "max_width=100"])
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())

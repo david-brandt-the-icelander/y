@@ -81,6 +81,19 @@
         "$ref": "#/$defs/holes"
       }
     },
+    "realizations": {
+      "type": "object",
+      "description": "The realizations of templates the bodies name (constraint language 3.5): `s.parse_u32()` is the method `parse` realized with `u32`. One table for a crate, in its root's file (`src/lib.constraints.json`, `src/main.constraints.json`, `tests/x.constraints.json`), keyed by the name the bodies use; the same template with the same arguments is one realization.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["template", "args"],
+        "properties": {
+          "template": { "type": "string", "minLength": 1, "description": "The template's full path (`std::mem::size_of`, `std::vec::Vec`), or `<_>::name` for a method, whose type is the receiver's. A body writes the template's last segment with the realization's name in its place; a path before it stays." },
+          "args": { "type": "array", "items": { "$ref": "#/$defs/type" }, "description": "Its type arguments, in order; `_` is left for the host to infer." }
+        }
+      }
+    },
     "views": {
       "type": "array",
       "description": "Views declared for the file: named pure projections of state a value holds beyond its value (language 15's `view(e)`), each bound to a host function. Usable in any clause of the file.",
@@ -100,7 +113,7 @@
   },
   "$defs": {
     "type": {
-      "description": "A type string (`u64 as 'usize'`, `ref<Entry>?`, `map<K, V> as 'std::collections::HashMap'`, `Chars<'a>`, `some std::iter::Iterator { Item = u8 }`, `any std::error::Error as 'std::boxed::Box'`), or host text for a type the language has no form for.",
+      "description": "A type string (`u64 as 'usize'`, `ref<Entry>?`, `ptr<u8>`, `map<K, V> as 'std::collections::HashMap'`, `Chars<'a>`, `some std::iter::Iterator { Item = u8 }`, `any std::error::Error as 'std::boxed::Box'`), or host text for a type the language has no form for.",
       "oneOf": [
         {
           "type": "string",
@@ -128,10 +141,10 @@
     "access": {
       "type": "object",
       "required": [
-        "rights",
-        "guarantee"
+        "rights"
       ],
       "additionalProperties": false,
+      "description": "The access of a slot's references (`ref<T>`: rights and a guarantee, always both) or of its pointers (`ptr<T>`: `rights: read` for `*const`, and never a guarantee; a pointer without an access is `*mut`).",
       "properties": {
         "rights": {
           "enum": [
@@ -187,6 +200,10 @@
       ],
       "additionalProperties": false,
       "properties": {
+        "default": {
+          "$ref": "#/$defs/type",
+          "description": "The parameter's default: a type, or for a const parameter its value as host text (form `const_default`)."
+        },
         "name": {
           "type": "string",
           "description": "A type parameter, or a lifetime with its quote."
@@ -376,6 +393,10 @@
         "access": {
           "$ref": "#/$defs/access"
         },
+        "cast": {
+          "const": true,
+          "description": "On a `const` or `static`: its value is cast to its type, as a cast local's initialiser is. `const W = N;` weaves to `const W: T = N as T;`."
+        },
         "hold": {
           "$ref": "#/$defs/hold"
         },
@@ -506,7 +527,23 @@
           "type": "object",
           "description": "`local name : T`, keyed by the binding's bare pattern text; `#2` marks a second `let` of the same pattern.",
           "additionalProperties": {
-            "$ref": "#/$defs/type"
+            "oneOf": [
+              { "$ref": "#/$defs/type" },
+              {
+                "type": "object",
+                "description": "A local with the access of its pointers, or whose initialiser is cast to its type: `let x = e;` weaves to `let x: T = e as T;`.",
+                "additionalProperties": false,
+                "required": ["type"],
+                "properties": { "type": { "$ref": "#/$defs/type" }, "access": { "$ref": "#/$defs/access" }, "cast": { "const": true } }
+              },
+              {
+                "type": "object",
+                "description": "A name over literals, keyed by its pattern (`n @ 1..=9`): the type of the literals under it, which weaves back as their suffix (`n @ 1u8..=9u8`).",
+                "additionalProperties": false,
+                "required": ["literal"],
+                "properties": { "literal": { "$ref": "#/$defs/type" } }
+              }
+            ]
           }
         },
         "hints": {
@@ -536,6 +573,9 @@
               },
               "type": {
                 "$ref": "#/$defs/type"
+              },
+              "access": {
+                "$ref": "#/$defs/access"
               },
               "sep": {
                 "const": "_",

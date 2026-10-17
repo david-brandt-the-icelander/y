@@ -185,7 +185,7 @@ fn the_library_file_is_valid_and_canonical() {
     }
     // the impls of B1, and the methods of those impls, are subjects of their own beside the entries for the external items
     let own = file["subjects"].as_array().unwrap().iter().filter(|s| s["kind"] != "impl" && s["impl"].is_null()).count();
-    assert_eq!(own, 113, "49 functions, 27 types, 19 traits, 11 macros and 1 const: the 105 external items, Ordering for the laws, and OccupiedEntry for a view; and for B2's `given` items the trait methods Hash::hash, PartialEq::eq, PartialOrd::lt, Ord::cmp, Ord::min and the trait PartialOrd");
+    assert_eq!(own, 137, "62 functions, 38 types, 19 traits, 11 macros and 1 const: the 105 external items, Ordering for the laws, and OccupiedEntry for a view; for B2's `given` items the trait methods Hash::hash, PartialEq::eq, PartialOrd::lt, Ord::cmp, Ord::min and the trait PartialOrd; and the 11 types whose end releases something (`lifetime self released at end`) with the 13 calls that produce them");
 }
 
 #[test]
@@ -576,7 +576,7 @@ fn libstats_counts_what_the_file_holds() {
     let (file, _) = std_file();
     let r = check_signatures(&file, &work("stats-sigs"), &target()).unwrap();
     let t = bare_rust::libstats::libstats(&file, Some(&r));
-    for want in ["library std 1.97.0 (263 subjects)", "function (27 are trait methods)", "unexpressed", "no arm of a macro in a clause", "sequences of language 6.15 (28 clauses)", "later calls, handles and bindings (14 clauses)", "path-resolved only: std::cmp::PartialEq", "type slots (192); 185 map to the type language and 7 are host text"] {
+    for want in ["library std 1.97.0 (287 subjects)", "function (27 are trait methods)", "unexpressed", "no arm of a macro in a clause", "sequences of language 6.15 (28 clauses)", "later calls, handles and bindings (14 clauses)", "path-resolved only: std::cmp::PartialEq", "type slots (218); 211 map to the type language and 7 are host text"] {
         assert!(t.contains(want), "{want}: {t}");
     }
     assert!(!t.contains("reasons carry no label"), "{t}");
@@ -1217,7 +1217,7 @@ fn b4_closed_the_small_additions_and_relabelled_what_stays() {
     );
     assert_eq!(n("no sequence value"), 0, "B5 gave every one a sequence or a label of its own");
     let with = |k: &str, t: &str| clauses.iter().filter(|(_, c)| c["kind"] == k && c["text"].as_str().unwrap().starts_with(t)).count();
-    assert_eq!((with("effects", "evaluable at compile time"), with("result must be used", "must be used"), with("never panics", "never panics except exhausted"), with("budget", "budget work expected")), (14, 14, 2, 2));
+    assert_eq!((with("effects", "evaluable at compile time"), with("result must be used", "must be used"), with("never panics", "never panics except exhausted"), with("budget", "budget work expected")), (14, 20, 2, 2));
     // every const claim of the file is an item the host promises to keep const
     for (s, c) in clauses.iter().filter(|(_, c)| c["text"] == "evaluable at compile time") {
         assert!(c["source"].as_str().unwrap().contains("rustc_const_stable"), "{s}");

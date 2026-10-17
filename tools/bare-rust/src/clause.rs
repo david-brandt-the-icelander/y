@@ -60,7 +60,7 @@ fn kind_words(kind: &str) -> &'static [&'static str] {
         "budget" => &["allocates", "retains", "work", "bytes", "sent", "round_trips", "per", "call", "instance", "frame", "B", "KB", "MB", "O", "p50", "p99", "expected", "amortised"],
         "layout" => &["c", "packed", "transparent", "align"],
         "callback" => &["with", "returning", "by", "per", "call"],
-        "hold" => &["ends", "survive", "call", "every", "item", "of", "with", "outlives", "within"],
+        "hold" => &["ends", "survive", "call", "every", "item", "of", "with", "outlives", "within", "released", "at", "end"],
         "obliges" => &["because"],
         _ => &[],
     }
@@ -341,6 +341,12 @@ fn lint_hold(head: &str, toks: &[Tok], text: &str, scope: &Scope) -> Vec<String>
         let ok = is_word(toks.get(2), "of") && toks.len() > 4 && toks.iter().any(|t| matches!(t, Tok::Word(w) if w == "ends" || w == "outlives" || w == "within"));
         if !ok {
             errs.push(format!("`lifetime every item of e ends with p` names a sequence and a predicate: `{text}`"));
+        }
+    } else if head == "lifetime" && toks.iter().any(|t| matches!(t, Tok::Word(w) if w == "released")) {
+        // `lifetime self released at end`: a type whose end gives something back (language 7.3).
+        let ok = toks.len() == 4 && ["self", "released", "at", "end"].iter().enumerate().all(|(i, w)| word(i) == *w);
+        if !ok {
+            errs.push(format!("`lifetime self released at end` is said of a type, and nothing follows: `{text}`"));
         }
     } else if head == "lifetime" {
         let survive = toks.iter().position(|t| matches!(t, Tok::Word(w) if w == "survive"));
@@ -750,6 +756,8 @@ mod tests {
         let mut sc = scope();
         sc.names.extend(["dest", "src", "self", "mid"].map(String::from));
         let hold = |t: &str| lint("hold", t, &["hold", "lifetime"], &sc).join("; ");
+        assert_eq!(hold("lifetime self released at end"), "");
+        assert!(hold("lifetime self released at end of call").contains("is said of a type"));
         assert_eq!(hold("hold result : moved from dest"), "");
         assert_eq!(hold("hold dest : moved from src.0"), "");
         assert_eq!(hold("lifetime src ends in call when src == dest"), "");

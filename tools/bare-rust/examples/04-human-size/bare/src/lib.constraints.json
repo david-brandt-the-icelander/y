@@ -99,7 +99,5 @@
     { "kind": "function", "name": "human_size::tests::invalid_overflow", "params": [] },
     { "kind": "function", "name": "human_size::tests::invalid_suffix", "params": [] }
   ],
-  "holes": {
-    "human_size::parse_human_readable_size": { "hints": [{ "kind": "targ", "n": 0, "type": "u64" }] }
-  }
+  "realizations": { "parse_u64": { "template": "<_>::parse", "args": ["u64"] } }
 }

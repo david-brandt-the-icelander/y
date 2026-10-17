@@ -11,6 +11,9 @@ pub enum Ty {
     Name(String),
     App(String, Vec<Ty>),
     Ref(Box<Ty>),
+    /// A host pointer: the address of a `T`, with no guarantee that it is valid or about any other path (Rust's
+    /// `*const T` and `*mut T`). The slot's access says whether it may write: `read` for `*const`, none for `*mut`.
+    Ptr(Box<Ty>),
     Opt(Box<Ty>),
     Tuple(Vec<Ty>),
     Coll(String, Vec<Ty>),
@@ -36,7 +39,7 @@ pub enum Bound {
 
 const PRIMS: [&str; 14] =
     ["bool", "u8", "u16", "u32", "u64", "u128", "i8", "i16", "i32", "i64", "i128", "f32", "f64", "_"];
-pub const RESERVED: [&str; 7] = ["text", "list", "map", "set", "ref", "some", "any"];
+pub const RESERVED: [&str; 8] = ["text", "list", "map", "set", "ref", "ptr", "some", "any"];
 
 pub fn is_prim(s: &str) -> bool {
     PRIMS.contains(&s)
@@ -44,6 +47,16 @@ pub fn is_prim(s: &str) -> bool {
 
 fn join(v: &[Ty]) -> String {
     v.iter().map(Ty::show).collect::<Vec<_>>().join(", ")
+}
+
+/// The result of call sugar: an `as` or a refinement after it would belong to the whole type, so a result that has
+/// one is in brackets: `Fn(u8) -> (u64 as 'usize')?`.
+fn show_ret(t: &Ty) -> String {
+    match t {
+        Ty::Opt(i) => format!("{}?", show_ret(i)),
+        Ty::As(..) | Ty::Refined(..) => format!("({})", t.show()),
+        _ => t.show(),
+    }
 }
 
 fn show_bounds(b: &[Bound]) -> String {
@@ -56,7 +69,7 @@ impl Bound {
         match self {
             Bound::Lifetime(l) => l.clone(),
             Bound::Iface { path, call: Some((a, r)), .. } => {
-                format!("{path}({}){}", join(a), r.as_ref().map(|r| format!(" -> {}", r.show())).unwrap_or_default())
+                format!("{path}({}){}", join(a), r.as_ref().map(|r| format!(" -> {}", show_ret(r))).unwrap_or_default())
             }
             Bound::Iface { path, args, assoc, .. } => {
                 let mut s = path.clone();
@@ -102,6 +115,7 @@ impl Ty {
             Ty::Name(n) => n.clone(),
             Ty::App(n, a) => format!("{n}<{}>", join(a)),
             Ty::Ref(t) => format!("ref<{}>", t.show()),
+            Ty::Ptr(t) => format!("ptr<{}>", t.show()),
             Ty::Opt(t) => format!("{}?", t.show()),
             Ty::Tuple(v) if v.len() == 1 => format!("({},)", v[0].show()),
             Ty::Tuple(v) => format!("({})", join(v)),
@@ -118,9 +132,28 @@ impl Ty {
     pub fn has_ref(&self) -> bool {
         match self {
             Ty::Ref(_) => true,
-            Ty::Opt(t) | Ty::As(t, _) | Ty::Refined(t, _) => t.has_ref(),
+            Ty::Ptr(t) | Ty::Opt(t) | Ty::As(t, _) | Ty::Refined(t, _) => t.has_ref(),
             Ty::App(_, v) | Ty::Tuple(v) | Ty::Coll(_, v) => v.iter().any(Ty::has_ref),
             _ => false,
+        }
+    }
+
+    pub fn has_ptr(&self) -> bool {
+        match self {
+            Ty::Ptr(_) => true,
+            Ty::Ref(t) | Ty::Opt(t) | Ty::As(t, _) | Ty::Refined(t, _) => t.has_ptr(),
+            Ty::App(_, v) | Ty::Tuple(v) | Ty::Coll(_, v) => v.iter().any(Ty::has_ptr),
+            _ => false,
+        }
+    }
+
+    /// Whether the slot's access lets its references or pointers write: a reference writes with `write`, a pointer
+    /// with anything but `read` (no access on a pointer is the absence of the read-only constraint, `*mut`).
+    pub fn writes(&self, rights: Option<&str>) -> bool {
+        if self.has_ptr() && !self.has_ref() {
+            rights != Some("read")
+        } else {
+            rights == Some("write")
         }
     }
 
@@ -139,7 +172,7 @@ impl Ty {
         };
         match self {
             Ty::Some(b) | Ty::Any(b) => inside(b),
-            Ty::Ref(t) | Ty::Opt(t) | Ty::As(t, _) | Ty::Refined(t, _) => t.bound_borrows(),
+            Ty::Ref(t) | Ty::Ptr(t) | Ty::Opt(t) | Ty::As(t, _) | Ty::Refined(t, _) => t.bound_borrows(),
             Ty::App(_, v) | Ty::Tuple(v) | Ty::Coll(_, v) => v.iter().any(Ty::bound_borrows),
             _ => false,
         }
@@ -185,7 +218,7 @@ impl Ty {
                         || call.as_ref().is_some_and(|(a, r)| a.iter().any(Ty::has_some) || r.as_ref().is_some_and(|r| r.has_some()))
                 }
             }),
-            Ty::Ref(t) | Ty::Opt(t) | Ty::As(t, _) | Ty::Refined(t, _) => t.has_some(),
+            Ty::Ref(t) | Ty::Ptr(t) | Ty::Opt(t) | Ty::As(t, _) | Ty::Refined(t, _) => t.has_some(),
             Ty::App(_, v) | Ty::Tuple(v) | Ty::Coll(_, v) => v.iter().any(Ty::has_some),
             _ => false,
         }
@@ -256,6 +289,15 @@ impl Ty {
                 match &**t {
                     Ty::Any(b) | Ty::Some(b) if b.len() > 1 => s + &format!("({inner})"),
                     _ => s + &inner,
+                }
+            }
+            // A pointer inside the bounds of an existential reads only, as a reference there is shared.
+            Ty::Ptr(t) => {
+                let s = if cx.m && !cx.in_bound { "*mut " } else { "*const " };
+                let inner = t.rust_in(cx, true)?;
+                match &**t {
+                    Ty::Any(b) | Ty::Some(b) if b.len() > 1 => format!("{s}({inner})"),
+                    _ => format!("{s}{inner}"),
                 }
             }
             Ty::Opt(t) => format!("Option<{}>", t.rust_in(cx, false)?),
@@ -480,13 +522,19 @@ impl P<'_> {
             let mut v = vec![];
             if !self.eat(")") {
                 v.push(self.ty()?);
+                let mut comma = false;
                 while self.eat(",") {
+                    comma = true;
                     if self.eat(")") {
                         return Ok(Ty::Tuple(v));
                     }
                     v.push(self.ty()?);
                 }
                 self.expect(")")?;
+                // `(T)` groups, as a one-tuple is written `(T,)`.
+                if !comma {
+                    return Ok(v.remove(0));
+                }
             }
             return Ok(Ty::Tuple(v));
         }
@@ -504,6 +552,7 @@ impl P<'_> {
             let a = self.args()?;
             return Ok(match id.as_str() {
                 "ref" if a.len() == 1 => Ty::Ref(Box::new(a.into_iter().next().unwrap())),
+                "ptr" if a.len() == 1 => Ty::Ptr(Box::new(a.into_iter().next().unwrap())),
                 "list" | "map" | "set" => Ty::Coll(id, a),
                 _ => Ty::App(id, a),
             });
@@ -536,6 +585,21 @@ mod tests {
     }
 
     #[test]
+    fn a_pointer_reads_or_writes_by_its_access() {
+        let t = Ty::parse("ptr<u8>").unwrap();
+        assert_eq!(t.show(), "ptr<u8>");
+        assert!(!t.has_ref() && t.has_ptr());
+        // `*const` is `rights: read`; `*mut` is no access at all, where a reference without one reads.
+        assert!(!t.writes(Some("read")) && t.writes(None) && t.writes(Some("write")));
+        assert!(!Ty::parse("ref<u8>").unwrap().writes(None));
+        assert_eq!(t.rust(false, None).unwrap(), "*const u8");
+        assert_eq!(t.rust(true, None).unwrap(), "*mut u8");
+        assert_eq!(Ty::parse("ptr<text>").unwrap().rust(false, None).unwrap(), "*const str");
+        assert_eq!(Ty::parse("ptr<list<u8> as 'std::primitive::slice'>").unwrap().rust(true, None).unwrap(), "*mut [u8]");
+        assert_eq!(Ty::parse("list<ptr<Node>> as 'Vec'").unwrap().rust(false, None).unwrap(), "Vec<*const Node>");
+    }
+
+    #[test]
     fn a_refinement_is_kept_in_the_string_and_erased_in_rust() {
         let s = r"text where length(value) == 1 and value matches /^\x{10FFFF}$/ as 'char'";
         let t = Ty::parse(s).unwrap();
@@ -555,6 +619,8 @@ mod tests {
             "some Iterator { Item = (u8, ref<text>) } + Clone + '_",
             "any std::error::Error + Send + Sync as 'std::boxed::Box'",
             "ref<any Fn(ref<u8>) -> bool>",
+            "any FnMut(ref<text>) -> (u64 as 'usize')? + 'static as 'Box'",
+            "(u8,)",
             "ref<any Iterator { Item = u8 }>",
             "Chars<'a>",
             "ref<list<Node<'_>> as 'Vec'>",

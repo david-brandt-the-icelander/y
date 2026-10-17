@@ -1,4 +1,4 @@
-use bare_rust::corpus::{strip_crate, FileResult};
+use bare_rust::corpus::FileResult;
 use bare_rust::check::{check_crate, CheckOpts};
 use bare_rust::crate_weave::{weave_crate_with, WeaveOpts};
 use bare_rust::json::canonical;
@@ -6,7 +6,23 @@ use std::{fs, path::PathBuf, process::exit};
 
 const USAGE: &str = "usage:
   bare-rust strip <file.rs> --crate <name> --module <path> [--out <dir>]
-  bare-rust strip <crate-dir> [--out <dir>] [--src-only]
+  bare-rust strip <crate-dir> [--out <dir>] [--src-only] [--no-cargo]
+      also chooses the builds the crate is checked in (another target, a feature, a --cfg), so that each piece of
+      code a #[cfg(..)] guards is compiled in one of them, and writes them to builds.json; --no-cargo: the default
+      build only (gated code keeps its mut)
+      a cast that is the whole initialiser of a typed `let` goes into the local's entry: `let x: u8 = (a + b) as u8;`
+      becomes `let x = a + b;` and `x: {type: u8, cast: true}`
+  bare-rust bind <file.rs>
+      prints the source with every cast and suffixed literal bound to a typed `let` (what strip strips, and what weave
+      gives back), and on stderr each site it left and why; mechanical names such as `h_u64` are meant to be renamed
+  bare-rust rename <dir> --list
+      the names each function's body binds, with their lines, and the crate's realizations: what rename can rename
+  bare-rust rename <dir> <map.json> [--check] [--lenient]
+      renames names of a stripped crate in its .brs and .constraints.json files together, and nothing else: the map is
+      {\"<function>\": {\"<old>\": \"<new>\"}, \"realizations\": {\"<old>\": \"<new>\"}}; a local is renamed in the function's
+      body and in the keys of its `holes`, a realization at every use and in the crate's table. Refused if a new name
+      is already a name there, an old one is not bound there or a format string captures it, or the result weaves
+      differently; --check only checks; --lenient skips an entry that does not apply (a map made on another version)
   bare-rust weave <file.brs> <file.constraints.json> [--out <dir>]
   bare-rust weave <dir> --out <dir> [--crate <crate-dir>] [--no-cargo] [--drop-holes] [--json]
       <dir> holds the .brs and .constraints.json files (the crate directory, if stripped in place); the crate's
@@ -14,6 +30,17 @@ const USAGE: &str = "usage:
       undetermined holes and errors, each at its place in the .brs file and, if it lies in woven-in text, with the JSON
       pointer of the slot (`src/lib.brs:12:5 [constraints: /subjects/3/params/1/type] error[E0308]: ...`); --json prints
       them as one JSON object instead; exits non-zero on any. --no-cargo only writes the files.
+  bare-rust scaffold <fn|impl|alias|struct> <path> [options] [--write <dir>]
+      a bare stub for a new item and its constraint entries, with `TODO` where a type goes (weave refuses a leftover
+      TODO); printed, or with --write <crate-or-bare-dir> appended to the module's .brs and .constraints.json:
+        fn     [mod::][Type::]name [--params a,b] [--self ref|mut|owned] [--generics T,U:Bound+Bound]
+               [--param-types t1,t2] [--result T|none]
+        impl   [mod::]Type [--trait Path] [--for Type] [--methods m1,m2:mut,m3:owned,m4:static] [--generics T]
+        alias  [mod::]Name [--type T] [--generics T]
+        struct [mod::]Name [--fields a,b | --tuple N] [--field-types t1,t2] [--generics T]
+        all    [--visible public|crate|module] [--crate <name>]
+      a parse error in a .brs that has a known fix (`let x: T`, `type X = T;`) and a missing subject at weave come
+      with the JSON entry to add
   bare-rust check <crate-dir> [--check-only] [--src-only] [--work <dir>] [--libraries <dir>] [--allow-missing-libraries]
       checks 1 to 5 of the plan for one crate; --check-only skips clippy and cargo test; results in <work>/<name>/check.json;
       check 5 (library files) runs when <libraries>/externals/<crate>.json exists, and fails on an external item with no
@@ -69,13 +96,26 @@ fn report(what: &str, results: &[FileResult]) -> Result<(), String> {
 
 fn run(args: Vec<String>) -> Result<(), String> {
     let rd = |p: &str| fs::read_to_string(p).map_err(|e| format!("{p}: {e}"));
+    if args.get(1).map(String::as_str) == Some("scaffold") {
+        return bare_rust::scaffold::run(&args[2..]);
+    }
     let out_dir = arg(&args, "--out").map(PathBuf::from);
     let target = args.get(2).ok_or(USAGE)?;
     match args.get(1).map(String::as_str) {
+        Some("bind") => {
+            let (out, left) = bare_rust::bind::bind_report(&rd(target)?)?;
+            print!("{out}");
+            for l in &left {
+                eprintln!("{target}:{}:{}: {} left: {}", l.line, l.col, l.what, l.why);
+            }
+            Ok(())
+        }
         Some("strip") if PathBuf::from(target).is_dir() => {
             let dir = PathBuf::from(target);
             let out = out_dir.unwrap_or_else(|| dir.clone());
-            report("strip", &strip_crate(&dir, &out, !args.iter().any(|a| a == "--src-only"))?)
+            let target = bare_rust::cargo::target_dir(&std::env::current_dir().map_err(|e| e.to_string())?);
+            let target = (!args.iter().any(|a| a == "--no-cargo")).then_some(target.as_path());
+            report("strip", &bare_rust::corpus::strip_crate_with(&dir, &out, !args.iter().any(|a| a == "--src-only"), target)?)
         }
         Some("strip") => {
             let krate = arg(&args, "--crate").ok_or("--crate is required")?;
@@ -236,6 +276,26 @@ fn run(args: Vec<String>) -> Result<(), String> {
             let refs: Vec<&std::path::Path> = dirs.iter().map(PathBuf::as_path).collect();
             let prov = format!("Generated by `bare-rust e2 {}`.", args[2..].join(" "));
             print!("{}", bare_rust::e2::e2(&refs, &prov)?);
+            Ok(())
+        }
+        Some("rename") if args.iter().any(|a| a == "--list") => {
+            print!("{}", bare_rust::json::ordered(&bare_rust::rename::bound_names(&PathBuf::from(target))?));
+            Ok(())
+        }
+        Some("rename") => {
+            let map_file = args.get(3).ok_or(USAGE)?;
+            let map: serde_json::Value = serde_json::from_str(&fs::read_to_string(map_file).map_err(|e| format!("{map_file}: {e}"))?)
+                .map_err(|e| format!("{map_file}: {e}"))?;
+            let check = args.iter().any(|a| a == "--check");
+            let lenient = args.iter().any(|a| a == "--lenient");
+            let (done, skipped) = bare_rust::rename::rename_dir_with(&PathBuf::from(target), &map, !check, lenient)?;
+            for r in &done {
+                println!("{}: {} -> {} ({} uses)", r.subject, r.from, r.to, r.uses);
+            }
+            for s in &skipped {
+                println!("skipped: {s}");
+            }
+            println!("{} names {}", done.len(), if check { "can be renamed (nothing written)" } else { "renamed" });
             Ok(())
         }
         Some("stats") => {
