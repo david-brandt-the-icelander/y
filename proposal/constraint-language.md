@@ -307,8 +307,15 @@ profile 'tranquility-2026-10' from replay 'tq-2026-10-14' on platform 'x86_64-un
     branch 'eve::dogma::Fitting::recalc_cpu' @ 3  taken 0.02          -- the third branch of the body, by its stable position
     size 'eve::market::Book::orders'             p50 12, p99 210
     fails 'wallet.Credit' with InsufficientFunds 0.004
+    access 'eve::market::Book::orders'          by orderID 0.92, by range price 0.07, scan 0.01
+    index 'eve::dogma::Fitting::slots'          p50 3, p99 15, sequential 0.80
+    lookup 'eve::cache::TypeCache::get'         hit 0.97
 ```
 
+- **Access to collections** is measured as well: by which keys or fields each collection was looked up, how often by a
+  range and how often scanned whole (`access`); the indices used and whether they ran in order (`index`); how often a
+  lookup found what it looked for (`lookup … hit`). It is what decides a representation (a map, a sorted array, an
+  array indexed by a dense key) and, for a table, which index a selection should use (§ 17, question 1).
 - **Points in a body** are named by their stable position in the bare body (the subject and the ordinal of the branch,
   call or loop), the same positions the facts of § 11.1.1 are computed at. A position that no longer exists after an
   edit is dropped, not guessed.
@@ -411,13 +418,13 @@ Clauses are of two sorts, and the difference decides how they are checked.
 | --- | --- | --- | --- | --- |
 | Values and shapes | parameter and result types, `field`, `type … where`, `quantity`, `unit`, `layout` | What values may cross a boundary, and how they are laid out | Predicate | 6.1 |
 | Calls | `from`, `require … else`, `ensure`, `on failure`, `fails … when`, `fails only`, `never fails runtime`, `result must be used`, `callback`, `law` | Who may call, what must hold before and after, how a call may fail | Predicate; laws are properties | 6.2 |
-| Bounds on effects | `reads only`, `writes only`, `emits only`, `sends only`, `calls only`, `effects only`, `effects none`, `pure`, `no io`, `no clock`, `no randomness`, `no suspension`, `deterministic`, `idempotent by`, `depends only on`, `terminates`, and `when` on any of them | What a call must not do | Property | 6.3 |
+| Bounds on effects | `reads only`, `writes only`, `emits only`, `sends only`, `calls only`, `effects only`, `effects none`, `pure`, `no io`, `no device`, `devices only`, `no clock`, `no randomness`, `no suspension`, `deterministic`, `idempotent by`, `depends only on`, `terminates`, and `when` on any of them | What a call must not do | Property | 6.3 |
 | State | `invariant`, `unique`, `reference … on end`, `acyclic`, `conserve`, `faucet`, `sink` | What must hold of stored state | Predicate | 6.4 |
 | Protocols | `states`, `initial`, `protocol` | Which changes and calls may follow which | Predicate for `states`; property for `protocol` | 6.5 |
 | Time and statistics | `always`, `never`, `after … within`, `before`, `since`, `until`, `eventually`, `rate`, `statistic` | What must hold over history | Predicate for `always`, `never` and `rate`; property otherwise | 6.6 |
 | Budgets | `budget` | How much time, work, memory and traffic | Property | 6.7 |
 | Concurrency | `confined to`, `guarded by`, `lock order`, `atomic`, `linearizable`, `no suspension while holding`, `no blocking in`, `not reentrant`, `cancellation safe`, `publishes` | Who may touch what, from where, in what order: rules a correct program keeps | Property | 6.8 |
-| Information | `label`, `flows only to`, `never flows … to`, `declassify … when … because`, `sanitised by` | Where information may go | Property | 6.9 |
+| Information | `label`, `flows only to`, `never flows … to`, `declassify … when … because`, `sanitised by`, `time independent of` | Where information may go | Property | 6.9 |
 | Compatibility and visibility | `version`, `compatible with`, `replaces`, `was`, `deprecated`, `stable`, `visible to` | What may change between versions, and who may refer to what | Checked at build | 6.10 |
 | Interfaces and implementations | `implements`, `assoc`, `for`, `some`, `any`, `hold … borrows for` | Which interfaces a type implements, what an implementation adds, and what a host subject is parameterised by | Checked at build | 6.11 |
 | Conditional promises | `given` | What a promise relies on: a bound's implementations, the default body, a build setting | Checked at build, as the promise is | 6.12 |
@@ -425,7 +432,7 @@ Clauses are of two sorts, and the difference decides how they are checked.
 | Independence | `pure`, read sets (`reads only`), write sets (`mutates only`, `writes only`), `disjoint`, `commutes with`, `sendable`, `shareable` | What may run in parallel or in another order: facts an optimizer, scheduler or translator may use | Property | 6.16 |
 | Sequences | `yields(it)`, `xs[i]`, `present`, `xs[i..j]`, `++`, `reverse`, `take`, `skip`, `zip`, `enumerate`, `select`, `while_true`, `flatten`, `map`, `filter` | What an iterator yields, and the order of a list's elements | Expressions: predicates when finite, properties for infinite sequences | 6.15 |
 | Small additions | `evaluable at compile time`, `must be used`, `moved from`, `ends in call`, `survive call`, `except exhausted`, `expected`, `amortised`, `result.0`, `mutates only p[e]`, `obliges caller` | Compile-time evaluation, must-use types, moves, drops, exhaustion, expected cost, tuple parts, an element frame, what a caller must establish | As the section each extends | 6.14 |
-| Lifetime | `hold`, `lifetime …`, `instances …`, `no strong cycle`, `model` | How long entities live and who keeps them | Property | 7 |
+| Lifetime | `hold`, `lifetime …` (including `cleared on end`), `instances …`, `no strong cycle`, `model` | How long entities live and who keeps them | Property | 7 |
 | Mutability and aliasing | `access`, `readonly`, `immutable`, `frozen after`, `write once`, `append only`, `monotonic`, `mutates only`, `interior`, `unchanged`, `exclusive`, `sole`, `disjoint`, `shared readonly` | Who may change what, and through how many paths | Property; predicate for columns | 8 |
 | Derived languages | `local` | A type a woven host needs inside a body | Checked at weave | 11.2 |
 | Status and placement | `assume … because`, `pin … because`, `not at` | What is taken on trust, what a person fixed, where a clause may not run | — | 10 |
@@ -434,7 +441,7 @@ Clauses are of two sorts, and the difference decides how they are checked.
 | Collection contents | `sorted`, `distinct`, `dense`, `heap ordered`, `nonempty` | What holds of a collection's elements | Predicates, in any expression | 6.19 |
 | Expectations | `expect` | What usually happens: sizes, frequencies, likelihoods, rare failures; never correctness | Watched only | 6.20 |
 | Platforms | `platform`, with `pointer width`, `endian`, `target features`, `atomics up to`, `panic`, `build`, `features` | What every subject of a build may assume | Checked at build, against the toolchain | 3.6 |
-| Profiles | `profile`, with `calls`, `branch`, `size`, `fails` | What a build's traffic was measured to do | Measured; never enforced | 3.7 |
+| Profiles | `profile`, with `calls`, `branch`, `size`, `fails`, `access`, `index`, `lookup` | What a build's traffic was measured to do | Measured; never enforced | 3.7 |
 
 ---
 
@@ -588,6 +595,13 @@ function rust 'eve::dogma::falloff'(range: f64, optimal: f64, falloff: f64) -> f
 
 - `effects none` is purity: no reads of mutable state, no writes, input and output, clock or randomness. Allocating what
   it returns is not an effect.
+- **A device access is an effect.** A read or write of a device's memory (a memory-mapped register, a buffer a device
+  reads or writes by DMA) or of an I/O port is an effect of its own kind, `device`, as input and output are. Each one
+  happens as the body writes it: none is removed, merged, repeated or moved past another device access, and a read is
+  never taken to give back what was last written. `devices only p` bounds which devices a subject touches, and `no
+  device` forbids them. In Rust these are `read_volatile` and `write_volatile` on a device's address; in C and C++, an
+  access through a `volatile` lvalue to such an address. A `volatile` used for something else (a variable a signal
+  handler shares) is concurrency (§ 6.8), not a device.
 - `pure` is `effects none`, `depends only on` every parameter, and `deterministic`, in one word: the subject reads only
   its inputs, writes none of them, has no other effect, and gives the same result for the same inputs. It adds no
   meaning, but it is the word optimizers and translators look for: a pure call may be computed once, moved, left out
@@ -828,6 +842,7 @@ label pii
 label secret(server)
 label hidden(owner)
 label untrusted
+label key
 
 table accounts.Users
     label email, birthDate, lastAddress : pii
@@ -846,18 +861,30 @@ table space.Ships
 method chat.Send(channelID: u64, message: text)
     label message : untrusted
     sanitised by chat.escape before log, client
+
+function rust 'eve_net::auth::tags_equal'(a: bytes, b: bytes) -> bool
+    label a, b : key
+    time independent of a, b
 ```
 
 - Sinks are `client`, `player(x)`, `server`, `ledger`, `chain`, `log`, `analytics`, `external` and `shard(x)`.
 - A failure is a flow. A precondition that reads hidden information may fail only with a failure no more revealing than
   its labels allow, and the compiler checks this: a `require` that reveals whether a cloaked ship is in range is a
-  breach even if the body never runs. Timing is a flow too, and is out of scope for enforcement (§ 17).
+  breach even if the body never runs.
+- **Timing is a flow, where a subject says so.** `time independent of p, q` says that how long the subject takes, and
+  which memory addresses it touches in what order, do not depend on the values of the labelled inputs `p` and `q`
+  (their sizes may matter). It is how a comparison of a secret, a cipher, or a check that must not reveal how far it
+  got before it failed is written. It is stated only of subjects whose inputs carry a label, and only where someone
+  defends it: everything else may take as long as it takes. An optimizer that keeps it does not add a branch on, an
+  early exit at, or a table lookup indexed by those values.
 - Labels also decide placement: a constraint may run only where everything it reads may flow (§ 10.3). A constraint that
   reads another pilot's hidden state can never run on a client.
 - `declassify` is the one way a label is relaxed, and it always carries a condition and a reason.
 - **Checked:** statically through the read sets of predicates and the bounds of subjects; at the proxies' filters, which
   apply visibility as policy; at the stream boundaries where server secrets are stripped; watched in CI by tracing
-  labelled values through replays.
+  labelled values through replays. `time independent of` is checked on the compiled code, for the platforms of the
+  build (§ 3.6), by a constant-time analysis where the host has one, and by timing the subject on generated inputs that
+  differ only in the labelled values; it is `enforced` only where the analysis runs, and watched elsewhere.
 
 ### 6.10 Compatibility and visibility
 
@@ -1690,6 +1717,10 @@ function rust 'eve::dogma::Fitting::modules_of'(self: ref<Fitting>, group: u32) 
 procedure 'wallet.Credit'(requestID: id<Requests>, amount: decimal(19, 2))
     expect fails InsufficientFunds  rarely
 
+type rust 'eve::market::Book'
+    expect access self.orders by orderID  usually 0.9
+    expect scans self.orders  rarely
+
 function rust 'eve::admin::rebuild_index'()
     expect cold
 ```
@@ -1698,6 +1729,12 @@ function rust 'eve::admin::rebuild_index'()
   still only expected). `p` is over the inputs and the result, as a postcondition is.
 - **`expect fails X rarely | often | f`**, **`expect hot`**, **`expect cold`**, and **`expect called per s about n`**
   name the cases optimizers use most.
+- **How a collection is used.** `expect access p by k [usually f]` (it is looked up by `k`; `by range k` for ranges),
+  `expect access p sequential | random`, `expect scans p rarely`, `expect index i of p < n [usually f]`, and `expect
+  lookup s hits [usually f]`. They are the indexing assumptions a representation is chosen for: a collection expected to
+  be looked up by one key and rarely scanned is a map on that key, one expected to be read in order is an array, and a
+  table expected to be selected by a column gets an index on it. Each is compared with the profile's `access`, `index`
+  and `lookup` entries (§ 3.7).
 - **Never a premise.** An expectation is not a fact at any point (§ 11.1.1): a check discharged by an expectation would
   be wrong in the calls it does not cover.
 - **Checked:** watched against the profiles of the builds (§ 3.7) and against traffic, with a `statistic` (§ 6.6) where
@@ -1794,6 +1831,15 @@ Each predicate is defined over the core; § 7.4 and § 7.5 give its meaning unde
   when its host says so through a destructor (Rust's `Drop`, a C++ destructor under RAII, Swift's `deinit`), or when it
   owns a value of a type that has it. `bind` keeps the end of such a value where the source has it (bare-rust
   proposal § 2.2).
+- **`lifetime e cleared on end`:** when `e` ends, no storage the program used for it still holds its contents: the
+  entity's own memory is overwritten before anything may reuse it, and so is every copy the program made of it on the
+  way (the old buffer of a growing collection, a value moved out of a place that kept its bytes). Memory after an end
+  is observable outside the program (a core dump, swapped pages, the next tenant of a reused buffer), and the write
+  that clears it is one no later read uses, which an optimizer would otherwise remove. `lifetime every value labelled
+  key cleared on end` states it for everything that carries a label (§ 6.9). For rows, the row's pages are overwritten
+  or its storage is encrypted with a key that ends with it. Rust's `zeroize` and C's `explicit_bzero` and
+  `memset_s` are how hosts do it; under tracing, a host whose strings cannot be overwritten cannot keep it for a
+  string, and its profile says so (§ 3.3).
 - **`lifetime e no use after end`:** no reference is used to reach `e` after `end(e)`; for resources, `no use after
   release`.
 - **`lifetime e reachable only from p, q`:** every strong path to `e` from a root passes through one of the named
@@ -2140,6 +2186,14 @@ disagreement fails the build.
 **Proof.** A constraint is `proven` when a host compiler proves it (a borrow in Rust, a non-escaping closure in Swift),
 when a static analysis does, or when the compiler discharges it from earlier clauses and declared types (a range already
 implied by a parameter's type), or from the facts that hold where the check is made (§ 11.1.1). The reason is recorded.
+
+**Optimizers need no barriers.** An optimizer may do anything that keeps every constraint that applies, every effect
+the program has, and the order of every effect that no freedom (§ 6.17) lets vary, choosing among the outcomes a
+freedom allows. There is no clause that forbids an optimization as such. What a barrier does in a host (a write that
+must not be removed, a comparison that must not exit early, a device read that must not be merged) is a constraint
+about something someone can observe: memory after an end (`cleared on end`, § 7.3), timing (`time independent of`,
+§ 6.9), or a device (an effect, § 6.3). Stated as such, it is kept by every optimizer that keeps constraints, and
+checked as constraints are.
 
 **Diagnostics** name the constraint, its subject and version, its status, the place it ran, and the inputs that broke
 it, redacted by their labels.
@@ -2645,7 +2699,11 @@ declaration   = subject | failure | predicate | block | label | scope | quantity
 platform      = "platform" [ HOST ] STABLE NL INDENT { platform_fact NL } DEDENT ;
 profile       = "profile" STABLE "from" NAME STABLE "on platform" STABLE NL INDENT { measured NL } DEDENT ;
 measured      = "calls" STABLE "per" scope_ref NUMBER | "branch" STABLE "@" NUMBER "taken" NUMBER
-              | "size" path_or_stable percentile NUMBER { "," percentile NUMBER } | "fails" STABLE "with" NAME NUMBER ;
+              | "size" path_or_stable percentile NUMBER { "," percentile NUMBER } | "fails" STABLE "with" NAME NUMBER
+              | "access" STABLE use NUMBER { "," use NUMBER }
+              | "index" STABLE percentile NUMBER { "," percentile NUMBER } [ "," "sequential" NUMBER ]
+              | "lookup" STABLE "hit" NUMBER ;
+use           = "by" [ "range" ] NAME | "scan" ;
 path_or_stable = STABLE | path ;
 platform_fact = "pointer width" NUMBER | "endian" ( "little" | "big" ) | "target features" NAME { "," NAME }
               | "atomics up to" NUMBER | "panic" ( "unwind" | "abort" )
@@ -2723,7 +2781,7 @@ LIFETIME      = "'" NAME ;
 
 bound         = ( "reads only" | "writes only" | "emits only" | "sends only" | "calls only" | "effects only" )
                   path_list
-              | "effects none" | "pure" | "no io" | "no clock" | "no randomness" [ "except rolls" ] | "no suspension"
+              | "effects none" | "pure" | "no io" | "no device" | "devices only" path_list | "no clock" | "no randomness" [ "except rolls" ] | "no suspension"
               | "deterministic" | "idempotent by" path | "commutes with" QNAME
               | "depends only on" path_list | "terminates" | "evaluable at compile time" ;
 state         = "invariant" NAME ":" expr [ "holds" ( "at write" | "at commit" | "between calls" | "always" ) ]
@@ -2751,7 +2809,8 @@ flow          = "label" path_list ":" NAME [ "(" path ")" ] [ "when" expr ]
               | "flows" NAME [ "(" NAME ")" ] "only to" sink { "," sink }
               | "never flows" NAME "to" sink { "," sink } [ "unless encrypted" ]
               | "declassify" path "to" sink { "," sink } "when" expr "because" STRING
-              | "sanitised by" QNAME "before" sink { "," sink } ;
+              | "sanitised by" QNAME "before" sink { "," sink }
+              | "time independent of" path_list ;
 compat        = "version" NUMBER | "compatible with" NUMBER { "," NUMBER } | "replaces" HOST STABLE
               | "was" STABLE | "deprecated" [ "since" NUMBER ] | "stable"
               | "visible to" ( "public" | "crate" | "module" | QNAME ) ;
@@ -2762,14 +2821,16 @@ memory        = "hold" [ path ] ":" ( "owns" | "shares" | "borrows" [ "from" pat
               | "instances" [ "per" scope_ref ] "at most" NUMBER
               | "instances attributed to" scope_ref "are none within" duration "after" event
               | "no strong cycle" [ "through" path_list ] ;
-target        = path | "every ref<" type ">" [ "obtained from" path ] | "every item of" expr | "rows" ;
+target        = path | "every ref<" type ">" [ "obtained from" path ] | "every item of" expr | "rows"
+              | "every value labelled" NAME ;
 lifetime_pred = "outlives" path | "within" scope_ref | "ends with" path | "ends in call" [ "when" expr ]
               | "does not escape" [ scope_ref ]
               | "escapes only to" path_list | "ends within" duration "after" event
               | "at most" duration [ "after" event ]
               | "released by" NAME "exactly once" | "released before end" | "ends by" NAME "exactly once"
               | "no use after" ( "end" | "release" ) | "reachable only from" path_list
-              | "stable address" [ "while held by" path_list ] | "on end" ( "refuse" | "invalidate" ) ;
+              | "stable address" [ "while held by" path_list ] | "on end" ( "refuse" | "invalidate" )
+              | "cleared on end" ;
 access        = "access" path ":" ( "identify" | "read" | "write" ) ( "exclusive" | "readers" | "any" )
               | "readonly" path [ "shallow" | "transitively" ]
               | "immutable" path [ "deep" | "shallow" ] [ "after" event ] | "frozen after" event
@@ -2786,7 +2847,10 @@ algebra       = "associative" [ "within" tolerance ] | "commutative" | "identity
               | "injective" | "equivalent to" ( QNAME | STABLE ) [ "within" tolerance ] ;
 tolerance     = ( "abs:" NUMBER [ "," "rel:" NUMBER ] | "rel:" NUMBER ) ;
 expectation   = "expect" ( expr [ "usually" NUMBER ] | "fails" NAME ( "rarely" | "often" | NUMBER )
-                         | "hot" | "cold" | "called per" scope_ref "about" NUMBER ) ;
+                         | "hot" | "cold" | "called per" scope_ref "about" NUMBER
+                         | "access" path ( "by" [ "range" ] NAME | "sequential" | "random" ) [ "usually" NUMBER ]
+                         | "scans" path ( "rarely" | "often" ) | "index" NAME "of" path "<" expr [ "usually" NUMBER ]
+                         | "lookup" path "hits" [ "usually" NUMBER ] ) ;
                                                        (* sorted, distinct, dense, heap ordered and nonempty are
                                                           predicates of § 6.19, written as calls in an expr *)
 path          = ( NAME | "owner" "(" path ")" ) { "." ( NAME | NUMBER ) | "[" expr "]" } [ ".*" ] | STABLE ;
@@ -2876,8 +2940,10 @@ handle_expr   = "current" "(" expr ")"                     (* the value at the p
 7. **Deadlines that can act.** Which `after … within` constraints can be enforced by a timer that fires at the deadline,
    rather than only watched? Leaning: those whose remedy is itself a declared procedure, such as returning a ship in
    transit to its origin.
-8. **Flows through timing.** Failures are covered; timing is not. Leaning: keep timing out of scope for enforcement, and
-   watch the few places where it matters (scans, cloaks) on replicas.
+8. **Flows through timing.** Failures are covered, and so is timing where a subject states `time independent of`
+   (§ 6.9). The rest of timing is not. Leaning: enforce `time independent of` only where a constant-time analysis runs
+   on the compiled code, watch it elsewhere, and watch the few places where timing matters to the game (scans, cloaks)
+   on replicas.
 9. **Statistics: when to alarm.** Thresholds for `statistic` clauses trade false alarms for missed drift. Leaning:
    sequential tests with a declared false-alarm rate per clause.
 10. **Syntax for agents and people.** Indentation reads well and diffs cleanly, but braces survive more tools. Leaning:
