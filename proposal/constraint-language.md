@@ -38,9 +38,11 @@ code.
 - **Clauses in families.** Values and shapes; calls (authority, preconditions, postconditions, failures, callbacks,
   laws); bounds on effects (what a call must not do); state (invariants, uniqueness, references, conservation);
   protocols and state machines; order in time and statistics; budgets; concurrency; information flow; compatibility and
-  visibility; memory: lifetime, mutability and aliasing; and independence, the facts that let work run in parallel or
-  in another order. Beside them, a platform states what every subject of a build may assume (§ 3.6), and the facts that
-  hold at each point of a body are derived, never written (§ 11.1.1).
+  visibility; memory: lifetime, mutability and aliasing; independence, the facts that let work run in parallel or in
+  another order; freedoms, what may vary; named algebraic properties; facts about a collection's contents; and
+  expectations, what usually happens, which never decide correctness. Beside them, a platform states what every
+  subject of a build may assume (§ 3.6), a profile what the build's traffic was measured to do (§ 3.7), and the facts
+  that hold at each point of a body are derived, never written (§ 11.1.1).
 - **Memory, written once for every model.** Lifetime, mutability and aliasing are stated over a core that belongs to no
   host: entities with lifetimes; references that own, share, borrow, observe or only identify what they point to; and
   paths that carry access rights and a guarantee about every other path. A memory model per host gives the core a
@@ -289,6 +291,33 @@ platform rust 'wasm32-unknown-unknown+simd128'
   little else; C and C++ fix the most, through the target and the compiler's flags; T-SQL's facts are the server's
   version and its settings (`ANSI_NULLS`, the collation).
 
+### 3.7 Profiles: what a build's traffic was measured to do
+
+**Meaning.** A profile is to expectations (§ 6.20) what a platform is to facts: a declaration the toolchain adds to a
+build, from measurement, that every subject compiled in it is under. It holds what recorded traffic showed: how often
+each subject was called, how often each branch of a body went each way, the sizes collections had, which failures
+occurred and how often, which calls were hot. The toolchain makes it from replays, test clusters or production samples
+and hands it to the compiler as it hands it the target, so that one build of the code can be laid out, inlined and
+specialised for the traffic it will see. A profile states nothing that must hold: a profile that is wrong, stale or
+missing makes a build slower, never wrong.
+
+```text
+profile 'tranquility-2026-10' from replay 'tq-2026-10-14' on platform 'x86_64-unknown-linux-gnu'
+    calls 'eve::dogma::Fitting::recalc_cpu'      per tick 1840
+    branch 'eve::dogma::Fitting::recalc_cpu' @ 3  taken 0.02          -- the third branch of the body, by its stable position
+    size 'eve::market::Book::orders'             p50 12, p99 210
+    fails 'wallet.Credit' with InsufficientFunds 0.004
+```
+
+- **Points in a body** are named by their stable position in the bare body (the subject and the ordinal of the branch,
+  call or loop), the same positions the facts of § 11.1.1 are computed at. A position that no longer exists after an
+  edit is dropped, not guessed.
+- **A profile names its source and its platform**, and is never `enforced`. Its entries are measurements, and a person
+  does not write them. A written expectation (§ 6.20) is compared with the profile of each build, and a profile far from
+  what a subject expects is reported.
+- **Per host.** Each host's profile-guided build takes it in its own form (LLVM's profile data for Rust and C++, the
+  JIT's own counters for the JVM and .NET, which a profile can seed); a host with no such build ignores it.
+
 ---
 
 ## 4. Expressions, defined once
@@ -400,7 +429,12 @@ Clauses are of two sorts, and the difference decides how they are checked.
 | Mutability and aliasing | `access`, `readonly`, `immutable`, `frozen after`, `write once`, `append only`, `monotonic`, `mutates only`, `interior`, `unchanged`, `exclusive`, `sole`, `disjoint`, `shared readonly` | Who may change what, and through how many paths | Property; predicate for columns | 8 |
 | Derived languages | `local` | A type a woven host needs inside a body | Checked at weave | 11.2 |
 | Status and placement | `assume … because`, `pin … because`, `not at` | What is taken on trust, what a person fixed, where a clause may not run | — | 10 |
+| Freedoms | `order unspecified`, `may reassociate within`, `result any of`, `may batch`, `may reorder` | What may vary between runs, builds and hosts, and so is no one's to rely on | Checked by running callers under each choice | 6.17 |
+| Algebraic properties | `associative`, `commutative`, `identity`, `absorbing`, `idempotent`, `involutive`, `inverse of`, `distributes over`, `monotone`, `injective`, `equivalent to` | Laws with fixed names, which tools recognise | Property, checked as laws are | 6.18 |
+| Collection contents | `sorted`, `distinct`, `dense`, `heap ordered`, `nonempty` | What holds of a collection's elements | Predicates, in any expression | 6.19 |
+| Expectations | `expect` | What usually happens: sizes, frequencies, likelihoods, rare failures; never correctness | Watched only | 6.20 |
 | Platforms | `platform`, with `pointer width`, `endian`, `target features`, `atomics up to`, `panic`, `build`, `features` | What every subject of a build may assume | Checked at build, against the toolchain | 3.6 |
+| Profiles | `profile`, with `calls`, `branch`, `size`, `fails` | What a build's traffic was measured to do | Measured; never enforced | 3.7 |
 
 ---
 
@@ -1453,14 +1487,14 @@ something that is not a list of lists or collections; and `size` or `reverse` of
   ("the first `n` items", "after the first `n`", "in step"); `map` and `filter` from a call of a named function in a body,
   and from a documentation line that names a function. For a library, from its documentation and source.
 
-What stays outside: that an order is arbitrary (std's `HashMap` documents that iteration order may differ between maps and
-runs: nothing is promised, and a clause states what holds, not that something may differ); a range of a generic `Step`
+What stays outside: a range of a generic `Step`
 type (`start..end` yields the successor of `start`, which `Step` defines, and `Step` is an unstable trait no bound can
 name: the language has no successor of a type parameter, and a range of integers is the refinement `T in a..b`, not a
 value of `Range`); and `collect`, whose result is any `FromIterator` and promises nothing of the items by itself (the
-impls of `Result` and `String` state theirs, as subjects of their own). The lifetime of the elements an iterator has not
-yet given is stated by `lifetime every item of yields(it) ends with it` (§ 7.3); the calls an adapter makes of its closure
-by `called by` (§ 6.13.1).
+impls of `Result` and `String` state theirs, as subjects of their own). That an order is arbitrary, as std's `HashMap`
+documents of its iteration, is not stated here, where a clause states what holds: it is a freedom (§ 6.17), `order
+unspecified yields(self.iter())`. The lifetime of the elements an iterator has not yet given is stated by `lifetime
+every item of yields(it) ends with it` (§ 7.3); the calls an adapter makes of its closure by `called by` (§ 6.13.1).
 
 ### 6.16 Independence: what lets work run in parallel or in another order
 
@@ -1513,6 +1547,163 @@ function rust 'eve::dogma::Fitting::recalc_power'(self: ref<Fitting>)
   `commutes with` by property tests that run both orders.
 - **Harvested:** from the manifests and replays (§ 8.6): the paths each call read and wrote, as the union of what was
   seen; `pure` from a body whose computed sets are its parameters' reads alone and that has no other effect.
+
+### 6.17 Freedoms: what may vary
+
+**Meaning.** Everything a program does that someone can observe is kept by a translation, unless something says it may
+vary: a translator cannot tell an order nobody relies on from one somebody does. A freedom says it. It widens what the
+subject may do to a stated set of outcomes, every one of them correct, and so tells every caller that it may not rely on
+any one of them. A freedom is the most useful thing an optimizer or translator can be told, because it is the room it
+works in: an unspecified order lets a hash map be replaced and a loop be split across cores, a tolerance lets a sum be
+reassociated and vectorised, and a log that may be batched need not be written on the hot path.
+
+```text
+function rust 'std::collections::HashMap::iter'(self: ref<map<K, V>>) -> some 'std::iter::Iterator' { Item = (ref<K>, ref<V>) }
+    order unspecified yields(result)                -- the pairs, in an order that may differ between maps and runs
+
+function rust 'eve::dogma::sum_bonuses'(xs: list<f64>) -> f64
+    may reassociate within abs: 1e-9, rel: 1e-12    -- any order of the additions; the result within that of the written one
+
+procedure 'eve::market::FindSeller'(typeID: u64, qty: u64) -> u64?
+    result any of select(o in market.Orders : o.typeID == typeID and o.qty >= qty).sellerID
+
+function rust 'eve::telemetry::record'(e: Event)
+    may batch emits                                  -- the events go out later and together, in their order
+    may reorder emits                                -- and in any order among themselves
+```
+
+- **`order unspecified s`:** the sequence `s` (a result, an iterator's `yields`, the rows of a query) has the elements a
+  clause of § 6.15 states, in any order. What its order is not, it says nothing of: `sorted` (§ 6.19) and an
+  unspecified order cannot both be stated of one sequence.
+- **`may reassociate within abs: e, rel: r`:** the subject's floating-point operations may be regrouped and reordered,
+  and the result is within the tolerance of the one the body as written computes, by the `approx` of § 4. Without it,
+  a translator keeps every float operation in its order, as the host's own strict mode does.
+- **`result any of e`:** the result is one element of the collection `e`, any one, where the body picks one by an order
+  nobody relies on (the first match of a scan).
+- **`may batch` and `may reorder`** take a kind of effect (`emits`, `sends`, `writes` to a path), and say the effects of
+  that kind may be delayed past the subject's return and applied together (`may batch`), or applied in any order among
+  themselves (`may reorder`). They never reorder an effect with one of another kind, and never delay one that the
+  subject's own result or a later call of the caller reads.
+- **What a freedom cannot widen.** The failure a caller sees: the first precondition that fails decides it (principle
+  6). A bound, a postcondition or an invariant: every outcome a freedom allows must keep them all.
+- **Freedoms are decided by people** (principle 9), and a miner may only propose one: a body's order being arbitrary
+  does not mean no caller relies on it.
+- **Checked:** the reference evaluator accepts every outcome in the set. Callers are checked for reliance by running them
+  in CI under each kind of choice: a shuffled order, a different association of a sum, another element of the set, the
+  effects batched. A caller whose result changes relies on what the freedom says varies, and has a bug.
+- **Harvested:** from documentation that says "arbitrary order", "unspecified", "any of", "may be reordered" or "is not
+  guaranteed to be".
+
+### 6.18 Named algebraic properties
+
+**Meaning.** A `law` (§ 6.2) states any property over a subject. A few properties are wanted by every optimizer and
+prover, and a fixed name with a fixed meaning is what lets a tool find them: `associative` with an `identity` turns a
+loop into a parallel reduction, `idempotent` makes a retry or a cached call safe, `monotone` lets a search be binary,
+and `equivalent to` lets a translator use another implementation and check it against this one. Each name is a law with
+the meaning below, checked as a law is, and nothing more.
+
+```text
+function rust 'eve::dogma::stack'(a: Modifier, b: Modifier) -> Modifier
+    associative
+    commutative
+    identity Modifier::NONE
+
+function rust 'eve::text::normalise'(s: text) -> text
+    idempotent
+
+function rust 'eve::market::price_after_tax'(p: decimal(19, 2), rate: decimal(5, 4)) -> decimal(19, 2)
+    monotone increasing in p
+
+function rust 'eve::dogma::falloff_fast'(range: f64, optimal: f64, falloff: f64) -> f64
+    equivalent to 'eve::dogma::falloff' within rel: 1e-12
+```
+
+| Name | On | The law |
+| --- | --- | --- |
+| `associative` | `f(a: T, b: T) -> T` | `f(f(a, b), c) == f(a, f(b, c))` |
+| `commutative` | `f(a: T, b: T) -> U` | `f(a, b) == f(b, a)` |
+| `identity e` | `f(a: T, b: T) -> T` | `f(e, a) == a and f(a, e) == a` |
+| `absorbing z` | `f(a: T, b: T) -> T` | `f(z, a) == z and f(a, z) == z` |
+| `idempotent` | `f(a: T) -> T`, or `f(a: T, b: T) -> T` | `f(f(a)) == f(a)`; `f(a, a) == a` |
+| `involutive` | `f(a: T) -> T` | `f(f(a)) == a` |
+| `inverse of g` | `f(a: U) -> T`, `g(a: T) -> U` | `f(g(a)) == a` |
+| `distributes over g` | `f`, `g` of `(T, T) -> T` | `f(a, g(b, c)) == g(f(a, b), f(a, c))` |
+| `monotone increasing in p` (`decreasing`, `non-decreasing`, `non-increasing`) | any `f` with a parameter `p` | larger `p`, the other arguments equal, gives a result larger (or not smaller, …) |
+| `injective` | any `f` | different arguments give different results |
+| `equivalent to S [within …]` | `f` and `S` of one signature | `f` and `S` give the same result, effects and failures for every input; with `within`, a result in that tolerance |
+
+- **Floats.** A float operation is rarely associative exactly: `associative within rel: r` states it in a tolerance,
+  which is what `may reassociate` (§ 6.17) needs of the operation it regroups.
+- **On a method of an interface**, a name binds every implementation, as any law does (§ 9): `associative` on a `Monoid`'s
+  `combine`.
+- **Fails:** a name on a subject of the wrong shape (`associative` on a function of one argument) is refused at build.
+- **Checked:** as laws are, by property tests in CI over generated values, and for `equivalent to` by running both on
+  the corpora; proven where a prover can.
+- **Harvested:** from trait implementations that promise them (`Ord`, a monoid), from documentation, and from bodies
+  that a prover shows to have them.
+
+### 6.19 Facts about a collection's contents
+
+**Meaning.** Some properties of a collection's elements are what decide how it can be used: a sorted list can be
+searched by halves, a list of distinct elements needs no deduplication, keys in a dense range can index an array instead
+of a map. They are named predicates, defined once over the sequences of § 6.15, and used in any expression: an
+invariant of a type, a postcondition, a precondition. Tools recognise the names.
+
+```text
+type rust 'eve::market::Book'
+    invariant bids_sorted : sorted(self.bids, by: price, descending)
+    invariant one_per_id  : distinct(self.bids, by: orderID)
+
+function rust 'eve::inventory::slots'(ship: ref<Ship>) -> list<u16>
+    ensure dense(result, 0 .. size(result))          -- the slots are 0, 1, 2, … with no gap, in some order
+```
+
+| Predicate | Holds when |
+| --- | --- |
+| `sorted(xs [, by: k] [, descending] [, strictly])` | every element is not greater (or, `strictly`, less) than the next, comparing `k` of each |
+| `distinct(xs [, by: k])` | no two elements (no two `k`s) are equal |
+| `dense(xs, a .. b)` | the elements are exactly the integers of `a .. b`, each once |
+| `heap ordered(xs [, by: k])` | every element at `i` is not less than those at `2i + 1` and `2i + 2` |
+| `nonempty(xs)` | `size(xs) > 0` |
+
+- A property of a structure's own shape (a balanced tree, a hash table's load) is an invariant of that type, stated by
+  its own projections (§ 9, `view`), not one of these names.
+- **Checked** as the clause they appear in is; in an invariant, where the invariant is.
+- **Harvested:** from types that keep them (`BTreeMap`'s keys are `sorted` and `distinct`), from documentation ("in
+  ascending order", "without duplicates"), and from a `sort` or `dedup` just before a value is returned.
+
+### 6.20 Expectations: what usually happens
+
+**Meaning.** An expectation states what a subject's use usually looks like: how large its inputs tend to be, how often
+it is called, how likely it is to fail, whether it is on a hot path. An optimizer uses it to choose a layout, a
+representation, where to inline and what to keep out of the way; a translator, to choose between two implementations
+that are both correct. An expectation never decides correctness: a wrong one makes the program slower, never wrong. It
+is therefore never `enforced` and nothing may be discharged by it; it is watched, and a subject used far from its
+expectation is reported, as a budget is (§ 6.7). Where an expectation is a person's statement of intent (this list is
+small by design), a profile (§ 3.7) is the measurement of a build, and the two are compared.
+
+```text
+function rust 'eve::dogma::Fitting::modules_of'(self: ref<Fitting>, group: u32) -> list<ModuleID>
+    expect size(result) <= 8  usually 0.99
+    expect hot
+
+procedure 'wallet.Credit'(requestID: id<Requests>, amount: decimal(19, 2))
+    expect fails InsufficientFunds  rarely
+
+function rust 'eve::admin::rebuild_index'()
+    expect cold
+```
+
+- **`expect p [usually f]`:** `p` holds in at least the fraction `f` of calls (all calls, without `usually`, which is
+  still only expected). `p` is over the inputs and the result, as a postcondition is.
+- **`expect fails X rarely | often | f`**, **`expect hot`**, **`expect cold`**, and **`expect called per s about n`**
+  name the cases optimizers use most.
+- **Never a premise.** An expectation is not a fact at any point (§ 11.1.1): a check discharged by an expectation would
+  be wrong in the calls it does not cover.
+- **Checked:** watched against the profiles of the builds (§ 3.7) and against traffic, with a `statistic` (§ 6.6) where
+  the expectation names a fraction.
+- **Harvested:** from the profiles: a candidate expectation for each subject whose measured use is narrow, which a person
+  turns into a statement of intent, or leaves to the profile.
 
 ---
 
@@ -2450,8 +2641,12 @@ path.
 ```text
 file          = [ "module" QNAME NL ] { "use" QNAME NL } { declaration } ;
 declaration   = subject | failure | predicate | block | label | scope | quantity | unit | typedef | variantdef
-              | conserve | platform ;
+              | conserve | platform | profile ;
 platform      = "platform" [ HOST ] STABLE NL INDENT { platform_fact NL } DEDENT ;
+profile       = "profile" STABLE "from" NAME STABLE "on platform" STABLE NL INDENT { measured NL } DEDENT ;
+measured      = "calls" STABLE "per" scope_ref NUMBER | "branch" STABLE "@" NUMBER "taken" NUMBER
+              | "size" path_or_stable percentile NUMBER { "," percentile NUMBER } | "fails" STABLE "with" NAME NUMBER ;
+path_or_stable = STABLE | path ;
 platform_fact = "pointer width" NUMBER | "endian" ( "little" | "big" ) | "target features" NAME { "," NAME }
               | "atomics up to" NUMBER | "panic" ( "unwind" | "abort" )
               | "build" NAME ( "on" | "off" ) { "," NAME ( "on" | "off" ) } | "features" NAME { "," NAME } ;
@@ -2501,7 +2696,7 @@ clause        = "let" ( NAME | pattern ) "=" expr
               | "layout" ( "c" | "packed" | "transparent" ) | "size" NUMBER | "align" NUMBER
               | "local" NAME ":" type
               | bound [ "when" expr ] | state | protocol | temporal | budget | concurrency | flow | compat | memory
-              | access
+              | access | freedom | algebra | expectation
               | "use" NAME "(" [ expr { "," expr } ] ")"
               | "assume" NAME ":" expr "because" STRING
               | "pin" NAME status "because" STRING
@@ -2583,6 +2778,17 @@ access        = "access" path ":" ( "identify" | "read" | "write" ) ( "exclusive
               | "mutates only" path_list [ "when" expr ] | "interior" path | "unchanged" "view(" path ")" [ "=" expr ]
               | "exclusive" path | "sole" path | "disjoint" path "," path { "," path } | "shared readonly" path ;
 
+freedom       = "order unspecified" expr | "may reassociate" "within" tolerance | "result any of" expr
+              | ( "may batch" | "may reorder" ) ( "emits" | "sends" | "writes" path ) ;
+algebra       = "associative" [ "within" tolerance ] | "commutative" | "identity" expr | "absorbing" expr
+              | "idempotent" | "involutive" | "inverse of" QNAME | "distributes over" QNAME
+              | "monotone" ( "increasing" | "decreasing" | "non-decreasing" | "non-increasing" ) "in" NAME
+              | "injective" | "equivalent to" ( QNAME | STABLE ) [ "within" tolerance ] ;
+tolerance     = ( "abs:" NUMBER [ "," "rel:" NUMBER ] | "rel:" NUMBER ) ;
+expectation   = "expect" ( expr [ "usually" NUMBER ] | "fails" NAME ( "rarely" | "often" | NUMBER )
+                         | "hot" | "cold" | "called per" scope_ref "about" NUMBER ) ;
+                                                       (* sorted, distinct, dense, heap ordered and nonempty are
+                                                          predicates of § 6.19, written as calls in an expr *)
 path          = ( NAME | "owner" "(" path ")" ) { "." ( NAME | NUMBER ) | "[" expr "]" } [ ".*" ] | STABLE ;
                                                        (* NUMBER: a tuple's part, result.0; "[" expr "]" in "mutates only" is one element;
                                                           owner(h) is the collection a handle borrows, § 4 *)
@@ -2701,5 +2907,12 @@ handle_expr   = "current" "(" expr ")"                     (* the value at the p
 18. **Facts at a point, and how far to compute them.** Branch conditions and preconditions are cheap; postconditions of
     earlier calls and the frame rule need the callees' files and write sets. Leaning: branches, preconditions, `cfg` and
     the platform first, with the frame rule only where every call on the path has a known write set.
+19. **Freedoms the code already takes.** A body that iterates a `HashMap` already varies its order, whether or not its
+    file says so, and a caller may already rely on it by accident. Leaning: harvest such bodies as candidates, run their
+    callers under a shuffled order in CI before a person states the freedom, and report the callers whose result
+    changes.
+20. **Profiles for code that changes.** A profile is keyed by positions in bodies, which edits move. Leaning: drop what
+    no longer matches and measure again, never carry a measurement across an edit; a profile is cheap to remake on the
+    corpora, and a stale one is worse than none.
 
 
