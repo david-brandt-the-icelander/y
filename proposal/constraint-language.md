@@ -202,7 +202,9 @@ cannot check is reported as such for every subject of that host, never silently 
   wall-clock time, allowed only in watched constraints; `duration`; `id<T>`, the identity of a row or entity of `T`.
 - **Composite:** records `{ name: T, ... }`; tuples; variants `A | B(T)`, closed unless marked `open`; optional `T?`;
   `list<T>`, `set<T>` and `map<K, V>`; `ref<T>`, a reference to a host entity, used by the memory clauses; `ptr<T>`,
-  a host pointer: the address of a `T`, with no guarantee that it is valid or about any other path (§ 8.1).
+  a host pointer: the address of a `T`, with no guarantee that it is valid or about any other path (§ 8.1). The kinds of
+  pointer between the two (valid, a cursor, an element, a C string, code) are refinements of `ptr<T>`, and `ref<T>` is
+  the most refined of them (§ 7.8).
 - **Refinements:** `T where p`, in which `value` names the value being refined; shorthands `T in a..b` and `T in {a, b,
   c}`; named refinements: `type Quantity = i64 where value >= 0`. A refinement on an optional type applies to the value
   when it is present. `where` always filters: the values of a type here, the rows of a table in an expression (§ 4).
@@ -261,6 +263,8 @@ platform rust 'x86_64-unknown-linux-gnu'
     endian little
     target features fxsr, sse, sse2
     atomics up to 64
+    code read only
+    calls only code
     panic unwind
     build overflow_checks on, debug_assertions on
     features std, alloc
@@ -433,7 +437,7 @@ Clauses are of two sorts, and the difference decides how they are checked.
 | Independence | `pure`, read sets (`reads only`), write sets (`mutates only`, `writes only`), `disjoint`, `commutes with`, `sendable`, `shareable` | What may run in parallel or in another order: facts an optimizer, scheduler or translator may use | Property | 6.16 |
 | Sequences | `yields(it)`, `xs[i]`, `present`, `xs[i..j]`, `++`, `reverse`, `take`, `skip`, `zip`, `enumerate`, `select`, `while_true`, `flatten`, `map`, `filter` | What an iterator yields, and the order of a list's elements | Expressions: predicates when finite, properties for infinite sequences | 6.15 |
 | Small additions | `evaluable at compile time`, `must be used`, `moved from`, `ends in call`, `survive call`, `except exhausted`, `expected`, `amortised`, `result.0`, `mutates only p[e]`, `obliges caller` | Compile-time evaluation, must-use types, moves, drops, exhaustion, expected cost, tuple parts, an element frame, what a caller must establish | As the section each extends | 6.14 |
-| Lifetime | `hold`, `lifetime …` (including `cleared on end`), `instances …`, `no strong cycle`, `model` | How long entities live and who keeps them | Property | 7 |
+| Lifetime | `hold`, `lifetime …` (including `cleared on end`, `usable after construct`, `reclaimed only after released`), pointer kinds (`valid`, `nonnull`, `cursor`, `element`, `aligned`, `terminated`, `data`, `code`), `instances …`, `no strong cycle`, `model` | How long entities live and who keeps them | Property | 7 |
 | Mutability and aliasing | `access`, `readonly`, `immutable`, `frozen after`, `write once`, `append only`, `monotonic`, `mutates only`, `interior`, `unchanged`, `exclusive`, `sole`, `disjoint`, `shared readonly` | Who may change what, and through how many paths | Property; predicate for columns | 8 |
 | Derived languages | `local` | A type a woven host needs inside a body | Checked at weave | 11.2 |
 | Status and placement | `assume … because`, `pin … because`, `not at` | What is taken on trust, what a person fixed, where a clause may not run | — | 10 |
@@ -1820,6 +1824,11 @@ There are three ends, and constraints name the one they mean:
   because finalisation is not guaranteed to happen.
 - **Reclamation, `reclaimed(e)`:** the moment its memory is returned. Constraints rarely name it; budgets do.
 
+A beginning has two moments too, for an entity whose host runs code to make it (a constructor, an initialiser, a
+factory that fills a struct): **`begin(e)`**, when its memory is there, and **`constructed(e)`**, when that code has
+returned successfully. Between them only the constructing code may use it; a construction that fails never reaches
+`constructed(e)`, and the entity is never usable.
+
 A **scope** is a span of time that lifetimes are stated against: `call`, `transaction`, `tick`, `request`, `session`,
 `frame`, `task`, `thread`, `process`, a named `scope`, or another entity's lifetime.
 
@@ -1883,6 +1892,16 @@ Each predicate is defined over the core; § 7.4 and § 7.5 give its meaning unde
   when its host says so through a destructor (Rust's `Drop`, a C++ destructor under RAII, Swift's `deinit`), or when it
   owns a value of a type that has it. `bind` keeps the end of such a value where the source has it (bare-rust
   proposal § 2.2).
+- **`lifetime e usable after construct`:** nothing but the code that constructs `e` (its constructor, and what that
+  calls with `e`) uses `e` before `constructed(e)`, and nothing uses it at all if construction fails. It is the rule that
+  `this` does not escape a constructor in Java, C# and C++, that a virtual call in a C++ constructor does not reach a
+  derived class not yet built, and that a Rust value is never seen half made (which safe Rust gives by construction: a
+  struct exists only once every field is given). Said of a type, it holds for each value of it.
+- **`lifetime e reclaimed only after released`:** the memory of `e` is not returned before its release has run: a
+  value whose type has a destructor is not freed without it (C's `free` of a C++ object, a `delete` through a base
+  class whose destructor is not virtual, an arena reset over values that own resources). It is the reverse of
+  `released before end`, and it is not a promise that the release runs: Rust's `mem::forget` keeps it, because what is
+  forgotten is never reclaimed either. Said of a type with `released at end`, it holds for each value of it.
 - **`lifetime e cleared on end`:** when `e` ends, no storage the program used for it still holds its contents: the
   entity's own memory is overwritten before anything may reuse it, and so is every copy the program made of it on the
   way (the old buffer of a growing collection, a value moved out of a place that kept its bytes). Memory after an end
@@ -2008,6 +2027,58 @@ nullifies, or an identity that dangles. Elsewhere, lifetimes are harvested from 
 replaying recorded traffic: dominators give `owns`, referrer sets give `reachable only from`, and populations by scope
 give `instances`.
 
+### 7.8 What a pointer may point at
+
+**Meaning.** A host pointer, `ptr<T>` (§ 3.4), is an address and nothing more: it may be anything, and reading through
+it is defined only if something else says it is safe. Every safer kind of pointer is the same address with constraints
+on what it may point at, and a reference is the most constrained of them. The kinds are refinements of `ptr<T>`, named
+predicates of § 4 written with `where`, so that a parameter, a field or a result says which kind it is and a checker or
+an optimizer knows what it may assume of it.
+
+| Kind | Refinement | May point at |
+| --- | --- | --- |
+| A pointer that may be invalid | `ptr<T>` | Any address, or none. It may be held, compared and passed on; reading or writing through it is undefined. |
+| A valid pointer | `ptr<T> where valid(value)` | Null, or an address the process can reach inside an allocation that has begun and not ended, at any byte of it, not only at the start of an entity. |
+| Not null | `where nonnull(value)` | Anything but null; with `valid`, a live allocation. |
+| A cursor over `a` | `where cursor(value, a)` | An element of the array `a`, or one past its last: it may be compared and stepped, and read through only where it is not at the end. |
+| An element of `a` | `where element(value, a)` | The start of an element of `a`: `value - base(a)` is a multiple of `size_of(T)`, and less than `size(a) * size_of(T)`. |
+| Aligned | `where aligned(value)` | An address that is a multiple of the alignment of `T`. |
+| A C string | `ptr<u8> where terminated(value, 0)` | A valid address from which a `0` byte comes before the end of its allocation; `terminated(value, v)` for any sentinel. |
+| Data | `where data(value)` | Memory the program reads and writes: its stacks, heaps and data segments, never its code. |
+| Code | `fn(…) -> … where code(value)` | The start of a function in the code the process loaded and may run, never data. |
+| A reference | `ref<T>` | `ptr<T> where valid(value) and nonnull(value) and aligned(value)`, at the start of a live entity of type `T`, which stays live while the reference is used (§ 7.2), with the access of § 8.1. |
+
+```text
+function c 'eve_native::name_of'(p: ptr<u8> where valid(value) and terminated(value, 0)) -> u64
+    ensure len : result == position(value, 0)          -- the length, up to the terminator
+
+function rust 'eve::mesh::Vertices::iter_raw'(self: ref<Vertices>) -> (ptr<Vertex>, ptr<Vertex>)
+    ensure first : element(result.0, self.items) or size(self.items) == 0
+    ensure end   : cursor(result.1, self.items) and result.1 == base(self.items) + size(self.items)
+
+type c 'eve_native::Callbacks'
+    field on_tick : fn(u64) where code(value)
+```
+
+- **Each kind is a set of constraints, and they combine:** a valid, aligned element of `a` is all three. A use that
+  needs more than its pointer's kind gives (reading through a cursor at its end, calling through a pointer that is not
+  `code`) is the defect, found where the use is.
+- **For the whole process,** two constraints are worth stating once, in its platform (§ 3.6), since they hold of every
+  pointer in it: `code read only`, that no write reaches memory that holds code, and `calls only code`, that every
+  indirect call goes to an address that is `code`. They are what W^X pages and control-flow integrity give, and the
+  build's flags and the loader's settings are checked against them, as every platform fact is.
+- **Provenance.** `valid`, `cursor` and `element` are about the allocation the pointer came from, not only the
+  address: a pointer stepped from one array onto the next is not an element of the second, whatever its address. This
+  is the rule of C, C++ and Rust (strict provenance), and it is what lets an optimizer assume two pointers from
+  different allocations never meet (§ 8.3).
+- **Checked:** by the host where it can (a reference in Rust, Swift and safe C#; a non-null pointer type; a `&[T]` is a
+  valid element pointer with its size); in CI by Miri for Rust's raw pointers and by the address and undefined-behaviour
+  sanitizers for C and C++; by hardware where the platform has it (CHERI capabilities carry bounds, and are `valid` and
+  `cursor` in hardware).
+- **Harvested:** from the host's types (`&T`, `NonNull<T>`, `*const c_char` with `CStr::from_ptr` beside it,
+  `std::span`, `extern "C" fn`), and from the documentation of C APIs ("must be NUL-terminated", "one past the end",
+  "may be null").
+
 ---
 
 ## 8. Mutability and aliasing
@@ -2047,7 +2118,8 @@ exclusivity is a constraint that an optimiser relies on and `*mut T` does not ha
 is the guarantee and validity: a reference is not null, is aligned, and its target lives while it is used, where a
 pointer may dangle, and whoever reads or writes through it must know otherwise (in Rust, in `unsafe` code). What the two
 share is that each designates a place, so what other paths write shows through it, and that neither constructs nor ends
-what it reaches: a slot holds a pointer as it holds any value.
+what it reaches: a slot holds a pointer as it holds any value. The kinds of pointer between `ptr<T>` and `ref<T>`, and
+what each may point at, are in § 7.8.
 
 The distinction between `read readers` and `read any` is the one most languages blur: a `const` reference in C++ and a
 read-only interface in Java promise only that this path does not write, not that the entity does not change. And C++'s
@@ -2767,7 +2839,8 @@ use           = "by" [ "range" ] NAME | "scan" ;
 path_or_stable = STABLE | path ;
 platform_fact = "pointer width" NUMBER | "endian" ( "little" | "big" ) | "target features" NAME { "," NAME }
               | "atomics up to" NUMBER | "panic" ( "unwind" | "abort" )
-              | "build" NAME ( "on" | "off" ) { "," NAME ( "on" | "off" ) } | "features" NAME { "," NAME } ;
+              | "build" NAME ( "on" | "off" ) { "," NAME ( "on" | "off" ) } | "features" NAME { "," NAME }
+              | "code read only" | "calls only code" ;
                                                        (* a NAME of a target feature or a feature may hold "-": "bulk-memory" *)
 
 subject       = subject_head NL INDENT { clause NL } DEDENT ;
@@ -2886,7 +2959,8 @@ memory        = "hold" [ path ] ":" ( "owns" | "shares" | "borrows" [ "from" pat
               | "no strong cycle" [ "through" path_list ] ;
 target        = path | "every ref<" type ">" [ "obtained from" path ] | "every item of" expr | "rows"
               | "every value labelled" NAME ;
-lifetime_pred = "outlives" path | "within" scope_ref | "ends with" path | "ends in call" [ "when" expr ]
+lifetime_pred = "usable after construct" | "reclaimed only after released"
+              | "outlives" path | "within" scope_ref | "ends with" path | "ends in call" [ "when" expr ]
               | "does not escape" [ scope_ref ]
               | "escapes only to" path_list | "ends within" duration "after" event
               | "at most" duration [ "after" event ]
