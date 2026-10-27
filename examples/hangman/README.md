@@ -27,7 +27,7 @@ letter. Six misses hang the man.
 |---|---|---|---|
 | Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 229, 211, 16 | hand |
 | Bare bodies | `bare/src/hangman.brs`, `bare/src/hangman/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 288, 168, 43, 3 | hand, as the Y compiler would lower the source |
-| Constraint files | `bare/src/*.constraints.json` (47 subjects, 19 clauses) | 386 | the same, then `bare-rust libfmt` for the canonical form |
+| Constraint files | `bare/src/*.constraints.json` (47 subjects, 19 clauses) | 385 | the same, then `bare-rust libfmt` for the canonical form |
 | Y facts | `bare/y-facts.json` | 353 | the same |
 | Rust | `src/hangman.rs`, `src/hangman/tests.rs`, `src/main.rs`, `src/lib.rs` | 288, 168, 43, 3 | `bare-rust weave` |
 | Y runtime | `../y-runtime/src/lib.rs` | 225 | hand: a small stand-in for the runtime that lowered code calls |
