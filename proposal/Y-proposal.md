@@ -1304,6 +1304,7 @@ the right description.
   self-contained and explicit rather than compact. A consumer that needs a fact Core IR does not carry has found a
   defect in Core IR.
 - **Rust** is the first backend and the first oracle. Zig or C comes next, then a native backend.
+  [`../examples/hangman`](../examples/hangman/) is a whole program taken through it, with the lowering done by hand.
 - **Independent oracles:**
   - `rustc` and Miri check ownership.
   - CBMC and Frama-C check generated C.

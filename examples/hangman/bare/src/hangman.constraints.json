@@ -1,0 +1,278 @@
+{
+  "format": "y-constraints/0",
+  "host": "rust",
+  "crate": "hangman-example 0.0.0",
+  "module": "src/hangman.rs",
+  "status": {
+    "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
+  },
+  "subjects": [
+    {
+      "kind": "const",
+      "name": "hangman_example::hangman::WORD_LIST",
+      "visible": "public",
+      "type": "ref<text>",
+      "access": { "rights": "read", "guarantee": "readers" }
+    },
+    {
+      "kind": "const",
+      "name": "hangman_example::hangman::ALLOWED_MISSES",
+      "visible": "public",
+      "type": "u64 as 'usize'"
+    },
+    {
+      "kind": "type",
+      "name": "hangman_example::hangman::Word",
+      "visible": "public",
+      "fields": [{ "type": "text", "hold": { "kind": "owns" } }],
+      "implements": [{ "trait": "fmt::Display", "impl": "hangman_example::hangman::Word as fmt::Display" }],
+      "clauses": [
+        {
+          "kind": "invariant",
+          "text": "invariant letters_only : self.0 matches /^[a-z]*$/",
+          "source": "y/src/hangman.y:17",
+          "status": { "lifted": "src/hangman.rs: Word::new" }
+        },
+        {
+          "kind": "invariant",
+          "text": "invariant long_enough : length(self.0) >= 4",
+          "source": "y/src/hangman.y:18",
+          "status": { "lifted": "src/hangman.rs: Word::new" }
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::Word::new",
+      "visible": "public",
+      "params": [{ "name": "value", "type": "text" }],
+      "result": { "type": "Word", "fails": "ConstraintViolation" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:16" }]
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::Word::as_text",
+      "visible": "public",
+      "params": [
+        { "name": "self", "type": "ref<Word>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "ref<text>", "hold": { "kind": "borrows", "from": "self" } }
+    },
+    { "kind": "impl", "name": "hangman_example::hangman::Word as fmt::Display" },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::Word as fmt::Display::fmt",
+      "params": [
+        { "name": "self", "type": "ref<Word>", "access": { "rights": "read", "guarantee": "readers" } },
+        {
+          "name": "f",
+          "type": "ref<std::fmt::Formatter<'_>>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "result": { "type": "std::fmt::Result" }
+    },
+    {
+      "kind": "type",
+      "name": "hangman_example::hangman::WordListError",
+      "visible": "public",
+      "variants": [
+        { "name": "Empty" },
+        { "name": "NotAWord", "fields": [{ "name": "text", "type": "text", "hold": { "kind": "owns" } }] }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::parse_word_list",
+      "visible": "public",
+      "params": [
+        { "name": "text", "type": "ref<text>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "list<Word> as 'Vec'", "fails": "WordListError" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:32" }]
+    },
+    {
+      "kind": "type",
+      "name": "hangman_example::hangman::Game",
+      "visible": "public",
+      "fields": [
+        { "name": "word", "type": "Word", "hold": { "kind": "owns" } },
+        { "name": "hits", "type": "set<Rune> as 'BTreeSet'", "hold": { "kind": "owns" } },
+        { "name": "misses", "type": "list<Rune> as 'Vec'", "hold": { "kind": "owns" } }
+      ],
+      "clauses": [
+        {
+          "kind": "invariant",
+          "text": "invariant within_allowance : size(self.misses) <= ALLOWED_MISSES",
+          "source": "y/src/hangman.y:55",
+          "status": { "lifted": "src/hangman.rs: guess, after the one write to misses" }
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "hangman_example::hangman::Outcome",
+      "visible": "public",
+      "variants": [{ "name": "Playing" }, { "name": "Won" }, { "name": "Lost" }]
+    },
+    {
+      "kind": "type",
+      "name": "hangman_example::hangman::Verdict",
+      "visible": "public",
+      "variants": [{ "name": "Hit" }, { "name": "Miss" }]
+    },
+    {
+      "kind": "type",
+      "name": "hangman_example::hangman::GuessError",
+      "visible": "public",
+      "variants": [
+        { "name": "Empty" },
+        {
+          "name": "NotOneLetter",
+          "fields": [{ "name": "text", "type": "text", "hold": { "kind": "owns" } }]
+        },
+        {
+          "name": "AlreadyGuessed",
+          "fields": [{ "name": "letter", "type": "Rune", "hold": { "kind": "owns" } }]
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::new_game",
+      "visible": "public",
+      "params": [{ "name": "word", "type": "Word" }],
+      "result": { "type": "Game" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:82" }]
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::outcome",
+      "visible": "public",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "Outcome" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:91" }]
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::guess",
+      "visible": "public",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        { "name": "line", "type": "ref<text>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "Verdict", "fails": "GuessError" },
+      "clauses": [
+        {
+          "kind": "require",
+          "text": "require still_playing : outcome(game) is Playing",
+          "source": "y/src/hangman.y:110",
+          "status": { "lifted": "src/hangman.rs: y_runtime::require" }
+        },
+        { "kind": "effects", "text": "no io", "source": "y/src/hangman.y:109" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/hangman.y:109" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/hangman.y:109" },
+        { "kind": "access", "text": "mutates only game.hits, game.misses", "source": "y/src/hangman.y:109" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::shown_rune",
+      "params": [
+        { "name": "rune", "type": "Rune" },
+        {
+          "name": "hits",
+          "type": "ref<set<Rune> as 'BTreeSet'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "Rune" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:140" }]
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::masked",
+      "visible": "public",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "text" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:152" }]
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::gallows",
+      "visible": "public",
+      "params": [{ "name": "misses", "type": "u64 as 'usize'" }],
+      "result": { "type": "text" },
+      "clauses": [
+        {
+          "kind": "require",
+          "text": "require within_allowance : misses <= ALLOWED_MISSES",
+          "source": "y/src/hangman.y:161",
+          "status": { "lifted": "src/hangman.rs: y_runtime::require" }
+        },
+        { "kind": "effects", "text": "pure", "source": "y/src/hangman.y:160" }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "hangman_example::hangman::PlayError",
+      "visible": "public",
+      "variants": [
+        { "name": "InputClosed" },
+        {
+          "name": "Console",
+          "fields": [{ "name": "error", "type": "ConsoleError", "hold": { "kind": "owns" } }]
+        }
+      ],
+      "implements": [
+        { "trait": "From<ConsoleError>", "impl": "hangman_example::hangman::PlayError as From" }
+      ]
+    },
+    { "kind": "impl", "name": "hangman_example::hangman::PlayError as From", "trait": "From<ConsoleError>" },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::PlayError as From::from",
+      "params": [{ "name": "error", "type": "ConsoleError" }],
+      "result": { "type": "PlayError" }
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::play",
+      "visible": "public",
+      "params": [
+        {
+          "name": "words",
+          "type": "ref<list<Word> as 'std::primitive::slice'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        {
+          "name": "console",
+          "type": "ref<Console>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        {
+          "name": "random",
+          "type": "ref<Random>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        { "name": "forever", "type": "ref<Forever>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "()", "fails": "PlayError" },
+      "clauses": [
+        {
+          "kind": "require",
+          "text": "require has_words : size(words) > 0",
+          "source": "y/src/hangman.y:195",
+          "status": { "lifted": "src/hangman.rs: y_runtime::require" }
+        },
+        { "kind": "effects", "text": "effects only console, random", "source": "y/src/hangman.y:194" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/hangman.y:194" }
+      ]
+    }
+  ],
+  "holes": { "hangman_example::hangman::masked": { "locals": { "shown": "list<Rune> as 'Vec'" } } }
+}

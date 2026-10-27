@@ -40,6 +40,9 @@ pub fn heads(kind: &str) -> &'static [&'static str] {
         "effects" => &[
             "effects none",
             "effects only",
+            "pure",
+            "no device",
+            "devices only",
             "no io",
             "no clock",
             "no randomness",
@@ -230,6 +233,17 @@ pub fn validate_with(file: &Value, text: Option<&str>, builds: &BTreeSet<String>
         .flatten()
         .flat_map(|s| s["variants"].as_array().into_iter().flatten().filter_map(|v| v["name"].as_str().map(str::to_string)))
         .collect();
+    // language 4: a clause in a module's file (`src/x.rs`) may name a constant of the module, and call a function of the
+    // module that is bound `pure` or `effects none` (§ 6.3), by its own name. A library file names other subjects by
+    // quoted host path, so its subjects' last segments, which repeat across modules, are not names here.
+    let module_file = file["module"].as_str().is_some_and(|m| m.ends_with(".rs"));
+    let last = |s: &Value| s["name"].as_str().and_then(|n| n.rsplit("::").next()).map(str::to_string);
+    let module_subjects = || file["subjects"].as_array().into_iter().flatten().filter(|_| module_file);
+    let file_consts: BTreeSet<String> = module_subjects().filter(|s| s["kind"] == "const").filter_map(last).collect();
+    let file_pure: BTreeSet<String> = module_subjects()
+        .filter(|s| s["kind"] == "function" && s["clauses"].as_array().into_iter().flatten().any(|c| c["kind"] == "effects" && (c["text"] == "pure" || c["text"] == "effects none")))
+        .filter_map(last)
+        .collect();
     for (i, sub) in file["subjects"].as_array().into_iter().flatten().enumerate() {
         let (kind, name) = (sub["kind"].as_str().unwrap_or(""), sub["name"].as_str().unwrap_or(""));
         let at = format!("subject {i} ({kind} {name})");
@@ -299,6 +313,8 @@ pub fn validate_with(file: &Value, text: Option<&str>, builds: &BTreeSet<String>
         let mut scope = Scope { names: variants.clone(), failures: failures.clone(), payload: payload.clone(), ..Scope::default() };
         scope.names.extend(all_views.iter().map(|v| v.0.clone()));
         scope.pure.extend(all_views.iter().map(|v| v.0.clone()));
+        scope.names.extend(file_consts.iter().chain(&file_pure).cloned());
+        scope.pure.extend(file_pure.iter().cloned());
         if kind == "type" {
             scope.names.insert("Self".into());
             scope.names.insert("other".into());

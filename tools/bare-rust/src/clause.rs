@@ -2,7 +2,8 @@
 //! what a prefix check cannot. Brackets balance and quotes close; the clause starts with a keyword of its kind; a host
 //! path is quoted (language 15's `STABLE`) and looks like one; a failure named by `fails` is declared in the file; and
 //! every other name is a parameter, `result`, `self`, a generic, a variant of a subject of the file, a name the clause
-//! binds (`all x`, `is V(x)`), or a word of the expression language.
+//! binds (`all x`, `is V(x)`), or a word of the expression language; in a module's file (`src/x.rs`), also a constant of
+//! the module or a function of it bound `pure` or `effects none`.
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;

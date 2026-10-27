@@ -1,0 +1,81 @@
+{
+  "format": "y-constraints/0",
+  "host": "rust",
+  "crate": "hangman-example 0.0.0",
+  "module": "src/hangman/tests.rs",
+  "status": {
+    "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
+  },
+  "subjects": [
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_letter_in_the_word_is_a_hit",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_letter_not_in_the_word_is_a_miss",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_repeated_letter_is_refused",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::typing_nothing_is_not_a_guess",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::two_letters_are_not_a_guess",
+      "params": []
+    },
+    { "kind": "function", "name": "hangman_example::hangman::tests::a_digit_is_not_a_guess", "params": [] },
+    { "kind": "function", "name": "hangman_example::hangman::tests::six_misses_hang_the_man", "params": [] },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::finding_every_letter_wins",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_new_game_is_being_played",
+      "params": []
+    },
+    { "kind": "function", "name": "hangman_example::hangman::tests::the_empty_gallows", "params": [] },
+    { "kind": "function", "name": "hangman_example::hangman::tests::the_full_gallows", "params": [] },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_word_list_is_read_in_order",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::an_empty_word_list_is_refused",
+      "params": []
+    },
+    { "kind": "function", "name": "hangman_example::hangman::tests::a_short_word_is_refused", "params": [] },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_player_who_finds_every_letter_wins",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_player_who_misses_six_times_is_hanged",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_closed_console_ends_the_game",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_failing_console_ends_the_game",
+      "params": []
+    }
+  ]
+}
