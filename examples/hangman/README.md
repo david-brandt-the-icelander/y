@@ -28,7 +28,7 @@ letter. Six misses hang the man.
 | Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 230, 211, 16 | hand |
 | Bare bodies | `bare/src/hangman.brs`, `bare/src/hangman/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 288, 168, 43, 3 | hand, as the Y compiler would lower the source |
 | Constraint files | `bare/src/*.constraints.json` (47 subjects, 19 clauses) | 385 | the same, then `bare-rust libfmt` for the canonical form |
-| Y facts | `bare/y-facts.json` | 353 | the same |
+| Y facts | `bare/y-facts.json` | 358 | the same |
 | Rust | `src/hangman.rs`, `src/hangman/tests.rs`, `src/main.rs`, `src/lib.rs` | 288, 168, 43, 3 | `bare-rust weave` |
 | Y runtime | `../y-runtime/src/lib.rs` | 225 | hand: a small stand-in for the runtime that lowered code calls |
 
@@ -58,7 +58,7 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | `with system` on the entry point | `System::root()` | `y-facts.json` `capabilities` | the same |
 | `requires name = (p)` | `require(p, "hangman::f#name")` | a `require` clause, status `lifted` by that call | a run-time check whose failure is a fault (a panic naming the construct) |
 | `invariant name = (p)` on a record | `invariant(p, "hangman::Game#name")` after the one write that can break it | an `invariant` clause on the type | the same |
-| `if name = (p)`, `while name = (p)` | `if p { // y: #name` | `y-facts.json` `decisions`: the Y line and the bare line of each | the same, with the comment |
+| `if name = (p)`, `while name = (p)`, and `else name:` | `if p { // y: #name`, `} else { // y: #name` | `y-facts.json` `decisions`: the Y line and the bare line of each | the same, with the comment |
 | A value chosen by a condition: `variable head = " "`, then `if has_head = (misses >= 1) { head = "O" }` (Y's blocks give no value) | the same shape | — | the same |
 | A condition that narrows (`if not_one_rune = (letter == optional.none): fail ...`) | `let Some(letter) = letter else { ... }` | — | let-else, so rustc checks the narrowing |
 | `forever because "..."` | the `&Forever` argument of the call that waits | `y-facts.json` `claims` | `console.read_line(forever)` |

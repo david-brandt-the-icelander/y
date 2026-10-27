@@ -226,5 +226,5 @@ public function play(words) fails play_error
     console.write_line(final_picture)?
     if won = (outcome_of(game) == outcome.won):
         console.write_line("You win! The word was {game.word}.")?
-    else:
+    else hanged:
         console.write_line("Hanged! The word was {game.word}.")?

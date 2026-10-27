@@ -135,7 +135,7 @@ fn a_player_who_finds_every_letter_wins() {
 
 #[test]
 fn a_player_who_misses_six_times_is_hanged() {
-    // y: covers play#won.else
+    // y: covers play#hanged
     let words = vec![Word::new("rope".to_string()).expect("given")];
     let console = Console::fake(&["a", "b", "c", "d", "f", "g"], false);
     let random = Random::seeded(7);

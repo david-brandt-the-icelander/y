@@ -120,6 +120,12 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
             assert!(at(d["y"].as_str().unwrap()).contains(&format!(" {name} = (")), "{function}#{name}: not at {}", d["y"]);
             assert!(at(d["bare"].as_str().unwrap()).contains(&format!("// y: #{name}")), "{function}#{name}: not at {}", d["bare"]);
             listed.insert(format!("{}#{name}", function.rsplit('.').next().unwrap()));
+            // an `else` has its own name (Y-proposal § 3.5), in the Y source and in the bare body
+            if let Some(e) = d.get("else") {
+                let other = e["name"].as_str().unwrap();
+                assert!(at(e["y"].as_str().unwrap()).trim_start().starts_with(&format!("else {other}:")), "{function}#{other}: not at {}", e["y"]);
+                assert!(at(e["bare"].as_str().unwrap()).contains(&format!("// y: #{other}")), "{function}#{other}: not at {}", e["bare"]);
+            }
         }
     }
     // each copy the lowering made is where the facts say, in the Y source and in the bare body
@@ -145,6 +151,10 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
         }
     }
     assert_eq!(listed, in_source, "y-facts.json and the Y source name different decisions");
+    // no `else` goes without a name
+    for y in ["y/src/hangman.y", "y/src/main.y", "y/src/hangman.test.y"] {
+        assert!(!read(&dir.join(y)).lines().any(|l| l.trim() == "else:"), "{y}: an `else` without a name");
+    }
     // each test covers what its Y source declares and its Rust comment repeats
     let rust_tests = read(&dir.join("src/hangman/tests.rs"));
     for (test, t) in facts["tests"].as_object().unwrap() {

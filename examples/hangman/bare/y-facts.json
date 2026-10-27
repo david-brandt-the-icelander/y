@@ -191,6 +191,11 @@
       {
         "name": "won",
         "y": "y/src/hangman.y:227",
+        "else": {
+          "name": "hanged",
+          "y": "y/src/hangman.y:229",
+          "bare": "bare/src/hangman.brs:284"
+        },
         "bare": "bare/src/hangman.brs:282"
       }
     ]
@@ -331,7 +336,7 @@
       "y": "y/src/hangman.test.y:172",
       "rust": "hangman_example::hangman::tests::a_player_who_misses_six_times_is_hanged",
       "covers": [
-        "play#won.else"
+        "play#hanged"
       ]
     },
     "a_closed_console_ends_the_game": {

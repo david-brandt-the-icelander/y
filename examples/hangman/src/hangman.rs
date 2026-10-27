@@ -147,7 +147,7 @@ pub fn guess(game: &mut Game, line: &str) -> Result<Verdict, GuessError> {
         return Err(GuessError::Empty);
     }
     let letter = single_rune(&trimmed.to_lowercase());
-    let Some(letter) = letter else { // y: #not_one_rune, which narrows `letter` to a `Rune`
+    let Some(letter) = letter else { // y: #not_one_rune, which narrows `letter` to a `rune`
         return Err(GuessError::NotOneLetter);
     };
     if !letter.is_ascii_lowercase() { // y: #not_a_letter
@@ -266,7 +266,7 @@ pub fn play(words: &[Word], console: &mut Console, random: &mut Random, forever:
         console.write_line(&format!("Missed: {missed}"))?;
         console.write("Guess:  ")?;
         let typed = console.read_line(forever)?; // y: forever because "a player may think for as long as they like"
-        let Some(typed) = typed else { // y: #closed, which narrows `typed` to a `Text`
+        let Some(typed) = typed else { // y: #closed, which narrows `typed` to a `string`
             return Err(PlayError::InputClosed);
         };
         match guess(&mut game, &typed) {
@@ -281,7 +281,7 @@ pub fn play(words: &[Word], console: &mut Console, random: &mut Random, forever:
     console.write_line(&final_picture)?;
     if outcome_of(&game) == Outcome::Won { // y: #won
         console.write_line(&format!("You win! The word was {}.", game.word))?;
-    } else {
+    } else { // y: #hanged
         console.write_line(&format!("Hanged! The word was {}.", game.word))?;
     }
     Ok(())

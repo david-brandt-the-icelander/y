@@ -685,6 +685,7 @@ This proposal restores the rule and extends it to every predicate in the languag
 | --- | --- |
 | Condition | `if found = (items[middle] == target): ...` |
 | Alternative | `else if go_right = (items[middle] < target): ...` |
+| Fallback | `else go_left: ...` |
 | Loop | `while searching = (low <= high): ...` |
 | Guard | `optional.some(user) when active = (user.last_seen > cutoff) => ...` |
 | Precondition, guarantee | `requires positive = (amount > 0isk)`, `ensures debited = (...)` |
@@ -695,8 +696,11 @@ This proposal restores the rule and extends it to every predicate in the languag
 **Exemptions and defaults.**
 
 - A predicate that is already a single boolean name, or `not` of one, needs no second name: `if is_empty: ...`.
-- `else` may be named (`else in_range: ...`). An unnamed `else` is identified as the last condition's name plus
-  `.else`.
+- **`else` always has a name of its own:** `else go_left:`. The name is bound to `true` when the fall-through branch
+  runs, so tests, traces, debuggers and logs can say which branch ran, as for every other branch. An `else` without a
+  name does not compile (the toolchain's rule, language reference § 7).
+- An `if` with no `else` still has two outcomes. The branch not taken is addressed as the condition's name plus `.else`
+  (`#sold_out.else`), because there is no `else` to carry a name.
 - A `for` loop is named by its variable. Inside nested loops, `break` and `continue` must name their loop:
   `break line`.
 - There is no `loop` and no `while true`.
@@ -728,7 +732,7 @@ public function position_of(target, items) returns position:
             return position = optional.some(middle)
         else if go_right = (items[middle] < target):
             low = middle.next()
-        else:
+        else go_left:
             high = middle.previous()?
     return position = optional.none
 ```
@@ -1255,7 +1259,8 @@ Tests are part of the language, because the compiler must know what a test claim
 
 **Coverage is declared, then verified.**
 
-- A function's *outcomes* are both sides of every named decision (`f#name`, `f#name.else`) and every case of its
+- A function's *outcomes* are both sides of every named decision (`f#name`, and the `else`'s own name, `f#go_left`, or
+  `f#name.else` where the `if` has no `else`) and every case of its
   failure type, written with its type (`f!failure_type.case`).
 - A test lists the outcomes it covers. The runner fails the test if it did not actually reach every one of them.
 - A test contributes coverage only for what it declares. This is the April 2026 rule, and it keeps coverage an auditable
@@ -1616,7 +1621,6 @@ premise changed, or because the iteration that tried them showed their cost. The
 | Spec block in place of the signature | April 2026 | A signature naming parameters and result; documentation above it with closed roles and the types | The examples abandoned it for helpers; a signature is where a reader looks for names and modes |
 | `=` to bind, `:=` to rebind | YAPL → April 2026 | `let` / `variable` | Mutability is marked where the name is declared; `:=` fought every agent's habits |
 | Two spellings of one keyword, method synonyms | YAPL, toolchain | One spelling | Contradicts "one way to write it" |
-| Mandatory name on `else` | YAPL → toolchain | Optional name | A name bound to `true` carries no information |
 | `loop` / `leave` / `next` | YAPL → toolchain | `break` / `continue`, named when nested; no unbounded `loop` | Keeps YAPL's rule, not its words |
 
 **Semantics**

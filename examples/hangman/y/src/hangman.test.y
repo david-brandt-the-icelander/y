@@ -170,7 +170,7 @@ test a_player_who_finds_every_letter_wins
 
 -- A player who misses six times is hanged, and is told the word.
 test a_player_who_misses_six_times_is_hanged
-        covers play#won.else:
+        covers play#hanged:
     given:
         let words = [word.new("rope")?]
     with:
