@@ -50,12 +50,14 @@ told about, because the compiler enumerates the cases.
 - ⚠️ `??` supplies a value for the absent case: `user.nickname ?? user.name` has type `string` where
   `nickname` is `string?`.
 - ⚠️ Absence is matched like any other case where the two branches do more than substitute a value, and
-  `match` over a `t?` is exhaustive in exactly the way it is over any sum type.
+  `switch` over a `t?` is exhaustive in exactly the way it is over any sum type.
 
   ```y
-  match customer:
-      optional.some(found) => use(found)
-      optional.none        => not_found()
+  switch customer:
+      optional.some(found):
+          use(found)
+      optional.none:
+          not_found()
   ```
 
 - ⚠️ `?.` reaches through absence: where `a` is `a_type?`, `a?.field` is the field's type made optional, and
@@ -95,14 +97,14 @@ told about, because the compiler enumerates the cases.
 - ⚠️ A failure is narrowed by matching it, and a function may convert a failure set into a smaller one
   by handling the cases it can.
 - ⚠️ A call that can fail has a two-case sum as its outcome, `result.ok(value)` or `result.err(failure)`, so a
-  single `match` ranges over a call's successes and failures together, and an optional result composes
+  single `switch` ranges over a call's successes and failures together, and an optional result composes
   with failure without a special rule
   → [`../../proposal/Y-proposal.md` § 3.4](../../proposal/Y-proposal.md#34-failure).
 
 ## Matching
 
-- ⚠️ `match` is exhaustive. A match that does not cover every case of the scrutinised type is a compile
-  error that names the missing cases, and adding a case to a `type` turns every non-exhaustive match on
+- ⚠️ `switch` is exhaustive. A switch that does not cover every case of the scrutinised type is a compile
+  error that names the missing cases, and adding a case to a `type` turns every non-exhaustive switch on
   it into an error at the sites that need updating.
 - ⚠️ Patterns nest, binding payloads positionally or by field name, and `_` matches without binding.
 - ⚠️ A `when` clause guards an arm with a boolean condition. A guarded arm never counts toward
@@ -114,7 +116,7 @@ told about, because the compiler enumerates the cases.
 
 | Program | Diagnostic | Status |
 | --- | --- | --- |
-| A `match` missing a case of a closed sum type | The missing cases, by name | ⚠️ |
+| A `switch` missing a case of a closed sum type | The missing cases, by name | ⚠️ |
 | An arm subsumed by an earlier arm | Which arm shadows it | ⚠️ |
 | Exhaustiveness claimed by a guarded arm alone | That the guard is not evidence, and which case is still uncovered | ⚠️ |
 | `?` where the enclosing signature names no compatible failure | The failure type produced and the failure type permitted | ⚠️ |

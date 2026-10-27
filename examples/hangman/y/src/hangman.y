@@ -39,9 +39,11 @@ public function parse_word_list(text) returns words fails word_list_error:
     for piece in text.split(" "):
         if blank = (piece.is_empty()):
             continue
-        match word.new(piece.to_string()):
-            result.ok(parsed) => found.push(parsed)
-            result.err(_) => fail word_list_error.not_a_word
+        switch word.new(piece.to_string()):
+            result.ok(parsed):
+                found.push(parsed)
+            result.err(_):
+                fail word_list_error.not_a_word
     if empty = (found.is_empty()):
         fail word_list_error.empty
     return words = found
@@ -216,12 +218,17 @@ public function play(words) fails play_error
         let typed = (console.read_line() forever because "a player may think for as long as they like")?
         if closed = (typed == optional.none):
             fail play_error.input_closed
-        match guess(mutable game, typed):
-            result.ok(verdict.hit) => console.write_line("Yes.")?
-            result.ok(verdict.miss) => console.write_line("No.")?
-            result.err(guess_error.empty) => console.write_line("Type a letter.")?
-            result.err(guess_error.not_one_letter) => console.write_line("\"{typed}\" is not one letter.")?
-            result.err(guess_error.already_guessed) => console.write_line("You have already guessed {typed}.")?
+        switch guess(mutable game, typed):
+            result.ok(verdict.hit):
+                console.write_line("Yes.")?
+            result.ok(verdict.miss):
+                console.write_line("No.")?
+            result.err(guess_error.empty):
+                console.write_line("Type a letter.")?
+            result.err(guess_error.not_one_letter):
+                console.write_line("\"{typed}\" is not one letter.")?
+            result.err(guess_error.already_guessed):
+                console.write_line("You have already guessed {typed}.")?
     let final_picture = gallows(game.misses.count())
     console.write_line(final_picture)?
     if won = (outcome_of(game) == outcome.won):

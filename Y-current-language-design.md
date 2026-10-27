@@ -185,9 +185,11 @@ This represents either a `customer` or absence.
 Pattern matching is preferred where behavior differs materially between cases.
 
 ```y
-match customer:
-    optional.some(found) => use(found)
-    optional.none        => not_found()
+switch customer:
+    optional.some(found):
+        use(found)
+    optional.none:
+        not_found()
 ```
 
 Exact optional-case syntax is not yet frozen.
@@ -230,10 +232,13 @@ type payment_result:
 Pattern matching is a core control-flow mechanism:
 
 ```y
-match result:
-    payment_result.approved(authorization) => complete(authorization)
-    payment_result.declined(reason) => reject(reason)
-    payment_result.unavailable => retry_later()
+switch result:
+    payment_result.approved(authorization):
+        complete(authorization)
+    payment_result.declined(reason):
+        reject(reason)
+    payment_result.unavailable:
+        retry_later()
 ```
 
 Exhaustiveness should be compiler checked.

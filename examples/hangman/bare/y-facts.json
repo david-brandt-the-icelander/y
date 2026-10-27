@@ -31,7 +31,7 @@
       "subject": "hangman_example::hangman::gallows",
       "param": "misses",
       "unit": "count<element>",
-      "y": "y/src/hangman.y:156"
+      "y": "y/src/hangman.y:158"
     },
     {
       "subject": "hangman_example::hangman::Word",
@@ -49,7 +49,7 @@
         "forever as forever"
       ],
       "lowered": "as the last three parameters, in order",
-      "y": "y/src/hangman.y:203"
+      "y": "y/src/hangman.y:205"
     },
     {
       "subject": "hangman_example::main",
@@ -65,7 +65,7 @@
       "claim": "forever",
       "because": "a player may think for as long as they like",
       "requires": "Forever",
-      "y": "y/src/hangman.y:216",
+      "y": "y/src/hangman.y:218",
       "bare": "bare/src/hangman.brs:268"
     }
   ],
@@ -82,7 +82,7 @@
     {
       "what": "words[chosen]",
       "why": "new_game keeps its word, and words is still read",
-      "y": "y/src/hangman.y:206",
+      "y": "y/src/hangman.y:208",
       "bare": "bare/src/hangman.brs:258"
     }
   ],
@@ -95,105 +95,105 @@
       },
       {
         "name": "empty",
-        "y": "y/src/hangman.y:45",
+        "y": "y/src/hangman.y:47",
         "bare": "bare/src/hangman.brs:75"
       }
     ],
     "hangman.outcome_of": [
       {
         "name": "hanged",
-        "y": "y/src/hangman.y:91",
+        "y": "y/src/hangman.y:93",
         "bare": "bare/src/hangman.brs:126"
       },
       {
         "name": "solved",
-        "y": "y/src/hangman.y:93",
+        "y": "y/src/hangman.y:95",
         "bare": "bare/src/hangman.brs:129"
       }
     ],
     "hangman.guess": [
       {
         "name": "nothing_typed",
-        "y": "y/src/hangman.y:110",
+        "y": "y/src/hangman.y:112",
         "bare": "bare/src/hangman.brs:146"
       },
       {
         "name": "not_one_rune",
-        "y": "y/src/hangman.y:113",
+        "y": "y/src/hangman.y:115",
         "bare": "bare/src/hangman.brs:150"
       },
       {
         "name": "not_a_letter",
-        "y": "y/src/hangman.y:116",
+        "y": "y/src/hangman.y:118",
         "bare": "bare/src/hangman.brs:153"
       },
       {
         "name": "repeated",
-        "y": "y/src/hangman.y:118",
+        "y": "y/src/hangman.y:120",
         "bare": "bare/src/hangman.brs:156"
       },
       {
         "name": "in_word",
-        "y": "y/src/hangman.y:120",
+        "y": "y/src/hangman.y:122",
         "bare": "bare/src/hangman.brs:159"
       }
     ],
     "hangman.shown_rune": [
       {
         "name": "known",
-        "y": "y/src/hangman.y:134",
+        "y": "y/src/hangman.y:136",
         "bare": "bare/src/hangman.brs:174"
       }
     ],
     "hangman.gallows": [
       {
         "name": "has_head",
-        "y": "y/src/hangman.y:159",
+        "y": "y/src/hangman.y:161",
         "bare": "bare/src/hangman.brs:199"
       },
       {
         "name": "has_body",
-        "y": "y/src/hangman.y:162",
+        "y": "y/src/hangman.y:164",
         "bare": "bare/src/hangman.brs:203"
       },
       {
         "name": "has_left_arm",
-        "y": "y/src/hangman.y:165",
+        "y": "y/src/hangman.y:167",
         "bare": "bare/src/hangman.brs:207"
       },
       {
         "name": "has_right_arm",
-        "y": "y/src/hangman.y:168",
+        "y": "y/src/hangman.y:170",
         "bare": "bare/src/hangman.brs:211"
       },
       {
         "name": "has_left_leg",
-        "y": "y/src/hangman.y:171",
+        "y": "y/src/hangman.y:173",
         "bare": "bare/src/hangman.brs:215"
       },
       {
         "name": "has_right_leg",
-        "y": "y/src/hangman.y:174",
+        "y": "y/src/hangman.y:176",
         "bare": "bare/src/hangman.brs:219"
       }
     ],
     "hangman.play": [
       {
         "name": "playing",
-        "y": "y/src/hangman.y:208",
+        "y": "y/src/hangman.y:210",
         "bare": "bare/src/hangman.brs:260"
       },
       {
         "name": "closed",
-        "y": "y/src/hangman.y:217",
+        "y": "y/src/hangman.y:219",
         "bare": "bare/src/hangman.brs:269"
       },
       {
         "name": "won",
-        "y": "y/src/hangman.y:227",
+        "y": "y/src/hangman.y:234",
         "else": {
           "name": "hanged",
-          "y": "y/src/hangman.y:229",
+          "y": "y/src/hangman.y:236",
           "bare": "bare/src/hangman.brs:284"
         },
         "bare": "bare/src/hangman.brs:282"

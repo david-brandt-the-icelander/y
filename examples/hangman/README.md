@@ -25,7 +25,7 @@ letter. Six misses hang the man.
 
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
-| Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 230, 211, 16 | hand |
+| Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 237, 211, 16 | hand |
 | Bare bodies | `bare/src/hangman.brs`, `bare/src/hangman/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 288, 168, 43, 3 | hand, as the Y compiler would lower the source |
 | Constraint files | `bare/src/*.constraints.json` (47 subjects, 19 clauses) | 385 | the same, then `bare-rust libfmt` for the canonical form |
 | Y facts | `bare/y-facts.json` | 358 | the same |
@@ -50,7 +50,7 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | A constant group, `public constants game_rules:` with `allowed_misses is count<element> = 6` | a module `game_rules` holding `const ALLOWED_MISSES = 6;`; uses are `game_rules::ALLOWED_MISSES` | a `module` subject and its `const` subjects | the same |
 | `type word is string where letters_only = value.matches(pattern"^[a-z]*$") and long_enough = ...` | `struct Word(_)` and a constructor that checks each constraint in order | two `invariant` clauses, with status `lifted` by the constructor | a newtype with `Word::new(..) -> Result<Word, ConstraintViolation>` |
 | `record`; a constant group used as a closed type (`outcome`, `verdict` and the failures `word_list_error`, `guess_error`: named values with no order, so not enumerations); a `type` with `case`s that carry data (`play_error`) | `struct`; `enum` with unit variants; `enum` with named fields | `fields`, `variants` | the same, deriving the structural equality Y always derives |
-| Blocks: a colon and indentation | braces, as Rust has | — | the same |
+| Blocks: a colon and indentation; `switch` with each arm a pattern and a colon, its statements beneath | braces, as Rust has; `match` with `=>` arms | — | the same |
 | No inline lambdas: `masked` builds its list with a `for` loop, and `outcome_of` asks `is_subset_of` | the loop; `.all(|letter| …)`, Rust's form of the subset test | — | the same |
 | No `with` clause: the function is pure | — | `effects` clause `pure` | — |
 | A `mutable` parameter and no `with` | — | `no io`, `no clock`, `no randomness`, `mutates only game.hits, game.misses` | — |

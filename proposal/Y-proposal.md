@@ -331,13 +331,14 @@ person can judge: is five seconds right, and is this the behaviour the business 
   indexing and arithmetic are computed into a named local first.
 - Literals that are small languages are checked at compile time: `pattern"^[a-z]+$"` (a regular expression),
   `url"https://example.com"`, and format strings. Y has no query strings (§ 3.13).
-- **Blocks are statements.** `if`, `match`, loops, `within`, `atomic`, `orelse`, `with`, `arena`, `uncancellable` and
+- **Blocks are statements.** `if`, `switch`, loops, `within`, `atomic`, `orelse`, `with`, `arena`, `uncancellable` and
   `supervise` produce no value, and Y has no conditional expression and no ternary operator.
   - A value chosen by a condition is assigned in each branch. The decision then has a name and a place, like every
     other: `variable head = " "`, then `if has_head = (misses >= 1): head = "O"`.
   - A value made inside a transaction or a deadline is returned from inside it, or assigned to a `variable` declared
     outside it.
-  - A `match` arm runs a statement: a call, an assignment, `return`, `fail`, `break` or `continue`.
+  - A `switch` arm is a pattern ending in a colon, with its statements indented beneath it, as every block is:
+    `result.ok(parsed):` then `found.push(parsed)`. There is no `=>`.
 
 **Functions and their results.**
 
@@ -459,7 +460,7 @@ public enumeration severity is string:
   through its group: `game_rules.allowed_misses`.
 - Every value is computed while the program is built (§ 3.17) and holds nothing mutable.
 - **A constant group whose members share one type is also a closed type:** a value of `outcome` is one of its members.
-  A member is always written with its group, `outcome.won` (§ 3.3), and `match` over it must cover every member. This
+  A member is always written with its group, `outcome.won` (§ 3.3), and `switch` over it must cover every member. This
   is the type for a set of named values with no order: where a game stands, what a guess did, and the cases of a
   failure that carry nothing.
 - **An enumeration is for a set that has an order and is iterated:** `for level in severity`, `severity.warning <
@@ -568,7 +569,7 @@ Referring to a case:
 **Absence.**
 
 - `t?` is a distinct type from `t`. Neither converts to the other implicitly.
-- `??` supplies a default, `?.` reaches through absence, and `match` covers `optional.some(value)` and `optional.none`.
+- `??` supplies a default, `?.` reaches through absence, and `switch` covers `optional.some(value)` and `optional.none`.
 - **A condition narrows.** Inside `if found = (user != optional.none): ...`, and after
   `if missing = (user == optional.none): return ...`, `user` is a `user`, no longer a `user?`. Nothing is written for
   this: every condition adds its predicate as a fact at the points it guards (constraint language § 11.1.1), and the type checker reads the fact.
@@ -643,7 +644,7 @@ The same mechanism gives every length and index its unit:
 A function that can fail names its failure type in its signature: `returns debit fails withdraw_error`.
 
 - **A call's outcome is a built-in two-case sum,** `result.ok(value)` or `result.err(failure)`. This settles the September open
-  question: one `match` ranges over success and failure together, and an optional result that can fail (`as
+  question: one `switch` ranges over success and failure together, and an optional result that can fail (`as
   receipt?` with `fails e`) composes without a special rule. Core IR still records every propagation edge explicitly,
   so *which failures can escape, and from where* is always answerable.
 - Inside the function, success is `return debit = value`, never `result.ok(value)`, and failure is written
@@ -655,10 +656,13 @@ A function that can fail names its failure type in its signature: `returns debit
   rollback-on-failure rule, carried into the language.
 
 ```y
-match load_customer(id):
-    result.ok(customer) => greet(customer)
-    result.err(customer_error.not_found(id: missing_id)) => offer_signup(missing_id)
-    result.err(customer_error.unavailable(retry_after)) => try_later(retry_after)
+switch load_customer(id):
+    result.ok(customer):
+        greet(customer)
+    result.err(customer_error.not_found(id: missing_id)):
+        offer_signup(missing_id)
+    result.err(customer_error.unavailable(retry_after)):
+        try_later(retry_after)
 ```
 
 **Faults are not failures.** A violated contract, arithmetic overflow, an exhausted allocator, a reached `todo`, or a
@@ -687,7 +691,7 @@ This proposal restores the rule and extends it to every predicate in the languag
 | Alternative | `else if go_right = (items[middle] < target): ...` |
 | Fallback | `else go_left: ...` |
 | Loop | `while searching = (low <= high): ...` |
-| Guard | `optional.some(user) when active = (user.last_seen > cutoff) => ...` |
+| Guard | `optional.some(user) when active = (user.last_seen > cutoff): ...` |
 | Precondition, guarantee | `requires positive = (amount > 0isk)`, `ensures debited = (...)` |
 | Invariant, constraint | `invariant departs_after_arrival = (...)`, `where positive = (value > 0)` |
 | Assertion | `assert charged_once = (charges.committed().count() == 1)` |
@@ -1051,10 +1055,13 @@ fails fulfilment_error.payment_unreachable: The charge could not be delivered.
 workflow fulfil(hold) returns shipped fails fulfilment_error
         with orders, charges, shipments:
     let order = orders.for_hold(hold)?
-    match submit charge_card(hold: hold, amount: order.total, method: order.payment_method):
-        result.ok(receipt) => return shipped = submit create_shipment(order: order.id, receipt: receipt.id)?
-        result.err(undelivered.failed(reason)) => fail fulfilment_error.payment_declined(reason)
-        result.err(undelivered.abandoned(abandonment)) => fail fulfilment_error.payment_unreachable(abandonment)
+    switch submit charge_card(hold: hold, amount: order.total, method: order.payment_method):
+        result.ok(receipt):
+            return shipped = submit create_shipment(order: order.id, receipt: receipt.id)?
+        result.err(undelivered.failed(reason)):
+            fail fulfilment_error.payment_declined(reason)
+        result.err(undelivered.abandoned(abandonment)):
+            fail fulfilment_error.payment_unreachable(abandonment)
 ```
 
 - `submit` suspends the workflow durably until the command's outcome is recorded.
@@ -1145,7 +1152,7 @@ transition request_payment(created, charge) returns pending:
 - A value whose state is unknown, because it came from storage, is matched to recover it.
 - Transitions are projected to TLA+ and checked with Apalache for reachability and invariants.
 
-In v1, typestate applies to owned values. Shared or stored state machines are advanced inside `atomic`: match the
+In v1, typestate applies to owned values. Shared or stored state machines are advanced inside `atomic`: switch on the
 current state, call the transition, and let conflicting commits retry. This answers the September open question
 without new machinery.
 
@@ -1616,8 +1623,9 @@ premise changed, or because the iteration that tried them showed their cost. The
 | Types in signatures, `->` and `T ! E` | Earlier drafts of this proposal | `function f(a, mutable b) returns result fails e`; each type in the role that documents its name (`a: ..., as string.`) | Few symbols; a signature reads as words, and every name is documented with its type in one place |
 | Unnamed results and an implicit last-expression result | Earlier drafts of this proposal | `returns name`, and `return name = value` | A result has a name, which its documentation explains, and every exit is a visible `return` or `fail` |
 | References in source: `&t`, `&mutable t`, `move`, borrowing results, `copy` types, `reference_counted<t>`, `weak<t>`; "no clone the programmer did not write" | September → earlier drafts of this proposal | Value semantics, `mutable` at both ends of a call; the compiler chooses borrows, moves and copies, and reports each copy | Ownership syntax is about memory, not intent, and is where agents fail most; value semantics keep what borrowing was for |
+| `match` with `pattern => statement` arms | Earlier drafts of this proposal | `switch`, each arm a pattern and a colon with its block beneath, as in the toolchain's language reference § 7 | One way to write a block; no `=>` |
 | A case written `.case` where the type is known | September → earlier drafts of this proposal | `type_name.case` everywhere, as YAPL had it (`color.red`) | The reader never infers which type a case belongs to |
-| `if` and `match` as expressions; a ternary operator | Earlier drafts of this proposal | Statements; a value is assigned in each branch | A decision is a statement with a name and a place, never a value hidden inside an expression |
+| `if` and `switch` as expressions; a ternary operator | Earlier drafts of this proposal | Statements; a value is assigned in each branch | A decision is a statement with a name and a place, never a value hidden inside an expression |
 | Spec block in place of the signature | April 2026 | A signature naming parameters and result; documentation above it with closed roles and the types | The examples abandoned it for helpers; a signature is where a reader looks for names and modes |
 | `=` to bind, `:=` to rebind | YAPL → April 2026 | `let` / `variable` | Mutability is marked where the name is declared; `:=` fought every agent's habits |
 | Two spellings of one keyword, method synonyms | YAPL, toolchain | One spelling | Contradicts "one way to write it" |
@@ -1731,7 +1739,7 @@ declarations   module from use public function returns fails record type case en
                implementation constant constants is unit schema migrate to command handler workflow test derived rule
                transient self
 contracts      requires ensures invariant where old assert
-control        if else match when for in while break continue return fail
+control        if else switch when for in while break continue return fail
 bindings       let variable mutable lambda nested captures with arena compile
 concurrency    within task supervise detach forever uncancellable
 transactions   atomic retry orelse enqueue submit
