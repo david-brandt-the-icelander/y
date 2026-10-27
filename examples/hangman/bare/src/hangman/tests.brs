@@ -5,8 +5,8 @@ use super::*;
 
 #[test]
 fn a_letter_in_the_word_is_a_hit() {
-    // y: covers guess#nothing_typed.else, guess#not_one_rune.else, guess#not_a_letter.else, guess#repeated.else,
-    //    guess#in_word, shown_rune#known, shown_rune#known.else
+    // y: covers guess#typed_something, guess#one_rune, guess#a_letter, guess#new_letter,
+    //    guess#in_word, shown_rune#known, shown_rune#unknown
     let game = new_game(Word::new("gallows".to_string()).expect("given"));
     let verdict = guess(&mut game, "l").expect("when");
     assert!(verdict == Verdict::Hit, "hit");
@@ -15,7 +15,7 @@ fn a_letter_in_the_word_is_a_hit() {
 
 #[test]
 fn a_letter_not_in_the_word_is_a_miss() {
-    // y: covers guess#in_word.else
+    // y: covers guess#not_in_word
     let game = new_game(Word::new("rope".to_string()).expect("given"));
     let verdict = guess(&mut game, "z").expect("when");
     assert!(verdict == Verdict::Miss, "miss");
@@ -66,7 +66,7 @@ fn six_misses_hang_the_man() {
 
 #[test]
 fn finding_every_letter_wins() {
-    // y: covers outcome_of#hanged.else, outcome_of#solved
+    // y: covers outcome_of#misses_left, outcome_of#solved
     let hits = BTreeSet::from([Rune('r'), Rune('o'), Rune('p'), Rune('e')]);
     let game = Game { word: Word::new("rope".to_string()).expect("given"), hits, misses: vec![Rune('a')] };
     let ending = outcome_of(&game);
@@ -75,7 +75,7 @@ fn finding_every_letter_wins() {
 
 #[test]
 fn a_new_game_is_being_played() {
-    // y: covers outcome_of#solved.else
+    // y: covers outcome_of#letters_left
     let game = new_game(Word::new("rope".to_string()).expect("given"));
     let ending = outcome_of(&game);
     assert!(ending == Outcome::Playing, "playing");
@@ -83,8 +83,8 @@ fn a_new_game_is_being_played() {
 
 #[test]
 fn the_empty_gallows() {
-    // y: covers gallows#has_head.else, gallows#has_body.else, gallows#has_left_arm.else, gallows#has_right_arm.else,
-    //    gallows#has_left_leg.else, gallows#has_right_leg.else
+    // y: covers gallows#no_head, gallows#no_body, gallows#no_left_arm, gallows#no_right_arm,
+    //    gallows#no_left_leg, gallows#no_right_leg
     let picture = gallows(0);
     let expected = ["  +---+", "  |   |", "      |", "      |", "      |", "      |", "========="].join("\n");
     assert!(picture == expected, "empty");
@@ -101,7 +101,7 @@ fn the_full_gallows() {
 
 #[test]
 fn a_word_list_is_read_in_order() {
-    // y: covers parse_word_list#blank, parse_word_list#blank.else, parse_word_list#empty.else
+    // y: covers parse_word_list#blank, parse_word_list#has_text, parse_word_list#has_words
     let words = parse_word_list("rope  gallows").expect("when");
     let expected = vec![Word::new("rope".to_string()).expect("then"), Word::new("gallows".to_string()).expect("then")];
     assert!(words == expected, "both_in_order");
@@ -123,7 +123,7 @@ fn a_short_word_is_refused() {
 
 #[test]
 fn a_player_who_finds_every_letter_wins() {
-    // y: covers play#playing, play#playing.else, play#closed.else, play#won
+    // y: covers play#playing, play#game_over, play#line_read, play#won
     let words = vec![Word::new("rope".to_string()).expect("given")];
     let console = Console::fake(&["r", "o", "p", "e"], false);
     let random = Random::seeded(7);

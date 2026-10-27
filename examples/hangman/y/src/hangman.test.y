@@ -1,7 +1,7 @@
 -- A letter in the word is a hit, and shows wherever it occurs in the word.
 test a_letter_in_the_word_is_a_hit
-        covers guess#nothing_typed.else, guess#not_one_rune.else, guess#not_a_letter.else, guess#repeated.else,
-               guess#in_word, shown_rune#known, shown_rune#known.else:
+        covers guess#typed_something, guess#one_rune, guess#a_letter, guess#new_letter,
+               guess#in_word, shown_rune#known, shown_rune#unknown:
     given:
         variable game = new_game(word.new("gallows")?)
     when:
@@ -12,7 +12,7 @@ test a_letter_in_the_word_is_a_hit
 
 -- A letter not in the word is a miss, and is kept in the order it was guessed.
 test a_letter_not_in_the_word_is_a_miss
-        covers guess#in_word.else:
+        covers guess#not_in_word:
     given:
         variable game = new_game(word.new("rope")?)
     when:
@@ -74,7 +74,7 @@ test six_misses_hang_the_man
 
 -- Finding every letter wins.
 test finding_every_letter_wins
-        covers outcome_of#hanged.else, outcome_of#solved:
+        covers outcome_of#misses_left, outcome_of#solved:
     given:
         let game = game(word: word.new("rope")?, hits: set.of(['r', 'o', 'p', 'e']), misses: ['a'])
     when:
@@ -84,7 +84,7 @@ test finding_every_letter_wins
 
 -- A new game is still being played.
 test a_new_game_is_being_played
-        covers outcome_of#solved.else:
+        covers outcome_of#letters_left:
     given:
         let game = new_game(word.new("rope")?)
     when:
@@ -94,8 +94,8 @@ test a_new_game_is_being_played
 
 -- With no misses, the gallows is empty.
 test the_empty_gallows
-        covers gallows#has_head.else, gallows#has_body.else, gallows#has_left_arm.else, gallows#has_right_arm.else,
-               gallows#has_left_leg.else, gallows#has_right_leg.else:
+        covers gallows#no_head, gallows#no_body, gallows#no_left_arm, gallows#no_right_arm,
+               gallows#no_left_leg, gallows#no_right_leg:
     given:
         let expected = [
             "  +---+",
@@ -132,7 +132,7 @@ test the_full_gallows
 
 -- A word list is read word by word, and runs of spaces between words are allowed.
 test a_word_list_is_read_in_order
-        covers parse_word_list#blank, parse_word_list#blank.else, parse_word_list#empty.else:
+        covers parse_word_list#blank, parse_word_list#has_text, parse_word_list#has_words:
     when:
         let words = parse_word_list("rope  gallows")?
     then:
@@ -156,7 +156,7 @@ test a_short_word_is_refused
 
 -- A player who finds every letter wins, and is told the word.
 test a_player_who_finds_every_letter_wins
-        covers play#playing, play#playing.else, play#closed.else, play#won:
+        covers play#playing, play#game_over, play#line_read, play#won:
     given:
         let words = [word.new("rope")?]
     with:

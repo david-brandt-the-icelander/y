@@ -37,14 +37,14 @@ fails word_list_error.not_a_word: A piece of the list is not a `word`: it has a 
 public function parse_word_list(text) returns words fails word_list_error:
     variable found = list.new()
     for piece in text.split(" "):
-        if blank = (piece.is_empty()):
+        if blank = (piece.is_empty()) else has_text:
             continue
         switch word.new(piece.to_string()):
             result.ok(parsed):
                 found.push(parsed)
             result.err(_):
                 fail word_list_error.not_a_word
-    if empty = (found.is_empty()):
+    if empty = (found.is_empty()) else has_words:
         fail word_list_error.empty
     return words = found
 
@@ -90,9 +90,9 @@ standing: Lost once the player has used up the misses allowed, won once every le
   playing otherwise, as outcome.
 ------------------------------------------------------------------------------------------------------------------------
 public function outcome_of(game) returns standing:
-    if hanged = (game.misses.count() == game_rules.allowed_misses):
+    if hanged = (game.misses.count() == game_rules.allowed_misses) else misses_left:
         return standing = outcome.lost
-    if solved = (game.word.runes().to_set().is_subset_of(game.hits)):
+    if solved = (game.word.runes().to_set().is_subset_of(game.hits)) else letters_left:
         return standing = outcome.won
     return standing = outcome.playing
 
@@ -109,17 +109,17 @@ fails guess_error.already_guessed: The letter was guessed before. The game is un
 public function guess(mutable game, line) returns answer fails guess_error
         requires still_playing = (outcome_of(game) == outcome.playing):
     let trimmed = line.trim()
-    if nothing_typed = (trimmed.is_empty()):
+    if nothing_typed = (trimmed.is_empty()) else typed_something:
         fail guess_error.empty
     let letter = trimmed.to_lowercase().single_rune()
-    if not_one_rune = (letter == optional.none):
+    if not_one_rune = (letter == optional.none) else one_rune:
         fail guess_error.not_one_letter
     -- From here `letter` is a `rune`: `not_one_rune` narrows it.
-    if not_a_letter = (not letter.is_ascii_lowercase()):
+    if not_a_letter = (not letter.is_ascii_lowercase()) else a_letter:
         fail guess_error.not_one_letter
-    if repeated = (game.hits.contains(letter) or game.misses.contains(letter)):
+    if repeated = (game.hits.contains(letter) or game.misses.contains(letter)) else new_letter:
         fail guess_error.already_guessed
-    if in_word = (game.word.runes().contains(letter)):
+    if in_word = (game.word.runes().contains(letter)) else not_in_word:
         game.hits.insert(letter)
         return answer = verdict.hit
     game.misses.push(letter)
@@ -133,7 +133,7 @@ hits: The letters found so far, as set<rune>.
 shown: What the player sees in its place, as rune.
 ------------------------------------------------------------------------------------------------------------------------
 function shown_rune(letter, hits) returns shown:
-    if known = (hits.contains(letter)):
+    if known = (hits.contains(letter)) else unknown:
         return shown = letter
     return shown = '_'
 
@@ -158,22 +158,22 @@ picture: The drawing, seven lines high, as string.
 public function gallows(misses) returns picture
         requires within_allowance = (misses <= game_rules.allowed_misses):
     variable head = " "
-    if has_head = (misses >= 1):
+    if has_head = (misses >= 1) else no_head:
         head = "O"
     variable body = " "
-    if has_body = (misses >= 2):
+    if has_body = (misses >= 2) else no_body:
         body = "|"
     variable left_arm = " "
-    if has_left_arm = (misses >= 3):
+    if has_left_arm = (misses >= 3) else no_left_arm:
         left_arm = "/"
     variable right_arm = " "
-    if has_right_arm = (misses >= 4):
+    if has_right_arm = (misses >= 4) else no_right_arm:
         right_arm = "\\"
     variable left_leg = " "
-    if has_left_leg = (misses >= 5):
+    if has_left_leg = (misses >= 5) else no_left_leg:
         left_leg = "/"
     variable right_leg = " "
-    if has_right_leg = (misses >= 6):
+    if has_right_leg = (misses >= 6) else no_right_leg:
         right_leg = "\\"
     let rows = [
         "  +---+",
@@ -207,7 +207,7 @@ public function play(words) fails play_error
     let chosen = random.index_below(words.count())
     variable game = new_game(words[chosen])
     console.write_line("Hangman: find the word, one letter at a time.")?
-    while playing = (outcome_of(game) == outcome.playing):
+    while playing = (outcome_of(game) == outcome.playing) else game_over:
         let picture = gallows(game.misses.count())
         let shown = masked(game)
         let missed = game.misses.join(separator: " ")
@@ -216,7 +216,7 @@ public function play(words) fails play_error
         console.write_line("Missed: {missed}")?
         console.write("Guess:  ")?
         let typed = (console.read_line() forever because "a player may think for as long as they like")?
-        if closed = (typed == optional.none):
+        if closed = (typed == optional.none) else line_read:
             fail play_error.input_closed
         switch guess(mutable game, typed):
             result.ok(verdict.hit):

@@ -120,12 +120,12 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
             assert!(at(d["y"].as_str().unwrap()).contains(&format!(" {name} = (")), "{function}#{name}: not at {}", d["y"]);
             assert!(at(d["bare"].as_str().unwrap()).contains(&format!("// y: #{name}")), "{function}#{name}: not at {}", d["bare"]);
             listed.insert(format!("{}#{name}", function.rsplit('.').next().unwrap()));
-            // an `else` has its own name (Y-proposal § 3.5), in the Y source and in the bare body
-            if let Some(e) = d.get("else") {
-                let other = e["name"].as_str().unwrap();
-                assert!(at(e["y"].as_str().unwrap()).trim_start().starts_with(&format!("else {other}:")), "{function}#{other}: not at {}", e["y"]);
-                assert!(at(e["bare"].as_str().unwrap()).contains(&format!("// y: #{other}")), "{function}#{other}: not at {}", e["bare"]);
-            }
+            // the other outcome has a name of its own (Y-proposal § 3.5): an `else` block's, or the header's `else name`
+            let e = d.get("else").unwrap_or_else(|| panic!("{function}#{name}: the other outcome has no name"));
+            let other = e["name"].as_str().unwrap();
+            assert!(at(e["y"].as_str().unwrap()).contains(&format!("else {other}:")), "{function}#{other}: not at {}", e["y"]);
+            assert!(at(e["bare"].as_str().unwrap()).contains(&format!("#{other}")), "{function}#{other}: not at {}", e["bare"]);
+            listed.insert(format!("{}#{other}", function.rsplit('.').next().unwrap()));
         }
     }
     // each copy the lowering made is where the facts say, in the Y source and in the bare body
@@ -147,6 +147,10 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
                 if (*w == "if" || *w == "while") && words.get(i + 2) == Some(&"=") && words.get(i + 3).is_some_and(|x| x.starts_with('(')) {
                     in_source.insert(format!("{function}#{}", words[i + 1]));
                 }
+                // `else name:`, a block's or the end of a header's
+                if *w == "else" && words.get(i + 1).is_some_and(|x| x.ends_with(':') && *x != "if") {
+                    in_source.insert(format!("{function}#{}", words[i + 1].trim_end_matches(':')));
+                }
             }
         }
     }
@@ -165,5 +169,6 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
         let comment: String = body.lines().skip(1).take_while(|l| l.trim_start().starts_with("//")).map(|l| l.trim_start().trim_start_matches("//").trim()).collect::<Vec<_>>().join(" ");
         let rust_covers: Vec<&str> = comment.trim_start_matches("y: covers").split(',').map(str::trim).collect();
         assert_eq!(rust_covers, covers, "{test}: the Rust comment and y-facts.json cover different outcomes");
+        assert!(!covers.iter().any(|c| c.ends_with(".else")), "{test}: an outcome is named, never `.else`");
     }
 }

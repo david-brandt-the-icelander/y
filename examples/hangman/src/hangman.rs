@@ -64,7 +64,7 @@ pub enum WordListError {
 pub fn parse_word_list(text: &str) -> Result<Vec<Word>, WordListError> {
     let mut found = Vec::new();
     for piece in text.split(" ") {
-        if piece.is_empty() { // y: #blank
+        if piece.is_empty() { // y: #blank, else #has_text
             continue;
         }
         match Word::new(piece.to_string()) {
@@ -72,7 +72,7 @@ pub fn parse_word_list(text: &str) -> Result<Vec<Word>, WordListError> {
             Err(_) => return Err(WordListError::NotAWord),
         }
     }
-    if found.is_empty() { // y: #empty
+    if found.is_empty() { // y: #empty, else #has_words
         return Err(WordListError::Empty);
     }
     Ok(found)
@@ -123,10 +123,10 @@ pub fn new_game(word: Word) -> Game {
 /// - Returns `Lost` once the player has used up the misses allowed, `Won` once every letter of the word is found, and
 ///   `Playing` otherwise.
 pub fn outcome_of(game: &Game) -> Outcome {
-    if game.misses.len() == game_rules::ALLOWED_MISSES { // y: #hanged
+    if game.misses.len() == game_rules::ALLOWED_MISSES { // y: #hanged, else #misses_left
         return Outcome::Lost;
     }
-    if runes(game.word.as_text()).all(|letter| game.hits.contains(&letter)) { // y: #solved
+    if runes(game.word.as_text()).all(|letter| game.hits.contains(&letter)) { // y: #solved, else #letters_left
         return Outcome::Won;
     }
     Outcome::Playing
@@ -143,20 +143,20 @@ pub fn outcome_of(game: &Game) -> Outcome {
 pub fn guess(game: &mut Game, line: &str) -> Result<Verdict, GuessError> {
     require(outcome_of(game) == Outcome::Playing, "hangman::guess#still_playing");
     let trimmed = line.trim();
-    if trimmed.is_empty() { // y: #nothing_typed
+    if trimmed.is_empty() { // y: #nothing_typed, else #typed_something
         return Err(GuessError::Empty);
     }
     let letter = single_rune(&trimmed.to_lowercase());
-    let Some(letter) = letter else { // y: #not_one_rune, which narrows `letter` to a `rune`
+    let Some(letter) = letter else { // y: #not_one_rune, else #one_rune, which narrows `letter` to a `rune`
         return Err(GuessError::NotOneLetter);
     };
-    if !letter.is_ascii_lowercase() { // y: #not_a_letter
+    if !letter.is_ascii_lowercase() { // y: #not_a_letter, else #a_letter
         return Err(GuessError::NotOneLetter);
     }
-    if game.hits.contains(&letter) || game.misses.contains(&letter) { // y: #repeated
+    if game.hits.contains(&letter) || game.misses.contains(&letter) { // y: #repeated, else #new_letter
         return Err(GuessError::AlreadyGuessed);
     }
-    if runes(game.word.as_text()).any(|each| each == letter) { // y: #in_word
+    if runes(game.word.as_text()).any(|each| each == letter) { // y: #in_word, else #not_in_word
         game.hits.insert(letter);
         return Ok(Verdict::Hit);
     }
@@ -171,7 +171,7 @@ pub fn guess(game: &mut Game, line: &str) -> Result<Verdict, GuessError> {
 /// - `hits`: the letters found so far.
 /// - Returns what the player sees in its place.
 fn shown_rune(letter: Rune, hits: &BTreeSet<Rune>) -> Rune {
-    if hits.contains(&letter) { // y: #known
+    if hits.contains(&letter) { // y: #known, else #unknown
         return letter;
     }
     Rune('_')
@@ -196,27 +196,27 @@ pub fn masked(game: &Game) -> String {
 pub fn gallows(misses: usize) -> String {
     require(misses <= game_rules::ALLOWED_MISSES, "hangman::gallows#within_allowance");
     let mut head = " ";
-    if misses >= 1 { // y: #has_head
+    if misses >= 1 { // y: #has_head, else #no_head
         head = "O";
     }
     let mut body = " ";
-    if misses >= 2 { // y: #has_body
+    if misses >= 2 { // y: #has_body, else #no_body
         body = "|";
     }
     let mut left_arm = " ";
-    if misses >= 3 { // y: #has_left_arm
+    if misses >= 3 { // y: #has_left_arm, else #no_left_arm
         left_arm = "/";
     }
     let mut right_arm = " ";
-    if misses >= 4 { // y: #has_right_arm
+    if misses >= 4 { // y: #has_right_arm, else #no_right_arm
         right_arm = "\\";
     }
     let mut left_leg = " ";
-    if misses >= 5 { // y: #has_left_leg
+    if misses >= 5 { // y: #has_left_leg, else #no_left_leg
         left_leg = "/";
     }
     let mut right_leg = " ";
-    if misses >= 6 { // y: #has_right_leg
+    if misses >= 6 { // y: #has_right_leg, else #no_right_leg
         right_leg = "\\";
     }
     let rows = [
@@ -257,7 +257,7 @@ pub fn play(words: &[Word], console: &mut Console, random: &mut Random, forever:
     let chosen = random.index_below(words.len());
     let mut game = new_game(words[chosen].clone()); // y: a copy, because new_game keeps its word and `words` is still read
     console.write_line("Hangman: find the word, one letter at a time.")?;
-    while outcome_of(&game) == Outcome::Playing { // y: #playing
+    while outcome_of(&game) == Outcome::Playing { // y: #playing, else #game_over
         let picture = gallows(game.misses.len());
         let shown = masked(&game);
         let missed = join_runes(&game.misses, " ");
@@ -266,7 +266,7 @@ pub fn play(words: &[Word], console: &mut Console, random: &mut Random, forever:
         console.write_line(&format!("Missed: {missed}"))?;
         console.write("Guess:  ")?;
         let typed = console.read_line(forever)?; // y: forever because "a player may think for as long as they like"
-        let Some(typed) = typed else { // y: #closed, which narrows `typed` to a `string`
+        let Some(typed) = typed else { // y: #closed, else #line_read, which narrows `typed` to a `string`
             return Err(PlayError::InputClosed);
         };
         match guess(&mut game, &typed) {

@@ -153,9 +153,9 @@ maximum: The largest allowed, as int64.
 clamped: x, moved into the range, as int64.
 ------------------------------------------------------------------------------------------------------------------------
 function clamp(x, minimum, maximum) returns clamped:
-    if below = (x < minimum):
+    if below = (x < minimum) else not_below:
         return clamped = minimum
-    if above = (x > maximum):
+    if above = (x > maximum) else not_above:
         return clamped = maximum
     return clamped = x
 ```

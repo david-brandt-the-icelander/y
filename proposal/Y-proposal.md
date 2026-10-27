@@ -51,7 +51,7 @@ public function hold_and_charge(item, buyer) returns hold fails hold_error
     within 5s?:
         atomic hold_one_unit:
             let stock = inventory.stock_of(item)?
-            if sold_out = (stock.available == 0):
+            if sold_out = (stock.available == 0) else in_stock:
                 retry
             stock.available -= 1
             let price = stock.price
@@ -224,7 +224,7 @@ supplies capabilities the same way production code receives them, and forces the
 ```y
 -- A conflicting commit forces the transaction to run three times; the customer is still charged once.
 test charges_once_when_the_transaction_retries
-        covers hold_and_charge#sold_out.else:
+        covers hold_and_charge#in_stock:
     given:
         let widget = item_id.parse("widget")?
         let buyer = any<buyer>(seed: 11)
@@ -256,7 +256,7 @@ Commands
   charge_card                                             new submitter: hold_and_charge
 Claims            none
 Gaps              none
-Coverage          4 of 4 outcomes covered by 4 tests (#sold_out, #sold_out.else, !hold_error.unknown_item, !hold_error.timed_out)
+Coverage          4 of 4 outcomes covered by 4 tests (#sold_out, #in_stock, !hold_error.unknown_item, !hold_error.timed_out)
                   1 fault schedule recorded (seed 0x5e1d)
 Contracts         none declared
 Oracles           rustc ownership projection agrees
@@ -334,7 +334,7 @@ person can judge: is five seconds right, and is this the behaviour the business 
 - **Blocks are statements.** `if`, `switch`, loops, `within`, `atomic`, `orelse`, `with`, `arena`, `uncancellable` and
   `supervise` produce no value, and Y has no conditional expression and no ternary operator.
   - A value chosen by a condition is assigned in each branch. The decision then has a name and a place, like every
-    other: `variable head = " "`, then `if has_head = (misses >= 1): head = "O"`.
+    other: `variable head = " "`, then `if has_head = (misses >= 1) else no_head: head = "O"`.
   - A value made inside a transaction or a deadline is returned from inside it, or assigned to a `variable` declared
     outside it.
   - A `switch` arm is a pattern ending in a colon, with its statements indented beneath it, as every block is:
@@ -570,8 +570,8 @@ Referring to a case:
 
 - `t?` is a distinct type from `t`. Neither converts to the other implicitly.
 - `??` supplies a default, `?.` reaches through absence, and `switch` covers `optional.some(value)` and `optional.none`.
-- **A condition narrows.** Inside `if found = (user != optional.none): ...`, and after
-  `if missing = (user == optional.none): return ...`, `user` is a `user`, no longer a `user?`. Nothing is written for
+- **A condition narrows.** Inside `if found = (user != optional.none) else absent: ...`, and after
+  `if missing = (user == optional.none) else present: return ...`, `user` is a `user`, no longer a `user?`. Nothing is written for
   this: every condition adds its predicate as a fact at the points it guards (constraint language § 11.1.1), and the type checker reads the fact.
   - The fact ends where the value may change: an assignment to a `variable`, or a call that takes it `mutable`. A field path
     such as `order.customer` narrows the same way, until something may write to that path.
@@ -687,10 +687,10 @@ This proposal restores the rule and extends it to every predicate in the languag
 
 | Construct | Form |
 | --- | --- |
-| Condition | `if found = (items[middle] == target): ...` |
+| Condition | `if found = (items[middle] == target) else not_found: ...` |
 | Alternative | `else if go_right = (items[middle] < target): ...` |
 | Fallback | `else go_left: ...` |
-| Loop | `while searching = (low <= high): ...` |
+| Loop | `while searching = (low <= high) else exhausted: ...` |
 | Guard | `optional.some(user) when active = (user.last_seen > cutoff): ...` |
 | Precondition, guarantee | `requires positive = (amount > 0isk)`, `ensures debited = (...)` |
 | Invariant, constraint | `invariant departs_after_arrival = (...)`, `where positive = (value > 0)` |
@@ -703,14 +703,15 @@ This proposal restores the rule and extends it to every predicate in the languag
 - **`else` always has a name of its own:** `else go_left:`. The name is bound to `true` when the fall-through branch
   runs, so tests, traces, debuggers and logs can say which branch ran, as for every other branch. An `else` without a
   name does not compile (the toolchain's rule, language reference § 7).
-- An `if` with no `else` still has two outcomes. The branch not taken is addressed as the condition's name plus `.else`
-  (`#sold_out.else`), because there is no `else` to carry a name.
+- **Both outcomes of every decision have names.** An `if` with no `else` block names its other outcome at the end of
+  its header, `if sold_out = (stock.available == 0) else in_stock:`, and a `while` names the outcome that ends it,
+  `while searching = (low <= high) else exhausted:`. A decision with an unnamed outcome does not compile.
 - A `for` loop is named by its variable. Inside nested loops, `break` and `continue` must name their loop:
   `break line`.
 - There is no `loop` and no `while true`.
 
 **What the names are for.** Each name becomes part of a stable address: `shop.checkout.hold_and_charge#sold_out`,
-`#sold_out.else`, `#hold_one_unit`. Those addresses are what:
+`#in_stock`, `#hold_one_unit`. Those addresses are what:
 
 - tests declare they cover (§ 3.14);
 - production traces record, when sampled;
@@ -730,7 +731,7 @@ position: The target's position, or nothing when it is absent, as index<element>
 public function position_of(target, items) returns position:
     variable low = items.first_index()?
     variable high = items.last_index()?
-    while searching = (low <= high):
+    while searching = (low <= high) else exhausted:
         let middle = low.midpoint(high)
         if found = (items[middle] == target):
             return position = optional.some(middle)
@@ -955,11 +956,11 @@ hand you. There is no global state to reach.
 variable job = optional.none
 atomic take_next_job:
     job = jobs.pending.pop_front()
-    if nothing_pending = (job == optional.none):
+    if nothing_pending = (job == optional.none) else got_pending:
         retry
 orelse atomic take_retried_job:
     job = jobs.retried.pop_front()
-    if nothing_retried = (job == optional.none):
+    if nothing_retried = (job == optional.none) else got_retried:
         retry
 ```
 
@@ -1091,7 +1092,7 @@ fails withdraw_error.insufficient_funds: The balance is lower than the amount.
 public function withdraw(mutable account, amount) returns debit fails withdraw_error
         requires positive_amount = (amount > 0isk)
         ensures debited_exactly = (account.balance == old(account.balance) - amount):
-    if short = (account.balance < amount):
+    if short = (account.balance < amount) else covered:
         fail withdraw_error.insufficient_funds(shortfall: amount - account.balance)
     account.balance -= amount
     return debit = receipt(account: account.id, amount: amount)
@@ -1266,9 +1267,9 @@ Tests are part of the language, because the compiler must know what a test claim
 
 **Coverage is declared, then verified.**
 
-- A function's *outcomes* are both sides of every named decision (`f#name`, and the `else`'s own name, `f#go_left`, or
-  `f#name.else` where the `if` has no `else`) and every case of its
-  failure type, written with its type (`f!failure_type.case`).
+- A function's *outcomes* are both named sides of every decision (`f#sold_out` and `f#in_stock`; in an `if` with an
+  `else` block, the block's own name, `f#go_left`) and every case of its failure type, written with its type
+  (`f!failure_type.case`).
 - A test lists the outcomes it covers. The runner fails the test if it did not actually reach every one of them.
 - A test contributes coverage only for what it declares. This is the April 2026 rule, and it keeps coverage an auditable
   claim rather than an accident.

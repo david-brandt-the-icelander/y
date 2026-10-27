@@ -91,11 +91,21 @@
       {
         "name": "blank",
         "y": "y/src/hangman.y:40",
+        "else": {
+          "name": "has_text",
+          "y": "y/src/hangman.y:40",
+          "bare": "bare/src/hangman.brs:67"
+        },
         "bare": "bare/src/hangman.brs:67"
       },
       {
         "name": "empty",
         "y": "y/src/hangman.y:47",
+        "else": {
+          "name": "has_words",
+          "y": "y/src/hangman.y:47",
+          "bare": "bare/src/hangman.brs:75"
+        },
         "bare": "bare/src/hangman.brs:75"
       }
     ],
@@ -103,11 +113,21 @@
       {
         "name": "hanged",
         "y": "y/src/hangman.y:93",
+        "else": {
+          "name": "misses_left",
+          "y": "y/src/hangman.y:93",
+          "bare": "bare/src/hangman.brs:126"
+        },
         "bare": "bare/src/hangman.brs:126"
       },
       {
         "name": "solved",
         "y": "y/src/hangman.y:95",
+        "else": {
+          "name": "letters_left",
+          "y": "y/src/hangman.y:95",
+          "bare": "bare/src/hangman.brs:129"
+        },
         "bare": "bare/src/hangman.brs:129"
       }
     ],
@@ -115,26 +135,51 @@
       {
         "name": "nothing_typed",
         "y": "y/src/hangman.y:112",
+        "else": {
+          "name": "typed_something",
+          "y": "y/src/hangman.y:112",
+          "bare": "bare/src/hangman.brs:146"
+        },
         "bare": "bare/src/hangman.brs:146"
       },
       {
         "name": "not_one_rune",
         "y": "y/src/hangman.y:115",
+        "else": {
+          "name": "one_rune",
+          "y": "y/src/hangman.y:115",
+          "bare": "bare/src/hangman.brs:150"
+        },
         "bare": "bare/src/hangman.brs:150"
       },
       {
         "name": "not_a_letter",
         "y": "y/src/hangman.y:118",
+        "else": {
+          "name": "a_letter",
+          "y": "y/src/hangman.y:118",
+          "bare": "bare/src/hangman.brs:153"
+        },
         "bare": "bare/src/hangman.brs:153"
       },
       {
         "name": "repeated",
         "y": "y/src/hangman.y:120",
+        "else": {
+          "name": "new_letter",
+          "y": "y/src/hangman.y:120",
+          "bare": "bare/src/hangman.brs:156"
+        },
         "bare": "bare/src/hangman.brs:156"
       },
       {
         "name": "in_word",
         "y": "y/src/hangman.y:122",
+        "else": {
+          "name": "not_in_word",
+          "y": "y/src/hangman.y:122",
+          "bare": "bare/src/hangman.brs:159"
+        },
         "bare": "bare/src/hangman.brs:159"
       }
     ],
@@ -142,6 +187,11 @@
       {
         "name": "known",
         "y": "y/src/hangman.y:136",
+        "else": {
+          "name": "unknown",
+          "y": "y/src/hangman.y:136",
+          "bare": "bare/src/hangman.brs:174"
+        },
         "bare": "bare/src/hangman.brs:174"
       }
     ],
@@ -149,31 +199,61 @@
       {
         "name": "has_head",
         "y": "y/src/hangman.y:161",
+        "else": {
+          "name": "no_head",
+          "y": "y/src/hangman.y:161",
+          "bare": "bare/src/hangman.brs:199"
+        },
         "bare": "bare/src/hangman.brs:199"
       },
       {
         "name": "has_body",
         "y": "y/src/hangman.y:164",
+        "else": {
+          "name": "no_body",
+          "y": "y/src/hangman.y:164",
+          "bare": "bare/src/hangman.brs:203"
+        },
         "bare": "bare/src/hangman.brs:203"
       },
       {
         "name": "has_left_arm",
         "y": "y/src/hangman.y:167",
+        "else": {
+          "name": "no_left_arm",
+          "y": "y/src/hangman.y:167",
+          "bare": "bare/src/hangman.brs:207"
+        },
         "bare": "bare/src/hangman.brs:207"
       },
       {
         "name": "has_right_arm",
         "y": "y/src/hangman.y:170",
+        "else": {
+          "name": "no_right_arm",
+          "y": "y/src/hangman.y:170",
+          "bare": "bare/src/hangman.brs:211"
+        },
         "bare": "bare/src/hangman.brs:211"
       },
       {
         "name": "has_left_leg",
         "y": "y/src/hangman.y:173",
+        "else": {
+          "name": "no_left_leg",
+          "y": "y/src/hangman.y:173",
+          "bare": "bare/src/hangman.brs:215"
+        },
         "bare": "bare/src/hangman.brs:215"
       },
       {
         "name": "has_right_leg",
         "y": "y/src/hangman.y:176",
+        "else": {
+          "name": "no_right_leg",
+          "y": "y/src/hangman.y:176",
+          "bare": "bare/src/hangman.brs:219"
+        },
         "bare": "bare/src/hangman.brs:219"
       }
     ],
@@ -181,11 +261,21 @@
       {
         "name": "playing",
         "y": "y/src/hangman.y:210",
+        "else": {
+          "name": "game_over",
+          "y": "y/src/hangman.y:210",
+          "bare": "bare/src/hangman.brs:260"
+        },
         "bare": "bare/src/hangman.brs:260"
       },
       {
         "name": "closed",
         "y": "y/src/hangman.y:219",
+        "else": {
+          "name": "line_read",
+          "y": "y/src/hangman.y:219",
+          "bare": "bare/src/hangman.brs:269"
+        },
         "bare": "bare/src/hangman.brs:269"
       },
       {
@@ -205,20 +295,20 @@
       "y": "y/src/hangman.test.y:2",
       "rust": "hangman_example::hangman::tests::a_letter_in_the_word_is_a_hit",
       "covers": [
-        "guess#nothing_typed.else",
-        "guess#not_one_rune.else",
-        "guess#not_a_letter.else",
-        "guess#repeated.else",
+        "guess#typed_something",
+        "guess#one_rune",
+        "guess#a_letter",
+        "guess#new_letter",
         "guess#in_word",
         "shown_rune#known",
-        "shown_rune#known.else"
+        "shown_rune#unknown"
       ]
     },
     "a_letter_not_in_the_word_is_a_miss": {
       "y": "y/src/hangman.test.y:14",
       "rust": "hangman_example::hangman::tests::a_letter_not_in_the_word_is_a_miss",
       "covers": [
-        "guess#in_word.else"
+        "guess#not_in_word"
       ]
     },
     "a_repeated_letter_is_refused": {
@@ -263,7 +353,7 @@
       "y": "y/src/hangman.test.y:76",
       "rust": "hangman_example::hangman::tests::finding_every_letter_wins",
       "covers": [
-        "outcome_of#hanged.else",
+        "outcome_of#misses_left",
         "outcome_of#solved"
       ]
     },
@@ -271,19 +361,19 @@
       "y": "y/src/hangman.test.y:86",
       "rust": "hangman_example::hangman::tests::a_new_game_is_being_played",
       "covers": [
-        "outcome_of#solved.else"
+        "outcome_of#letters_left"
       ]
     },
     "the_empty_gallows": {
       "y": "y/src/hangman.test.y:96",
       "rust": "hangman_example::hangman::tests::the_empty_gallows",
       "covers": [
-        "gallows#has_head.else",
-        "gallows#has_body.else",
-        "gallows#has_left_arm.else",
-        "gallows#has_right_arm.else",
-        "gallows#has_left_leg.else",
-        "gallows#has_right_leg.else"
+        "gallows#no_head",
+        "gallows#no_body",
+        "gallows#no_left_arm",
+        "gallows#no_right_arm",
+        "gallows#no_left_leg",
+        "gallows#no_right_leg"
       ]
     },
     "the_full_gallows": {
@@ -303,8 +393,8 @@
       "rust": "hangman_example::hangman::tests::a_word_list_is_read_in_order",
       "covers": [
         "parse_word_list#blank",
-        "parse_word_list#blank.else",
-        "parse_word_list#empty.else"
+        "parse_word_list#has_text",
+        "parse_word_list#has_words"
       ]
     },
     "an_empty_word_list_is_refused": {
@@ -327,8 +417,8 @@
       "rust": "hangman_example::hangman::tests::a_player_who_finds_every_letter_wins",
       "covers": [
         "play#playing",
-        "play#playing.else",
-        "play#closed.else",
+        "play#game_over",
+        "play#line_read",
         "play#won"
       ]
     },
