@@ -23,12 +23,10 @@ worth their syntax cost.
 
   ```y
   function withdraw(mutable account, amount) returns debit fails withdraw_error
-      requires positive = (amount > 0)
-      requires covered = (account.balance >= amount)
-      ensures debited = (account.balance == old(account.balance) - amount)
-  {
+          requires positive = (amount > 0)
+          requires covered = (account.balance >= amount)
+          ensures debited = (account.balance == old(account.balance) - amount):
       ...
-  }
   ```
 
 - ⚠️ `old(e)` in a postcondition denotes `e` evaluated on entry, which is what makes a statement about
@@ -63,13 +61,12 @@ worth their syntax cost.
   them.
 
   ```y
-  state order {
+  state order:
       .created
       .payment_pending
       .paid
       .cancelled
       .fulfilled
-  }
   ```
 
 - ⚠️ A state is usable as a type: `order.created` is the type of an order in that state, and a function may

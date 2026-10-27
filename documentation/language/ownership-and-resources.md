@@ -28,10 +28,10 @@ them tell a reviewer about memory, not about intent.
 
   ```y
   -- order: The order to look at, as order.
-  function inspect(order) { ... }
+  function inspect(order): ...
 
   -- order: The order to change, as order.
-  function update(mutable order) { ... }
+  function update(mutable order): ...
   ```
 
 - ⚠️ A `let` binding may not change, and a `variable` may. Method receivers are declared `self` or

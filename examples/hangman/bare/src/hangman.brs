@@ -9,11 +9,14 @@ use y_runtime::{invariant, require, ConsoleError, ConstraintViolation, Console, 
 #[cfg(test)]
 mod tests;
 
-/// The words a game chooses from, separated by spaces.
-const WORD_LIST = "gallows noose scaffold hangman trapdoor verdict alphabet puzzle riddle lantern";
+/// The rules every game is played by: the Y constant group `game_rules`.
+mod game_rules {
+    /// The words a game chooses from, separated by spaces.
+    const WORD_LIST = "gallows noose scaffold hangman trapdoor verdict alphabet puzzle riddle lantern";
 
-/// How many wrong guesses a player may make. The last of them hangs the man.
-const ALLOWED_MISSES = 6;
+    /// How many wrong guesses a player may make. The last of them hangs the man.
+    const ALLOWED_MISSES = 6;
+}
 
 /// A word a game can be played with.
 ///
@@ -49,7 +52,7 @@ impl fmt::Display for Word {
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum WordListError {
     Empty,
-    NotAWord { text },
+    NotAWord,
 }
 
 /// Reads a word list.
@@ -66,7 +69,7 @@ fn parse_word_list(text) {
         }
         match Word::new(piece.to_string()) {
             Ok(parsed) => words.push(parsed),
-            Err(_) => return Err(WordListError::NotAWord { text: piece.to_string() }),
+            Err(_) => return Err(WordListError::NotAWord),
         }
     }
     if words.is_empty() { // y: #empty
@@ -102,8 +105,8 @@ enum Verdict {
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum GuessError {
     Empty,
-    NotOneLetter { text },
-    AlreadyGuessed { letter },
+    NotOneLetter,
+    AlreadyGuessed,
 }
 
 /// Starts a game.
@@ -120,7 +123,7 @@ fn new_game(word) {
 /// - Returns `Lost` once the player has used up the misses allowed, `Won` once every letter of the word is found, and
 ///   `Playing` otherwise.
 fn outcome_of(game) {
-    if game.misses.len() == ALLOWED_MISSES { // y: #hanged
+    if game.misses.len() == game_rules::ALLOWED_MISSES { // y: #hanged
         return Outcome::Lost;
     }
     if runes(game.word.as_text()).all(|letter| game.hits.contains(&letter)) { // y: #solved
@@ -145,20 +148,20 @@ fn guess(game, line) {
     }
     let letter = single_rune(&trimmed.to_lowercase());
     let Some(letter) = letter else { // y: #not_one_rune, which narrows `letter` to a `Rune`
-        return Err(GuessError::NotOneLetter { text: trimmed.to_string() });
+        return Err(GuessError::NotOneLetter);
     };
     if !letter.is_ascii_lowercase() { // y: #not_a_letter
-        return Err(GuessError::NotOneLetter { text: trimmed.to_string() });
+        return Err(GuessError::NotOneLetter);
     }
     if game.hits.contains(&letter) || game.misses.contains(&letter) { // y: #repeated
-        return Err(GuessError::AlreadyGuessed { letter });
+        return Err(GuessError::AlreadyGuessed);
     }
     if runes(game.word.as_text()).any(|each| each == letter) { // y: #in_word
         game.hits.insert(letter);
         return Ok(Verdict::Hit);
     }
     game.misses.push(letter);
-    invariant(game.misses.len() <= ALLOWED_MISSES, "hangman::Game#within_allowance");
+    invariant(game.misses.len() <= game_rules::ALLOWED_MISSES, "hangman::Game#within_allowance");
     Ok(Verdict::Miss)
 }
 
@@ -188,7 +191,7 @@ fn masked(game) {
 /// - `misses`: how many wrong guesses the player has made.
 /// - Returns the picture, seven lines high.
 fn gallows(misses) {
-    require(misses <= ALLOWED_MISSES, "hangman::gallows#within_allowance");
+    require(misses <= game_rules::ALLOWED_MISSES, "hangman::gallows#within_allowance");
     let head = " ";
     if misses >= 1 { // y: #has_head
         head = "O";
@@ -267,8 +270,8 @@ fn play(words, console, random, forever) {
             Ok(Verdict::Hit) => console.write_line("Yes.")?,
             Ok(Verdict::Miss) => console.write_line("No.")?,
             Err(GuessError::Empty) => console.write_line("Type a letter.")?,
-            Err(GuessError::NotOneLetter { text }) => console.write_line(&format!("\"{text}\" is not one letter."))?,
-            Err(GuessError::AlreadyGuessed { letter }) => console.write_line(&format!("You have already guessed {letter}."))?,
+            Err(GuessError::NotOneLetter) => console.write_line(&format!("\"{typed}\" is not one letter."))?,
+            Err(GuessError::AlreadyGuessed) => console.write_line(&format!("You have already guessed {typed}."))?,
         }
     }
     let final_picture = gallows(game.misses.len());

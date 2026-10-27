@@ -135,33 +135,29 @@ Unless otherwise stated, syntax in this document is **illustrative rather than f
 ### 3.1 Functions
 
 ```y
----
+------------------------------------------------------------------------------------------------------------------------
 x: The number to square, as int64.
 squared: x times x, as int64.
----
-function square(x) returns squared {
+------------------------------------------------------------------------------------------------------------------------
+function square(x) returns squared:
     return squared = x * x
-}
 ```
 
 With several paths:
 
 ```y
----
+------------------------------------------------------------------------------------------------------------------------
 x: The number to limit, as int64.
 minimum: The smallest allowed, as int64.
 maximum: The largest allowed, as int64.
 clamped: x, moved into the range, as int64.
----
-function clamp(x, minimum, maximum) returns clamped {
-    if below = (x < minimum) {
+------------------------------------------------------------------------------------------------------------------------
+function clamp(x, minimum, maximum) returns clamped:
+    if below = (x < minimum):
         return clamped = minimum
-    }
-    if above = (x > maximum) {
+    if above = (x > maximum):
         return clamped = maximum
-    }
     return clamped = x
-}
 ```
 
 (The October proposal settles the spelling: types are written in the documentation above a function, the result is
@@ -189,10 +185,9 @@ This represents either a `customer` or absence.
 Pattern matching is preferred where behavior differs materially between cases.
 
 ```y
-match customer {
+match customer:
     .some(found) => use(found)
     .none        => not_found()
-}
 ```
 
 Exact optional-case syntax is not yet frozen.
@@ -218,30 +213,27 @@ Pattern matching and propagation syntax should make the success path concise wit
 Working direction:
 
 ```y
-record customer {
+record customer:
     id: customer_id
     name: string
-}
 ```
 
 Variants/sum types:
 
 ```y
-type payment_result {
+type payment_result:
     .approved(authorization)
     .declined(decline_reason)
     .unavailable
-}
 ```
 
 Pattern matching is a core control-flow mechanism:
 
 ```y
-match result {
+match result:
     .approved(authorization) => complete(authorization)
     .declined(reason) => reject(reason)
     .unavailable => retry_later()
-}
 ```
 
 Exhaustiveness should be compiler checked.
@@ -266,10 +258,10 @@ Illustrative syntax may include familiar forms:
 
 ```y
 -- order: The order to look at, as order.
-function inspect(order) { ... }
+function inspect(order): ...
 
 -- order: The order to change, as order.
-function update(mutable order) { ... }
+function update(mutable order): ...
 ```
 
 The October proposal settles this further: source has value semantics and no references at all, and
@@ -338,15 +330,13 @@ shared inventory: inventory
 Transactional mutation:
 
 ```y
-atomic {
+atomic:
     let item = inventory[item_id]
 
-    if item.available == 0 {
+    if item.available == 0:
         retry
-    }
 
     item.available -= 1
-}
 ```
 
 ### 6.1 `atomic`
@@ -374,12 +364,10 @@ Alternative transactions can be composed.
 Illustrative syntax:
 
 ```y
-atomic {
+atomic:
     take(primary_queue)
-}
-or_else {
+or_else:
     take(secondary_queue)
-}
 ```
 
 The exact syntax is not frozen, but transactional alternatives are part of the intended model.
@@ -395,10 +383,9 @@ Transactional code **must not directly interact with external nontransactional s
 For example, this is invalid in principle:
 
 ```y
-atomic {
+atomic:
     account.balance -= amount
     payment_provider.charge(card, amount) -- forbidden
-}
 ```
 
 An STM transaction may be retried.
@@ -421,15 +408,10 @@ External effects requested from transactional code are represented as durable co
 Illustrative direction:
 
 ```y
-atomic {
+atomic:
     order.status = .payment_pending
 
-    enqueue charge_card {
-        order_id: order.id
-        amount: order.total
-        payment_method: order.payment_method
-    }
-}
+    enqueue charge_card(order_id: order.id, amount: order.total, payment_method: order.payment_method)
 ```
 
 The command becomes durable as part of the same transaction.
@@ -462,13 +444,11 @@ The language should support a post-commit mechanism.
 Illustrative syntax:
 
 ```y
-atomic {
+atomic:
     order.status = .confirmed
 
-    afterCommit {
+    afterCommit:
         enqueue send_confirmation(order.id)
-    }
-}
 ```
 
 The important semantic property is that the action is not performed during speculative transactional execution.
@@ -528,11 +508,10 @@ let result = queue.receive() within 5s
 or:
 
 ```y
-within 30s {
+within 30s:
     let user = load_user(id)
     let orders = load_orders(user.id)
     render(user, orders)
-}
 ```
 
 Exact syntax remains open.
@@ -552,12 +531,11 @@ The language should avoid orphan tasks as the default.
 Illustrative direction:
 
 ```y
-within 10s {
+within 10s:
     task user = load_user(id)
     task orders = load_orders(id)
 
     render(user, orders)
-}
 ```
 
 The compiler/runtime knows the lifetime and cancellation relationship of these tasks.
@@ -571,14 +549,13 @@ Long-running operations should be expressible as workflows rather than ad hoc co
 Illustrative syntax:
 
 ```y
-workflow fulfill(order_id) {
+workflow fulfill(order_id):
     let order = load_order(order_id)
 
     let payment = submit charge_card(order.payment)
     let shipment = submit create_shipment(order)
 
     complete(order, payment, shipment)
-}
 ```
 
 A workflow may survive:
@@ -602,12 +579,10 @@ Illustrative syntax:
 
 ```y
 function withdraw(mutable account, amount) returns debit fails withdraw_error
-    requires positive = (amount > 0)
-    requires covered = (account.balance >= amount)
-    ensures debited = (account.balance == old(account.balance) - amount)
-{
+        requires positive = (amount > 0)
+        requires covered = (account.balance >= amount)
+        ensures debited = (account.balance == old(account.balance) - amount):
     ...
-}
 ```
 
 Contracts serve several purposes:
@@ -669,13 +644,12 @@ Protocol state should be representable in types rather than only in runtime comm
 Example direction:
 
 ```y
-state order {
+state order:
     .created
     .payment_pending
     .paid
     .cancelled
     .fulfilled
-}
 ```
 
 Transitions can be restricted:
@@ -707,11 +681,10 @@ Schema evolution should not be an unrelated string-based side system.
 Illustrative direction:
 
 ```y
-schema customer v3 {
+schema customer v3:
     id: customer_id
     name: string
     email: email?
-}
 ```
 
 Migration syntax remains open.

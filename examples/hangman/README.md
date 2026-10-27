@@ -25,11 +25,11 @@ letter. Six misses hang the man.
 
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
-| Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 264, 280, 19 | hand |
-| Bare bodies | `bare/src/hangman.brs`, `bare/src/hangman/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 282, 168, 43, 3 | hand, as the Y compiler would lower the source |
-| Constraint files | `bare/src/*.constraints.json` (46 subjects, 19 clauses) | 398 | the same, then `bare-rust libfmt` for the canonical form |
-| Y facts | `bare/y-facts.json` | 345 | the same |
-| Rust | `src/hangman.rs`, `src/hangman/tests.rs`, `src/main.rs`, `src/lib.rs` | 282, 168, 43, 3 | `bare-rust weave` |
+| Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 226, 211, 16 | hand |
+| Bare bodies | `bare/src/hangman.brs`, `bare/src/hangman/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 285, 168, 43, 3 | hand, as the Y compiler would lower the source |
+| Constraint files | `bare/src/*.constraints.json` (47 subjects, 19 clauses) | 386 | the same, then `bare-rust libfmt` for the canonical form |
+| Y facts | `bare/y-facts.json` | 353 | the same |
+| Rust | `src/hangman.rs`, `src/hangman/tests.rs`, `src/main.rs`, `src/lib.rs` | 285, 168, 43, 3 | `bare-rust weave` |
 | Y runtime | `../y-runtime/src/lib.rs` | 225 | hand: a small stand-in for the runtime that lowered code calls |
 
 The Y package has two modules. `hangman` holds the game, and `main` is the entry point. They lower to one Rust package:
@@ -47,9 +47,10 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | `return result = value`, `fail .case(...)`, `?` | `return Ok(value)` or the last expression, `return Err(E::Case { .. })`, `?` | `result.fails` | the same |
 | `?` converting through the one case that carries the failure | `?` | an `impl From` subject | `impl From<ConsoleError> for PlayError` |
 | `lower_snake_case` type and case names (`guess_error`, `.not_one_letter`) | `GuessError`, `NotOneLetter`: the lowering's one renaming, to Rust's casing | Rust names | the same |
-| `lower_snake_case` constants (`allowed_misses`) | `ALLOWED_MISSES` | the same | the same |
-| `type word = text where letters_only = ..., long_enough = ...` | `struct Word(_)` and a constructor that checks each constraint in order | two `invariant` clauses, with status `lifted` by the constructor | a newtype with `Word::new(..) -> Result<Word, ConstraintViolation>` |
-| `record`, closed sum type | `struct`, `enum` with named fields | `fields`, `variants` | the same, deriving the structural equality Y always derives |
+| A constant group, `public constants game_rules:` with `allowed_misses is count<element> = 6` | a module `game_rules` holding `const ALLOWED_MISSES = 6;`; uses are `game_rules::ALLOWED_MISSES` | a `module` subject and its `const` subjects | the same |
+| `type word = string where letters_only = ..., long_enough = ...` | `struct Word(_)` and a constructor that checks each constraint in order | two `invariant` clauses, with status `lifted` by the constructor | a newtype with `Word::new(..) -> Result<Word, ConstraintViolation>` |
+| `record`; `enumeration` (`outcome`, `verdict` and the failures `word_list_error`, `guess_error`); a `type` with `case`s that carry data (`play_error`) | `struct`; `enum` with unit variants; `enum` with named fields | `fields`, `variants` | the same, deriving the structural equality Y always derives |
+| Blocks: a colon and indentation | braces, as Rust has | — | the same |
 | No `with` clause: the function is pure | — | `effects` clause `pure` | — |
 | A `mutable` parameter and no `with` | — | `no io`, `no clock`, `no randomness`, `mutates only game.hits, game.misses` | — |
 | `with console, random, forever`, typed in the documentation | three more parameters | their types and access; `effects only console, random`; the clause also in `y-facts.json` `capabilities` | `&mut Console, &mut Random, &Forever` |
@@ -60,13 +61,13 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | A value chosen by a condition: `variable head = " "`, then `if has_head = (misses >= 1) { head = "O" }` (Y's blocks give no value) | the same shape | — | the same |
 | A condition that narrows (`if not_one_rune = (letter == .none) { fail ... }`) | `let Some(letter) = letter else { ... }` | — | let-else, so rustc checks the narrowing |
 | `forever because "..."` | the `&Forever` argument of the call that waits | `y-facts.json` `claims` | `console.read_line(forever)` |
-| `compile parse_word_list(word_list)` | the value, as a `const` array, and a `static` built once from it | `y-facts.json` `compiled` | the same, and a generated test that makes the call at run time and compares |
+| `compile parse_word_list(game_rules.word_list)` | the value, as a `const` array, and a `static` built once from it | `y-facts.json` `compiled` | the same, and a generated test that makes the call at run time and compares |
 | `count<element>`, `count<rune>` | — (units are erased) | `y-facts.json` `units` | `usize` |
-| `text` (and a read-only `text` parameter), `rune`, `list<t>`, `set<t>` | — | `text`, `ref<text>`, `Rune`, `list<T> as 'Vec'`, `set<T> as 'BTreeSet'` | `String`, `&str`, `y_runtime::Rune`, `Vec<T>`, `BTreeSet<T>` |
+| `string` (and a read-only `string` parameter), `rune`, `list<t>`, `set<t>` | — | `text`, `ref<text>`, `Rune`, `list<T> as 'Vec'`, `set<T> as 'BTreeSet'` | `String`, `&str`, `y_runtime::Rune`, `Vec<T>`, `BTreeSet<T>` |
 | Interpolation, `"{name}"` and `"{game.word}"` | `format!("{name}")`, `format!("{}", game.word)` | — | the same |
 | `variable` | `let` | — | `let mut`, which `weave` derived through rustc (24 of them) |
 | `test name covers a, b { given / with / when / then }` | `#[test] fn name()`; a `?` in `given` or `when` lowers to `expect`; `fake console(input: [...])` to `Console::fake(...)` | `y-facts.json` `tests`: what each covers; repeated in a comment in the test | the same |
-| Documentation: the `--` line or `---` block above a declaration, with roles; the types leave it for the signature | `///` with the roles as a list | — | the same |
+| Documentation: the `--` line, or the block between two rules of dashes, above a declaration, with roles; the types leave it for the signature | `///` with the roles as a list | — | the same |
 
 ## What had to be assumed
 
@@ -80,7 +81,7 @@ following:
 - **One `with` block can bind several capabilities:** `with console = ..., random = ..., forever = ... { ... }`.
 - **A refined type can have several named constraints,** separated by commas after one `where`.
 - **Rune literals** are written `'z'`, as in `value.count_of('@')` in the proposal.
-- **Library names:** `set.of([...])`, `list.join(separator:)`, `text.single_rune()`, `text.split(...)`, `text.trim()`.
+- **Library names:** `set.of([...])`, `list.join(separator:)`, `string.single_rune()`, `string.split(...)`, `string.trim()`.
 - **Fakes for tests:** `fake console(input: [...], read_fails: ...)`, `fake random(seed: ...)` and `fake forever`.
 - **Placement of `forever`:** `forever because "..."` follows the waiting call, as `within 5s` does.
 

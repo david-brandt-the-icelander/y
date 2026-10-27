@@ -20,11 +20,10 @@ failure mode is a deploy that cannot be rolled back.
 - ⚠️ `schema` declares a persistent shape with a version:
 
   ```y
-  schema customer v3 {
+  schema customer v3:
       id: customer_id
       name: string
       email: email?
-  }
   ```
 
 - ⚠️ Every version of a schema is retained in the source, so the compiler can compare them rather than
@@ -58,10 +57,9 @@ failure mode is a deploy that cannot be rolled back.
 - ⚠️ `migrate` declares how one schema version becomes the next, as an expression per field of the target:
 
   ```y
-  migrate customer v1 to v2 {
+  migrate customer v1 to v2:
       display_name = first_name + " " + last_name
       normalized_name = normalize(display_name)
-  }
   ```
 
 - ⚠️ A migration declares what it reads and what it writes, and may read schemas other than the one it is

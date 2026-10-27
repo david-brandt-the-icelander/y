@@ -4,7 +4,7 @@ use hangman_example::hangman::{play, PlayError, Word};
 use std::sync::LazyLock;
 use y_runtime::System;
 
-/// The value of `compile parse_word_list(WORD_LIST)` in `main`, which the Y compiler evaluated while building
+/// The value of `compile parse_word_list(game_rules.word_list)` in `main`, which the Y compiler evaluated while building
 /// (Y § 3.17): ten words, as data.
 const COMPILED_WORD_LIST = ["gallows", "noose", "scaffold", "hangman", "trapdoor", "verdict", "alphabet", "puzzle", "riddle", "lantern"];
 
@@ -18,7 +18,7 @@ static WORDS = LazyLock::new(|| COMPILED_WORD_LIST.iter().map(|word| Word::new(w
 /// - Fails `Console`: the terminal could not be read or written.
 fn main() {
     let system = System::root();
-    let words = &*WORDS; // y: compile parse_word_list(WORD_LIST)
+    let words = &*WORDS; // y: compile parse_word_list(game_rules.word_list)
     {
         // y: with console = system.console(), random = system.random(), forever = system.forever()
         let console = system.console();
@@ -33,11 +33,11 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hangman_example::hangman::{parse_word_list, WORD_LIST};
+    use hangman_example::hangman::{game_rules, parse_word_list};
 
     #[test]
     fn compiled_word_list_matches_run_time() {
-        let run_time = parse_word_list(WORD_LIST);
-        assert!(run_time == Ok(WORDS.clone()), "y: compile parse_word_list(WORD_LIST)");
+        let run_time = parse_word_list(game_rules::WORD_LIST);
+        assert!(run_time == Ok(WORDS.clone()), "y: compile parse_word_list(game_rules.word_list)");
     }
 }

@@ -27,7 +27,7 @@ fn a_repeated_letter_is_refused() {
     // y: covers guess#repeated, guess!already_guessed
     let mut game = Game { word: Word::new("rope".to_string()).expect("given"), hits: BTreeSet::new(), misses: vec![Rune('z')] };
     let refused = guess(&mut game, "Z");
-    assert!(refused == Err(GuessError::AlreadyGuessed { letter: Rune('z') }), "refused_as_repeated");
+    assert!(refused == Err(GuessError::AlreadyGuessed), "refused_as_repeated");
     assert!(game.misses.len() == 1, "no_new_miss");
 }
 
@@ -44,7 +44,7 @@ fn two_letters_are_not_a_guess() {
     // y: covers guess#not_one_rune, guess!not_one_letter
     let mut game = new_game(Word::new("rope".to_string()).expect("given"));
     let refused = guess(&mut game, "ab");
-    assert!(refused == Err(GuessError::NotOneLetter { text: "ab".to_string() }), "refused_as_two");
+    assert!(refused == Err(GuessError::NotOneLetter), "refused_as_two");
 }
 
 #[test]
@@ -52,7 +52,7 @@ fn a_digit_is_not_a_guess() {
     // y: covers guess#not_a_letter
     let mut game = new_game(Word::new("rope".to_string()).expect("given"));
     let refused = guess(&mut game, "7");
-    assert!(refused == Err(GuessError::NotOneLetter { text: "7".to_string() }), "refused_as_digit");
+    assert!(refused == Err(GuessError::NotOneLetter), "refused_as_digit");
 }
 
 #[test]
@@ -118,7 +118,7 @@ fn an_empty_word_list_is_refused() {
 fn a_short_word_is_refused() {
     // y: covers parse_word_list!not_a_word
     let refused = parse_word_list("rope cat");
-    assert!(refused == Err(WordListError::NotAWord { text: "cat".to_string() }), "refused_naming_it");
+    assert!(refused == Err(WordListError::NotAWord), "refused_as_not_a_word");
 }
 
 #[test]

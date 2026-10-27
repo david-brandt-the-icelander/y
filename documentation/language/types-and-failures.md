@@ -19,10 +19,9 @@ told about, because the compiler enumerates the cases.
 - ⚠️ `record` declares a product type with named, typed, ordered fields.
 
   ```y
-  record customer {
+  record customer:
       id: customer_id
       name: string
-  }
   ```
 
 - ⚠️ A record with few fields may be declared positionally on one line, and the two forms are the same
@@ -30,11 +29,10 @@ told about, because the compiler enumerates the cases.
 - ⚠️ `type` declares a closed sum type. Each case names itself and carries zero or more payload types.
 
   ```y
-  type payment_result {
+  type payment_result:
       .approved(authorization)
       .declined(decline_reason)
       .unavailable
-  }
   ```
 
 - ⚠️ A case is written `.name`, and the type it belongs to is taken from the context the expression
@@ -56,10 +54,9 @@ told about, because the compiler enumerates the cases.
   `match` over a `t?` is exhaustive in exactly the way it is over any sum type.
 
   ```y
-  match customer {
+  match customer:
       .some(found) => use(found)
       .none        => not_found()
-  }
   ```
 
 - ⚠️ `?.` reaches through absence: where `a` is `a_type?`, `a?.field` is the field's type made optional, and
@@ -83,17 +80,15 @@ told about, because the compiler enumerates the cases.
   written.
 
   ```y
-  type startup_error {
+  type startup_error:
       .configuration(configuration_error)
       .database(database_error)
       .network(network_error)
-  }
 
-  function startup() returns started fails startup_error {
+  function startup() returns started fails startup_error:
       let configuration = load_configuration("app.json")?
       let database = connect(configuration.database)?
       return started = application(configuration, database)
-  }
   ```
 
 - ⚠️ Where two cases could carry the same inner failure type, the conversion is ambiguous and the

@@ -39,15 +39,13 @@ external effects inside a transaction, and why an entire second mechanism exists
   observes a partial state.
 
   ```y
-  atomic {
+  atomic:
       let item = inventory[item_id]
 
-      if item.available == 0 {
+      if item.available == 0:
           retry
-      }
 
       item.available -= 1
-  }
   ```
 
 - ⚠️ The runtime records what the transaction read and wrote, detects conflict with a committed
@@ -81,12 +79,10 @@ external effects inside a transaction, and why an entire second mechanism exists
   waits on the union of both read sets.
 
   ```y
-  atomic {
+  atomic:
       take(primary_queue)
-  }
-  or_else {
+  or_else:
       take(secondary_queue)
-  }
   ```
 
 - ⚠️ An alternative that commits does so as the whole transaction, and the discarded alternative's writes
@@ -103,10 +99,9 @@ enforced; what to do instead is [External effects](external-effects.md).
   `atomic` block, at compile time, by the effect set of the block's body.
 
   ```y
-  atomic {
+  atomic:
       account.balance -= amount
       payment_provider.charge(card, amount)   -- rejected
-  }
   ```
 
 - ⚠️ The diagnostic for this names the effect, the call path that introduced it, and the durable mechanism

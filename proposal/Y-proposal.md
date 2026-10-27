@@ -34,7 +34,7 @@ Three rules follow, and most of this document is their consequences.
 A function, as a reviewer would be shown it:
 
 ```y
----
+------------------------------------------------------------------------------------------------------------------------
 Holds one unit of an item for a buyer and asks for payment, exactly once.
 
 why: Stock is never oversold, and a transaction that retries never charges twice.
@@ -45,25 +45,20 @@ inventory: The stock and the holds on it, as shared<inventory>.
 charges: Where charges are queued, as enqueue<charge_card>.
 fails unknown_item: The item is not stocked here.
 fails timed_out: No unit became free within five seconds.
----
+------------------------------------------------------------------------------------------------------------------------
 public function hold_and_charge(item, buyer) returns hold fails hold_error
-    with inventory, charges
-{
-    within 5s {
-        atomic hold_one_unit {
+        with inventory, charges:
+    within 5s?:
+        atomic hold_one_unit:
             let stock = inventory.stock_of(item)?
-            if sold_out = (stock.available == 0) {
+            if sold_out = (stock.available == 0):
                 retry
-            }
             stock.available -= 1
             let price = stock.price
 
             hold = inventory.open_hold(item: item, buyer: buyer.id)
-            enqueue charge_card { hold: hold.id, amount: price, method: buyer.payment_method }
-        }
-    }?
+            enqueue charge_card(hold: hold.id, amount: price, method: buyer.payment_method)
     return hold
-}
 ```
 
 Without opening another file, a reviewer can see that this function touches exactly two things (one shared inventory,
@@ -83,7 +78,7 @@ context object, March 2026); units on every length and index (July and March 202
 (toolchain, October 2025); fixtures generated from constraints (October 2025); *provable or explicitly missing*
 (ai.lang, March 2026); gaps recorded where the code is (knowledge-driven development, August 2026).
 
-**Dropped**, with reasons in § 7: significant indentation; `x is integer` annotations; classes,
+**Dropped**, with reasons in § 7: braces; `x is integer` annotations; classes,
 facets, factory methods and inheritance; exceptions; ambient `using` contexts; transactional memory for *all* state;
 affinities and placements in source; comments with runtime meaning; the spec block as a replacement for the signature;
 `afterCommit`; references, borrows and moves in source, which become the compiler's choices under value semantics
@@ -123,7 +118,7 @@ the facts a reviewer needs into the declaration**, where they become checked cla
 
 | Fact | Where it is pinned | Written by |
 | --- | --- | --- |
-| Parameter, result and capability types | Documentation above the signature (`line: ..., as text.`) | Agent (public signatures are never inferred) |
+| Parameter, result and capability types | Documentation above the signature (`line: ..., as string.`) | Agent (public signatures are never inferred) |
 | Which parameters the function may change | Signature (`x` or `mutable x`) | Agent, corrected by fix-its |
 | Which arguments a call lets the callee change | Call site (`mutable x`) | Agent, corrected by fix-its |
 | Authority, and therefore effects | `with` clause | `y fix`, from inference |
@@ -177,11 +172,10 @@ told this story in prose. Here it is in the proposed language.
 **The agent's first draft** puts the charge where it reads naturally:
 
 ```y
-        atomic hold_one_unit {
+        atomic hold_one_unit:
             -- ...
             stock.available -= 1
             gateway.charge(method: buyer.payment_method, amount: stock.price)?
-        }
 ```
 
 **The compiler rejects it**, and the diagnostic names the replacement rather than only the prohibition — a rule this
@@ -211,10 +205,10 @@ error[Y0301]: unbounded wait
 22 |                 retry
    |                 ^^^^^ waits until `inventory.stocks` changes, with no deadline above it
    |
-   = fix: bound the enclosing scope, e.g. `within 5s { ... }`; the expiry becomes a typed failure
+   = fix: bound the enclosing scope, e.g. `within 5s?: ...`; the expiry becomes a typed failure
 ```
 
-After `within 5s { ... }?`, the compiler reports that the failure set now includes `expired` and that `hold_error` has
+After `within 5s?:`, the compiler reports that the failure set now includes `expired` and that `hold_error` has
 no case carrying it. The agent adds `case timed_out(deadline: expired)`, and `y fix` pins the authority it inferred:
 
 ```text
@@ -230,28 +224,21 @@ supplies capabilities the same way production code receives them, and forces the
 ```y
 -- A conflicting commit forces the transaction to run three times; the customer is still charged once.
 test charges_once_when_the_transaction_retries
-    covers hold_and_charge#sold_out.else
-{
-    given {
+        covers hold_and_charge#sold_out.else:
+    given:
         let widget = item_id.parse("widget")?
         let buyer = any<buyer>(seed: 11)
-    }
-    with {
+    with:
         inventory = shared.new(inventory.stocked(item: widget, available: 1, price: 1_500isk))
         charges = fake enqueue<charge_card>
-    }
-    faults {
+    faults:
         conflict at hold_and_charge#hold_one_unit, times: 2
-    }
-    when {
+    when:
         let hold = hold_and_charge(widget, buyer)?
-    }
-    then {
+    then:
         assert charged_once = (charges.committed().count() == 1)
         assert held_the_widget = (hold.item == widget)
         assert no_stock_left = (inventory.snapshot().stock_of(widget)?.available == 0)
-    }
-}
 ```
 
 **The reviewer** does not open the diff first. They open the review packet, which is ordered by risk:
@@ -288,7 +275,7 @@ person can judge: is five seconds right, and is this the behaviour the business 
 
 - A module is one file. Its first line is `module shop.checkout`, and it must match the path `src/shop/checkout.y`.
   The redundancy is deliberate: a sample shown out of context still says where it lives.
-- Imports name what they bring in: `use shop.inventory.{inventory, item_id}`. There are no wildcard imports, no
+- Imports name what they bring in: `from shop.inventory use inventory, item_id`. There are no wildcard imports, no
   re-exports and no relative paths. An import cycle is an error that lists the cycle.
 - The formatter sorts imports (standard library, then dependencies, then this package). Each name means the same thing
   everywhere in a package, so an alias (`as`) is allowed only to resolve a collision.
@@ -302,10 +289,10 @@ person can judge: is five seconds right, and is this the behaviour the business 
   commands and constants alike. Any other casing is a compile error, as are leading, trailing and doubled underscores.
 - This is the long-standing lowercase-everything rule. A reviewer tells a type from a value by where it stands, not by
   its case: types appear in the documentation of a function, in a field, after `type`, and before `.` in a
-  constructor or a qualified case (`word.new(text)`, `payment_result.approved(...)`).
+  constructor or a qualified case (`word.new(spelling)`, `payment_result.approved(...)`).
 - **Types and values have separate names, but one spelling.** A field may be `word: word`, and a capability
   `console` may have the type `console`. In an expression, a value hides a type of the same name; the type is then
-  reached through its module (`bank.receipt { ... }`), which the formatter writes only where it is needed.
+  reached through its module (`bank.receipt(...)`), which the formatter writes only where it is needed.
 - Identifiers are ASCII. Bidirectional-control and invisible characters are rejected everywhere in source except as
   escapes inside text literals. A reviewer must be able to trust that what they see is what compiles.
 - **No abbreviations,** except a short list that every Y programmer learns once:
@@ -347,7 +334,7 @@ person can judge: is five seconds right, and is this the behaviour the business 
 - **Blocks are statements.** `if`, `match`, loops, `within`, `atomic`, `orelse`, `with`, `arena`, `uncancellable` and
   `supervise` produce no value, and Y has no conditional expression and no ternary operator.
   - A value chosen by a condition is assigned in each branch. The decision then has a name and a place, like every
-    other: `variable head = " "`, then `if has_head = (misses >= 1) { head = "O" }`.
+    other: `variable head = " "`, then `if has_head = (misses >= 1): head = "O"`.
   - A value made inside a transaction or a deadline is assigned to a name declared outside it (§ 0's `hold`).
   - A `match` arm runs a statement: a call, an assignment, `return`, `fail`, `break` or `continue`.
 
@@ -355,9 +342,8 @@ person can judge: is five seconds right, and is this the behaviour the business 
 
 ```y
 -- answer: The meaning of life, as int32.
-function meaning_of_life() returns answer {
+function meaning_of_life() returns answer:
     return answer = 42
-}
 ```
 
 - **A signature names its parameters and its result, and nothing else.** It has no types and no `->`:
@@ -365,7 +351,7 @@ function meaning_of_life() returns answer {
   - then its capabilities, `with console, random`;
   - then its contracts.
 - **Types live in the documentation directly above** (§ 3.2). Each parameter, the result and each capability has a
-  role that ends with `as` and its type: `line: What the player typed, as text.` A signature whose documentation lacks a
+  role that ends with `as` and its type: `line: What the player typed, as string.` A signature whose documentation lacks a
   type does not compile, so every function with parameters or a result is documented, private ones included.
 - **The result is a name.** `returns verdict` declares `verdict` as a variable of the function, unassigned until the
   body assigns it.
@@ -392,27 +378,70 @@ function meaning_of_life() returns answer {
 
 - **`--` starts a comment** that runs to the end of its line.
 - **A line of three or more dashes, alone, opens a block comment,** and the next such line closes it.
-  - The closing line should have as many dashes as the opening one. A block whose two lines differ is a lint error,
-    not a compile error.
-  - The width belongs to the block, not to the file: editing one block never changes another.
+  - An author types `---`. `y format`, and every editor and agent that writes Y, widens each such line to a rule that
+    runs to the line limit (120 columns) from its indentation, so committed code shows a line across the page between
+    a declaration's documentation and its neighbours, never a bare `---`.
+  - Two lines of one block that differ in width are a lint error, which formatting fixes.
 - **A comment directly above a declaration, with no blank line between, is its documentation** (§ 3.2). Every other
   comment is free text.
 - `//` and `/* */` are not comments in Y. The diagnostic names `--`, and `y fix` rewrites them.
 - Commented-out code is a lint error. Delete it; history keeps it.
-- Blocks are braced. `y format` has no options and preserves every comment. It produces one layout for any program, so
-  every diff is about content.
+- **Blocks are a colon and indentation, as in Python.** A line that opens a block ends with `:`, and the block is the
+  lines indented four spaces beneath it. A header that does not fit on one line continues on lines indented eight
+  spaces, and its last line ends with the colon. There are no braces.
+- Lines are at most 120 columns. `y format` has no options and preserves every comment. It produces one layout for any
+  program, so every diff is about content.
 - A function body longer than 60 lines is a lint warning, and longer than 120 is an error. A reviewable sample fits on
   a screen.
 
 ### 3.2 Declarations and documentation
 
-**Declaration kinds.** Y has few: `function`, `record`, `type`, `state`, `transition`, `trait`, `implementation`,
-`constant`, `unit`, `schema`, `migrate`, `command`, `handler`, `workflow`, `derived`, `rule`, `test`.
+**Declaration kinds.** Y has few: `function`, `record`, `type`, `enumeration`, `state`, `transition`, `trait`,
+`implementation`, `constant`, `constants`, `unit`, `schema`, `migrate`, `command`, `handler`, `workflow`, `derived`,
+`rule`, `test`.
 
 - There are no classes, facets, singletons, factory methods or inheritance.
 - A constructor is an ordinary function returning the type (`new`, `parse`, `from_…`).
 - Behaviour is shared through traits with explicit `implementation`s. Every iteration that had more kinds of type than
   this spent its time reconciling them.
+
+**Constants, constant groups and enumerations** keep the toolchain's syntax (`y-language-toolchain`, language reference
+§ 3, "Constant, Constants, and Enumeration Declarations"):
+
+```y
+-- The number of seconds in a minute.
+public seconds_per_minute is constant int64 = 60
+
+-- The rules every game is played by.
+public constants game_rules:
+    -- How many wrong guesses a player may make.
+    allowed_misses is count<element> = 6
+    constants scoring:
+        points_per_hit = 10
+
+-- Where a game stands.
+public enumeration outcome:
+    playing
+    won
+    lost
+
+-- How a job ended, as the string a log shows.
+public enumeration job_status is string:
+    ok = "OK"
+    failed = "FAILED"
+```
+
+- A single constant is `name is constant type = value`, and its type may be left to the value: `answer is constant = 42`.
+  Inside a `constants` group the word `constant` is not repeated, and a group may hold groups. A member is reached
+  through its group: `game_rules.allowed_misses`.
+- Every value is computed while the program is built (§ 3.17) and holds nothing mutable.
+- An enumeration names a closed set of values. They are numbered from zero unless given values, and the values have
+  one type, the smallest unsigned integer that holds them unless the enumeration names one (`is string`). A value is
+  written `.won` where the type is known, and `outcome.won` where it is not.
+- An enumeration is the type for a set of cases that carry nothing, failure types included. A `type` with `case`s is
+  for cases that carry data (§ 3.3).
+- `is` appears only here, in `is constant` and in a typed member or enumeration (§ 7 records why `is` was dropped
+  everywhere else).
 
 **Documentation is grammar, written as a comment.** The April 2026 spec block was right that every declaration a reader
 relies on needs structured documentation in a closed grammar. It went further and made the block *replace* the
@@ -422,14 +451,14 @@ Its documentation is the comment directly above it: a `--` line, or a `---` bloc
 set of roles, and it is where a function's types are written:
 
 ```y
----
+------------------------------------------------------------------------------------------------------------------------
 Takes money out of an account.
 
 account: The account to debit, as account.
 amount: How much to take, as money<isk>.
 debit: A receipt for the debit, as receipt.
 fails insufficient_funds: The balance is lower than the amount.
----
+------------------------------------------------------------------------------------------------------------------------
 public function withdraw(mutable account, amount) returns debit fails withdraw_error
 ```
 
@@ -482,23 +511,21 @@ There is no truthiness, no null, and no implicit numeric widening.
 **Records** have named, typed fields and may declare named invariants:
 
 ```y
-record stay {
-    guest: guest_id,
-    arrives: date,
-    departs: date,
+record stay:
+    guest: guest_id
+    arrives: date
+    departs: date
 
     invariant departs_after_arrival = (departs > arrives)
-}
 ```
 
 **Sum types** are closed. Every case payload has named fields, because Y has no tuples anywhere:
 
 ```y
-type payment_result {
+type payment_result:
     case approved(authorization: authorization)
     case declined(reason: decline_reason)
     case unavailable
-}
 ```
 
 Referring to a case:
@@ -513,22 +540,21 @@ Referring to a case:
 
 - `t?` is a distinct type from `t`. Neither converts to the other implicitly.
 - `??` supplies a default, `?.` reaches through absence, and `match` covers `.some(value)` and `.none`.
-- **A condition narrows.** Inside `if found = (user != .none) { ... }`, and after `if missing = (user == .none) {
-  return ... }`, `user` is a `user`, no longer a `user?`. Nothing is written for this: every condition adds its predicate as a fact at the
+- **A condition narrows.** Inside `if found = (user != .none): ...`, and after `if missing = (user == .none): return ...`, `user` is a `user`, no longer a `user?`. Nothing is written for this: every condition adds its predicate as a fact at the
   points it guards (constraint language § 11.1.1), and the type checker reads the fact.
   - The fact ends where the value may change: an assignment to a `variable`, or a call that takes it `mutable`. A field path
     such as `order.customer` narrows the same way, until something may write to that path.
   - The same facts discharge a callee's `requires` (§ 3.11) when they imply it.
 
 **Several results.** A function that produces several results returns one record. For a one-off result, its type is
-an anonymous record with named fields: `parts: The quotient and the remainder, as { quotient: int64, remainder: int64 }.`
+an anonymous record with named fields: `parts: The quotient and the remainder, as record(quotient: int64, remainder: int64).`
 
 **Refined types.** A type may be a named restriction of another. Each restriction has a name, and construction checks
 all of them:
 
 ```y
 type quantity = int64 where positive = (value > 0)
-type email_address = text where has_one_at_sign = (value.count_of('@') == 1)
+type email_address = string where has_one_at_sign = (value.count_of('@') == 1)
 ```
 
 - `quantity.new(n)` returns a `quantity`, and fails with `constraint_violation`.
@@ -547,7 +573,7 @@ type email_address = text where has_one_at_sign = (value.count_of('@') == 1)
 
 The same mechanism gives every length and index its unit:
 
-- `text.count()` gives a `count<rune>`, `bytes.count()` a `count<byte>`, and `list.count()` a `count<element>`.
+- `string.count()` gives a `count<rune>`, `bytes.count()` a `count<byte>`, and `list.count()` a `count<element>`.
 - `index<rune>` does not index `bytes`.
 - An integer *literal* takes its count or index unit from context, so `list.count() == 1` needs no ceremony. An `int64`
   *value* never converts implicitly. Physical units get no such allowance: `within 5` is an error, because `5` could
@@ -555,12 +581,12 @@ The same mechanism gives every length and index its unit:
 - This is the July 2026 rule (*always name the unit: `length_in_bytes`, never `size`*) and the March 2026 typed lengths,
   moved from naming convention into the type checker.
 
-**Text.**
+**Strings.**
 
-- `text` is a sequence of `rune`s. A `rune` is exactly one extended grapheme cluster, and text is NFC-normalised when
-  it is constructed, so canonically equivalent text is equal.
+- `string` is a sequence of `rune`s. A `rune` is exactly one extended grapheme cluster, and a string is NFC-normalised
+  when it is constructed, so canonically equivalent strings are equal.
 - `bytes` is a separate type. Conversion between the two names its encoding and what to do with invalid input
-  (`text.decode_utf8(bytes, on_invalid: .reject)`), and rejecting is the default.
+  (`string.decode_utf8(bytes, on_invalid: .reject)`), and rejecting is the default.
 - Nothing is locale-sensitive by default. Case folding, collation and formatting take a `locale` argument, and no
   locale is ever inferred from the process.
 
@@ -593,11 +619,10 @@ A function that can fail names its failure type in its signature: `returns debit
   rollback-on-failure rule, carried into the language.
 
 ```y
-match load_customer(id) {
-    .ok(customer) => greet(customer),
-    .err(.not_found(id: missing_id)) => offer_signup(missing_id),
-    .err(.unavailable(retry_after)) => try_later(retry_after),
-}
+match load_customer(id):
+    .ok(customer) => greet(customer)
+    .err(.not_found(id: missing_id)) => offer_signup(missing_id)
+    .err(.unavailable(retry_after)) => try_later(retry_after)
 ```
 
 **Faults are not failures.** A violated contract, arithmetic overflow, an exhausted allocator, a reached `todo`, or a
@@ -622,19 +647,19 @@ This proposal restores the rule and extends it to every predicate in the languag
 
 | Construct | Form |
 | --- | --- |
-| Condition | `if found = (items[middle] == target) { ... }` |
-| Alternative | `else if go_right = (items[middle] < target) { ... }` |
-| Loop | `while searching = (low <= high) { ... }` |
+| Condition | `if found = (items[middle] == target): ...` |
+| Alternative | `else if go_right = (items[middle] < target): ...` |
+| Loop | `while searching = (low <= high): ...` |
 | Guard | `.some(user) when active = (user.last_seen > cutoff) => ...` |
 | Precondition, guarantee | `requires positive = (amount > 0isk)`, `ensures debited = (...)` |
 | Invariant, constraint | `invariant departs_after_arrival = (...)`, `where positive = (value > 0)` |
 | Assertion | `assert charged_once = (charges.committed().count() == 1)` |
-| Transaction, task | `atomic hold_one_unit { ... }`, `task profile = load_profile(id)` |
+| Transaction, task | `atomic hold_one_unit: ...`, `task profile = load_profile(id)` |
 
 **Exemptions and defaults.**
 
-- A predicate that is already a single boolean name, or `not` of one, needs no second name: `if is_empty { ... }`.
-- `else` may be named (`else in_range { ... }`). An unnamed `else` is identified as the last condition's name plus
+- A predicate that is already a single boolean name, or `not` of one, needs no second name: `if is_empty: ...`.
+- `else` may be named (`else in_range: ...`). An unnamed `else` is identified as the last condition's name plus
   `.else`.
 - A `for` loop is named by its variable. Inside nested loops, `break` and `continue` must name their loop:
   `break line`.
@@ -651,28 +676,25 @@ This proposal restores the rule and extends it to every predicate in the languag
   wrong. This is ai.lang's "zoom", as a view rather than a data model.
 
 ```y
----
+------------------------------------------------------------------------------------------------------------------------
 Finds where a value sits in a sorted list.
 
 target: The value to look for, as int64.
 items: The list to search, as sorted_list<int64>.
 position: The target's position, or nothing when it is absent, as index<element>?.
----
-public function position_of(target, items) returns position {
+------------------------------------------------------------------------------------------------------------------------
+public function position_of(target, items) returns position:
     variable low = items.first_index()?
     variable high = items.last_index()?
-    while searching = (low <= high) {
+    while searching = (low <= high):
         let middle = low.midpoint(high)
-        if found = (items[middle] == target) {
+        if found = (items[middle] == target):
             return position = .some(middle)
-        } else if go_right = (items[middle] < target) {
+        else if go_right = (items[middle] < target):
             low = middle.next()
-        } else {
+        else:
             high = middle.previous()?
-        }
-    }
     return position = .none
-}
 ```
 
 In a function whose result is optional, `?` on an absent value returns with the result absent.
@@ -732,7 +754,7 @@ holds values, never references to them. Borrows exist only in the generated code
 - Release that can fail declares its failure type, and a scope that holds such a resource includes that failure in its
   own signature. Release failures are never discarded.
 
-**Arenas.** An arena (`arena parse_scratch { ... }`) releases everything allocated inside it at once, and nothing
+**Arenas.** An arena (`arena parse_scratch: ...`) releases everything allocated inside it at once, and nothing
 allocated there may escape. Arena ownership says *when a resource is destroyed*, never *when an operation may run*.
 A socket owned by an arena is still an external effect (§ 3.9). This is the September distinction, unchanged.
 
@@ -743,7 +765,7 @@ effects are what capabilities do. This merges September's two open questions, ef
 into one clause:
 
 ```y
----
+------------------------------------------------------------------------------------------------------------------------
 Exports one month's invoices as files.
 
 month: The month to export, as month.
@@ -752,9 +774,9 @@ invoices: The stored invoices, as store<invoice>.
 uploads: Where the files go, as file_system.
 clock: The time the export is stamped with, as clock.
 fails write_failed: A file could not be written.
----
+------------------------------------------------------------------------------------------------------------------------
 public function export_invoices(month) returns exported fails export_error
-    with invoices, uploads, clock
+        with invoices, uploads, clock
 ```
 
 **The capability kinds**, each declaring the effects it carries:
@@ -786,7 +808,7 @@ needs no annotation because the missing clause is the annotation. Contract expre
 
 - The entry point receives the root, `system`, and every other capability derives from it.
 - There is no way to construct a capability from nothing, read one from a global, or recover one from a type.
-- Attenuation only narrows: `with uploads = uploads.subtree(path"/var/app/exports") { ... }`. This is the single place
+- Attenuation only narrows: `with uploads = uploads.subtree(path"/var/app/exports"): ...`. This is the single place
   where a name may be rebound in an inner scope, and it is allowed because it can only reduce authority.
 - A package manifest lists the root capabilities a program may request. A dependency's public functions declare what
   they require, so a dependency upgrade that widens required authority is a review item, not a surprise. This is
@@ -821,10 +843,11 @@ the language's job.
 
 **Every wait is bounded, and the bound is checked.**
 
-- `within 30s { ... }` sets an absolute deadline shared by everything inside it. `queue.receive() within 5s` bounds a
+- `within 30s?: ...` sets an absolute deadline shared by everything inside it. `queue.receive() within 5s` bounds a
   single operation.
 - A nested `within` can only shorten the deadline, never extend it.
-- Expiry is a typed failure (`expired`), propagated like any other.
+- Expiry is a typed failure (`expired`). `within 5s?:` propagates it, as `?` after a call propagates a failure, so the
+  exit is spelled where the reader looks.
 - A suspension with no finite bound above it does not compile. A wait that is genuinely indefinite is written
   `forever because "..."`, which requires the `forever` capability and is a claim (§ 3.15).
 
@@ -835,14 +858,14 @@ the language's job.
 - A scope does not exit until its tasks finish.
 - A failing task cancels its siblings, and the scope's failure type includes the failures of its tasks.
 - Two tasks may not hold the same value `mutable`, nor one `mutable` while another reads it.
-- Work that outlives its scope is written `detach because "..." within 1h { ... }`. It requires the `detach`
+- Work that outlives its scope is written `detach because "..." within 1h: ...`. It requires the `detach`
   capability and carries an explicit lifetime.
 
 **Cancellation.**
 
 - Cancellation arrives only at suspension points, as a failure.
 - Cleanup during cancellation has its own bound.
-- A short critical region may be protected from cancellation (`uncancellable within 50ms { ... }`), and only with a
+- A short critical region may be protected from cancellation (`uncancellable within 50ms: ...`), and only with a
   bound.
 - Cancellation never undoes a committed transaction or withdraws a command that committed with it.
 
@@ -850,10 +873,9 @@ the language's job.
 "fail on the first failure". Other policies are written on the scope:
 
 ```y
-within 24h supervise(restart: .each_failed, at_most: 5, per: 10min) {
+within 24h supervise(restart: .each_failed, at_most: 5, per: 10min):
     task ingest = run_ingest()
     task compaction = run_compaction()
-}
 ```
 
 - A restarted task starts from its declared initial state. Shared state it committed survives, so restart is never a
@@ -887,18 +909,14 @@ hand you. There is no global state to reach.
 
 ```y
 variable job = .none
-atomic take_next_job {
+atomic take_next_job:
     job = jobs.pending.pop_front()
-    if nothing_pending = (job == .none) {
+    if nothing_pending = (job == .none):
         retry
-    }
-}
-orelse atomic take_retried_job {
+orelse atomic take_retried_job:
     job = jobs.retried.pop_front()
-    if nothing_retried = (job == .none) {
+    if nothing_retried = (job == .none):
         retry
-    }
-}
 ```
 
 **Semantics:**
@@ -936,36 +954,31 @@ decision someone has to make:
 
 ```y
 -- Charges a buyer's payment method for a hold.
-command charge_card {
-    hold: hold_id,
-    amount: money<isk>,
-    method: payment_method_id,
+command charge_card:
+    hold: hold_id
+    amount: money<isk>
+    method: payment_method_id
 
-    policy {
+    policy:
         deduplicate_by: hold
         idempotent: true
         retry: backoff(first: 1s, factor: 2, attempts: 8)
         deadline: 24h
-        on_abandon: compensate release_hold { hold: hold }
-    }
-}
+        on_abandon: compensate release_hold(hold: hold)
 
----
+------------------------------------------------------------------------------------------------------------------------
 Performs the charge; runs outside any transaction.
 
 command: The charge to make, as charge_card.
 charged: The payment gateway's receipt, as charge_receipt.
 gateway: The payment gateway, as http<payment_gateway>.
 fails declined: The gateway refused the charge.
----
+------------------------------------------------------------------------------------------------------------------------
 handler charge_card(command) returns charged fails charge_error
-    with gateway
-{
-    within 30s {
+        with gateway:
+    within 30s?:
         charged = gateway.charge(idempotency_key: command.id, method: command.method, amount: command.amount)?
-    }?
     return charged
-}
 ```
 
 - `enqueue` submits a command from inside a transaction, which is the only place it may appear. The command is durable
@@ -985,7 +998,7 @@ handler charge_card(command) returns charged fails charge_error
 **Workflows** are durable, long-running functions:
 
 ```y
----
+------------------------------------------------------------------------------------------------------------------------
 Takes a held item from payment to shipment.
 
 hold: The hold to fulfil, as hold_id.
@@ -995,17 +1008,14 @@ charges: Where charges are submitted, as submit<charge_card>.
 shipments: Where shipments are submitted, as submit<create_shipment>.
 fails payment_declined: The charge was refused.
 fails payment_unreachable: The charge could not be delivered.
----
+------------------------------------------------------------------------------------------------------------------------
 workflow fulfil(hold) returns shipped fails fulfilment_error
-    with orders, charges, shipments
-{
+        with orders, charges, shipments:
     let order = orders.for_hold(hold)?
-    match submit charge_card { hold: hold, amount: order.total, method: order.payment_method } {
-        .ok(receipt) => return shipped = submit create_shipment { order: order.id, receipt: receipt.id }?,
-        .err(.failed(reason)) => fail .payment_declined(reason),
-        .err(.abandoned(abandonment)) => fail .payment_unreachable(abandonment),
-    }
-}
+    match submit charge_card(hold: hold, amount: order.total, method: order.payment_method):
+        .ok(receipt) => return shipped = submit create_shipment(order: order.id, receipt: receipt.id)?
+        .err(.failed(reason)) => fail .payment_declined(reason)
+        .err(.abandoned(abandonment)) => fail .payment_unreachable(abandonment)
 ```
 
 - `submit` suspends the workflow durably until the command's outcome is recorded.
@@ -1024,24 +1034,21 @@ workflow fulfil(hold) returns shipped fails fulfilment_error
 **Contracts** are part of the declaration and, like every predicate, are named:
 
 ```y
----
+------------------------------------------------------------------------------------------------------------------------
 Takes money out of an account.
 
 account: The account to debit, as account.
 amount: How much to take, as money<isk>.
 debit: A receipt for the debit, as receipt.
 fails insufficient_funds: The balance is lower than the amount.
----
+------------------------------------------------------------------------------------------------------------------------
 public function withdraw(mutable account, amount) returns debit fails withdraw_error
-    requires positive_amount = (amount > 0isk)
-    ensures debited_exactly = (account.balance == old(account.balance) - amount)
-{
-    if short = (account.balance < amount) {
+        requires positive_amount = (amount > 0isk)
+        ensures debited_exactly = (account.balance == old(account.balance) - amount):
+    if short = (account.balance < amount):
         fail .insufficient_funds(shortfall: amount - account.balance)
-    }
     account.balance -= amount
-    return debit = receipt { account: account.id, amount: amount }
-}
+    return debit = receipt(account: account.id, amount: amount)
 ```
 
 **A precondition and a failure are not the same thing.** A zero amount is the caller's bug, so it is `requires`. An
@@ -1072,26 +1079,24 @@ documentation rules make the choice visible: a `requires` has no `fails` role, a
 
 ```y
 -- An order's life from creation to payment.
-state order {
+state order:
     id: order_id
     lines: list<line>
 
     case created
-    case payment_pending { charge: command_id }
-    case paid { receipt: receipt_id }
-    case cancelled { reason: cancel_reason }
-}
+    case payment_pending(charge: command_id)
+    case paid(receipt: receipt_id)
+    case cancelled(reason: cancel_reason)
 
----
+------------------------------------------------------------------------------------------------------------------------
 Records that payment was requested for a new order.
 
 order: The new order, as order.created.
 charge: The charge command that was submitted, as command_id.
 pending: The order, waiting for payment, as order.payment_pending.
----
-transition request_payment(order, charge) returns pending {
-    return pending = order.becomes(.payment_pending { charge: charge })
-}
+------------------------------------------------------------------------------------------------------------------------
+transition request_payment(order, charge) returns pending:
+    return pending = order.becomes(.payment_pending(charge: charge))
 ```
 
 - `order.created` is a type, and a transition takes the value it starts from: the name passed to it cannot be used
@@ -1111,17 +1116,15 @@ A record that outlives its process has a second type: the one on disk. Y makes t
 
 ```y
 -- A customer as stored, version 3.
-schema customer v3 {
+schema customer v3:
     key id: customer_id
-    name: text
+    name: string
     email: email_address?
     marketing_consent: consent
-}
 
 -- Version 3 adds explicit marketing consent; nobody is assumed to have given it.
-migrate customer v2 to v3 {
+migrate customer v2 to v3:
     marketing_consent = .not_given
-}
 ```
 
 **Schemas.**
@@ -1177,11 +1180,11 @@ let active_names = users.filter(user => user.active).map(user => user.name).sort
 ```y
 derived active_user_count: count<element> = users.filter(user => user.active).count()
 
----
+------------------------------------------------------------------------------------------------------------------------
 A customer whose payments have failed often and who owes a lot.
 
 customer: The customer to judge, as customer.
----
+------------------------------------------------------------------------------------------------------------------------
 rule high_risk(customer) = (customer.failed_payments > 3) and (customer.outstanding > 100_000isk)
 ```
 
@@ -1242,9 +1245,9 @@ Some things the compiler cannot check. Y does not pretend otherwise; it makes ea
 
 | Claim | What it asserts | Also requires |
 | --- | --- | --- |
-| `unsafe because "..." { ... }` | This native or foreign code upholds Y's rules | `native` |
+| `unsafe because "...": ...` | This native or foreign code upholds Y's rules | `native` |
 | `forever because "..."` | This wait is meant to be unbounded | `forever` |
-| `detach because "..." within 1h { ... }` | This work may outlive its scope | `detach` |
+| `detach because "..." within 1h: ...` | This work may outlive its scope | `detach` |
 | `reveal(secret) because "..."` | This sensitive value may be seen here | `reveal` |
 | `assume name = (predicate) because "..."` | The prover may take this as true without proof | — |
 | `allow(Y2031) because "..."` | This lint does not apply here | — |
@@ -1288,16 +1291,15 @@ Together with claims and the coverage gate, this gives Y ai.lang's fifth invaria
 `compile` runs a call while the program is built, and the program holds the result as a value:
 
 ```y
----
+------------------------------------------------------------------------------------------------------------------------
 Computes the CRC-32 of some bytes.
 
 bytes: The bytes to check, as bytes.
 crc: Their CRC-32, as uint32.
----
-function checksum(bytes) returns crc {
+------------------------------------------------------------------------------------------------------------------------
+function checksum(bytes) returns crc:
     let table = compile crc_table(polynomial: 0xEDB8_8320)
     ...
-}
 ```
 
 **What can be compiled.**
@@ -1309,7 +1311,7 @@ function checksum(bytes) returns crc {
 - Every argument is known when the program is built: a literal, a `constant`, or a name bound by another `compile`. Any
   other argument is an error that names it.
 - The result holds no capability. It cannot hold a reference either, because Y has none (§ 3.6).
-- A `constant` declaration is evaluated the same way, so `constant standard_crc_table: list<uint32> =
+- A constant is evaluated the same way, so `standard_crc_table is constant list<uint32> =
   crc_table(polynomial: 0xEDB8_8320)` needs no keyword. `compile` is the same evaluation inside a body, for a value that one function uses.
 
 **What evaluation produces.**
@@ -1560,13 +1562,13 @@ premise changed, or because the iteration that tried them showed their cost. The
 
 | Dropped | Held in | Replaced by | Why |
 | --- | --- | --- | --- |
-| Significant indentation | YAPL → April 2026 | Braces and one formatter | Whitespace does not survive every tool, chat window and review UI an agent's output passes through; the formatter gives the same visual structure |
-| `name is type`, and `is` in five roles | YAPL → April 2026 | `name: type` | `is` meant annotation, predicate sugar, capture, mutability and optionality; the March 2026 review called it the most ambiguous token in the language |
+| Braces for blocks | Earlier drafts of this proposal | A colon and indentation, as in Python and YAPL v4 | Indentation is what a reader follows anyway; the formatter and the parser agree on it, and an agent that sends code through a tool that eats whitespace is told so by the parser |
+| `name is type`, and `is` in five roles | YAPL → April 2026 | `name: type`, except in constants and enumerations, which keep `is constant` and `is <type>` | `is` meant annotation, predicate sugar, capture, mutability and optionality; the March 2026 review called it the most ambiguous token in the language |
 | File-wide width-matched `---` / `===` / `~~~` comment blocks | YAPL → April 2026 | `--` lines, and `---` blocks whose width belongs to each block | File-wide delimiter width makes one edit rewrite many lines of diff |
 | `//` and `///` comments | Earlier drafts of this proposal | `--` and `---`, Y's own since YAPL; documentation is the comment above a declaration | Spelling borrowed for agents' habits, which a diagnostic and `y fix` correct instead |
 | Abbreviated keywords and names: `pub`, `fn`, `var`, `const`, `impl`, `mut`, `Int`, `Bool` | Earlier drafts of this proposal | `public`, `function`, `variable`, `constant`, `implementation`, `mutable`, `int64`, `boolean` | The no-abbreviation rule binds the language's own words too; the sized numeric types and standard units are the few abbreviations kept |
 | `PascalCase` for types, cases, traits, states and commands | Earlier drafts of this proposal | `lower_snake_case` for every identifier, as in YAPL; any other casing is a compile error | One casing rule with no exceptions; a type is told from a value by where it stands |
-| Types in signatures, `->` and `T ! E` | Earlier drafts of this proposal | `function f(a, mutable b) returns result fails e`; each type in the role that documents its name (`a: ..., as text.`) | Few symbols; a signature reads as words, and every name is documented with its type in one place |
+| Types in signatures, `->` and `T ! E` | Earlier drafts of this proposal | `function f(a, mutable b) returns result fails e`; each type in the role that documents its name (`a: ..., as string.`) | Few symbols; a signature reads as words, and every name is documented with its type in one place |
 | Unnamed results and an implicit last-expression result | Earlier drafts of this proposal | `returns name`, and `return name = value` | A result has a name, which its documentation explains, and every exit is a visible `return` or `fail` |
 | References in source: `&t`, `&mutable t`, `move`, borrowing results, `copy` types, `reference_counted<t>`, `weak<t>`; "no clone the programmer did not write" | September → earlier drafts of this proposal | Value semantics, `mutable` at both ends of a call; the compiler chooses borrows, moves and copies, and reports each copy | Ownership syntax is about memory, not intent, and is where agents fail most; value semantics keep what borrowing was for |
 | `if` and `match` as expressions; a ternary operator | Earlier drafts of this proposal | Statements; a value is assigned in each branch | A decision is a statement with a name and a place, never a value hidden inside an expression |
@@ -1680,8 +1682,9 @@ would have caught, the language has not yet done its job, and the packet or the 
 The complete list, so that the size of the surface is visible:
 
 ```text
-declarations   module use public function returns fails record type case state transition trait implementation
-               constant unit schema migrate to command handler workflow test derived rule transient self
+declarations   module from use public function returns fails record type case enumeration state transition trait
+               implementation constant constants is unit schema migrate to command handler workflow test derived rule
+               transient self
 contracts      requires ensures invariant where old assert
 control        if else match when for in while break continue return fail
 bindings       let variable mutable captures with arena compile

@@ -31,11 +31,10 @@ cancellation needs to propagate; and if cancellation propagates, failure isolati
 - ⚠️ `within` bounds a scope, and every suspension inside it shares the one deadline:
 
   ```y
-  within 30s {
+  within 30s:
       let user = load_user(id)
       let orders = load_orders(user.id)
       render(user, orders)
-  }
   ```
 
 - ⚠️ A scope's deadline is absolute, not a per-operation budget: three calls inside `within 30s` have
@@ -58,12 +57,11 @@ cancellation needs to propagate; and if cancellation propagates, failure isolati
 - ⚠️ `task` starts concurrent work belonging to the enclosing scope:
 
   ```y
-  within 10s {
+  within 10s:
       task user = load_user(id)
       task orders = load_orders(id)
 
       render(user, orders)
-  }
   ```
 
 - ⚠️ A scope does not exit until every task started in it has finished or been cancelled. There are no

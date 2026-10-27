@@ -26,15 +26,10 @@ worth naming:
   the same commit, so it exists if and only if the transaction committed.
 
   ```y
-  atomic {
+  atomic:
       order.status = .payment_pending
 
-      enqueue charge_card {
-          order_id: order.id
-          amount: order.total
-          payment_method: order.payment_method
-      }
-  }
+      enqueue charge_card(order_id: order.id, amount: order.total, payment_method: order.payment_method)
   ```
 
 - ⚠️ A command is a declared type with typed fields, and submitting one requires a capability for that
@@ -69,13 +64,11 @@ worth naming:
   speculative attempt.
 
   ```y
-  atomic {
+  atomic:
       order.status = .confirmed
 
-      afterCommit {
+      afterCommit:
           enqueue send_confirmation(order.id)
-      }
-  }
   ```
 
 - ⚠️ An `afterCommit` block observes the committed state, not the speculative state, and runs once per
@@ -109,14 +102,13 @@ worth naming:
   and the results of the commands it submitted are all reconstructable from durable state.
 
   ```y
-  workflow fulfill(order_id) {
+  workflow fulfill(order_id):
       let order = load_order(order_id)
 
       let payment = submit charge_card(order.payment)
       let shipment = submit create_shipment(order)
 
       complete(order, payment, shipment)
-  }
   ```
 
 - ⚠️ `submit` submits a durable command and suspends the workflow until its outcome is recorded, yielding

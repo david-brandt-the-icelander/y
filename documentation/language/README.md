@@ -22,10 +22,10 @@ wonder whether `within 5s` is a commitment. It is not. The bound is.
 The two statements that *are* about syntax, and are blocked:
 
 - ⚠️ **Y has a grammar** — a lexical structure, a reserved-word list, an expression precedence table,
-  and a rule for whether blocks are delimited by layout or by braces. The transcript leans toward
-  significant indentation; the working design's examples are braced, and the two are not reconciled.
-  ⛔ **Unblocked by** the language owner freezing the surface syntax. Nothing downstream of a parser can
-  be built without it, and it is the single most blocking decision in the corpus.
+  and a rule for how blocks are delimited. The language owner has decided the block rule: a colon and
+  indentation, as in Python, with `--` and `---` comments and `lower_snake_case` identifiers
+  → [`../../proposal/Y-proposal.md` § 3.1](../../proposal/Y-proposal.md#31-source-form). The rest of the
+  grammar is still to be written.
 - ⚠️ **Y has a macro or metaprogramming model**, or a decision that it has none.
   ⛔ **Unblocked by** the language owner. It is listed as open in § 31 with no stated leaning, and it
   constrains the parser, the HIR and what an agent is allowed to generate, so it cannot be deferred past
