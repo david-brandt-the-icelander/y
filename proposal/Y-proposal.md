@@ -275,7 +275,7 @@ person can judge: is five seconds right, and is this the behaviour the business 
 
 - A module is one file. Its first line is `module shop.checkout`, and it must match the path `src/shop/checkout.y`.
   The redundancy is deliberate: a sample shown out of context still says where it lives.
-- Imports name what they bring in: `from shop.inventory use inventory, item_id`. There are no wildcard imports, no
+- Imports name what they bring in: `from shop.inventory import inventory, item_id`. There are no wildcard imports, no
   re-exports and no relative paths. An import cycle is an error that lists the cycle.
 - The formatter sorts imports (standard library, then dependencies, then this package). Each name means the same thing
   everywhere in a package, so an alias (`as`) is allowed only to resolve a collision.
@@ -1736,7 +1736,7 @@ would have caught, the language has not yet done its job, and the packet or the 
 The complete list, so that the size of the surface is visible:
 
 ```text
-declarations   module from use public function returns fails record type case enumeration state transition trait
+declarations   module from import public function returns fails record type case enumeration state transition trait
                implementation constant constants is unit schema migrate to command handler workflow test derived rule
                transient self
 contracts      requires ensures invariant where old assert

@@ -1,8 +1,8 @@
 module hangman
 
-from standard.console use console, console_error
-from standard.random use random
-from standard.wait use forever
+from standard.console import console, console_error
+from standard.random import random
+from standard.wait import forever
 
 -- The rules every game is played by.
 public constants game_rules:
