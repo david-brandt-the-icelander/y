@@ -4,13 +4,13 @@ test a_letter_in_the_word_is_a_hit
            guess#in_word, shown_rune#known, shown_rune#known.else
 {
     given {
-        variable game = new_game(Word.new("gallows")?)
+        variable game = new_game(word.new("gallows")?)
     }
     when {
         let verdict = guess(mutable game, "l")?
     }
     then {
-        assert hit = (verdict == .Hit)
+        assert hit = (verdict == .hit)
         assert shown_twice = (masked(game) == "_ _ l l _ _ _")
     }
 }
@@ -20,60 +20,60 @@ test a_letter_not_in_the_word_is_a_miss
     covers guess#in_word.else
 {
     given {
-        variable game = new_game(Word.new("rope")?)
+        variable game = new_game(word.new("rope")?)
     }
     when {
         let verdict = guess(mutable game, "z")?
     }
     then {
-        assert miss = (verdict == .Miss)
+        assert miss = (verdict == .miss)
         assert recorded = (game.misses == ['z'])
     }
 }
 
 -- A letter guessed before is refused in either case, and costs nothing.
 test a_repeated_letter_is_refused
-    covers guess#repeated, guess!AlreadyGuessed
+    covers guess#repeated, guess!already_guessed
 {
     given {
-        variable game = Game { word: Word.new("rope")?, hits: Set.new(), misses: ['z'] }
+        variable game = game { word: word.new("rope")?, hits: set.new(), misses: ['z'] }
     }
     when {
         let refused = guess(mutable game, "Z")
     }
     then {
-        assert refused_as_repeated = (refused == .Err(.AlreadyGuessed(letter: 'z')))
+        assert refused_as_repeated = (refused == .err(.already_guessed(letter: 'z')))
         assert no_new_miss = (game.misses.count() == 1)
     }
 }
 
 -- A line of spaces is not a guess.
 test typing_nothing_is_not_a_guess
-    covers guess#nothing_typed, guess!Empty
+    covers guess#nothing_typed, guess!empty
 {
     given {
-        variable game = new_game(Word.new("rope")?)
+        variable game = new_game(word.new("rope")?)
     }
     when {
         let refused = guess(mutable game, "   ")
     }
     then {
-        assert refused_as_empty = (refused == .Err(.Empty))
+        assert refused_as_empty = (refused == .err(.empty))
     }
 }
 
 -- Two letters are not a guess.
 test two_letters_are_not_a_guess
-    covers guess#not_one_rune, guess!NotOneLetter
+    covers guess#not_one_rune, guess!not_one_letter
 {
     given {
-        variable game = new_game(Word.new("rope")?)
+        variable game = new_game(word.new("rope")?)
     }
     when {
         let refused = guess(mutable game, "ab")
     }
     then {
-        assert refused_as_two = (refused == .Err(.NotOneLetter(text: "ab")))
+        assert refused_as_two = (refused == .err(.not_one_letter(text: "ab")))
     }
 }
 
@@ -82,58 +82,58 @@ test a_digit_is_not_a_guess
     covers guess#not_a_letter
 {
     given {
-        variable game = new_game(Word.new("rope")?)
+        variable game = new_game(word.new("rope")?)
     }
     when {
         let refused = guess(mutable game, "7")
     }
     then {
-        assert refused_as_digit = (refused == .Err(.NotOneLetter(text: "7")))
+        assert refused_as_digit = (refused == .err(.not_one_letter(text: "7")))
     }
 }
 
 -- The last miss allowed hangs the man.
 test six_misses_hang_the_man
-    covers outcome#hanged
+    covers outcome_of#hanged
 {
     given {
-        let game = Game { word: Word.new("rope")?, hits: Set.new(), misses: ['a', 'b', 'c', 'd', 'f', 'g'] }
+        let game = game { word: word.new("rope")?, hits: set.new(), misses: ['a', 'b', 'c', 'd', 'f', 'g'] }
     }
     when {
-        let ending = outcome(game)
+        let ending = outcome_of(game)
     }
     then {
-        assert lost = (ending == .Lost)
+        assert lost = (ending == .lost)
     }
 }
 
 -- Finding every letter wins.
 test finding_every_letter_wins
-    covers outcome#hanged.else, outcome#solved
+    covers outcome_of#hanged.else, outcome_of#solved
 {
     given {
-        let game = Game { word: Word.new("rope")?, hits: Set.of(['r', 'o', 'p', 'e']), misses: ['a'] }
+        let game = game { word: word.new("rope")?, hits: set.of(['r', 'o', 'p', 'e']), misses: ['a'] }
     }
     when {
-        let ending = outcome(game)
+        let ending = outcome_of(game)
     }
     then {
-        assert won = (ending == .Won)
+        assert won = (ending == .won)
     }
 }
 
 -- A new game is still being played.
 test a_new_game_is_being_played
-    covers outcome#solved.else
+    covers outcome_of#solved.else
 {
     given {
-        let game = new_game(Word.new("rope")?)
+        let game = new_game(word.new("rope")?)
     }
     when {
-        let ending = outcome(game)
+        let ending = outcome_of(game)
     }
     then {
-        assert playing = (ending == .Playing)
+        assert playing = (ending == .playing)
     }
 }
 
@@ -171,31 +171,31 @@ test a_word_list_is_read_in_order
         let words = parse_word_list("rope  gallows")?
     }
     then {
-        assert both_in_order = (words == [Word.new("rope")?, Word.new("gallows")?])
+        assert both_in_order = (words == [word.new("rope")?, word.new("gallows")?])
     }
 }
 
 -- A list with no words is refused.
 test an_empty_word_list_is_refused
-    covers parse_word_list#empty, parse_word_list!Empty
+    covers parse_word_list#empty, parse_word_list!empty
 {
     when {
         let refused = parse_word_list("   ")
     }
     then {
-        assert refused_as_empty = (refused == .Err(.Empty))
+        assert refused_as_empty = (refused == .err(.empty))
     }
 }
 
 -- A list with a short word is refused, and the error names the word.
 test a_short_word_is_refused
-    covers parse_word_list!NotAWord
+    covers parse_word_list!not_a_word
 {
     when {
         let refused = parse_word_list("rope cat")
     }
     then {
-        assert refused_naming_it = (refused == .Err(.NotAWord(text: "cat")))
+        assert refused_naming_it = (refused == .err(.not_a_word(text: "cat")))
     }
 }
 
@@ -204,18 +204,18 @@ test a_player_who_finds_every_letter_wins
     covers play#playing, play#playing.else, play#closed.else, play#won
 {
     given {
-        let words = [Word.new("rope")?]
+        let words = [word.new("rope")?]
     }
     with {
-        console = fake Console(input: ["r", "o", "p", "e"])
-        random = fake Random(seed: 7)
-        forever = fake Forever
+        console = fake console(input: ["r", "o", "p", "e"])
+        random = fake random(seed: 7)
+        forever = fake forever
     }
     when {
         play(words)?
     }
     then {
-        assert announced = (console.written().last() == .Some("You win! The word was rope."))
+        assert announced = (console.written().last() == .some("You win! The word was rope."))
     }
 }
 
@@ -224,57 +224,57 @@ test a_player_who_misses_six_times_is_hanged
     covers play#won.else
 {
     given {
-        let words = [Word.new("rope")?]
+        let words = [word.new("rope")?]
     }
     with {
-        console = fake Console(input: ["a", "b", "c", "d", "f", "g"])
-        random = fake Random(seed: 7)
-        forever = fake Forever
+        console = fake console(input: ["a", "b", "c", "d", "f", "g"])
+        random = fake random(seed: 7)
+        forever = fake forever
     }
     when {
         play(words)?
     }
     then {
-        assert announced = (console.written().last() == .Some("Hanged! The word was rope."))
+        assert announced = (console.written().last() == .some("Hanged! The word was rope."))
     }
 }
 
 -- A console that closes in the middle of a game ends it with a failure.
 test a_closed_console_ends_the_game
-    covers play#closed, play!InputClosed
+    covers play#closed, play!input_closed
 {
     given {
-        let words = [Word.new("rope")?]
+        let words = [word.new("rope")?]
     }
     with {
-        console = fake Console(input: ["r"])
-        random = fake Random(seed: 7)
-        forever = fake Forever
+        console = fake console(input: ["r"])
+        random = fake random(seed: 7)
+        forever = fake forever
     }
     when {
         let ended = play(words)
     }
     then {
-        assert closed = (ended == .Err(.InputClosed))
+        assert closed = (ended == .err(.input_closed))
     }
 }
 
 -- A console that cannot be read ends the game with the console's error.
 test a_failing_console_ends_the_game
-    covers play!Console
+    covers play!console
 {
     given {
-        let words = [Word.new("rope")?]
+        let words = [word.new("rope")?]
     }
     with {
-        console = fake Console(input: [], read_fails: true)
-        random = fake Random(seed: 7)
-        forever = fake Forever
+        console = fake console(input: [], read_fails: true)
+        random = fake random(seed: 7)
+        forever = fake forever
     }
     when {
         let ended = play(words)
     }
     then {
-        assert failed_reading = (ended == .Err(.Console(error: ConsoleError.fake_read_failure())))
+        assert failed_reading = (ended == .err(.console(error: console_error.fake_read_failure())))
     }
 }

@@ -24,7 +24,7 @@ pub struct Word(String);
 impl Word {
     /// Checks both constraints of `Word`, in the order the Y source names them.
     pub fn new(value: String) -> Result<Word, ConstraintViolation> {
-        if !runes(&value).all(|rune| rune.is_ascii_lowercase()) { // y: Word#letters_only
+        if !runes(&value).all(|letter| letter.is_ascii_lowercase()) { // y: Word#letters_only
             return Err(ConstraintViolation { constraint: "hangman::Word#letters_only" });
         }
         if !(count(&value) >= 4) { // y: Word#long_enough
@@ -65,7 +65,7 @@ pub fn parse_word_list(text: &str) -> Result<Vec<Word>, WordListError> {
             continue;
         }
         match Word::new(piece.to_string()) {
-            Ok(word) => words.push(word),
+            Ok(parsed) => words.push(parsed),
             Err(_) => return Err(WordListError::NotAWord { text: piece.to_string() }),
         }
     }
@@ -119,11 +119,11 @@ pub fn new_game(word: Word) -> Game {
 /// - `game`: the game to judge.
 /// - Returns `Lost` once the player has used up the misses allowed, `Won` once every letter of the word is found, and
 ///   `Playing` otherwise.
-pub fn outcome(game: &Game) -> Outcome {
+pub fn outcome_of(game: &Game) -> Outcome {
     if game.misses.len() == ALLOWED_MISSES { // y: #hanged
         return Outcome::Lost;
     }
-    if runes(game.word.as_text()).all(|rune| game.hits.contains(&rune)) { // y: #solved
+    if runes(game.word.as_text()).all(|letter| game.hits.contains(&letter)) { // y: #solved
         return Outcome::Won;
     }
     Outcome::Playing
@@ -138,7 +138,7 @@ pub fn outcome(game: &Game) -> Outcome {
 /// - Fails `NotOneLetter`: the player typed more than one character, or one that is not a letter.
 /// - Fails `AlreadyGuessed`: the letter was guessed before. The game is unchanged.
 pub fn guess(game: &mut Game, line: &str) -> Result<Verdict, GuessError> {
-    require(outcome(game) == Outcome::Playing, "hangman::guess#still_playing");
+    require(outcome_of(game) == Outcome::Playing, "hangman::guess#still_playing");
     let trimmed = line.trim();
     if trimmed.is_empty() { // y: #nothing_typed
         return Err(GuessError::Empty);
@@ -153,7 +153,7 @@ pub fn guess(game: &mut Game, line: &str) -> Result<Verdict, GuessError> {
     if game.hits.contains(&letter) || game.misses.contains(&letter) { // y: #repeated
         return Err(GuessError::AlreadyGuessed { letter });
     }
-    if runes(game.word.as_text()).any(|rune| rune == letter) { // y: #in_word
+    if runes(game.word.as_text()).any(|each| each == letter) { // y: #in_word
         game.hits.insert(letter);
         return Ok(Verdict::Hit);
     }
@@ -164,12 +164,12 @@ pub fn guess(game: &mut Game, line: &str) -> Result<Verdict, GuessError> {
 
 /// Shows one letter of the word: the letter once it is found, and an underscore until then.
 ///
-/// - `rune`: the letter of the word.
+/// - `letter`: the letter of the word.
 /// - `hits`: the letters found so far.
 /// - Returns what the player sees in its place.
-fn shown_rune(rune: Rune, hits: &BTreeSet<Rune>) -> Rune {
-    if hits.contains(&rune) { // y: #known
-        return rune;
+fn shown_rune(letter: Rune, hits: &BTreeSet<Rune>) -> Rune {
+    if hits.contains(&letter) { // y: #known
+        return letter;
     }
     Rune('_')
 }
@@ -179,7 +179,7 @@ fn shown_rune(rune: Rune, hits: &BTreeSet<Rune>) -> Rune {
 /// - `game`: the game.
 /// - Returns each letter of the word, found or not, separated by spaces: `_ o _ e`.
 pub fn masked(game: &Game) -> String {
-    let shown: Vec<Rune> = runes(game.word.as_text()).map(|rune| shown_rune(rune, &game.hits)).collect();
+    let shown: Vec<Rune> = runes(game.word.as_text()).map(|letter| shown_rune(letter, &game.hits)).collect();
     join_runes(&shown, " ")
 }
 
@@ -251,7 +251,7 @@ pub fn play(words: &[Word], console: &mut Console, random: &mut Random, forever:
     let chosen = random.index_below(words.len());
     let mut game = new_game(words[chosen].clone()); // y: a copy, because new_game keeps its word and `words` is still read
     console.write_line("Hangman: find the word, one letter at a time.")?;
-    while outcome(&game) == Outcome::Playing { // y: #playing
+    while outcome_of(&game) == Outcome::Playing { // y: #playing
         let picture = gallows(game.misses.len());
         let shown = masked(&game);
         let missed = join_runes(&game.misses, " ");
@@ -273,7 +273,7 @@ pub fn play(words: &[Word], console: &mut Console, random: &mut Random, forever:
     }
     let final_picture = gallows(game.misses.len());
     console.write_line(&final_picture)?;
-    if outcome(&game) == Outcome::Won { // y: #won
+    if outcome_of(&game) == Outcome::Won { // y: #won
         console.write_line(&format!("You win! The word was {}.", game.word))?;
     } else {
         console.write_line(&format!("Hanged! The word was {}.", game.word))?;

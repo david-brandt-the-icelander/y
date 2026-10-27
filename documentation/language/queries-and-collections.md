@@ -51,7 +51,7 @@ incrementally, and an explicit loop is one it must execute as written.
   recomputed:
 
   ```y
-  derived activeUserCount =
+  derived active_user_count =
       users.where(.active).count()
   ```
 
@@ -76,9 +76,8 @@ incrementally, and an explicit loop is one it must execute as written.
 - ⚠️ `rule` declares a named predicate over data, holding exactly when its condition does:
 
   ```y
-  rule HighRiskCustomer(customer)
-  when customer.failedPayments > 3
-    && customer.outstandingBalance > 100_000kr
+  rule high_risk_customer(customer) =
+      (customer.failed_payments > 3) and (customer.outstanding_balance > 100_000kr)
   ```
 
 - ⚠️ A rule is usable as a predicate in a pipeline, in a contract, and in another rule.

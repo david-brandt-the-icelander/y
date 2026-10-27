@@ -19,80 +19,80 @@ told about, because the compiler enumerates the cases.
 - ⚠️ `record` declares a product type with named, typed, ordered fields.
 
   ```y
-  record Customer {
-      id: CustomerId
-      name: String
+  record customer {
+      id: customer_id
+      name: string
   }
   ```
 
 - ⚠️ A record with few fields may be declared positionally on one line, and the two forms are the same
-  type: `record Point(x: Float, y: Float)`.
+  type: `record point(x: float, y: float)`.
 - ⚠️ `type` declares a closed sum type. Each case names itself and carries zero or more payload types.
 
   ```y
-  type PaymentResult {
-      .Approved(Authorization)
-      .Declined(DeclineReason)
-      .Unavailable
+  type payment_result {
+      .approved(authorization)
+      .declined(decline_reason)
+      .unavailable
   }
   ```
 
-- ⚠️ A case is written `.Name`, and the type it belongs to is taken from the context the expression
+- ⚠️ A case is written `.name`, and the type it belongs to is taken from the context the expression
   appears in — the declared type of the binding, the parameter it is passed to, or the return type of the
   enclosing function. Where context does not determine a unique type, the case is written with its type
   qualified, and an ambiguous case with no qualification is a compile error rather than a guess.
 - ⚠️ A sum type is closed: its cases are fixed at declaration, and no other module adds one. Exhaustive
   matching depends on this and Y does not offer an open variant.
-- ⚠️ `Void` is the type of an expression that produces no value, and is an ordinary type: it may be
-  written as a return type, and a `T ! E` function that produces nothing on success is `Void ! E`.
+- ⚠️ `void` is the type of an expression that produces no value, and is an ordinary type: it may be
+  written as a result's type; a function that produces nothing on success has no `returns`, and may still `fail`.
 
 ## Absence
 
-- ⚠️ `T?` is a value that is either a `T` or absent. It is a distinct type from `T`, there is no null,
-  and no `T` is implicitly an absent `T?` or the reverse.
-- ⚠️ `??` supplies a value for the absent case: `user.nickname ?? user.name` has type `String` where
-  `nickname` is `String?`.
+- ⚠️ `t?` is a value that is either a `t` or absent. It is a distinct type from `t`, there is no null,
+  and no `t` is implicitly an absent `t?` or the reverse.
+- ⚠️ `??` supplies a value for the absent case: `user.nickname ?? user.name` has type `string` where
+  `nickname` is `string?`.
 - ⚠️ Absence is matched like any other case where the two branches do more than substitute a value, and
-  `match` over a `T?` is exhaustive in exactly the way it is over any sum type.
+  `match` over a `t?` is exhaustive in exactly the way it is over any sum type.
 
   ```y
   match customer {
-      .Some(c) => use(c)
-      .None    => notFound()
+      .some(found) => use(found)
+      .none        => not_found()
   }
   ```
 
-- ⚠️ `?.` reaches through absence: where `a` is `A?`, `a?.field` is the field's type made optional, and
+- ⚠️ `?.` reaches through absence: where `a` is `a_type?`, `a?.field` is the field's type made optional, and
   the chain produces absence without evaluating the rest.
 
 ## Failure
 
-- ⚠️ `T ! E` is the type of a computation that produces a `T` or fails with an `E`. It appears in a
-  signature exactly where a return type appears:
+- ⚠️ A function that produces a `customer` or fails with a `customer_error` says so in words, after the
+  name of its result; the result's type is in the documentation above it:
 
   ```y
-  function loadCustomer(id: CustomerId) -> Customer ! CustomerError
+  function load_customer(id) returns customer fails customer_error
   ```
 
 - ⚠️ A failure is an ordinary typed value. There is no unwinding, no side channel, no ambient handler,
   and no way for a failure to leave a function whose signature does not name it.
-- ⚠️ `?` propagates: applied to a `T ! E` expression inside a function returning `U ! E`, it yields the
-  `T` on success and returns the failure unchanged otherwise.
+- ⚠️ `?` propagates: applied to a call that can fail with `e`, inside a function that also fails with
+  `e`, it yields the call's result on success and returns the failure unchanged otherwise.
 - ⚠️ Where the enclosing function's failure type is a sum type with exactly one case whose payload is
   the inner failure type, `?` converts through that case, and the conversion is derived rather than
   written.
 
   ```y
-  type StartupError {
-      .Configuration(ConfigurationError)
-      .Database(DatabaseError)
-      .Network(NetworkError)
+  type startup_error {
+      .configuration(configuration_error)
+      .database(database_error)
+      .network(network_error)
   }
 
-  function startup() -> Application ! StartupError {
-      let configuration = loadConfiguration("app.json")?
+  function startup() returns started fails startup_error {
+      let configuration = load_configuration("app.json")?
       let database = connect(configuration.database)?
-      Application(configuration, database)
+      return started = application(configuration, database)
   }
   ```
 
@@ -100,11 +100,10 @@ told about, because the compiler enumerates the cases.
   program is rejected, naming both candidate cases. The compiler does not pick one.
 - ⚠️ A failure is narrowed by matching it, and a function may convert a failure set into a smaller one
   by handling the cases it can.
-- ⚠️⛔ **`T ! E` is either a distinct semantic channel in Core IR or sugar for a two-case sum type**,
-  and which one decides whether a single `match` can range over a call's successes and failures
-  together, whether `T ! E` and `T?` compose into one construct or two, and what a backend has to
-  lower. ⛔ **Unblocked by** the language owner. Everything above holds under either answer; the
-  matching syntax for a failing call does not.
+- ⚠️ A call that can fail has a two-case sum as its outcome, `.ok(value)` or `.err(failure)`, so a
+  single `match` ranges over a call's successes and failures together, and an optional result composes
+  with failure without a special rule
+  → [`../../proposal/Y-proposal.md` § 3.4](../../proposal/Y-proposal.md#34-failure).
 
 ## Matching
 
@@ -126,8 +125,8 @@ told about, because the compiler enumerates the cases.
 | Exhaustiveness claimed by a guarded arm alone | That the guard is not evidence, and which case is still uncovered | ⚠️ |
 | `?` where the enclosing signature names no compatible failure | The failure type produced and the failure type permitted | ⚠️ |
 | `?` where two cases of the enclosing failure type could wrap the inner one | Both candidates | ⚠️ |
-| A bare `.Case` whose type context is ambiguous | The candidate types | ⚠️ |
-| A `T` used where `T?` is expected, or the reverse | That absence is a distinct type | ⚠️ |
+| A bare `.case` whose type context is ambiguous | The candidate types | ⚠️ |
+| A `t` used where `t?` is expected, or the reverse | That absence is a distinct type | ⚠️ |
 
 ## Where it lives
 

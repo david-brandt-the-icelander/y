@@ -22,10 +22,10 @@ worth their syntax cost.
   signature rather than statements in its body.
 
   ```y
-  function withdraw(account: mutable Account, amount: Money) -> Receipt ! WithdrawError
-      requires amount > 0
-      requires account.balance >= amount
-      ensures account.balance == old(account.balance) - amount
+  function withdraw(mutable account, amount) returns debit fails withdraw_error
+      requires positive = (amount > 0)
+      requires covered = (account.balance >= amount)
+      ensures debited = (account.balance == old(account.balance) - amount)
   {
       ...
   }
@@ -51,7 +51,7 @@ worth their syntax cost.
 - ⚠️ Contracts are projected to independent verifiers rather than only to Y's own checker
   → [`../toolchain/oracles.md`](../toolchain/oracles.md).
 - ⚠️⛔ **How much refinement reasoning the type system carries** — whether a refinement like
-  `Money where amount > 0` is a type that propagates through inference, or whether contracts remain
+  `money where amount > 0` is a type that propagates through inference, or whether contracts remain
   attached to functions and checked at call sites — decides whether an ordinary program needs a prover in
   its build. § 31 lists contract and refinement syntax as open.
   ⛔ **Unblocked by** the language owner. The working design's stated intent is richer reasoning without
@@ -63,22 +63,22 @@ worth their syntax cost.
   them.
 
   ```y
-  state Order {
-      .Created
-      .PaymentPending
-      .Paid
-      .Cancelled
-      .Fulfilled
+  state order {
+      .created
+      .payment_pending
+      .paid
+      .cancelled
+      .fulfilled
   }
   ```
 
-- ⚠️ A state is usable as a type: `Order.Created` is the type of an order in that state, and a function may
+- ⚠️ A state is usable as a type: `order.created` is the type of an order in that state, and a function may
   take or return one.
 - ⚠️ `transition` declares a legal move between states, and consumes the value in the source state to
   produce it in the target:
 
   ```y
-  transition pay(order: Order.Created) -> Order.PaymentPending
+  transition pay(order) returns pending
   ```
 
 - ⚠️ A transition not declared does not exist. Calling an operation on a value in the wrong state is a
@@ -109,13 +109,13 @@ worth their syntax cost.
 - ⚠️ A unit is part of a type, and a literal may carry one:
 
   ```y
-  let timeout: Seconds = 5s
-  let distance: Kilometers = 12.4km
-  let amount: ISK = 1500kr
+  let timeout: seconds = 5s
+  let distance: kilometers = 12.4km
+  let amount: isk = 1500kr
   ```
 
-- ⚠️ Arithmetic respects units: adding two `Seconds` yields `Seconds`, dividing `Kilometers` by `Hours`
-  yields a speed, and adding `Seconds` to `Kilometers` is a compile error.
+- ⚠️ Arithmetic respects units: adding two `seconds` yields `seconds`, dividing `kilometers` by `hours`
+  yields a speed, and adding `seconds` to `kilometers` is a compile error.
 - ⚠️ A plain number does not silently become a united value, and a united value does not silently become a
   plain number.
 - ⚠️ Conversion between units of the same dimension is explicit at the point of conversion, and the
@@ -123,7 +123,7 @@ worth their syntax cost.
 - ⚠️ A program declares its own units and dimensions, so a currency, a wash cycle count or a request quota
   is a unit on the same footing as a metre.
 - ⚠️ Units are erased before code generation and cost nothing at runtime.
-- ⚠️ A currency is a dimension, not a scale factor — `ISK` and `EUR` are not interconvertible by a constant,
+- ⚠️ A currency is a dimension, not a scale factor — `isk` and `eur` are not interconvertible by a constant,
   and a program that adds them is rejected rather than converted at some ambient rate.
 - ⚠️ A deadline is a united value, so `within 5s` is type-checked rather than conventional
   → [Concurrency and time](concurrency-and-time.md).

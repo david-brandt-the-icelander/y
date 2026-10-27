@@ -135,24 +135,37 @@ Unless otherwise stated, syntax in this document is **illustrative rather than f
 ### 3.1 Functions
 
 ```y
-function square(x: Integer) -> Integer = x * x
-```
-
-Block form:
-
-```y
-function clamp(x: Integer, minimum: Integer, maximum: Integer) -> Integer {
-    if x < minimum {
-        return minimum
-    }
-
-    if x > maximum {
-        return maximum
-    }
-
-    x
+---
+x: The number to square, as int64.
+squared: x times x, as int64.
+---
+function square(x) returns squared {
+    return squared = x * x
 }
 ```
+
+With several paths:
+
+```y
+---
+x: The number to limit, as int64.
+minimum: The smallest allowed, as int64.
+maximum: The largest allowed, as int64.
+clamped: x, moved into the range, as int64.
+---
+function clamp(x, minimum, maximum) returns clamped {
+    if below = (x < minimum) {
+        return clamped = minimum
+    }
+    if above = (x > maximum) {
+        return clamped = maximum
+    }
+    return clamped = x
+}
+```
+
+(The October proposal settles the spelling: types are written in the documentation above a function, the result is
+named, and every identifier is `lower_snake_case`; `proposal/Y-proposal.md` § 3.1.)
 
 ### 3.2 Immutable and mutable bindings
 
@@ -168,17 +181,17 @@ variable attempts = 0
 ### 3.3 Optional values
 
 ```y
-Customer?
+customer?
 ```
 
-This represents either a `Customer` or absence.
+This represents either a `customer` or absence.
 
 Pattern matching is preferred where behavior differs materially between cases.
 
 ```y
 match customer {
-    .Some(c) => use(c)
-    .None    => notFound()
+    .some(found) => use(found)
+    .none        => not_found()
 }
 ```
 
@@ -189,18 +202,12 @@ Exact optional-case syntax is not yet frozen.
 The working notation is:
 
 ```y
-T ! E
+function load_customer(id) returns customer fails customer_error
 ```
 
 meaning:
 
-> produces a `T`, or fails with an `E`.
-
-For example:
-
-```y
-function loadCustomer(id: CustomerId) -> Customer ! CustomerError
-```
+> produces a `customer`, or fails with a `customer_error`.
 
 Failures are ordinary typed program values, not an untyped exception side-channel.
 
@@ -211,19 +218,19 @@ Pattern matching and propagation syntax should make the success path concise wit
 Working direction:
 
 ```y
-record Customer {
-    id: CustomerId
-    name: String
+record customer {
+    id: customer_id
+    name: string
 }
 ```
 
 Variants/sum types:
 
 ```y
-type PaymentResult {
-    .Approved(Authorization)
-    .Declined(DeclineReason)
-    .Unavailable
+type payment_result {
+    .approved(authorization)
+    .declined(decline_reason)
+    .unavailable
 }
 ```
 
@@ -231,9 +238,9 @@ Pattern matching is a core control-flow mechanism:
 
 ```y
 match result {
-    .Approved(authorization) => complete(authorization)
-    .Declined(reason) => reject(reason)
-    .Unavailable => retryLater()
+    .approved(authorization) => complete(authorization)
+    .declined(reason) => reject(reason)
+    .unavailable => retry_later()
 }
 ```
 
@@ -258,9 +265,11 @@ The semantic model should be able to represent:
 Illustrative syntax may include familiar forms:
 
 ```y
-function inspect(order: Order) { ... }
+-- order: The order to look at, as order.
+function inspect(order) { ... }
 
-function update(order: mutable Order) { ... }
+-- order: The order to change, as order.
+function update(mutable order) { ... }
 ```
 
 The October proposal settles this further: source has value semantics and no references at all, and
@@ -323,14 +332,14 @@ Shared mutable state is based around **software transactional memory (STM)** rat
 Illustrative declarations:
 
 ```y
-shared inventory: Inventory
+shared inventory: inventory
 ```
 
 Transactional mutation:
 
 ```y
 atomic {
-    let item = inventory[itemId]
+    let item = inventory[item_id]
 
     if item.available == 0 {
         retry
@@ -358,7 +367,7 @@ The runtime/compiler is responsible for:
 
 This is semantic retry, not a manually written polling loop.
 
-### 6.3 `orElse`
+### 6.3 `or_else`
 
 Alternative transactions can be composed.
 
@@ -366,10 +375,10 @@ Illustrative syntax:
 
 ```y
 atomic {
-    take(primaryQueue)
+    take(primary_queue)
 }
-orElse {
-    take(secondaryQueue)
+or_else {
+    take(secondary_queue)
 }
 ```
 
@@ -388,7 +397,7 @@ For example, this is invalid in principle:
 ```y
 atomic {
     account.balance -= amount
-    paymentProvider.charge(card, amount) -- forbidden
+    payment_provider.charge(card, amount) -- forbidden
 }
 ```
 
@@ -413,12 +422,12 @@ Illustrative direction:
 
 ```y
 atomic {
-    order.status = .PaymentPending
+    order.status = .payment_pending
 
-    enqueue ChargeCard {
-        orderId: order.id
+    enqueue charge_card {
+        order_id: order.id
         amount: order.total
-        paymentMethod: order.paymentMethod
+        payment_method: order.payment_method
     }
 }
 ```
@@ -454,10 +463,10 @@ Illustrative syntax:
 
 ```y
 atomic {
-    order.status = .Confirmed
+    order.status = .confirmed
 
     afterCommit {
-        enqueue SendConfirmation(order.id)
+        enqueue send_confirmation(order.id)
     }
 }
 ```
@@ -520,8 +529,8 @@ or:
 
 ```y
 within 30s {
-    let user = loadUser(id)
-    let orders = loadOrders(user.id)
+    let user = load_user(id)
+    let orders = load_orders(user.id)
     render(user, orders)
 }
 ```
@@ -544,8 +553,8 @@ Illustrative direction:
 
 ```y
 within 10s {
-    task user = loadUser(id)
-    task orders = loadOrders(id)
+    task user = load_user(id)
+    task orders = load_orders(id)
 
     render(user, orders)
 }
@@ -562,11 +571,11 @@ Long-running operations should be expressible as workflows rather than ad hoc co
 Illustrative syntax:
 
 ```y
-workflow fulfill(orderId: OrderId) {
-    let order = loadOrder(orderId)
+workflow fulfill(order_id) {
+    let order = load_order(order_id)
 
-    let payment = submit ChargeCard(order.payment)
-    let shipment = submit CreateShipment(order)
+    let payment = submit charge_card(order.payment)
+    let shipment = submit create_shipment(order)
 
     complete(order, payment, shipment)
 }
@@ -592,10 +601,10 @@ Y should support machine-checkable preconditions, postconditions, and invariants
 Illustrative syntax:
 
 ```y
-function withdraw(account: mutable Account, amount: Money) -> Receipt ! WithdrawError
-    requires amount > 0
-    requires account.balance >= amount
-    ensures account.balance == old(account.balance) - amount
+function withdraw(mutable account, amount) returns debit fails withdraw_error
+    requires positive = (amount > 0)
+    requires covered = (account.balance >= amount)
+    ensures debited = (account.balance == old(account.balance) - amount)
 {
     ...
 }
@@ -621,9 +630,9 @@ Physical and business units should be representable in the type system.
 Examples:
 
 ```y
-let timeout: Seconds = 5s
-let distance: Kilometers = 12.4km
-let amount: ISK = 1500kr
+let timeout: seconds = 5s
+let distance: kilometers = 12.4km
+let amount: isk = 1500kr
 ```
 
 This prevents entire classes of category errors and gives AI-generated code more semantic structure to work with.
@@ -660,19 +669,19 @@ Protocol state should be representable in types rather than only in runtime comm
 Example direction:
 
 ```y
-state Order {
-    .Created
-    .PaymentPending
-    .Paid
-    .Cancelled
-    .Fulfilled
+state order {
+    .created
+    .payment_pending
+    .paid
+    .cancelled
+    .fulfilled
 }
 ```
 
 Transitions can be restricted:
 
 ```y
-transition pay(order: Order.Created) -> Order.PaymentPending
+transition pay(order) returns pending
 ```
 
 The exact syntax is open.
@@ -698,10 +707,10 @@ Schema evolution should not be an unrelated string-based side system.
 Illustrative direction:
 
 ```y
-schema Customer v3 {
-    id: CustomerId
-    name: String
-    email: Email?
+schema customer v3 {
+    id: customer_id
+    name: string
+    email: email?
 }
 ```
 
@@ -716,16 +725,15 @@ Y may include a declarative subset for facts, rules, derived values, and increme
 Examples:
 
 ```y
-derived activeUserCount =
+derived active_user_count =
     users.where(.active).count()
 ```
 
 and:
 
 ```y
-rule HighRiskCustomer(customer)
-when customer.failedPayments > 3
-  && customer.outstandingBalance > 100_000kr
+rule high_risk_customer(customer) =
+    (customer.failed_payments > 3) and (customer.outstanding_balance > 100_000kr)
 ```
 
 The goal is not to turn the entire language into Datalog.

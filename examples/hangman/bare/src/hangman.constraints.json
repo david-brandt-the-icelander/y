@@ -147,7 +147,7 @@
     },
     {
       "kind": "function",
-      "name": "hangman_example::hangman::outcome",
+      "name": "hangman_example::hangman::outcome_of",
       "visible": "public",
       "params": [
         { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
@@ -167,7 +167,7 @@
       "clauses": [
         {
           "kind": "require",
-          "text": "require still_playing : outcome(game) is Playing",
+          "text": "require still_playing : outcome_of(game) is Playing",
           "source": "y/src/hangman.y:120",
           "status": { "lifted": "src/hangman.rs: y_runtime::require" }
         },
@@ -181,7 +181,7 @@
       "kind": "function",
       "name": "hangman_example::hangman::shown_rune",
       "params": [
-        { "name": "rune", "type": "Rune" },
+        { "name": "letter", "type": "Rune" },
         {
           "name": "hits",
           "type": "ref<set<Rune> as 'BTreeSet'>",
@@ -266,11 +266,11 @@
         {
           "kind": "require",
           "text": "require has_words : size(words) > 0",
-          "source": "y/src/hangman.y:230",
+          "source": "y/src/hangman.y:232",
           "status": { "lifted": "src/hangman.rs: y_runtime::require" }
         },
-        { "kind": "effects", "text": "effects only console, random", "source": "y/src/hangman.y:229" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/hangman.y:229" }
+        { "kind": "effects", "text": "effects only console, random", "source": "y/src/hangman.y:231" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/hangman.y:231" }
       ]
     }
   ],

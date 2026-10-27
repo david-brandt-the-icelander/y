@@ -22,14 +22,16 @@ them tell a reviewer about memory, not about intent.
   returned as freely as in a garbage-collected language.
 - ⚠️ **Values have value semantics.** A value never changes under someone who holds it: keeping a value
   keeps it as it is, and changing a copy changes only that copy.
-- ⚠️ **Parameters are immutable by default.** `x: T` is read and never changed. `x: mutable T` lets the
+- ⚠️ **Parameters are immutable by default.** A parameter `x` is read and never changed. `mutable x` lets the
   callee change the caller's value, and the call says so too, `update(mutable order)`. While the call
   runs, nothing else can reach that value.
 
   ```y
-  function inspect(order: Order) { ... }
+  -- order: The order to look at, as order.
+  function inspect(order) { ... }
 
-  function update(order: mutable Order) { ... }
+  -- order: The order to change, as order.
+  function update(mutable order) { ... }
   ```
 
 - ⚠️ A `let` binding may not change, and a `variable` may. Method receivers are declared `self` or
@@ -53,7 +55,7 @@ them tell a reviewer about memory, not about intent.
   keeps it ends the caller's use of it, and a later use is a compile error naming where it was given
   away. It is cleaned up once, at the end of the scope of its last holder.
 - ⚠️ Values share freely without a type that opts out of single ownership: there are no references to
-  share. Mutable state between tasks is `Shared<T>` → [Shared state](shared-state.md), and a graph is a
+  share. Mutable state between tasks is `shared<t>` → [Shared state](shared-state.md), and a graph is a
   collection or arena of nodes that refer to each other by typed index.
 
 ## Arenas

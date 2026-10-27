@@ -25,7 +25,7 @@ letter. Six misses hang the man.
 
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
-| Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 262, 280, 19 | hand |
+| Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 264, 280, 19 | hand |
 | Bare bodies | `bare/src/hangman.brs`, `bare/src/hangman/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 282, 168, 43, 3 | hand, as the Y compiler would lower the source |
 | Constraint files | `bare/src/*.constraints.json` (46 subjects, 19 clauses) | 398 | the same, then `bare-rust libfmt` for the canonical form |
 | Y facts | `bare/y-facts.json` | 345 | the same |
@@ -39,58 +39,60 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 
 | Y | Bare body | Constraint file or `y-facts.json` | Rust |
 |---|---|---|---|
-| `function f(x: T) -> R` | `fn f(x)` | a `function` subject: `params`, `result` | `fn f(x: T) -> R` |
-| `x: T`, read only (Y's default) | the name | `type` `ref<T>`, `access` read/readers | `&T`, a shared borrow |
-| `x: T` that the function keeps (`new_game(word: Word)`) | the name | `type` `T` | `T` by value; the caller's last use moves it, and any other use is a copy |
-| `x: mutable T`, and `mutable x` at the call | the name; `&mut x` at the call | `type` `ref<T>`, `access` write/exclusive | `&mut T` |
+| `function f(x, mutable y) returns r fails e`, with `x: …, as t.` and `r: …, as u.` in the documentation above | `fn f(x, y)` | a `function` subject: `params` with the types from the documentation, `result` with `fails` | `fn f(x: &T, y: &mut Y) -> Result<U, E>` |
+| `x`, read only (Y's default) | the name | `type` `ref<t>`, `access` read/readers | `&T`, a shared borrow |
+| `x` that the function keeps (`new_game(word)`) | the name | `type` `t` | `T` by value; the caller's last use moves it, and any other use is a copy |
+| `mutable x` in the signature, and `mutable x` at the call | the name; `&mut x` at the call | `type` `ref<t>`, `access` write/exclusive | `&mut T` |
 | A copy the compiler had to make (`new_game(words[chosen])`, where `words` is still read) | `.clone()`, marked `// y: a copy` | `y-facts.json` `copies` | the same |
-| `R ! E`, `fail .Case(...)`, `?` | `return Err(E::Case { .. })`, `?` | `result.fails` | `Result<R, E>` |
+| `return result = value`, `fail .case(...)`, `?` | `return Ok(value)` or the last expression, `return Err(E::Case { .. })`, `?` | `result.fails` | the same |
 | `?` converting through the one case that carries the failure | `?` | an `impl From` subject | `impl From<ConsoleError> for PlayError` |
-| `type Word = Text where letters_only = ..., long_enough = ...` | `struct Word(_)` and a constructor that checks each constraint in order | two `invariant` clauses, with status `lifted` by the constructor | a newtype with `Word::new(..) -> Result<Word, ConstraintViolation>` |
+| `lower_snake_case` type and case names (`guess_error`, `.not_one_letter`) | `GuessError`, `NotOneLetter`: the lowering's one renaming, to Rust's casing | Rust names | the same |
+| `lower_snake_case` constants (`allowed_misses`) | `ALLOWED_MISSES` | the same | the same |
+| `type word = text where letters_only = ..., long_enough = ...` | `struct Word(_)` and a constructor that checks each constraint in order | two `invariant` clauses, with status `lifted` by the constructor | a newtype with `Word::new(..) -> Result<Word, ConstraintViolation>` |
 | `record`, closed sum type | `struct`, `enum` with named fields | `fields`, `variants` | the same, deriving the structural equality Y always derives |
 | No `with` clause: the function is pure | — | `effects` clause `pure` | — |
 | A `mutable` parameter and no `with` | — | `no io`, `no clock`, `no randomness`, `mutates only game.hits, game.misses` | — |
-| `with console: Console, random: Random, forever: Forever` | three more parameters | their types and access; `effects only console, random`; the clause also in `y-facts.json` `capabilities` | `&mut Console, &mut Random, &Forever` |
-| `with system: System` on the entry point | `System::root()` | `y-facts.json` `capabilities` | the same |
+| `with console, random, forever`, typed in the documentation | three more parameters | their types and access; `effects only console, random`; the clause also in `y-facts.json` `capabilities` | `&mut Console, &mut Random, &Forever` |
+| `with system` on the entry point | `System::root()` | `y-facts.json` `capabilities` | the same |
 | `requires name = (p)` | `require(p, "hangman::f#name")` | a `require` clause, status `lifted` by that call | a run-time check whose failure is a fault (a panic naming the construct) |
 | `invariant name = (p)` on a record | `invariant(p, "hangman::Game#name")` after the one write that can break it | an `invariant` clause on the type | the same |
 | `if name = (p)`, `while name = (p)` | `if p { // y: #name` | `y-facts.json` `decisions`: the Y line and the bare line of each | the same, with the comment |
-| A condition that narrows (`if not_one_rune = (letter == .None) { fail ... }`) | `let Some(letter) = letter else { ... }` | — | let-else, so rustc checks the narrowing |
+| A value chosen by a condition: `variable head = " "`, then `if has_head = (misses >= 1) { head = "O" }` (Y's blocks give no value) | the same shape | — | the same |
+| A condition that narrows (`if not_one_rune = (letter == .none) { fail ... }`) | `let Some(letter) = letter else { ... }` | — | let-else, so rustc checks the narrowing |
 | `forever because "..."` | the `&Forever` argument of the call that waits | `y-facts.json` `claims` | `console.read_line(forever)` |
-| `compile parse_word_list(WORD_LIST)` | the value, as a `const` array, and a `static` built once from it | `y-facts.json` `compiled` | the same, and a generated test that makes the call at run time and compares |
-| `Count<Element>`, `Count<Rune>` | — (units are erased) | `y-facts.json` `units` | `usize` |
-| `Text` (and a read-only `Text` parameter), `Rune`, `List<T>`, `Set<T>` | — | `text`, `ref<text>`, `Rune`, `list<T> as 'Vec'`, `set<T> as 'BTreeSet'` | `String`, `&str`, `y_runtime::Rune`, `Vec<T>`, `BTreeSet<T>` |
+| `compile parse_word_list(word_list)` | the value, as a `const` array, and a `static` built once from it | `y-facts.json` `compiled` | the same, and a generated test that makes the call at run time and compares |
+| `count<element>`, `count<rune>` | — (units are erased) | `y-facts.json` `units` | `usize` |
+| `text` (and a read-only `text` parameter), `rune`, `list<t>`, `set<t>` | — | `text`, `ref<text>`, `Rune`, `list<T> as 'Vec'`, `set<T> as 'BTreeSet'` | `String`, `&str`, `y_runtime::Rune`, `Vec<T>`, `BTreeSet<T>` |
 | Interpolation, `"{name}"` and `"{game.word}"` | `format!("{name}")`, `format!("{}", game.word)` | — | the same |
 | `variable` | `let` | — | `let mut`, which `weave` derived through rustc (24 of them) |
-| `test name covers a, b { given / with / when / then }` | `#[test] fn name()`; a `?` in `given` or `when` lowers to `expect`; `fake Console(input: [...])` to `Console::fake(...)` | `y-facts.json` `tests`: what each covers; repeated in a comment in the test | the same |
-| A value chosen by a condition: `variable head = " "`, then `if has_head = (misses >= 1) { head = "O" }` (Y's `if` is a statement and gives no value) | the same shape | — | the same |
-| Documentation: the `--` line or `---` block above a declaration, with roles | `///` with the roles as a list | — | the same |
+| `test name covers a, b { given / with / when / then }` | `#[test] fn name()`; a `?` in `given` or `when` lowers to `expect`; `fake console(input: [...])` to `Console::fake(...)` | `y-facts.json` `tests`: what each covers; repeated in a comment in the test | the same |
+| Documentation: the `--` line or `---` block above a declaration, with roles; the types leave it for the signature | `///` with the roles as a list | — | the same |
 
 ## What had to be assumed
 
 `Y-proposal.md` does not settle everything a whole program needs. Where it is silent, the example assumes the
 following:
 
-- **Standard capabilities and their methods:** a `Console` capability with `write_line`, `write` and `read_line`;
-  `Random.index_below`; and `System.console()`, `System.random()` and `System.forever()`. The proposal lists `Clock`,
-  `Random`, `FileSystem` and others, but not a terminal.
-- **The entry point** is `public function main() -> Void ! E with system: System`.
+- **Standard capabilities and their methods:** a `console` capability with `write_line`, `write` and `read_line`;
+  `random.index_below`; and `system.console()`, `system.random()` and `system.forever()`. The proposal lists `clock`,
+  `random`, `file_system` and others, but not a terminal.
+- **The entry point** is `public function main() fails e with system`.
 - **One `with` block can bind several capabilities:** `with console = ..., random = ..., forever = ... { ... }`.
 - **A refined type can have several named constraints,** separated by commas after one `where`.
 - **Rune literals** are written `'z'`, as in `value.count_of('@')` in the proposal.
-- **Library names:** `Set.of([...])`, `List.join(separator:)`, `Text.single_rune()`, `Text.split(...)`, `Text.trim()`.
-- **Fakes for tests:** `fake Console(input: [...], read_fails: ...)`, `fake Random(seed: ...)` and `fake Forever`.
+- **Library names:** `set.of([...])`, `list.join(separator:)`, `text.single_rune()`, `text.split(...)`, `text.trim()`.
+- **Fakes for tests:** `fake console(input: [...], read_fails: ...)`, `fake random(seed: ...)` and `fake forever`.
 - **Placement of `forever`:** `forever because "..."` follows the waiting call, as `within 5s` does.
 
 ## Where the runtime is simpler than Y
 
 `../y-runtime` is only as large as this example needs, and each shortcut is stated on the item that takes it:
 
-- **`Rune`** holds one Unicode scalar value, where Y's is an extended grapheme cluster. They are the same for the
-  words here, which a `Word` limits to `a` to `z`.
-- **`Set`** lowers to `BTreeSet`, which iterates in sorted order where Y iterates in insertion order. The game never
+- **`rune`** (Rust `Rune`) holds one Unicode scalar value, where Y's is an extended grapheme cluster. They are the same for the
+  words here, which a `word` limits to `a` to `z`.
+- **`set`** lowers to `BTreeSet`, which iterates in sorted order where Y iterates in insertion order. The game never
   iterates a set, so the difference cannot be seen here.
-- **`Random`** seeds from the clock without recording the seed, so a game cannot be replayed (Y § 4.7).
+- **`random`** seeds from the clock without recording the seed, so a game cannot be replayed (Y § 4.7).
 
 ## Checks
 

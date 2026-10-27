@@ -49,7 +49,7 @@
         "forever: Forever"
       ],
       "lowered": "as the last three parameters, in order",
-      "y": "y/src/hangman.y:229"
+      "y": "y/src/hangman.y:231"
     },
     {
       "subject": "hangman_example::main",
@@ -65,7 +65,7 @@
       "claim": "forever",
       "because": "a player may think for as long as they like",
       "requires": "Forever",
-      "y": "y/src/hangman.y:243",
+      "y": "y/src/hangman.y:245",
       "bare": "bare/src/hangman.brs:262"
     }
   ],
@@ -82,7 +82,7 @@
     {
       "what": "words[chosen]",
       "why": "new_game keeps its word, and words is still read",
-      "y": "y/src/hangman.y:233",
+      "y": "y/src/hangman.y:235",
       "bare": "bare/src/hangman.brs:252"
     }
   ],
@@ -99,7 +99,7 @@
         "bare": "bare/src/hangman.brs:72"
       }
     ],
-    "hangman.outcome": [
+    "hangman.outcome_of": [
       {
         "name": "hanged",
         "y": "y/src/hangman.y:100",
@@ -180,17 +180,17 @@
     "hangman.play": [
       {
         "name": "playing",
-        "y": "y/src/hangman.y:235",
+        "y": "y/src/hangman.y:237",
         "bare": "bare/src/hangman.brs:254"
       },
       {
         "name": "closed",
-        "y": "y/src/hangman.y:244",
+        "y": "y/src/hangman.y:246",
         "bare": "bare/src/hangman.brs:263"
       },
       {
         "name": "won",
-        "y": "y/src/hangman.y:257",
+        "y": "y/src/hangman.y:259",
         "bare": "bare/src/hangman.brs:276"
       }
     ]
@@ -221,7 +221,7 @@
       "rust": "hangman_example::hangman::tests::a_repeated_letter_is_refused",
       "covers": [
         "guess#repeated",
-        "guess!AlreadyGuessed"
+        "guess!already_guessed"
       ]
     },
     "typing_nothing_is_not_a_guess": {
@@ -229,7 +229,7 @@
       "rust": "hangman_example::hangman::tests::typing_nothing_is_not_a_guess",
       "covers": [
         "guess#nothing_typed",
-        "guess!Empty"
+        "guess!empty"
       ]
     },
     "two_letters_are_not_a_guess": {
@@ -237,7 +237,7 @@
       "rust": "hangman_example::hangman::tests::two_letters_are_not_a_guess",
       "covers": [
         "guess#not_one_rune",
-        "guess!NotOneLetter"
+        "guess!not_one_letter"
       ]
     },
     "a_digit_is_not_a_guess": {
@@ -251,22 +251,22 @@
       "y": "y/src/hangman.test.y:96",
       "rust": "hangman_example::hangman::tests::six_misses_hang_the_man",
       "covers": [
-        "outcome#hanged"
+        "outcome_of#hanged"
       ]
     },
     "finding_every_letter_wins": {
       "y": "y/src/hangman.test.y:111",
       "rust": "hangman_example::hangman::tests::finding_every_letter_wins",
       "covers": [
-        "outcome#hanged.else",
-        "outcome#solved"
+        "outcome_of#hanged.else",
+        "outcome_of#solved"
       ]
     },
     "a_new_game_is_being_played": {
       "y": "y/src/hangman.test.y:126",
       "rust": "hangman_example::hangman::tests::a_new_game_is_being_played",
       "covers": [
-        "outcome#solved.else"
+        "outcome_of#solved.else"
       ]
     },
     "the_empty_gallows": {
@@ -307,14 +307,14 @@
       "rust": "hangman_example::hangman::tests::an_empty_word_list_is_refused",
       "covers": [
         "parse_word_list#empty",
-        "parse_word_list!Empty"
+        "parse_word_list!empty"
       ]
     },
     "a_short_word_is_refused": {
       "y": "y/src/hangman.test.y:191",
       "rust": "hangman_example::hangman::tests::a_short_word_is_refused",
       "covers": [
-        "parse_word_list!NotAWord"
+        "parse_word_list!not_a_word"
       ]
     },
     "a_player_who_finds_every_letter_wins": {
@@ -339,14 +339,14 @@
       "rust": "hangman_example::hangman::tests::a_closed_console_ends_the_game",
       "covers": [
         "play#closed",
-        "play!InputClosed"
+        "play!input_closed"
       ]
     },
     "a_failing_console_ends_the_game": {
       "y": "y/src/hangman.test.y:263",
       "rust": "hangman_example::hangman::tests::a_failing_console_ends_the_game",
       "covers": [
-        "play!Console"
+        "play!console"
       ]
     }
   }

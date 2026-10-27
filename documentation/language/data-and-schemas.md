@@ -20,10 +20,10 @@ failure mode is a deploy that cannot be rolled back.
 - ⚠️ `schema` declares a persistent shape with a version:
 
   ```y
-  schema Customer v3 {
-      id: CustomerId
-      name: String
-      email: Email?
+  schema customer v3 {
+      id: customer_id
+      name: string
+      email: email?
   }
   ```
 
@@ -58,9 +58,9 @@ failure mode is a deploy that cannot be rolled back.
 - ⚠️ `migrate` declares how one schema version becomes the next, as an expression per field of the target:
 
   ```y
-  migrate Customer v1 -> v2 {
-      displayName = firstName + " " + lastName
-      normalizedName = normalize(displayName)
+  migrate customer v1 to v2 {
+      display_name = first_name + " " + last_name
+      normalized_name = normalize(display_name)
   }
   ```
 
@@ -68,10 +68,10 @@ failure mode is a deploy that cannot be rolled back.
   migrating:
 
   ```y
-  migrate Customer v1 -> v2
-      reads CustomerV1
-      reads CountryRules
-      writes CustomerV2
+  migrate customer v1 to v2
+      reads customer_v1
+      reads country_rules
+      writes customer_v2
   ```
 
 - ⚠️ A migration is deterministic, pure with respect to external systems, and idempotent. It reads only

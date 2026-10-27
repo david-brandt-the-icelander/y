@@ -32,8 +32,8 @@ cancellation needs to propagate; and if cancellation propagates, failure isolati
 
   ```y
   within 30s {
-      let user = loadUser(id)
-      let orders = loadOrders(user.id)
+      let user = load_user(id)
+      let orders = load_orders(user.id)
       render(user, orders)
   }
   ```
@@ -59,8 +59,8 @@ cancellation needs to propagate; and if cancellation propagates, failure isolati
 
   ```y
   within 10s {
-      task user = loadUser(id)
-      task orders = loadOrders(id)
+      task user = load_user(id)
+      task orders = load_orders(id)
 
       render(user, orders)
   }

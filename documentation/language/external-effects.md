@@ -27,12 +27,12 @@ worth naming:
 
   ```y
   atomic {
-      order.status = .PaymentPending
+      order.status = .payment_pending
 
-      enqueue ChargeCard {
-          orderId: order.id
+      enqueue charge_card {
+          order_id: order.id
           amount: order.total
-          paymentMethod: order.paymentMethod
+          payment_method: order.payment_method
       }
   }
   ```
@@ -70,10 +70,10 @@ worth naming:
 
   ```y
   atomic {
-      order.status = .Confirmed
+      order.status = .confirmed
 
       afterCommit {
-          enqueue SendConfirmation(order.id)
+          enqueue send_confirmation(order.id)
       }
   }
   ```
@@ -109,11 +109,11 @@ worth naming:
   and the results of the commands it submitted are all reconstructable from durable state.
 
   ```y
-  workflow fulfill(orderId: OrderId) {
-      let order = loadOrder(orderId)
+  workflow fulfill(order_id) {
+      let order = load_order(order_id)
 
-      let payment = submit ChargeCard(order.payment)
-      let shipment = submit CreateShipment(order)
+      let payment = submit charge_card(order.payment)
+      let shipment = submit create_shipment(order)
 
       complete(order, payment, shipment)
   }

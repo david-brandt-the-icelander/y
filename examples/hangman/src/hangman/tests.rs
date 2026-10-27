@@ -24,7 +24,7 @@ fn a_letter_not_in_the_word_is_a_miss() {
 
 #[test]
 fn a_repeated_letter_is_refused() {
-    // y: covers guess#repeated, guess!AlreadyGuessed
+    // y: covers guess#repeated, guess!already_guessed
     let mut game = Game { word: Word::new("rope".to_string()).expect("given"), hits: BTreeSet::new(), misses: vec![Rune('z')] };
     let refused = guess(&mut game, "Z");
     assert!(refused == Err(GuessError::AlreadyGuessed { letter: Rune('z') }), "refused_as_repeated");
@@ -33,7 +33,7 @@ fn a_repeated_letter_is_refused() {
 
 #[test]
 fn typing_nothing_is_not_a_guess() {
-    // y: covers guess#nothing_typed, guess!Empty
+    // y: covers guess#nothing_typed, guess!empty
     let mut game = new_game(Word::new("rope".to_string()).expect("given"));
     let refused = guess(&mut game, "   ");
     assert!(refused == Err(GuessError::Empty), "refused_as_empty");
@@ -41,7 +41,7 @@ fn typing_nothing_is_not_a_guess() {
 
 #[test]
 fn two_letters_are_not_a_guess() {
-    // y: covers guess#not_one_rune, guess!NotOneLetter
+    // y: covers guess#not_one_rune, guess!not_one_letter
     let mut game = new_game(Word::new("rope".to_string()).expect("given"));
     let refused = guess(&mut game, "ab");
     assert!(refused == Err(GuessError::NotOneLetter { text: "ab".to_string() }), "refused_as_two");
@@ -57,27 +57,27 @@ fn a_digit_is_not_a_guess() {
 
 #[test]
 fn six_misses_hang_the_man() {
-    // y: covers outcome#hanged
+    // y: covers outcome_of#hanged
     let misses = vec![Rune('a'), Rune('b'), Rune('c'), Rune('d'), Rune('f'), Rune('g')];
     let game = Game { word: Word::new("rope".to_string()).expect("given"), hits: BTreeSet::new(), misses };
-    let ending = outcome(&game);
+    let ending = outcome_of(&game);
     assert!(ending == Outcome::Lost, "lost");
 }
 
 #[test]
 fn finding_every_letter_wins() {
-    // y: covers outcome#hanged.else, outcome#solved
+    // y: covers outcome_of#hanged.else, outcome_of#solved
     let hits = BTreeSet::from([Rune('r'), Rune('o'), Rune('p'), Rune('e')]);
     let game = Game { word: Word::new("rope".to_string()).expect("given"), hits, misses: vec![Rune('a')] };
-    let ending = outcome(&game);
+    let ending = outcome_of(&game);
     assert!(ending == Outcome::Won, "won");
 }
 
 #[test]
 fn a_new_game_is_being_played() {
-    // y: covers outcome#solved.else
+    // y: covers outcome_of#solved.else
     let game = new_game(Word::new("rope".to_string()).expect("given"));
-    let ending = outcome(&game);
+    let ending = outcome_of(&game);
     assert!(ending == Outcome::Playing, "playing");
 }
 
@@ -109,14 +109,14 @@ fn a_word_list_is_read_in_order() {
 
 #[test]
 fn an_empty_word_list_is_refused() {
-    // y: covers parse_word_list#empty, parse_word_list!Empty
+    // y: covers parse_word_list#empty, parse_word_list!empty
     let refused = parse_word_list("   ");
     assert!(refused == Err(WordListError::Empty), "refused_as_empty");
 }
 
 #[test]
 fn a_short_word_is_refused() {
-    // y: covers parse_word_list!NotAWord
+    // y: covers parse_word_list!not_a_word
     let refused = parse_word_list("rope cat");
     assert!(refused == Err(WordListError::NotAWord { text: "cat".to_string() }), "refused_naming_it");
 }
@@ -147,7 +147,7 @@ fn a_player_who_misses_six_times_is_hanged() {
 
 #[test]
 fn a_closed_console_ends_the_game() {
-    // y: covers play#closed, play!InputClosed
+    // y: covers play#closed, play!input_closed
     let words = vec![Word::new("rope".to_string()).expect("given")];
     let mut console = Console::fake(&["r"], false);
     let mut random = Random::seeded(7);
@@ -158,7 +158,7 @@ fn a_closed_console_ends_the_game() {
 
 #[test]
 fn a_failing_console_ends_the_game() {
-    // y: covers play!Console
+    // y: covers play!console
     let words = vec![Word::new("rope".to_string()).expect("given")];
     let mut console = Console::fake(&[], true);
     let mut random = Random::seeded(7);

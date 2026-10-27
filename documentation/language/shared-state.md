@@ -21,7 +21,7 @@ external effects inside a transaction, and why an entire second mechanism exists
   inside a transaction.
 
   ```y
-  shared inventory: Inventory
+  shared inventory: inventory
   ```
 
 - ⚠️ Shared state is reached only through a capability for it, so which components can touch a given
@@ -40,7 +40,7 @@ external effects inside a transaction, and why an entire second mechanism exists
 
   ```y
   atomic {
-      let item = inventory[itemId]
+      let item = inventory[item_id]
 
       if item.available == 0 {
           retry
@@ -74,24 +74,24 @@ external effects inside a transaction, and why an entire second mechanism exists
   unready and retries is a blocking operation on that value with no separate condition-variable protocol
   to get wrong.
 
-## `orElse`
+## `or_else`
 
-- ⚠️ `orElse` composes transactional alternatives. The first block runs; if it reaches `retry`, its
+- ⚠️ `or_else` composes transactional alternatives. The first block runs; if it reaches `retry`, its
   effects are discarded and the second block runs; if that also reaches `retry`, the composed transaction
   waits on the union of both read sets.
 
   ```y
   atomic {
-      take(primaryQueue)
+      take(primary_queue)
   }
-  orElse {
-      take(secondaryQueue)
+  or_else {
+      take(secondary_queue)
   }
   ```
 
 - ⚠️ An alternative that commits does so as the whole transaction, and the discarded alternative's writes
   are never observable.
-- ⚠️ `orElse` chains, and the alternatives are tried left to right.
+- ⚠️ `or_else` chains, and the alternatives are tried left to right.
 
 ## The rule: no external effect inside a transaction
 
@@ -105,7 +105,7 @@ enforced; what to do instead is [External effects](external-effects.md).
   ```y
   atomic {
       account.balance -= amount
-      paymentProvider.charge(card, amount)   -- rejected
+      payment_provider.charge(card, amount)   -- rejected
   }
   ```
 
