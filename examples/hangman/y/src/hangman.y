@@ -33,14 +33,14 @@ returns: Every word of the list, in order.
 fails Empty: The list has no words.
 fails NotAWord: A piece of the list is not a `Word`: it has a character other than `a` to `z`, or fewer than four.
 ---
-public function parse_word_list(text: &Text) -> List<Word> ! WordListError {
+public function parse_word_list(text: Text) -> List<Word> ! WordListError {
     variable words = List.new()
     for piece in text.split(" ") {
         if blank = (piece.is_empty()) {
             continue
         }
         match Word.new(piece.to_text()) {
-            .Ok(word) => words.push(move word),
+            .Ok(word) => words.push(word),
             .Err(_) => fail .NotAWord(text: piece.to_text()),
         }
     }
@@ -86,7 +86,7 @@ word: The word the player must find.
 returns: A game with nothing guessed.
 ---
 public function new_game(word: Word) -> Game {
-    Game { word: move word, hits: Set.new(), misses: List.new() }
+    Game { word: word, hits: Set.new(), misses: List.new() }
 }
 
 ---
@@ -96,7 +96,7 @@ game: The game to judge.
 returns: Lost once the player has used up the misses allowed, Won once every letter of the word is found, and
   Playing otherwise.
 ---
-public function outcome(game: &Game) -> Outcome {
+public function outcome(game: Game) -> Outcome {
     if hanged = (game.misses.count() == ALLOWED_MISSES) {
         return .Lost
     }
@@ -116,7 +116,7 @@ fails Empty: The player typed nothing but spaces.
 fails NotOneLetter: The player typed more than one character, or one that is not a letter.
 fails AlreadyGuessed: The letter was guessed before. The game is unchanged.
 ---
-public function guess(game: &mutable Game, line: &Text) -> Verdict ! GuessError
+public function guess(game: mutable Game, line: Text) -> Verdict ! GuessError
     requires still_playing = (outcome(game) == .Playing)
 {
     let trimmed = line.trim()
@@ -149,7 +149,7 @@ rune: The letter of the word.
 hits: The letters found so far.
 returns: What the player sees in its place.
 ---
-function shown_rune(rune: Rune, hits: &Set<Rune>) -> Rune {
+function shown_rune(rune: Rune, hits: Set<Rune>) -> Rune {
     if known = (hits.contains(rune)) {
         return rune
     }
@@ -162,8 +162,8 @@ Shows the word as the player sees it.
 game: The game.
 returns: Each letter of the word, found or not, separated by spaces: `_ o _ e`.
 ---
-public function masked(game: &Game) -> Text {
-    game.word.runes().map(rune => shown_rune(rune, &game.hits)).join(separator: " ")
+public function masked(game: Game) -> Text {
+    game.word.runes().map(rune => shown_rune(rune, game.hits)).join(separator: " ")
 }
 
 ---
@@ -225,18 +225,18 @@ returns: Nothing. The console shows the player how the game ended.
 fails InputClosed: The console closed before the game ended.
 fails Console: The console could not be read or written.
 ---
-public function play(words: &List<Word>) -> Void ! PlayError
+public function play(words: List<Word>) -> Void ! PlayError
     with console: Console, random: Random, forever: Forever
     requires has_words = (not words.is_empty())
 {
     let chosen = random.index_below(words.count())
-    variable game = new_game(words[chosen].clone())
+    variable game = new_game(words[chosen])
     console.write_line("Hangman: find the word, one letter at a time.")?
-    while playing = (outcome(&game) == .Playing) {
+    while playing = (outcome(game) == .Playing) {
         let picture = gallows(game.misses.count())
-        let shown = masked(&game)
+        let shown = masked(game)
         let missed = game.misses.join(separator: " ")
-        console.write_line(&picture)?
+        console.write_line(picture)?
         console.write_line("Word:   {shown}")?
         console.write_line("Missed: {missed}")?
         console.write("Guess:  ")?
@@ -244,7 +244,7 @@ public function play(words: &List<Word>) -> Void ! PlayError
         if closed = (typed == .None) {
             fail .InputClosed
         }
-        match guess(&mutable game, &typed) {
+        match guess(mutable game, typed) {
             .Ok(.Hit) => console.write_line("Yes.")?,
             .Ok(.Miss) => console.write_line("No.")?,
             .Err(.Empty) => console.write_line("Type a letter.")?,
@@ -253,8 +253,8 @@ public function play(words: &List<Word>) -> Void ! PlayError
         }
     }
     let final_picture = gallows(game.misses.count())
-    console.write_line(&final_picture)?
-    if won = (outcome(&game) == .Won) {
+    console.write_line(final_picture)?
+    if won = (outcome(game) == .Won) {
         console.write_line("You win! The word was {game.word}.")?
     } else {
         console.write_line("Hanged! The word was {game.word}.")?

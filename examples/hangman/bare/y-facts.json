@@ -78,6 +78,14 @@
       "bare": "bare/src/main.brs:9"
     }
   ],
+  "copies": [
+    {
+      "what": "words[chosen]",
+      "why": "new_game keeps its word, and words is still read",
+      "y": "y/src/hangman.y:233",
+      "bare": "bare/src/hangman.brs:252"
+    }
+  ],
   "decisions": {
     "hangman.parse_word_list": [
       {

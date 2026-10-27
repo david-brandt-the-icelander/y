@@ -31,17 +31,8 @@ incrementally, and an explicit loop is one it must execute as written.
   `.where { .age >= 18 }`.
 - ⚠️ A chain is fused into a single traversal where the stages permit it, rather than materialising an
   intermediate collection per stage.
-- ⚠️ **The receiver decides whether the chain consumes, borrows or mutably borrows** the collection, and no
-  stage name changes to say so:
-
-  ```y
-  users.map { ... }        -- consumes the collection
-  &users.map { ... }       -- borrows it
-  &mutable users.each { ... }  -- mutably borrows it
-  ```
-
-- ⚠️ A chain that consumes its receiver may move each element out, and a chain that borrows it produces
-  borrows — so a projection that would need a copy is a compile error rather than a hidden clone
+- ⚠️ **A chain reads its receiver and produces a new value.** It never changes the receiver: changing
+  the elements of a collection is a `for` loop over a `variable`, which says so
   → [Ownership and resources](ownership-and-resources.md).
 - ⚠️ A stage's laziness is not a property the programmer manages: the semantics are those of the whole
   chain, and whether an intermediate is materialised is a decision recorded in the semantic layer rather

@@ -7,11 +7,11 @@ test a_letter_in_the_word_is_a_hit
         variable game = new_game(Word.new("gallows")?)
     }
     when {
-        let verdict = guess(&mutable game, "l")?
+        let verdict = guess(mutable game, "l")?
     }
     then {
         assert hit = (verdict == .Hit)
-        assert shown_twice = (masked(&game) == "_ _ l l _ _ _")
+        assert shown_twice = (masked(game) == "_ _ l l _ _ _")
     }
 }
 
@@ -23,7 +23,7 @@ test a_letter_not_in_the_word_is_a_miss
         variable game = new_game(Word.new("rope")?)
     }
     when {
-        let verdict = guess(&mutable game, "z")?
+        let verdict = guess(mutable game, "z")?
     }
     then {
         assert miss = (verdict == .Miss)
@@ -39,7 +39,7 @@ test a_repeated_letter_is_refused
         variable game = Game { word: Word.new("rope")?, hits: Set.new(), misses: ['z'] }
     }
     when {
-        let refused = guess(&mutable game, "Z")
+        let refused = guess(mutable game, "Z")
     }
     then {
         assert refused_as_repeated = (refused == .Err(.AlreadyGuessed(letter: 'z')))
@@ -55,7 +55,7 @@ test typing_nothing_is_not_a_guess
         variable game = new_game(Word.new("rope")?)
     }
     when {
-        let refused = guess(&mutable game, "   ")
+        let refused = guess(mutable game, "   ")
     }
     then {
         assert refused_as_empty = (refused == .Err(.Empty))
@@ -70,7 +70,7 @@ test two_letters_are_not_a_guess
         variable game = new_game(Word.new("rope")?)
     }
     when {
-        let refused = guess(&mutable game, "ab")
+        let refused = guess(mutable game, "ab")
     }
     then {
         assert refused_as_two = (refused == .Err(.NotOneLetter(text: "ab")))
@@ -85,7 +85,7 @@ test a_digit_is_not_a_guess
         variable game = new_game(Word.new("rope")?)
     }
     when {
-        let refused = guess(&mutable game, "7")
+        let refused = guess(mutable game, "7")
     }
     then {
         assert refused_as_digit = (refused == .Err(.NotOneLetter(text: "7")))
@@ -100,7 +100,7 @@ test six_misses_hang_the_man
         let game = Game { word: Word.new("rope")?, hits: Set.new(), misses: ['a', 'b', 'c', 'd', 'f', 'g'] }
     }
     when {
-        let ending = outcome(&game)
+        let ending = outcome(game)
     }
     then {
         assert lost = (ending == .Lost)
@@ -115,7 +115,7 @@ test finding_every_letter_wins
         let game = Game { word: Word.new("rope")?, hits: Set.of(['r', 'o', 'p', 'e']), misses: ['a'] }
     }
     when {
-        let ending = outcome(&game)
+        let ending = outcome(game)
     }
     then {
         assert won = (ending == .Won)
@@ -130,7 +130,7 @@ test a_new_game_is_being_played
         let game = new_game(Word.new("rope")?)
     }
     when {
-        let ending = outcome(&game)
+        let ending = outcome(game)
     }
     then {
         assert playing = (ending == .Playing)
@@ -212,7 +212,7 @@ test a_player_who_finds_every_letter_wins
         forever = fake Forever
     }
     when {
-        play(&words)?
+        play(words)?
     }
     then {
         assert announced = (console.written().last() == .Some("You win! The word was rope."))
@@ -232,7 +232,7 @@ test a_player_who_misses_six_times_is_hanged
         forever = fake Forever
     }
     when {
-        play(&words)?
+        play(words)?
     }
     then {
         assert announced = (console.written().last() == .Some("Hanged! The word was rope."))
@@ -252,7 +252,7 @@ test a_closed_console_ends_the_game
         forever = fake Forever
     }
     when {
-        let ended = play(&words)
+        let ended = play(words)
     }
     then {
         assert closed = (ended == .Err(.InputClosed))
@@ -272,7 +272,7 @@ test a_failing_console_ends_the_game
         forever = fake Forever
     }
     when {
-        let ended = play(&words)
+        let ended = play(words)
     }
     then {
         assert failed_reading = (ended == .Err(.Console(error: ConsoleError.fake_read_failure())))

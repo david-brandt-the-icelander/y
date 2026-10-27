@@ -44,7 +44,7 @@ returns: The hold, waiting for the charge to be confirmed.
 fails UnknownItem: The item is not stocked here.
 fails TimedOut: No unit became free within five seconds.
 ---
-public function hold_and_charge(item: ItemId, buyer: &Buyer) -> Hold ! HoldError
+public function hold_and_charge(item: ItemId, buyer: Buyer) -> Hold ! HoldError
     with inventory: Shared<Inventory>, charges: Enqueue<ChargeCard>
 {
     within 5s {
@@ -70,8 +70,8 @@ that the transaction may re-run and the charge still happens once (because `enqu
 which branch a test must reach to cover the sold-out path (`hold_and_charge#sold_out`). None of those facts is a
 convention; each one is checked, and the compiler rejects the program if any of them is false.
 
-**Kept from September**, unchanged in meaning: deterministic semantics; Core IR as the definition of a program; ownership
-and borrowing with no hidden clones; typed failure; software transactional memory with no external effect inside a
+**Kept from September**, unchanged in meaning: deterministic semantics; Core IR as the definition of a program;
+deterministic destruction; typed failure; software transactional memory with no external effect inside a
 transaction; durable commands and workflows; bounded suspension without `async` colouring; structured concurrency;
 contracts, typestate and units; versioned schemas; independent oracles.
 
@@ -84,7 +84,8 @@ context object, March 2026); units on every length and index (July and March 202
 **Dropped**, with reasons in § 7: significant indentation; lowercase type names; `x is integer` annotations; classes,
 facets, factory methods and inheritance; exceptions; ambient `using` contexts; transactional memory for *all* state;
 affinities and placements in source; comments with runtime meaning; the spec block as a replacement for the signature;
-`afterCommit`.
+`afterCommit`; references, borrows and moves in source, which become the compiler's choices under value semantics
+(§ 3.6).
 
 ## 1. The premise, and what it changes
 
@@ -112,14 +113,14 @@ the loop. Two consequences:
 
 ### 1.2 Inferred, then pinned
 
-Y infers types inside bodies, ownership inside bodies, effects, suspension points and failure paths — and then **pins
+Y infers types inside bodies, effects, suspension points and failure paths — and then **pins
 the facts a reviewer needs into the declaration**, where they become checked claims:
 
 | Fact | Where it is pinned | Written by |
 | --- | --- | --- |
 | Parameter and result types | Signature | Agent (public signatures are never inferred) |
-| Ownership mode of each parameter and result | Signature (`T`, `&T`, `&mutable T`, `-> &T from x`) | Agent, corrected by fix-its |
-| Ownership transfer at a call | Call site (`&x`, `&mutable x`, `move x`) | Agent, corrected by fix-its |
+| Which parameters the function may change | Signature (`x: T` or `x: mutable T`) | Agent, corrected by fix-its |
+| Which arguments a call lets the callee change | Call site (`mutable x`) | Agent, corrected by fix-its |
 | Authority, and therefore effects | `with` clause | `y fix`, from inference |
 | Failure set | `-> T ! E`, and `fails` doc roles | Agent; the compiler checks exhaustiveness of documentation |
 | Preconditions and guarantees | `requires` / `ensures` | Agent |
@@ -127,7 +128,7 @@ the facts a reviewer needs into the declaration**, where they become checked cla
 
 A pinned clause that no longer matches the body is a compile error, so a change in what a function may do cannot land
 without the declaration changing — and the declaration is where the diff shows it. Facts that are *not* pinned
-(suspension points, transaction read and write sets, inferred borrows inside a body) are printed on request by
+(suspension points, transaction read and write sets, the copies and borrows the compiler chose) are printed on request by
 `y explain` (§ 4.3).
 
 ### 1.3 Review is sampling
@@ -237,7 +238,7 @@ test charges_once_when_the_transaction_retries
         conflict at hold_and_charge#hold_one_unit, times: 2
     }
     when {
-        let hold = hold_and_charge(widget, &buyer)?
+        let hold = hold_and_charge(widget, buyer)?
     }
     then {
         assert charged_once = (charges.committed().count() == 1)
@@ -299,8 +300,8 @@ person can judge: is five seconds right, and is this the behaviour the business 
   escapes inside text literals. A reviewer must be able to trust that what they see is what compiles.
 - **No abbreviations,** except those listed in the project glossary (`id`, `url`, `http`, …). The linter checks this.
   - The rule binds the language as much as its programs. Keywords are words: `public`, `function`, `variable`,
-    `constant`, `implementation`, `&mutable`.
-  - So are the standard library's names (`Integer`, `Boolean`, `ReferenceCounted<T>`, `divide_floor`) and the
+    `constant`, `implementation`, `mutable`.
+  - So are the standard library's names (`Integer`, `Boolean`, `divide_floor`) and the
     toolchain's commands (`y format`).
   - Unit symbols declared with `unit` (`s`, `km`, `isk`) are symbols, not abbreviations.
 - Lengths, sizes and durations do not need units in their names, because units are in their types (§ 3.3).
@@ -344,8 +345,8 @@ person can judge: is five seconds right, and is this the behaviour the business 
 **Closures.**
 
 - A closure is a single expression: `users.filter(user => user.active)`.
-- Anything longer is a named local function that lists what it captures (`function add_line(line: &Line)
-  captures &mutable total { ... }`). The name appears in traces, and the capture list shows what the helper can reach.
+- Anything longer is a named local function that lists what it captures (`function add_line(line: Line)
+  captures mutable total { ... }`). The name appears in traces, and the capture list shows what the helper can reach.
 
 **Comments and layout.**
 
@@ -388,7 +389,7 @@ amount: How much to take.
 returns: A receipt for the debit.
 fails InsufficientFunds: The balance is lower than the amount.
 ---
-public function withdraw(account: &mutable Account, amount: Money<Isk>) -> Receipt ! WithdrawError
+public function withdraw(account: mutable Account, amount: Money<Isk>) -> Receipt ! WithdrawError
 ```
 
 
@@ -472,7 +473,7 @@ Referring to a case:
 - **A condition narrows.** Inside `if found = (user != .None) { ... }`, and after `if missing = (user == .None) {
   return ... }`, `user` is a `User`. Nothing is written for this: every condition adds its predicate as a fact at the
   points it guards (constraint language § 11.1.1), and the type checker reads the fact.
-  - The fact ends where the value may change: an assignment to a `variable`, or a call that borrows it `&mutable`. A field path
+  - The fact ends where the value may change: an assignment to a `variable`, or a call that takes it `mutable`. A field path
     such as `order.customer` narrows the same way, until something may write to that path.
   - The same facts discharge a callee's `requires` (§ 3.11) when they imply it.
 
@@ -549,7 +550,7 @@ The same mechanism gives every length and index its unit:
 
 ```y
 match load_customer(id) {
-    .Ok(customer) => greet(&customer),
+    .Ok(customer) => greet(customer),
     .Err(.NotFound(id: missing_id)) => offer_signup(missing_id),
     .Err(.Unavailable(retry_after)) => try_later(retry_after),
 }
@@ -613,7 +614,7 @@ target: The value to look for.
 items: The list to search.
 returns: The target's position, or nothing when it is absent.
 ---
-public function position_of(target: Integer, items: &SortedList<Integer>) -> Index<Element>? {
+public function position_of(target: Integer, items: SortedList<Integer>) -> Index<Element>? {
     variable low = items.first_index()?
     variable high = items.last_index()?
     while searching = (low <= high) {
@@ -633,43 +634,57 @@ public function position_of(target: Integer, items: &SortedList<Integer>) -> Ind
 The parameter is a `SortedList`, not a `List` with a `requires sorted` precondition. Where a property can be carried by
 a type, Y prefers the type (§ 1.5, rule 2).
 
-### 3.6 Ownership
+### 3.6 Values and ownership
 
-Y keeps the September model: one owner, shared borrows that exclude mutation, exclusive borrows that permit it,
-deterministic destruction, **and no clone the programmer did not write**. What changes is where ownership is written
-down.
+**A program reads as if every value were garbage-collected.** Y source has no references, no borrows, no lifetimes
+and no moves. A value is passed, stored and returned as freely as in a garbage-collected language. What it never does
+is change under someone who holds it: Y values have value semantics.
 
-- **Signatures are explicit.** A parameter is `x: T` (ownership moves in), `x: &T` (shared borrow) or `x: &mutable T`
-  (exclusive borrow). A result that borrows names what it borrows from: `fn display_name(user: &User) -> &Text from
-  user`.
-- **Call sites are explicit.** Passing a non-copy value is written `move order`, `&order` or `&mutable order`. A bare name
-  is allowed only for copy types and temporaries. This is YAPL's two-sided `mutable` (2024), generalised. A reviewer
-  sees at the call which arguments the callee may change or keep.
-- **Bodies are inferred.** Borrows of locals, reborrows and the end of a borrow's life are the compiler's job, and
-  `y explain` prints what it concluded.
-- **Method receivers borrow as their signature says** (`order.total()` borrows, `order.cancel()` may take `&mutable`), as
-  in Rust, because receiver syntax is where agents' habits are strongest. The elaborated view shows the mode.
-- **Copy is declared.** A record or sum type marked `copy` (identifiers, small values) is duplicated rather than moved.
-  The set of copy types is never inferred from size.
+- **Parameters are immutable by default.** A parameter `x: T` is read and never changed, so the caller's value is the
+  same after the call.
+- **`mutable` marks the exception, at both ends of the call.** A parameter `x: mutable T` lets the callee change the
+  caller's value, and the call says so: `guess(mutable game, line)`. While the call runs, nothing else can reach that
+  value. This is YAPL's two-sided `mutable` (2024): a reviewer sees at the call which arguments the callee may change.
+- **Bindings:** a `variable` may be reassigned and changed, and a `let` may not.
+- **Method receivers** are declared `self` or `mutable self`. They are not marked at the call (`order.cancel()`),
+  because receiver syntax is where agents' habits are strongest. The elaborated view shows the mode.
+- **Keeping a value keeps it as it is.** When `new_game(word)` stores `word` in the game, nothing done to the game's
+  word changes the caller's, and the reverse.
 
-**No type contains a borrow in v1.** Records, sum types and collections own what they hold. Borrows live in
-parameters, locals and results only. This one restriction is what lets Y have no lifetime parameters, which is where
-agents writing Rust spend most of their failed attempts. Pipelines and iterators are built in, so the compiler handles
-their borrows. The restriction is a bet: relaxing it later is additive, but imposing it later would not be.
+**The compiler chooses the representation.** How a value is passed and kept is a physical decision of the backend:
 
-**Sharing without a single owner:**
+- An immutable parameter that the callee only reads is passed as a shared borrow.
+- A value that the callee keeps is moved when the caller no longer uses it, and copied when it does.
+- A large value that would be copied often may be counted and copied on write instead.
+- A `mutable` parameter is an exclusive borrow.
 
-- `ReferenceCounted<T>` shares immutable data, and `Weak<T>` observes it without keeping it alive.
+`y explain` lists every copy the compiler made and why it made it, and the review packet counts them. A copy is
+visible where it costs something, without being written where it does not.
+
+**Why.** Ownership syntax is where agents writing Rust spend most of their failed attempts. It tells a reviewer about
+memory, not about intent. Value semantics keep what the borrow rules were for: nothing changes behind a reader's back,
+and two tasks never share a value that either may change (§ 3.8, § 3.9). The cost is the copies the compiler cannot
+avoid, and it reports each one.
+
+**No lifetimes.** Source has no references, so it has no lifetime parameters and no results that borrow. A record
+holds values, never references to them. Borrows exist only in the generated code, where `rustc` and Miri check them
+(§ 4.6).
+
+**Sharing:**
+
 - Mutable state reachable from more than one task is `Shared<T>` and nothing else (§ 3.9). There is no interior
   mutability outside transactions.
-- Graphs live in an arena or collection and refer to each other by typed index (`Index<Node>`), not by pointer.
+- Graphs live in an arena or collection and refer to each other by typed index (`Index<Node>`).
 
 **Cleanup.**
 
-- Values are destroyed at the end of their owning scope, in reverse order.
-- A type may declare release behaviour that runs exactly once, on normal exit and on failure alike.
-- Release that can fail declares its failure type, and a scope that owns such a value includes that failure in its own
-  signature. Release failures are never discarded.
+- A type that declares release behaviour is a **resource**: a file, a socket, a lock. A resource is never copied.
+  Giving it to a callee that keeps it ends the caller's use of it, and a later use is an error that names where it was
+  given away.
+- A resource is released exactly once, at the end of the scope of its last holder, on normal exit and on failure
+  alike. Resources in one scope are released in reverse order.
+- Release that can fail declares its failure type, and a scope that holds such a resource includes that failure in its
+  own signature. Release failures are never discarded.
 
 **Arenas.** An arena (`arena parse_scratch { ... }`) releases everything allocated inside it at once, and nothing
 allocated there may escape. Arena ownership says *when a resource is destroyed*, never *when an operation may run*.
@@ -763,7 +778,7 @@ the language's job.
   it, within the scope's deadline.
 - A scope does not exit until its tasks finish.
 - A failing task cancels its siblings, and the scope's failure type includes the failures of its tasks.
-- Two tasks may not hold conflicting borrows.
+- Two tasks may not hold the same value `mutable`, nor one `mutable` while another reads it.
 - Work that outlives its scope is written `detach because "..." within 1h { ... }`. It requires the `Detach`
   capability and carries an explicit lifetime.
 
@@ -805,7 +820,7 @@ This settles September's overlap between task scopes and supervisors by making t
 entry point, and passed down. September's module-level `shared inventory: Inventory` becomes a value someone had to
 hand you. There is no global state to reach.
 
-- A `Shared<T>` is read and written only inside `atomic`, where it behaves as `&mutable T` and the runtime tracks what
+- A `Shared<T>` is read and written only inside `atomic`, where it behaves as a `mutable` value and the runtime tracks what
   was read and written.
 - `snapshot()` outside a transaction returns an immutable, consistent copy. It is a read-only transaction, and exists
   so that tests and reports need not open one.
@@ -936,7 +951,7 @@ amount: How much to take.
 returns: A receipt for the debit.
 fails InsufficientFunds: The balance is lower than the amount.
 ---
-public function withdraw(account: &mutable Account, amount: Money<Isk>) -> Receipt ! WithdrawError
+public function withdraw(account: mutable Account, amount: Money<Isk>) -> Receipt ! WithdrawError
     requires positive_amount = (amount > 0isk)
     ensures debited_exactly = (account.balance == old(account.balance) - amount)
 {
@@ -956,7 +971,7 @@ documentation rules make the choice visible: a `requires` has no `fails` role, a
 
 - `ensures` holds when the function succeeds. `ensures on failure name = (...)` states what holds when it fails.
 - Contract expressions are pure, since they can have no `with` clause.
-- A record's `invariant` holds whenever the record is not being mutated. A function taking it as `&mutable` may break the
+- A record's `invariant` holds whenever the record is not being mutated. A function taking it `mutable` may break the
   invariant inside its body, and must restore it before returning.
 - An invariant on a record held in `Shared<T>` is checked at the commit of every transaction that wrote the record.
   This is the April 2026 "watch list" idea, with the watch list taken from the fields.
@@ -992,8 +1007,8 @@ transition request_payment(order: Order.Created, charge: CommandId) -> Order.Pay
 }
 ```
 
-- `Order.Created` is a type, and a transition consumes the value it starts from. A stale reference to the old state is
-  therefore an ownership error, not a logic error.
+- `Order.Created` is a type, and a transition takes the value it starts from: the name passed to it cannot be used
+  afterwards. A stale copy of the old state is therefore a compile error, not a logic error.
 - A transition that is not declared does not exist.
 - A field that means something only after payment exists only in `Paid`.
 - A value whose state is unknown, because it came from storage, is matched to recover it.
@@ -1028,7 +1043,7 @@ migrate Customer v2 -> v3 {
   change as additive or breaking, and names the field that made it breaking.
 - Codecs are generated, identity is declared (`key`), and constraints and invariants are checked on read as well as on
   write.
-- A field whose type holds a borrow, a capability or a task does not compile.
+- A field whose type holds a capability or a task does not compile.
 - Persisted states are `state` declarations, so the legal transitions of stored data are those of the type.
 
 **Migrations.**
@@ -1056,12 +1071,11 @@ must not prevent them, and does not need them.
 **Pipelines** say what the answer is, which leaves the compiler free to fuse, parallelise or index:
 
 ```y
-let active_names = &users.filter(user => user.active).map(user => user.name).sorted()
+let active_names = users.filter(user => user.active).map(user => user.name).sorted()
 ```
 
-- **The receiver's mode decides ownership**, and stage names do not change to say so. `&users.filter(...)` borrows,
-  `users.map(...)` consumes, and `&mutable users.for_each(...)` mutates. This comes from the September riff, and it
-  matches the call-site rule of § 3.6.
+- **A pipeline reads its source and produces a new value.** It never changes the source: changing the elements of a
+  collection is a `for` loop over a `variable`, which says so.
 - A pipeline over transactional state reads inside the enclosing transaction.
 - Unordered results make no promise about order beyond their source's. Order is asked for with `sorted`.
 
@@ -1076,7 +1090,7 @@ let active_names = &users.filter(user => user.active).map(user => user.name).sor
 ```y
 derived active_user_count: Count<Element> = users.filter(user => user.active).count()
 
-rule high_risk(customer: &Customer) = (customer.failed_payments > 3) and (customer.outstanding > 100_000isk)
+rule high_risk(customer: Customer) = (customer.failed_payments > 3) and (customer.outstanding > 100_000isk)
 ```
 
 Y has no query strings, and no user-visible index management in v1.
@@ -1182,7 +1196,7 @@ Together with claims and the coverage gate, this gives Y ai.lang's fifth invaria
 `compile` runs a call while the program is built, and the program holds the result as a value:
 
 ```y
-function checksum(bytes: &Bytes) -> UnsignedInteger32 {
+function checksum(bytes: Bytes) -> UnsignedInteger32 {
     let table = compile crc_table(polynomial: 0xEDB8_8320)
     ...
 }
@@ -1196,7 +1210,7 @@ function checksum(bytes: &Bytes) -> UnsignedInteger32 {
   first.
 - Every argument is known when the program is built: a literal, a `const`, or a name bound by another `compile`. Any
   other argument is an error that names it.
-- The result holds no capability. A result cannot hold a borrow either, because no type does (§ 3.6).
+- The result holds no capability. It cannot hold a reference either, because Y has none (§ 3.6).
 - A `const` declaration is evaluated the same way, so `const CRC_TABLE = crc_table(polynomial: 0xEDB8_8320)` needs no
   keyword. `compile` is the same evaluation inside a body, for a value that one function uses.
 
@@ -1246,8 +1260,8 @@ can compute something a reviewer would otherwise have to work out by reading.
 - **`y format`** has no options. It is lossless: it preserves every comment, and never rewrites prose or `y:` links. It
   is idempotent. Two programs that mean the same thing and differ only in layout format to the same text, so every diff
   line is a real change.
-- **`y fix`** applies the machine-applicable part of every diagnostic. It pins inferred authority, adds `&`, `&mutable` and
-  `move` at call sites, names or unnames arguments, sorts imports, and scaffolds missing documentation roles. It leaves
+- **`y fix`** applies the machine-applicable part of every diagnostic. It pins inferred authority, adds `mutable` at call
+  sites, names or unnames arguments, sorts imports, and scaffolds missing documentation roles. It leaves
   the prose to the author.
 - The parser recovers from errors and reports every error in a file in one run. Its syntax tree keeps spans and
   comments, so a mechanical rewrite touches only the lines it means to. Agents depend on this more than people do.
@@ -1272,7 +1286,7 @@ Diagnostics are the channel through which the compiler teaches the agent, so the
 
 For any declaration, `y explain` prints the elaborated program *as Y*, not as an IR dump. It includes:
 
-- inferred borrows and moves;
+- the borrows, moves and copies the compiler chose, and why it made each copy;
 - every capability used, and the call path that needed it;
 - suspension points;
 - each transaction's read and write sets;
@@ -1287,7 +1301,7 @@ programmer might have written.
 
 Every function has a **compatibility signature**, computed from its elaborated form. It contains:
 
-- its parameter and result types, with their ownership modes;
+- its parameter and result types, and which parameters are `mutable`;
 - its authority;
 - its failure set;
 - its contracts;
@@ -1422,8 +1436,8 @@ owner still decides; the recommendation is here so that deciding is quick.
 | Grammar: layout or braces | Braces, with one canonical formatter | § 3.1 |
 | Macro or metaprogramming model | None in v1. The compiler derives equality, hashing, ordering and codecs; agents write the rest | § 3.3, § 7 |
 | `T ! E`: distinct channel or sum type | A built-in sum type; Core IR records propagation edges | § 3.4 |
-| Degree of ownership inference | Signatures and call sites explicit, bodies inferred; no type contains a borrow in v1 | § 3.6 |
-| Types that opt out of single ownership | `ReferenceCounted<T>` for immutable sharing; `Shared<T>` for mutable; arenas and typed indices for graphs | § 3.6 |
+| Degree of ownership inference | All of it: source has value semantics and `mutable` at both ends of a call; borrows, moves and copies are the compiler's, and it reports copies | § 3.6 |
+| Types that opt out of single ownership | None needed: values are shared freely; `Shared<T>` for mutable state between tasks; arenas and typed indices for graphs | § 3.6 |
 | Effect annotation syntax | The `with` clause: effects are what capabilities carry | § 3.7 |
 | Capability declaration and passing | Declared per function, threaded by type from the caller's scope, overridden explicitly | § 3.7 |
 | Where handler failure escalates | Mandatory `on_abandon`: compensate or park; in workflows, `.Abandoned` is a failure to handle | § 3.10 |
@@ -1453,7 +1467,8 @@ premise changed, or because the iteration that tried them showed their cost. The
 | `name is type`, and `is` in five roles | YAPL → April 2026 | `name: Type` | `is` meant annotation, predicate sugar, capture, mutability and optionality; the March 2026 review called it the most ambiguous token in the language |
 | File-wide width-matched `---` / `===` / `~~~` comment blocks | YAPL → April 2026 | `--` lines, and `---` blocks whose width belongs to each block | File-wide delimiter width makes one edit rewrite many lines of diff |
 | `//` and `///` comments | Earlier drafts of this proposal | `--` and `---`, Y's own since YAPL; documentation is the comment above a declaration | Spelling borrowed for agents' habits, which a diagnostic and `y fix` correct instead |
-| Abbreviated keywords and names: `pub`, `fn`, `var`, `const`, `impl`, `mut`, `Int`, `Bool`, `Rc` | Earlier drafts of this proposal | `public`, `function`, `variable`, `constant`, `implementation`, `mutable`, `Integer`, `Boolean`, `ReferenceCounted` | The no-abbreviation rule binds the language's own words too |
+| Abbreviated keywords and names: `pub`, `fn`, `var`, `const`, `impl`, `mut`, `Int`, `Bool` | Earlier drafts of this proposal | `public`, `function`, `variable`, `constant`, `implementation`, `mutable`, `Integer`, `Boolean` | The no-abbreviation rule binds the language's own words too |
+| References in source: `&T`, `&mutable T`, `move`, borrowing results, `copy` types, `ReferenceCounted<T>`, `Weak<T>`; "no clone the programmer did not write" | September → earlier drafts of this proposal | Value semantics, `mutable` at both ends of a call; the compiler chooses borrows, moves and copies, and reports each copy | Ownership syntax is about memory, not intent, and is where agents fail most; value semantics keep what borrowing was for |
 | `if` and `match` as expressions; a ternary operator | Earlier drafts of this proposal | Statements; a value is assigned in each branch | A decision is a statement with a name and a place, never a value hidden inside an expression |
 | Spec block in place of the signature | April 2026 | Signature in code, documentation with closed roles above it | The examples abandoned it for helpers; types are read in the signature; agents' priors |
 | `=` to bind, `:=` to rebind | YAPL → April 2026 | `let` / `variable` | Mutability is marked where the name is declared; `:=` fought every agent's habits |
@@ -1550,7 +1565,7 @@ The process has to prevent all four.
 | --- | --- | --- |
 | M0 | Grammar, error-recovering parser, lossless tree, `y format`, stable diagnostic codes | Every example in this document formats to itself |
 | M1 | Names, types, sum types, named decisions, documentation roles, no-shadowing, refined types | Conformance corpus; `y explain` for types |
-| M2 | Ownership (explicit signatures and calls, inferred bodies); Rust backend for the pure subset | `rustc` projection agrees on the corpus |
+| M2 | Value semantics and `mutable`; the choice of borrows, moves and copies; Rust backend for the pure subset | `rustc` projection agrees on the corpus |
 | M3 | Capabilities, effects, `y fix` pinning; tests, `covers`, the coverage gate | The § 2 tour runs end to end without `Shared` |
 | M4 | `Shared`, `atomic`, `retry`, `orelse`; `within`, `task`, supervision; controllable scheduler, fault injection | The § 2 tour runs end to end |
 | M5 | Commands, handlers, workflows; schemas, migrations, `Store` | Crash-injection suite |
@@ -1566,10 +1581,10 @@ The complete list, so that the size of the surface is visible:
 
 ```text
 declarations   module use public function record type case state transition trait implementation constant unit
-               schema migrate command handler workflow test derived rule copy transient self Self
+               schema migrate command handler workflow test derived rule transient self Self
 contracts      requires ensures invariant where old assert
 control        if else match when for in while break continue return fail
-bindings       let variable mutable move from captures with arena compile
+bindings       let variable mutable captures with arena compile
 concurrency    within task supervise detach forever uncancellable
 transactions   atomic retry orelse enqueue submit
 claims, gaps   unsafe assume allow reveal because todo

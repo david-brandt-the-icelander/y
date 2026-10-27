@@ -14,6 +14,6 @@ public function main() -> Void ! PlayError
 {
     let words = compile parse_word_list(WORD_LIST)
     with console = system.console(), random = system.random(), forever = system.forever() {
-        play(&words)?
+        play(words)?
     }
 }

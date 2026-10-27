@@ -249,7 +249,7 @@ impl From<ConsoleError> for PlayError {
 pub fn play(words: &[Word], console: &mut Console, random: &mut Random, forever: &Forever) -> Result<(), PlayError> {
     require(!words.is_empty(), "hangman::play#has_words");
     let chosen = random.index_below(words.len());
-    let mut game = new_game(words[chosen].clone());
+    let mut game = new_game(words[chosen].clone()); // y: a copy, because new_game keeps its word and `words` is still read
     console.write_line("Hangman: find the word, one letter at a time.")?;
     while outcome(&game) == Outcome::Playing { // y: #playing
         let picture = gallows(game.misses.len());

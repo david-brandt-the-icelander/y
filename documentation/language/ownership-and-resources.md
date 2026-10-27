@@ -6,45 +6,40 @@
 
 ## What this is for
 
-Y takes the useful half of Rust's ownership model — one owner, aliasing that excludes mutation,
-deterministic destruction — and declines to make the programmer spell out the parts a compiler can work
-out. The goal is not to resemble Rust. It is that a program which aliases unsafely does not compile, and
-that a value's lifetime is a fact rather than a convention.
+Y keeps what Rust's ownership model is for — nothing changes behind a reader's back, aliasing never
+permits a data race, and a value's lifetime is a fact rather than a convention — without asking the
+programmer to spell out references, borrows or moves. A Y program reads as if every value were
+garbage-collected, and the compiler works out ownership from it
+→ [`../../proposal/Y-proposal.md` § 3.6](../../proposal/Y-proposal.md#36-values-and-ownership).
 
-Two things make this matter more for generated code than for hand-written code. An agent will happily
-produce a plausible aliasing bug, and an agent will happily produce a hidden deep copy to get past a
-borrow error. Y rejects the first and refuses to perform the second.
+Two things make this matter more for generated code than for hand-written code. An agent writing Rust
+spends most of its failed attempts on borrows and lifetimes, and the annotations it writes to get past
+them tell a reviewer about memory, not about intent.
 
-## Ownership
+## Values
 
-- ⚠️ Every value has exactly one owner at a time. Assignment and argument passing transfer ownership,
-  and using a value after it has been transferred is a compile error naming the transfer site.
-- ⚠️ `&T` is a shared borrow: any number may exist at once, and none of them permits mutation.
-- ⚠️ `&mutable T` is an exclusive borrow: while one exists, no other borrow of that value exists, and it
-  permits mutation.
+- ⚠️ Y source has no references, no borrows, no lifetimes and no moves. A value is passed, stored and
+  returned as freely as in a garbage-collected language.
+- ⚠️ **Values have value semantics.** A value never changes under someone who holds it: keeping a value
+  keeps it as it is, and changing a copy changes only that copy.
+- ⚠️ **Parameters are immutable by default.** `x: T` is read and never changed. `x: mutable T` lets the
+  callee change the caller's value, and the call says so too, `update(mutable order)`. While the call
+  runs, nothing else can reach that value.
 
   ```y
-  function inspect(order: &Order) { ... }
+  function inspect(order: Order) { ... }
 
-  function update(order: &mutable Order) { ... }
+  function update(order: mutable Order) { ... }
   ```
 
-- ⚠️ A borrow may not outlive the value it borrows, and a function may return a borrow derived from a
-  borrowed parameter.
-- ⚠️ `move` states a transfer that would happen anyway, for a reader who wants it visible:
-  `let transferred = move value`. It changes nothing about what the program means.
-- ⚠️ **The compiler never inserts a clone to make a program type-check.** Where a program needs a copy,
-  the copy is written, and a program that would only work with a hidden copy is rejected with the
-  ownership conflict that caused it. Silent deep copies are the mechanism by which a pleasant surface
-  syntax turns into a program with surprising cost, and Y does not have them.
-- ⚠️ Types that are cheap and safe to duplicate bit-for-bit are copied rather than moved, and the set of
-  such types is closed and part of a type's declaration rather than inferred from its size.
-- ⚠️⛔ **Ownership is inferred as far as inference stays predictable, and annotations are written where
-  it does not.** The compiler may infer substantially more than Rust does — how much more, and what the
-  rule is for when a signature must say `&` out loud, is undecided; § 31 lists the degree of ownership
-  inference as open. ⛔ **Unblocked by** the language owner. It decides whether the borrow markers in
-  every example in this corpus are mandatory or merely permitted, so it is a precondition for writing
-  the first real Y program rather than a later refinement.
+- ⚠️ A `let` binding may not change, and a `variable` may. Method receivers are declared `self` or
+  `mutable self`, and are not marked at the call.
+- ⚠️ **The compiler chooses the representation.** A parameter the callee only reads is passed as a
+  shared borrow; a value the callee keeps is moved when the caller no longer uses it and copied when it
+  does; a value that would be copied often may be counted and copied on write; a `mutable` parameter is
+  an exclusive borrow. `y explain` lists every copy the compiler made and why.
+- ⚠️ Borrows exist only in the generated code, where an independent checker verifies them
+  → [`../toolchain/oracles.md`](../toolchain/oracles.md).
 
 ## Lifetime and cleanup
 
@@ -54,18 +49,18 @@ borrow error. Y rejects the first and refuses to perform the second.
   owner, whether the scope exits normally or through a failure.
 - ⚠️ Cleanup that can itself fail declares a failure type, and a scope whose cleanup fails propagates
   that failure rather than discarding it.
-- ⚠️⛔ **A bounded set of types opts out of single ownership** where a graph genuinely needs shared
-  lifetime, through reference counting or a region discipline rather than a tracing collector. Which
-  types, whether the choice is per-type or per-allocation, and whether cycles are rejected or leaked is
-  undecided; § 31 lists garbage collection versus region and ownership strategies as open.
-  ⛔ **Unblocked by** the language owner.
+- ⚠️ **A type with cleanup is a resource, and a resource is never copied.** Giving it to a callee that
+  keeps it ends the caller's use of it, and a later use is a compile error naming where it was given
+  away. It is cleaned up once, at the end of the scope of its last holder.
+- ⚠️ Values share freely without a type that opts out of single ownership: there are no references to
+  share. Mutable state between tasks is `Shared<T>` → [Shared state](shared-state.md), and a graph is a
+  collection or arena of nodes that refer to each other by typed index.
 
 ## Arenas
 
 - ⚠️ An arena owns a set of values with one lifetime and destroys them together, so that a computation
   which allocates heavily does not pay for individual destruction.
-- ⚠️ A value allocated in an arena may not outlive the arena, and a borrow of it may not escape the
-  arena's scope.
+- ⚠️ A value allocated in an arena may not outlive the arena, and may not escape the arena's scope.
 - ⚠️ **An arena may own an external resource, and owning it does not make it transactional.** A GPU
   buffer, a socket and a file handle can all have their destruction managed by an arena while remaining
   operations that must not execute speculatively. The two questions are separate and answered by
@@ -80,11 +75,10 @@ borrow error. Y rejects the first and refuses to perform the second.
 
 | Program | Diagnostic | Status |
 | --- | --- | --- |
-| Use of a value after ownership transferred | Where it was transferred | ⚠️ |
-| `&mutable` alongside any other live borrow | The conflicting borrow and its extent | ⚠️ |
-| Mutation through a shared borrow | That `&` excludes mutation | ⚠️ |
-| A borrow outliving its referent | Where the referent dies | ⚠️ |
-| A program that would need an implicit clone | The ownership conflict, not a suggestion to copy | ⚠️ |
+| A change to a parameter that is not `mutable` | That the parameter is immutable, and how to declare it `mutable` | ⚠️ |
+| A call that passes a `mutable` parameter without `mutable` at the call | The parameter, and the call to mark | ⚠️ |
+| The same value passed `mutable` twice in one call, or `mutable` and read | The two arguments | ⚠️ |
+| Use of a resource after it was given away | Where it was given away | ⚠️ |
 | An arena-allocated value escaping its arena | The arena's scope | ⚠️ |
 | A speculative context performing a non-repeatable operation on an arena-owned external resource | That arena ownership is not transactional | ⚠️ |
 

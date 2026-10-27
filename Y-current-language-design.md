@@ -258,12 +258,13 @@ The semantic model should be able to represent:
 Illustrative syntax may include familiar forms:
 
 ```y
-function inspect(order: &Order) { ... }
+function inspect(order: Order) { ... }
 
-function update(order: &mutable Order) { ... }
-
-let transferred = move value
+function update(order: mutable Order) { ... }
 ```
+
+The October proposal settles this further: source has value semantics and no references at all, and
+borrows, moves and copies are the compiler's choices (`proposal/Y-proposal.md` § 3.6).
 
 The compiler may infer substantially more than Rust does at the source level.
 
@@ -591,7 +592,7 @@ Y should support machine-checkable preconditions, postconditions, and invariants
 Illustrative syntax:
 
 ```y
-function withdraw(account: &mutable Account, amount: Money) -> Receipt ! WithdrawError
+function withdraw(account: mutable Account, amount: Money) -> Receipt ! WithdrawError
     requires amount > 0
     requires account.balance >= amount
     ensures account.balance == old(account.balance) - amount

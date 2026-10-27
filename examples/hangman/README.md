@@ -40,13 +40,16 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | Y | Bare body | Constraint file or `y-facts.json` | Rust |
 |---|---|---|---|
 | `function f(x: T) -> R` | `fn f(x)` | a `function` subject: `params`, `result` | `fn f(x: T) -> R` |
-| `x: T` (moves in), `&T`, `&mutable T` | the name | `type`, and `access` read/readers or write/exclusive | `T`, `&T`, `&mut T` |
+| `x: T`, read only (Y's default) | the name | `type` `ref<T>`, `access` read/readers | `&T`, a shared borrow |
+| `x: T` that the function keeps (`new_game(word: Word)`) | the name | `type` `T` | `T` by value; the caller's last use moves it, and any other use is a copy |
+| `x: mutable T`, and `mutable x` at the call | the name; `&mut x` at the call | `type` `ref<T>`, `access` write/exclusive | `&mut T` |
+| A copy the compiler had to make (`new_game(words[chosen])`, where `words` is still read) | `.clone()`, marked `// y: a copy` | `y-facts.json` `copies` | the same |
 | `R ! E`, `fail .Case(...)`, `?` | `return Err(E::Case { .. })`, `?` | `result.fails` | `Result<R, E>` |
 | `?` converting through the one case that carries the failure | `?` | an `impl From` subject | `impl From<ConsoleError> for PlayError` |
 | `type Word = Text where letters_only = ..., long_enough = ...` | `struct Word(_)` and a constructor that checks each constraint in order | two `invariant` clauses, with status `lifted` by the constructor | a newtype with `Word::new(..) -> Result<Word, ConstraintViolation>` |
 | `record`, closed sum type | `struct`, `enum` with named fields | `fields`, `variants` | the same, deriving the structural equality Y always derives |
 | No `with` clause: the function is pure | — | `effects` clause `pure` | — |
-| `&mut` parameter and no `with` | — | `no io`, `no clock`, `no randomness`, `mutates only game.hits, game.misses` | — |
+| A `mutable` parameter and no `with` | — | `no io`, `no clock`, `no randomness`, `mutates only game.hits, game.misses` | — |
 | `with console: Console, random: Random, forever: Forever` | three more parameters | their types and access; `effects only console, random`; the clause also in `y-facts.json` `capabilities` | `&mut Console, &mut Random, &Forever` |
 | `with system: System` on the entry point | `System::root()` | `y-facts.json` `capabilities` | the same |
 | `requires name = (p)` | `require(p, "hangman::f#name")` | a `require` clause, status `lifted` by that call | a run-time check whose failure is a fault (a panic naming the construct) |
@@ -56,7 +59,7 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | `forever because "..."` | the `&Forever` argument of the call that waits | `y-facts.json` `claims` | `console.read_line(forever)` |
 | `compile parse_word_list(WORD_LIST)` | the value, as a `const` array, and a `static` built once from it | `y-facts.json` `compiled` | the same, and a generated test that makes the call at run time and compares |
 | `Count<Element>`, `Count<Rune>` | — (units are erased) | `y-facts.json` `units` | `usize` |
-| `Text`, `&Text`, `Rune`, `List<T>`, `Set<T>` | — | `text`, `ref<text>`, `Rune`, `list<T> as 'Vec'`, `set<T> as 'BTreeSet'` | `String`, `&str`, `y_runtime::Rune`, `Vec<T>`, `BTreeSet<T>` |
+| `Text` (and a read-only `Text` parameter), `Rune`, `List<T>`, `Set<T>` | — | `text`, `ref<text>`, `Rune`, `list<T> as 'Vec'`, `set<T> as 'BTreeSet'` | `String`, `&str`, `y_runtime::Rune`, `Vec<T>`, `BTreeSet<T>` |
 | Interpolation, `"{name}"` and `"{game.word}"` | `format!("{name}")`, `format!("{}", game.word)` | — | the same |
 | `variable` | `let` | — | `let mut`, which `weave` derived through rustc (24 of them) |
 | `test name covers a, b { given / with / when / then }` | `#[test] fn name()`; a `?` in `given` or `when` lowers to `expect`; `fake Console(input: [...])` to `Console::fake(...)` | `y-facts.json` `tests`: what each covers; repeated in a comment in the test | the same |

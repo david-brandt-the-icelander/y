@@ -122,6 +122,12 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
             listed.insert(format!("{}#{name}", function.rsplit('.').next().unwrap()));
         }
     }
+    // each copy the lowering made is where the facts say, in the Y source and in the bare body
+    for c in facts["copies"].as_array().unwrap() {
+        let what = c["what"].as_str().unwrap();
+        assert!(at(c["y"].as_str().unwrap()).contains(what), "copy of {what}: not at {}", c["y"]);
+        assert!(at(c["bare"].as_str().unwrap()).contains("// y: a copy"), "copy of {what}: not marked at {}", c["bare"]);
+    }
     // every named decision of the Y source is listed: `if name = (` and `while name = (`
     let mut in_source = BTreeSet::new();
     for y in ["y/src/hangman.y", "y/src/main.y"] {
