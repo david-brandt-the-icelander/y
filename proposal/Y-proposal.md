@@ -431,6 +431,12 @@ Referring to a case:
 
 - `T?` is a distinct type from `T`. Neither converts to the other implicitly.
 - `??` supplies a default, `?.` reaches through absence, and `match` covers `.Some(value)` and `.None`.
+- **A condition narrows.** Inside `if found = (user != .None) { ... }`, and after `if missing = (user == .None) {
+  return ... }`, `user` is a `User`. Nothing is written for this: every condition adds its predicate as a fact at the
+  points it guards (constraint language § 11.1.1), and the type checker reads the fact.
+  - The fact ends where the value may change: an assignment to a `var`, or a call that borrows it `&mut`. A field path
+    such as `order.customer` narrows the same way, until something may write to that path.
+  - The same facts discharge a callee's `requires` (§ 3.11) when they imply it.
 
 **Several results.** A function that produces several results returns a record. For a one-off result, write an
 anonymous record type with named fields: `-> { quotient: Int, remainder: Int }`.
@@ -921,8 +927,9 @@ documentation rules make the choice visible: a `requires` has no `fails` role, a
 - **The build reports every contract it demoted to a runtime check, and the review packet lists them.** A guarantee
   that was never proven is not allowed to look like one that was.
 - Contracts generate property tests (§ 3.14) and are projected to Why3 or Dafny (§ 4.6).
-- v1 has no flow-sensitive refinement inference. Properties that must travel with a value belong in a refined type
-  (§ 3.3). Properties of one call belong in its contract. No ordinary build needs a theorem prover.
+- v1 has no flow-sensitive refinement inference beyond the facts conditions add (§ 3.3): a condition's own predicate
+  holds where it guards, and nothing else is derived from it. Properties that must travel with a value belong in a
+  refined type (§ 3.3). Properties of one call belong in its contract. No ordinary build needs a theorem prover.
 
 **Typestate.** A `state` declaration lists the fields every state shares, then the fields only some states have:
 
@@ -1129,6 +1136,64 @@ Together with claims and the coverage gate, this gives Y ai.lang's fifth invaria
 - A requirement linked by `satisfies` either has code, or is listed without it.
 - An unfinished piece of work either compiles as a `todo` or a `gap`, or it does not compile.
 
+### 3.17 Evaluation at compile time
+
+`compile` runs a call while the program is built, and the program holds the result as a value:
+
+```y
+fn checksum(bytes: &Bytes) -> UInt32 {
+    let table = compile crc_table(polynomial: 0xEDB8_8320)
+    ...
+}
+```
+
+**What can be compiled.**
+
+- The operand is one call to a function with no `with` clause, which makes it pure (§ 3.7).
+- The function carries no mark. The same function runs while building and while running, as suspension needs no
+  `async`. Unlike C++'s `constexpr` and Rust's `const fn`, there is no second kind of function to keep in step with the
+  first.
+- Every argument is known when the program is built: a literal, a `const`, or a name bound by another `compile`. Any
+  other argument is an error that names it.
+- The result holds no capability. A result cannot hold a borrow either, because no type does (§ 3.6).
+- A `const` declaration is evaluated the same way, so `const CRC_TABLE = crc_table(polynomial: 0xEDB8_8320)` needs no
+  keyword. `compile` is the same evaluation inside a body, for a value that one function uses.
+
+**What evaluation produces.**
+
+- **The value is the one the call would return at run time.** Pure code in Y depends on nothing that differs between
+  the build machine and the target: integers have fixed sizes and are checked, and there is no locale or hash order
+  (§ 4.7).
+- **A fault is a build error.** A failed `assert`, an overflow, a violated `requires` or a reached `todo` produces the
+  fault report of § 3.4, placed at the `compile` and at the construct that faulted.
+- **A failure is a build error too.** A call returning `T ! E` must succeed. A failure is reported with its case and the
+  case's `fails` role, and the result has type `T`. Literal prefixes (`re"…"`, `url"…"`) are this rule with a shorter
+  spelling: a literal that would not parse never builds.
+- **Evaluation that does not finish is a build error.** It is stopped by the toolchain's fixed step limit and reported
+  with the call stack where it stopped. Source cannot change the limit.
+
+**What a reviewer sees.**
+
+- `y explain` shows the value at each `compile`. A large value is shown as its size and fingerprint.
+- When an edit to the function or its arguments changes a computed value, the semantic diff (§ 4.4) shows the old and
+  new values, so a reviewer sees what the edit did without running anything.
+
+**Lowering.**
+
+- The compiler evaluates the call on Core IR. The backend writes the result as data. In bare Rust it is a `static` or
+  `const` item holding the value, not a call, so it does not depend on what Rust's `const fn` allows (which excludes
+  allocating).
+- A value Rust cannot hold as a constant, such as a `Map`, is built once, on first use, from static data.
+- The constraint file records where the value came from. A generated test makes the same call at run time and compares
+  the results, which checks the compiler's evaluator against the backend as an independent oracle (§ 4.6).
+
+**Not in v1.**
+
+- Parameters that must be known when the program is built, such as Zig's `comptime` parameters and C++ templates over
+  values. They would let a function specialise on a value (a buffer of fixed size, say). Generics (§ 8, question 2)
+  decide whether they come.
+- Generating types or declarations. Y has no macros, and `compile` produces values only.
+
 ## 4. The toolchain is the reviewer's instrument
 
 In this design the language and its toolchain are one product. Every rule in § 3 exists so that a tool in this section
@@ -1322,7 +1387,7 @@ owner still decides; the recommendation is here so that deciding is quick.
 | `afterCommit` durability | Dropped; `enqueue` and buffered telemetry cover every case | § 3.10 |
 | Workflow syntax and body boundary | `workflow` may open `atomic`; determinism enforced by its permitted capabilities | § 3.10 |
 | Supervision source model | A policy on a task scope | § 3.8 |
-| Refinement reasoning | Named `where` constraints on types, contracts on functions, no flow-sensitive inference in v1 | § 3.3, § 3.11 |
+| Refinement reasoning | Named `where` constraints on types, contracts on functions, conditions narrow where they guard; no other flow-sensitive inference in v1 | § 3.3, § 3.11 |
 | Typestate over shared state | Owned values in v1; shared state machines advanced inside `atomic` | § 3.11 |
 | Schema projection onto storage | One projection in v1; projection choice belongs to the physical optimiser later | § 3.12, § 5 |
 | What triggers `converge` | A deployment action, post-v1 | § 5 |
@@ -1458,7 +1523,7 @@ declarations   module use pub fn record type case state transition trait impl co
                schema migrate command handler workflow test derived rule copy transient self Self
 contracts      requires ensures invariant where old assert
 control        if else match when for in while break continue return fail
-bindings       let var move from captures with arena
+bindings       let var move from captures with arena compile
 concurrency    within task supervise detach forever uncancellable
 transactions   atomic retry orelse enqueue submit
 claims, gaps   unsafe assume allow reveal because todo
