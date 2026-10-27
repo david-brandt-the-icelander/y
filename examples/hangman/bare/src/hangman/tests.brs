@@ -24,7 +24,7 @@ fn a_letter_not_in_the_word_is_a_miss() {
 
 #[test]
 fn a_repeated_letter_is_refused() {
-    // y: covers guess#repeated, guess!already_guessed
+    // y: covers guess#repeated, guess!guess_error.already_guessed
     let game = Game { word: Word::new("rope".to_string()).expect("given"), hits: BTreeSet::new(), misses: vec![Rune('z')] };
     let refused = guess(&mut game, "Z");
     assert!(refused == Err(GuessError::AlreadyGuessed), "refused_as_repeated");
@@ -33,7 +33,7 @@ fn a_repeated_letter_is_refused() {
 
 #[test]
 fn typing_nothing_is_not_a_guess() {
-    // y: covers guess#nothing_typed, guess!empty
+    // y: covers guess#nothing_typed, guess!guess_error.empty
     let game = new_game(Word::new("rope".to_string()).expect("given"));
     let refused = guess(&mut game, "   ");
     assert!(refused == Err(GuessError::Empty), "refused_as_empty");
@@ -41,7 +41,7 @@ fn typing_nothing_is_not_a_guess() {
 
 #[test]
 fn two_letters_are_not_a_guess() {
-    // y: covers guess#not_one_rune, guess!not_one_letter
+    // y: covers guess#not_one_rune, guess!guess_error.not_one_letter
     let game = new_game(Word::new("rope".to_string()).expect("given"));
     let refused = guess(&mut game, "ab");
     assert!(refused == Err(GuessError::NotOneLetter), "refused_as_two");
@@ -109,14 +109,14 @@ fn a_word_list_is_read_in_order() {
 
 #[test]
 fn an_empty_word_list_is_refused() {
-    // y: covers parse_word_list#empty, parse_word_list!empty
+    // y: covers parse_word_list#empty, parse_word_list!word_list_error.empty
     let refused = parse_word_list("   ");
     assert!(refused == Err(WordListError::Empty), "refused_as_empty");
 }
 
 #[test]
 fn a_short_word_is_refused() {
-    // y: covers parse_word_list!not_a_word
+    // y: covers parse_word_list!word_list_error.not_a_word
     let refused = parse_word_list("rope cat");
     assert!(refused == Err(WordListError::NotAWord), "refused_as_not_a_word");
 }
@@ -147,7 +147,7 @@ fn a_player_who_misses_six_times_is_hanged() {
 
 #[test]
 fn a_closed_console_ends_the_game() {
-    // y: covers play#closed, play!input_closed
+    // y: covers play#closed, play!play_error.input_closed
     let words = vec![Word::new("rope".to_string()).expect("given")];
     let console = Console::fake(&["r"], false);
     let random = Random::seeded(7);
@@ -158,7 +158,7 @@ fn a_closed_console_ends_the_game() {
 
 #[test]
 fn a_failing_console_ends_the_game() {
-    // y: covers play!console
+    // y: covers play!play_error.console
     let words = vec![Word::new("rope".to_string()).expect("given")];
     let console = Console::fake(&[], true);
     let random = Random::seeded(7);

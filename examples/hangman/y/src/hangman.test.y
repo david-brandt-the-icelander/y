@@ -23,7 +23,7 @@ test a_letter_not_in_the_word_is_a_miss
 
 -- A letter guessed before is refused in either case, and costs nothing.
 test a_repeated_letter_is_refused
-        covers guess#repeated, guess!already_guessed:
+        covers guess#repeated, guess!guess_error.already_guessed:
     given:
         variable game = game(word: word.new("rope")?, hits: set.new(), misses: ['z'])
     when:
@@ -34,7 +34,7 @@ test a_repeated_letter_is_refused
 
 -- A line of spaces is not a guess.
 test typing_nothing_is_not_a_guess
-        covers guess#nothing_typed, guess!empty:
+        covers guess#nothing_typed, guess!guess_error.empty:
     given:
         variable game = new_game(word.new("rope")?)
     when:
@@ -44,7 +44,7 @@ test typing_nothing_is_not_a_guess
 
 -- Two letters are not a guess.
 test two_letters_are_not_a_guess
-        covers guess#not_one_rune, guess!not_one_letter:
+        covers guess#not_one_rune, guess!guess_error.not_one_letter:
     given:
         variable game = new_game(word.new("rope")?)
     when:
@@ -140,7 +140,7 @@ test a_word_list_is_read_in_order
 
 -- A list with no words is refused.
 test an_empty_word_list_is_refused
-        covers parse_word_list#empty, parse_word_list!empty:
+        covers parse_word_list#empty, parse_word_list!word_list_error.empty:
     when:
         let refused = parse_word_list("   ")
     then:
@@ -148,7 +148,7 @@ test an_empty_word_list_is_refused
 
 -- A list with a short word is refused.
 test a_short_word_is_refused
-        covers parse_word_list!not_a_word:
+        covers parse_word_list!word_list_error.not_a_word:
     when:
         let refused = parse_word_list("rope cat")
     then:
@@ -184,7 +184,7 @@ test a_player_who_misses_six_times_is_hanged
 
 -- A console that closes in the middle of a game ends it with a failure.
 test a_closed_console_ends_the_game
-        covers play#closed, play!input_closed:
+        covers play#closed, play!play_error.input_closed:
     given:
         let words = [word.new("rope")?]
     with:
@@ -198,7 +198,7 @@ test a_closed_console_ends_the_game
 
 -- A console that cannot be read ends the game with the console's error.
 test a_failing_console_ends_the_game
-        covers play!console:
+        covers play!play_error.console:
     given:
         let words = [word.new("rope")?]
     with:

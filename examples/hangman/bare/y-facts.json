@@ -31,7 +31,7 @@
       "subject": "hangman_example::hangman::gallows",
       "param": "misses",
       "unit": "count<element>",
-      "y": "y/src/hangman.y:155"
+      "y": "y/src/hangman.y:156"
     },
     {
       "subject": "hangman_example::hangman::Word",
@@ -49,7 +49,7 @@
         "forever as forever"
       ],
       "lowered": "as the last three parameters, in order",
-      "y": "y/src/hangman.y:202"
+      "y": "y/src/hangman.y:203"
     },
     {
       "subject": "hangman_example::main",
@@ -65,7 +65,7 @@
       "claim": "forever",
       "because": "a player may think for as long as they like",
       "requires": "Forever",
-      "y": "y/src/hangman.y:215",
+      "y": "y/src/hangman.y:216",
       "bare": "bare/src/hangman.brs:268"
     }
   ],
@@ -82,7 +82,7 @@
     {
       "what": "words[chosen]",
       "why": "new_game keeps its word, and words is still read",
-      "y": "y/src/hangman.y:205",
+      "y": "y/src/hangman.y:206",
       "bare": "bare/src/hangman.brs:258"
     }
   ],
@@ -90,107 +90,107 @@
     "hangman.parse_word_list": [
       {
         "name": "blank",
-        "y": "y/src/hangman.y:39",
+        "y": "y/src/hangman.y:40",
         "bare": "bare/src/hangman.brs:67"
       },
       {
         "name": "empty",
-        "y": "y/src/hangman.y:44",
+        "y": "y/src/hangman.y:45",
         "bare": "bare/src/hangman.brs:75"
       }
     ],
     "hangman.outcome_of": [
       {
         "name": "hanged",
-        "y": "y/src/hangman.y:90",
+        "y": "y/src/hangman.y:91",
         "bare": "bare/src/hangman.brs:126"
       },
       {
         "name": "solved",
-        "y": "y/src/hangman.y:92",
+        "y": "y/src/hangman.y:93",
         "bare": "bare/src/hangman.brs:129"
       }
     ],
     "hangman.guess": [
       {
         "name": "nothing_typed",
-        "y": "y/src/hangman.y:109",
+        "y": "y/src/hangman.y:110",
         "bare": "bare/src/hangman.brs:146"
       },
       {
         "name": "not_one_rune",
-        "y": "y/src/hangman.y:112",
+        "y": "y/src/hangman.y:113",
         "bare": "bare/src/hangman.brs:150"
       },
       {
         "name": "not_a_letter",
-        "y": "y/src/hangman.y:115",
+        "y": "y/src/hangman.y:116",
         "bare": "bare/src/hangman.brs:153"
       },
       {
         "name": "repeated",
-        "y": "y/src/hangman.y:117",
+        "y": "y/src/hangman.y:118",
         "bare": "bare/src/hangman.brs:156"
       },
       {
         "name": "in_word",
-        "y": "y/src/hangman.y:119",
+        "y": "y/src/hangman.y:120",
         "bare": "bare/src/hangman.brs:159"
       }
     ],
     "hangman.shown_rune": [
       {
         "name": "known",
-        "y": "y/src/hangman.y:133",
+        "y": "y/src/hangman.y:134",
         "bare": "bare/src/hangman.brs:174"
       }
     ],
     "hangman.gallows": [
       {
         "name": "has_head",
-        "y": "y/src/hangman.y:158",
+        "y": "y/src/hangman.y:159",
         "bare": "bare/src/hangman.brs:199"
       },
       {
         "name": "has_body",
-        "y": "y/src/hangman.y:161",
+        "y": "y/src/hangman.y:162",
         "bare": "bare/src/hangman.brs:203"
       },
       {
         "name": "has_left_arm",
-        "y": "y/src/hangman.y:164",
+        "y": "y/src/hangman.y:165",
         "bare": "bare/src/hangman.brs:207"
       },
       {
         "name": "has_right_arm",
-        "y": "y/src/hangman.y:167",
+        "y": "y/src/hangman.y:168",
         "bare": "bare/src/hangman.brs:211"
       },
       {
         "name": "has_left_leg",
-        "y": "y/src/hangman.y:170",
+        "y": "y/src/hangman.y:171",
         "bare": "bare/src/hangman.brs:215"
       },
       {
         "name": "has_right_leg",
-        "y": "y/src/hangman.y:173",
+        "y": "y/src/hangman.y:174",
         "bare": "bare/src/hangman.brs:219"
       }
     ],
     "hangman.play": [
       {
         "name": "playing",
-        "y": "y/src/hangman.y:207",
+        "y": "y/src/hangman.y:208",
         "bare": "bare/src/hangman.brs:260"
       },
       {
         "name": "closed",
-        "y": "y/src/hangman.y:216",
+        "y": "y/src/hangman.y:217",
         "bare": "bare/src/hangman.brs:269"
       },
       {
         "name": "won",
-        "y": "y/src/hangman.y:226",
+        "y": "y/src/hangman.y:227",
         "bare": "bare/src/hangman.brs:282"
       }
     ]
@@ -221,7 +221,7 @@
       "rust": "hangman_example::hangman::tests::a_repeated_letter_is_refused",
       "covers": [
         "guess#repeated",
-        "guess!already_guessed"
+        "guess!guess_error.already_guessed"
       ]
     },
     "typing_nothing_is_not_a_guess": {
@@ -229,7 +229,7 @@
       "rust": "hangman_example::hangman::tests::typing_nothing_is_not_a_guess",
       "covers": [
         "guess#nothing_typed",
-        "guess!empty"
+        "guess!guess_error.empty"
       ]
     },
     "two_letters_are_not_a_guess": {
@@ -237,7 +237,7 @@
       "rust": "hangman_example::hangman::tests::two_letters_are_not_a_guess",
       "covers": [
         "guess#not_one_rune",
-        "guess!not_one_letter"
+        "guess!guess_error.not_one_letter"
       ]
     },
     "a_digit_is_not_a_guess": {
@@ -307,14 +307,14 @@
       "rust": "hangman_example::hangman::tests::an_empty_word_list_is_refused",
       "covers": [
         "parse_word_list#empty",
-        "parse_word_list!empty"
+        "parse_word_list!word_list_error.empty"
       ]
     },
     "a_short_word_is_refused": {
       "y": "y/src/hangman.test.y:150",
       "rust": "hangman_example::hangman::tests::a_short_word_is_refused",
       "covers": [
-        "parse_word_list!not_a_word"
+        "parse_word_list!word_list_error.not_a_word"
       ]
     },
     "a_player_who_finds_every_letter_wins": {
@@ -339,14 +339,14 @@
       "rust": "hangman_example::hangman::tests::a_closed_console_ends_the_game",
       "covers": [
         "play#closed",
-        "play!input_closed"
+        "play!play_error.input_closed"
       ]
     },
     "a_failing_console_ends_the_game": {
       "y": "y/src/hangman.test.y:200",
       "rust": "hangman_example::hangman::tests::a_failing_console_ends_the_game",
       "covers": [
-        "play!console"
+        "play!play_error.console"
       ]
     }
   }

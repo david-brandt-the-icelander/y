@@ -43,8 +43,8 @@ buyer: Who pays, and with what, as buyer.
 hold: The hold, waiting for the charge to be confirmed, as hold.
 inventory: The stock and the holds on it, as shared<inventory>.
 charges: Where charges are queued, as enqueue<charge_card>.
-fails unknown_item: The item is not stocked here.
-fails timed_out: No unit became free within five seconds.
+fails hold_error.unknown_item: The item is not stocked here.
+fails hold_error.timed_out: No unit became free within five seconds.
 ------------------------------------------------------------------------------------------------------------------------
 public function hold_and_charge(item, buyer) returns hold fails hold_error
         with inventory, charges:
@@ -215,7 +215,7 @@ no case carrying it. The agent adds `case timed_out(deadline: expired)`, and `y 
 $ y fix src/shop/checkout.y
   pinned  with inventory, charges   (hold_and_charge)
   added   inventory: ..., as shared<inventory>.   charges: ..., as enqueue<charge_card>.
-  added   fails timed_out: ...   (documentation for the new capabilities and failure case; prose left for the author)
+  added   fails hold_error.timed_out: ...   (documentation for the new capabilities and failure case; prose left for the author)
 ```
 
 **The test** lives at the path computed from the module (`src/shop/checkout.test.y`), declares which outcome it covers,
@@ -249,14 +249,14 @@ $ y review main..hold-and-charge
 Signatures
   + shop.checkout.hold_and_charge                         new, public
       authority    shared<inventory>, enqueue<charge_card>
-      fails        unknown_item, timed_out
+      fails        hold_error.unknown_item, hold_error.timed_out
       waits        at most 5s
       transacts    hold_one_unit — writes inventory.stocks, inventory.holds; enqueues charge_card
 Commands
   charge_card                                             new submitter: hold_and_charge
 Claims            none
 Gaps              none
-Coverage          4 of 4 outcomes covered by 4 tests (#sold_out, #sold_out.else, !unknown_item, !timed_out)
+Coverage          4 of 4 outcomes covered by 4 tests (#sold_out, #sold_out.else, !hold_error.unknown_item, !hold_error.timed_out)
                   1 fault schedule recorded (seed 0x5e1d)
 Contracts         none declared
 Oracles           rustc ownership projection agrees
@@ -362,7 +362,7 @@ function meaning_of_life() returns answer:
     block. So a value made inside a transaction is returned from inside it (§ 0's `hold`).
   - A function without `returns` has no result, and its `return` takes no name.
 - **A function that can fail says so in its signature:** `fails guess_error`. Its documentation then has a
-  `fails <case>:` role for every case.
+  `fails <type>.<case>:` role for every case: `fails guess_error.empty:`.
 
 **Calls.**
 
@@ -484,7 +484,7 @@ Takes money out of an account.
 account: The account to debit, as account.
 amount: How much to take, as money<isk>.
 debit: A receipt for the debit, as receipt.
-fails insufficient_funds: The balance is lower than the amount.
+fails withdraw_error.insufficient_funds: The balance is lower than the amount.
 ------------------------------------------------------------------------------------------------------------------------
 public function withdraw(mutable account, amount) returns debit fails withdraw_error
 ```
@@ -497,7 +497,7 @@ public function withdraw(mutable account, amount) returns debit fails withdraw_e
 | `<parameter>: …, as <type>.` | One per parameter, by name: what it means, and its type | Every parameter of every function |
 | `<result>: …, as <type>.` | What the result named after `returns` means, and its type | Every function with a result |
 | `<capability>: …, as <type>.` | One per capability of the `with` clause | Every capability |
-| `fails <case>:` | When and why each failure case occurs | Every case of a `public function`'s failure type |
+| `fails <type>.<case>:` | When and why each failure case occurs, the case written with its type (§ 3.3) | Every case of a `public function`'s failure type |
 | `satisfies:` | A `y:` link to the requirement or journey this implements | Optional |
 | `see:` | A `y:` link to a related declaration or document | Optional |
 | `gap:` / `defect:` / `blocked:` | Unfinished or broken behaviour (§ 3.16) | Where it applies |
@@ -809,7 +809,7 @@ exported: How many invoices were written, as count<element>.
 invoices: The stored invoices, as store<invoice>.
 uploads: Where the files go, as file_system.
 clock: The time the export is stamped with, as clock.
-fails write_failed: A file could not be written.
+fails export_error.write_failed: A file could not be written.
 ------------------------------------------------------------------------------------------------------------------------
 public function export_invoices(month) returns exported fails export_error
         with invoices, uploads, clock
@@ -1008,7 +1008,7 @@ Performs the charge; runs outside any transaction.
 command: The charge to make, as charge_card.
 charged: The payment gateway's receipt, as charge_receipt.
 gateway: The payment gateway, as http<payment_gateway>.
-fails declined: The gateway refused the charge.
+fails charge_error.declined: The gateway refused the charge.
 ------------------------------------------------------------------------------------------------------------------------
 handler charge_card(command) returns charged fails charge_error
         with gateway:
@@ -1041,8 +1041,8 @@ shipped: The shipment, as shipment.
 orders: The stored orders, as store<order>.
 charges: Where charges are submitted, as submit<charge_card>.
 shipments: Where shipments are submitted, as submit<create_shipment>.
-fails payment_declined: The charge was refused.
-fails payment_unreachable: The charge could not be delivered.
+fails fulfilment_error.payment_declined: The charge was refused.
+fails fulfilment_error.payment_unreachable: The charge could not be delivered.
 ------------------------------------------------------------------------------------------------------------------------
 workflow fulfil(hold) returns shipped fails fulfilment_error
         with orders, charges, shipments:
@@ -1075,7 +1075,7 @@ Takes money out of an account.
 account: The account to debit, as account.
 amount: How much to take, as money<isk>.
 debit: A receipt for the debit, as receipt.
-fails insufficient_funds: The balance is lower than the amount.
+fails withdraw_error.insufficient_funds: The balance is lower than the amount.
 ------------------------------------------------------------------------------------------------------------------------
 public function withdraw(mutable account, amount) returns debit fails withdraw_error
         requires positive_amount = (amount > 0isk)
@@ -1256,7 +1256,7 @@ Tests are part of the language, because the compiler must know what a test claim
 **Coverage is declared, then verified.**
 
 - A function's *outcomes* are both sides of every named decision (`f#name`, `f#name.else`) and every case of its
-  failure type (`f!case`).
+  failure type, written with its type (`f!failure_type.case`).
 - A test lists the outcomes it covers. The runner fails the test if it did not actually reach every one of them.
 - A test contributes coverage only for what it declares. This is the April 2026 rule, and it keeps coverage an auditable
   claim rather than an accident.

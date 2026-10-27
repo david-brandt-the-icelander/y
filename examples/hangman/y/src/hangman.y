@@ -30,8 +30,9 @@ Reads a word list.
 
 text: The words, separated by spaces, as string.
 words: Every word of the list, in order, as list<word>.
-fails empty: The list has no words.
-fails not_a_word: A piece of the list is not a `word`: it has a character other than `a` to `z`, or fewer than four.
+fails word_list_error.empty: The list has no words.
+fails word_list_error.not_a_word: A piece of the list is not a `word`: it has a character other than `a` to `z`, or
+  fewer than four.
 ------------------------------------------------------------------------------------------------------------------------
 public function parse_word_list(text) returns words fails word_list_error:
     variable found = list.new()
@@ -99,9 +100,9 @@ Takes one letter from what the player typed, and records it as a hit or a miss.
 game: The game, which gains the letter, as game.
 line: What the player typed, without its line ending, as string.
 answer: Whether the letter is in the word, as verdict.
-fails empty: The player typed nothing but spaces.
-fails not_one_letter: The player typed more than one character, or one that is not a letter.
-fails already_guessed: The letter was guessed before. The game is unchanged.
+fails guess_error.empty: The player typed nothing but spaces.
+fails guess_error.not_one_letter: The player typed more than one character, or one that is not a letter.
+fails guess_error.already_guessed: The letter was guessed before. The game is unchanged.
 ------------------------------------------------------------------------------------------------------------------------
 public function guess(mutable game, line) returns answer fails guess_error
         requires still_playing = (outcome_of(game) == outcome.playing):
@@ -195,8 +196,8 @@ words: The words to choose from, as list<word>.
 console: Where the game is shown and the guesses are read, as console.
 random: What chooses the word, as random.
 forever: The right to wait for the player as long as they take, as forever.
-fails input_closed: The console closed before the game ended.
-fails console: The console could not be read or written.
+fails play_error.input_closed: The console closed before the game ended.
+fails play_error.console: The console could not be read or written.
 ------------------------------------------------------------------------------------------------------------------------
 public function play(words) fails play_error
         with console, random, forever

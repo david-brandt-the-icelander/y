@@ -6,8 +6,8 @@ from hangman use game_rules, parse_word_list, play, play_error
 Plays one game of Hangman at the terminal.
 
 system: The root capability, from which the console, the random source and the right to wait come, as system.
-fails input_closed: The terminal closed before the game ended.
-fails console: The terminal could not be read or written.
+fails play_error.input_closed: The terminal closed before the game ended.
+fails play_error.console: The terminal could not be read or written.
 ------------------------------------------------------------------------------------------------------------------------
 public function main() fails play_error
         with system:
