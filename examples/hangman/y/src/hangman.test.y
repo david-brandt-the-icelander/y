@@ -5,9 +5,9 @@ test a_letter_in_the_word_is_a_hit
     given:
         variable game = new_game(word.new("gallows")?)
     when:
-        let verdict = guess(mutable game, "l")?
+        let answer = guess(mutable game, "l")?
     then:
-        assert hit = (verdict == .hit)
+        assert hit = (answer == verdict.hit)
         assert shown_twice = (masked(game) == "_ _ l l _ _ _")
 
 -- A letter not in the word is a miss, and is kept in the order it was guessed.
@@ -16,9 +16,9 @@ test a_letter_not_in_the_word_is_a_miss
     given:
         variable game = new_game(word.new("rope")?)
     when:
-        let verdict = guess(mutable game, "z")?
+        let answer = guess(mutable game, "z")?
     then:
-        assert miss = (verdict == .miss)
+        assert miss = (answer == verdict.miss)
         assert recorded = (game.misses == ['z'])
 
 -- A letter guessed before is refused in either case, and costs nothing.
@@ -29,7 +29,7 @@ test a_repeated_letter_is_refused
     when:
         let refused = guess(mutable game, "Z")
     then:
-        assert refused_as_repeated = (refused == .err(.already_guessed))
+        assert refused_as_repeated = (refused == result.err(guess_error.already_guessed))
         assert no_new_miss = (game.misses.count() == 1)
 
 -- A line of spaces is not a guess.
@@ -40,7 +40,7 @@ test typing_nothing_is_not_a_guess
     when:
         let refused = guess(mutable game, "   ")
     then:
-        assert refused_as_empty = (refused == .err(.empty))
+        assert refused_as_empty = (refused == result.err(guess_error.empty))
 
 -- Two letters are not a guess.
 test two_letters_are_not_a_guess
@@ -50,7 +50,7 @@ test two_letters_are_not_a_guess
     when:
         let refused = guess(mutable game, "ab")
     then:
-        assert refused_as_two = (refused == .err(.not_one_letter))
+        assert refused_as_two = (refused == result.err(guess_error.not_one_letter))
 
 -- A digit is not a guess.
 test a_digit_is_not_a_guess
@@ -60,7 +60,7 @@ test a_digit_is_not_a_guess
     when:
         let refused = guess(mutable game, "7")
     then:
-        assert refused_as_digit = (refused == .err(.not_one_letter))
+        assert refused_as_digit = (refused == result.err(guess_error.not_one_letter))
 
 -- The last miss allowed hangs the man.
 test six_misses_hang_the_man
@@ -70,7 +70,7 @@ test six_misses_hang_the_man
     when:
         let ending = outcome_of(game)
     then:
-        assert lost = (ending == .lost)
+        assert lost = (ending == outcome.lost)
 
 -- Finding every letter wins.
 test finding_every_letter_wins
@@ -80,7 +80,7 @@ test finding_every_letter_wins
     when:
         let ending = outcome_of(game)
     then:
-        assert won = (ending == .won)
+        assert won = (ending == outcome.won)
 
 -- A new game is still being played.
 test a_new_game_is_being_played
@@ -90,7 +90,7 @@ test a_new_game_is_being_played
     when:
         let ending = outcome_of(game)
     then:
-        assert playing = (ending == .playing)
+        assert playing = (ending == outcome.playing)
 
 -- With no misses, the gallows is empty.
 test the_empty_gallows
@@ -144,7 +144,7 @@ test an_empty_word_list_is_refused
     when:
         let refused = parse_word_list("   ")
     then:
-        assert refused_as_empty = (refused == .err(.empty))
+        assert refused_as_empty = (refused == result.err(word_list_error.empty))
 
 -- A list with a short word is refused.
 test a_short_word_is_refused
@@ -152,7 +152,7 @@ test a_short_word_is_refused
     when:
         let refused = parse_word_list("rope cat")
     then:
-        assert refused_as_not_a_word = (refused == .err(.not_a_word))
+        assert refused_as_not_a_word = (refused == result.err(word_list_error.not_a_word))
 
 -- A player who finds every letter wins, and is told the word.
 test a_player_who_finds_every_letter_wins
@@ -166,7 +166,7 @@ test a_player_who_finds_every_letter_wins
     when:
         play(words)?
     then:
-        assert announced = (console.written().last() == .some("You win! The word was rope."))
+        assert announced = (console.written().last() == optional.some("You win! The word was rope."))
 
 -- A player who misses six times is hanged, and is told the word.
 test a_player_who_misses_six_times_is_hanged
@@ -180,7 +180,7 @@ test a_player_who_misses_six_times_is_hanged
     when:
         play(words)?
     then:
-        assert announced = (console.written().last() == .some("Hanged! The word was rope."))
+        assert announced = (console.written().last() == optional.some("Hanged! The word was rope."))
 
 -- A console that closes in the middle of a game ends it with a failure.
 test a_closed_console_ends_the_game
@@ -194,7 +194,7 @@ test a_closed_console_ends_the_game
     when:
         let ended = play(words)
     then:
-        assert closed = (ended == .err(.input_closed))
+        assert closed = (ended == result.err(play_error.input_closed))
 
 -- A console that cannot be read ends the game with the console's error.
 test a_failing_console_ends_the_game
@@ -208,4 +208,4 @@ test a_failing_console_ends_the_game
     when:
         let ended = play(words)
     then:
-        assert failed_reading = (ended == .err(.console(error: console_error.fake_read_failure())))
+        assert failed_reading = (ended == result.err(play_error.console(error: console_error.fake_read_failure())))

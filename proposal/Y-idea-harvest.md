@@ -194,7 +194,7 @@ vocabulary.
 | A rune is a grapheme; strings immutable; substrings share storage; bytes become text only through an explicit encoding | 2024 (17, 19) | Adopted | § 3.3 |
 | `typed_decimal` for units — "way to much work … we're removing typed_decimal entirely"; currency kept, with explicit exchange rates | 2024 (26, 28) | Adapted | § 3.3 — units return through the type system; currency is a dimension |
 | Separate methods instead of boolean flags (`date_to_long_string`, not `long_format: true`) | 2024 (26) | Adopted | Standard-library style |
-| Enumeration keys always qualified (`color.red`) | 2024 (30) | Adapted | § 3.3 — `.Case` where the type is certain, qualified where not, never a guess |
+| Enumeration keys always qualified (`color.red`) | 2024 (30) | Adopted | § 3.3 — every case is written with its type, `outcome.won`; there is no `.case` shorthand |
 | Classes with facets; factory methods instead of constructors; `get`/`set` properties; singletons; opt-in overriding | 2024 (12, 33, 103, 147, 150) | Dropped | § 7 — too many kinds |
 | `=` to bind and `:=` to rebind, "so the operator's visual weight discourages mutation" | 2024 (32) | Dropped | § 7 — `let` / `var` |
 | Deterministic reference tracking; "any object that contains a resource is itself a resource" | 2024 (22, 149) | Adapted | § 3.6 — ownership; a scope owning something with fallible release carries that failure |

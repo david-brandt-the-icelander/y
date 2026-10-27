@@ -62,11 +62,11 @@ worth their syntax cost.
 
   ```y
   state order:
-      .created
-      .payment_pending
-      .paid
-      .cancelled
-      .fulfilled
+      case created
+      case payment_pending
+      case paid
+      case cancelled
+      case fulfilled
   ```
 
 - ⚠️ A state is usable as a type: `order.created` is the type of an order in that state, and a function may

@@ -44,9 +44,9 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | `x` that the function keeps (`new_game(word)`) | the name | `type` `t` | `T` by value; the caller's last use moves it, and any other use is a copy |
 | `mutable x` in the signature, and `mutable x` at the call | the name; `&mut x` at the call | `type` `ref<t>`, `access` write/exclusive | `&mut T` |
 | A copy the compiler had to make (`new_game(words[chosen])`, where `words` is still read) | `.clone()`, marked `// y: a copy` | `y-facts.json` `copies` | the same |
-| `return result = value`, `fail .case(...)`, `?` | `return Ok(value)` or the last expression, `return Err(E::Case { .. })`, `?` | `result.fails` | the same |
+| `return answer = value`, `fail guess_error.empty`, `?` | `return Ok(value)` or the last expression, `return Err(E::Case { .. })`, `?` | `result.fails` | the same |
 | `?` converting through the one case that carries the failure | `?` | an `impl From` subject | `impl From<ConsoleError> for PlayError` |
-| `lower_snake_case` type and case names (`guess_error`, `.not_one_letter`) | `GuessError`, `NotOneLetter`: the lowering's one renaming, to Rust's casing | Rust names | the same |
+| `lower_snake_case` type and case names (`guess_error`, `guess_error.not_one_letter`) | `GuessError`, `NotOneLetter`: the lowering's one renaming, to Rust's casing | Rust names | the same |
 | A constant group, `public constants game_rules:` with `allowed_misses is count<element> = 6` | a module `game_rules` holding `const ALLOWED_MISSES = 6;`; uses are `game_rules::ALLOWED_MISSES` | a `module` subject and its `const` subjects | the same |
 | `type word is string where letters_only = ... and long_enough = ...` | `struct Word(_)` and a constructor that checks each constraint in order | two `invariant` clauses, with status `lifted` by the constructor | a newtype with `Word::new(..) -> Result<Word, ConstraintViolation>` |
 | `record`; `enumeration` (`outcome`, `verdict` and the failures `word_list_error`, `guess_error`); a `type` with `case`s that carry data (`play_error`) | `struct`; `enum` with unit variants; `enum` with named fields | `fields`, `variants` | the same, deriving the structural equality Y always derives |
@@ -59,7 +59,7 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | `invariant name = (p)` on a record | `invariant(p, "hangman::Game#name")` after the one write that can break it | an `invariant` clause on the type | the same |
 | `if name = (p)`, `while name = (p)` | `if p { // y: #name` | `y-facts.json` `decisions`: the Y line and the bare line of each | the same, with the comment |
 | A value chosen by a condition: `variable head = " "`, then `if has_head = (misses >= 1) { head = "O" }` (Y's blocks give no value) | the same shape | — | the same |
-| A condition that narrows (`if not_one_rune = (letter == .none) { fail ... }`) | `let Some(letter) = letter else { ... }` | — | let-else, so rustc checks the narrowing |
+| A condition that narrows (`if not_one_rune = (letter == optional.none): fail ...`) | `let Some(letter) = letter else { ... }` | — | let-else, so rustc checks the narrowing |
 | `forever because "..."` | the `&Forever` argument of the call that waits | `y-facts.json` `claims` | `console.read_line(forever)` |
 | `compile parse_word_list(game_rules.word_list)` | the value, as a `const` array, and a `static` built once from it | `y-facts.json` `compiled` | the same, and a generated test that makes the call at run time and compares |
 | `count<element>`, `count<rune>` | — (units are erased) | `y-facts.json` `units` | `usize` |
@@ -78,7 +78,7 @@ following:
   `random.index_below`; and `system.console()`, `system.random()` and `system.forever()`. The proposal lists `clock`,
   `random`, `file_system` and others, but not a terminal.
 - **The entry point** is `public function main() fails e with system`.
-- **One `with` block can bind several capabilities:** `with console = ..., random = ..., forever = ... { ... }`.
+- **One `with` block can bind several capabilities:** `with console = ..., random = ..., forever = ...:`.
 - **Rune literals** are written `'z'`, as in `value.count_of('@')` in the proposal.
 - **Library names:** `set.of([...])`, `list.join(separator:)`, `string.single_rune()`, `string.split(...)`, `string.trim()`.
 - **Fakes for tests:** `fake console(input: [...], read_fails: ...)`, `fake random(seed: ...)` and `fake forever`.
@@ -131,7 +131,7 @@ following:
 - **The clause linter needed three additions.**
   - It now knows `pure`, `no device` and `devices only`, which § 6.3 added.
   - In a module's file, a clause may name the module's constants, and call its functions that are bound `pure` or
-    `effects none`. That is how `require still_playing : outcome(game) is Playing` names `outcome`.
+    `effects none`. That is how `require still_playing : outcome_of(game) is Playing` names `outcome_of`.
 - **Narrowing costs nothing to lower.** A Y condition that narrows becomes a Rust let-else, so rustc checks the fact
   the Y checker relied on.
 - **A named decision's identity survives only as a comment.** A real backend would also carry it into traces and fault

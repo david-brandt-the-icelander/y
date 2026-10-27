@@ -27,7 +27,7 @@ worth naming:
 
   ```y
   atomic:
-      order.status = .payment_pending
+      order.status = order_status.payment_pending
 
       enqueue charge_card(order_id: order.id, amount: order.total, payment_method: order.payment_method)
   ```
@@ -65,7 +65,7 @@ worth naming:
 
   ```y
   atomic:
-      order.status = .confirmed
+      order.status = order_status.confirmed
 
       afterCommit:
           enqueue send_confirmation(order.id)

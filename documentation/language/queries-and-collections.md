@@ -27,8 +27,8 @@ incrementally, and an explicit loop is one it must execute as written.
           .sorted()
   ```
 
-- ⚠️ A single-parameter lambda may elide its parameter, referring to the element's members directly:
-  `.where { .age >= 18 }`.
+- ⚠️ A lambda names its parameter, even when it has one: `.where(user => user.age >= 18)`. Y has no
+  shorthand that elides it, as it has none for a case's type.
 - ⚠️ A chain is fused into a single traversal where the stages permit it, rather than materialising an
   intermediate collection per stage.
 - ⚠️ **A chain reads its receiver and produces a new value.** It never changes the receiver: changing
@@ -52,7 +52,7 @@ incrementally, and an explicit loop is one it must execute as written.
 
   ```y
   derived active_user_count =
-      users.where(.active).count()
+      users.where(user => user.active).count()
   ```
 
 - ⚠️ A derived value is always consistent with the state it is defined over, and reading it inside a

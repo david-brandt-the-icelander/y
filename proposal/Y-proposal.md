@@ -326,7 +326,7 @@ person can judge: is five seconds right, and is this the behaviour the business 
   - There is no `%`; use `remainder_euclidean` or `remainder_truncated`.
   - Arithmetic is checked, and overflow is a fault (§ 3.4).
 - Conversions that can lose information say so in their names (`to_integer_truncated`,
-  `to_integer_rounded(.half_even)`). No conversion is implicit.
+  `to_integer_rounded(rounding.half_even)`). No conversion is implicit.
 - Interpolation accepts a name or a field path and nothing else: `"hold {hold.id} for {buyer.name}"`. Calls,
   indexing and arithmetic are computed into a named local first.
 - Literals that are small languages are checked at compile time: `pattern"^[a-z]+$"` (a regular expression),
@@ -355,7 +355,7 @@ function meaning_of_life() returns answer:
   type does not compile, so every function with parameters or a result is documented, private ones included.
 - **The result is a name.** `returns verdict` declares `verdict` as a variable of the function, unassigned until the
   body assigns it.
-  - Every path ends in `return` or `fail`. `return verdict = .hit` assigns and returns in one statement.
+  - Every path ends in `return` or `fail`. `return answer = verdict.hit` assigns and returns in one statement.
   - Where the result was assigned before, as inside a transaction, `return verdict` returns it.
   - A function without `returns` has no result, and its `return` takes no name.
 - **A function that can fail says so in its signature:** `fails guess_error`. Its documentation then has a
@@ -437,7 +437,7 @@ public enumeration job_status is string:
 - Every value is computed while the program is built (§ 3.17) and holds nothing mutable.
 - An enumeration names a closed set of values. They are numbered from zero unless given values, and the values have
   one type, the smallest unsigned integer that holds them unless the enumeration names one (`is string`). A value is
-  written `.won` where the type is known, and `outcome.won` where it is not.
+  always written with its enumeration, `outcome.won` (§ 3.3).
 - An enumeration is the type for a set of cases that carry nothing, failure types included. A `type` with `case`s is
   for cases that carry data (§ 3.3).
 - `is` appears only here, in `is constant` and in a typed member or enumeration, and in a refined type,
@@ -530,18 +530,21 @@ type payment_result:
 
 Referring to a case:
 
-- A case is written `.approved(...)` where the expected type decides it.
-- Where the type is ambiguous, write it qualified, `payment_result.approved(...)`. An unqualified case the compiler
-  cannot place is an error, never a guess.
-- A pattern binds a payload field under its own name (`.declined(reason)`), or under a new one
-  (`.declined(reason: why_declined)`).
+- **A case is always written with its type:** `payment_result.approved(...)`, `outcome.won`, in an expression, a
+  pattern, a `return` and a `fail` alike. There is no `.approved` shorthand: a reader never has to work out which type
+  a case belongs to, and an agent never has to guess.
+- The built-in sums are named like any other: a call's outcome is `result.ok(value)` or `result.err(failure)`, and an
+  optional value is `optional.some(value)` or `optional.none`.
+- A pattern binds a payload field under its own name (`payment_result.declined(reason)`), or under a new one
+  (`payment_result.declined(reason: why_declined)`).
 
 **Absence.**
 
 - `t?` is a distinct type from `t`. Neither converts to the other implicitly.
-- `??` supplies a default, `?.` reaches through absence, and `match` covers `.some(value)` and `.none`.
-- **A condition narrows.** Inside `if found = (user != .none): ...`, and after `if missing = (user == .none): return ...`, `user` is a `user`, no longer a `user?`. Nothing is written for this: every condition adds its predicate as a fact at the
-  points it guards (constraint language § 11.1.1), and the type checker reads the fact.
+- `??` supplies a default, `?.` reaches through absence, and `match` covers `optional.some(value)` and `optional.none`.
+- **A condition narrows.** Inside `if found = (user != optional.none): ...`, and after
+  `if missing = (user == optional.none): return ...`, `user` is a `user`, no longer a `user?`. Nothing is written for
+  this: every condition adds its predicate as a fact at the points it guards (constraint language § 11.1.1), and the type checker reads the fact.
   - The fact ends where the value may change: an assignment to a `variable`, or a call that takes it `mutable`. A field path
     such as `order.customer` narrows the same way, until something may write to that path.
   - The same facts discharge a callee's `requires` (§ 3.11) when they imply it.
@@ -592,7 +595,7 @@ The same mechanism gives every length and index its unit:
 - `string` is a sequence of `rune`s. A `rune` is exactly one extended grapheme cluster, and a string is NFC-normalised
   when it is constructed, so canonically equivalent strings are equal.
 - `bytes` is a separate type. Conversion between the two names its encoding and what to do with invalid input
-  (`string.decode_utf8(bytes, on_invalid: .reject)`), and rejecting is the default.
+  (`string.decode_utf8(bytes, on_invalid: invalid_input.reject)`), and rejecting is the default.
 - Nothing is locale-sensitive by default. Case folding, collation and formatting take a `locale` argument, and no
   locale is ever inferred from the process.
 
@@ -600,7 +603,7 @@ The same mechanism gives every length and index its unit:
 `equals` is a place for an agent to be subtly wrong and for a reviewer to miss it.
 
 - A field marked `transient` is excluded from equality, hashing and serialisation.
-- Comparison returns `ordering` (`.less`, `.equal`, `.greater`), never an integer.
+- Comparison returns an `ordering` (`ordering.less`, `ordering.equal`, `ordering.greater`), never an integer.
 
 **Sensitive data.** `sensitive<t>` wraps values such as credentials and personal data.
 
@@ -612,12 +615,12 @@ The same mechanism gives every length and index its unit:
 
 A function that can fail names its failure type in its signature: `returns debit fails withdraw_error`.
 
-- **A call's outcome is a built-in two-case sum,** `.ok(value)` or `.err(failure)`. This settles the September open
+- **A call's outcome is a built-in two-case sum,** `result.ok(value)` or `result.err(failure)`. This settles the September open
   question: one `match` ranges over success and failure together, and an optional result that can fail (`as
   receipt?` with `fails e`) composes without a special rule. Core IR still records every propagation edge explicitly,
   so *which failures can escape, and from where* is always answerable.
-- Inside the function, success is `return debit = value`, never `.ok(value)`, and failure is written
-  `fail .insufficient_funds(shortfall: gap)`. Every failure exit is spelled `fail` or `?`, so every one of them can be
+- Inside the function, success is `return debit = value`, never `result.ok(value)`, and failure is written
+  `fail withdraw_error.insufficient_funds(shortfall: gap)`. Every failure exit is spelled `fail` or `?`, so every one of them can be
   found with a search, and there is exactly one way to write each.
 - `?` propagates a failure unchanged, or converts it through the single case of the enclosing failure type that
   carries it. If two cases could carry it, the program is rejected and the error names both candidates.
@@ -626,9 +629,9 @@ A function that can fail names its failure type in its signature: `returns debit
 
 ```y
 match load_customer(id):
-    .ok(customer) => greet(customer)
-    .err(.not_found(id: missing_id)) => offer_signup(missing_id)
-    .err(.unavailable(retry_after)) => try_later(retry_after)
+    result.ok(customer) => greet(customer)
+    result.err(customer_error.not_found(id: missing_id)) => offer_signup(missing_id)
+    result.err(customer_error.unavailable(retry_after)) => try_later(retry_after)
 ```
 
 **Faults are not failures.** A violated contract, arithmetic overflow, an exhausted allocator, a reached `todo`, or a
@@ -656,7 +659,7 @@ This proposal restores the rule and extends it to every predicate in the languag
 | Condition | `if found = (items[middle] == target): ...` |
 | Alternative | `else if go_right = (items[middle] < target): ...` |
 | Loop | `while searching = (low <= high): ...` |
-| Guard | `.some(user) when active = (user.last_seen > cutoff) => ...` |
+| Guard | `optional.some(user) when active = (user.last_seen > cutoff) => ...` |
 | Precondition, guarantee | `requires positive = (amount > 0isk)`, `ensures debited = (...)` |
 | Invariant, constraint | `invariant departs_after_arrival = (...)`, `where positive = (value > 0)` |
 | Assertion | `assert charged_once = (charges.committed().count() == 1)` |
@@ -695,12 +698,12 @@ public function position_of(target, items) returns position:
     while searching = (low <= high):
         let middle = low.midpoint(high)
         if found = (items[middle] == target):
-            return position = .some(middle)
+            return position = optional.some(middle)
         else if go_right = (items[middle] < target):
             low = middle.next()
         else:
             high = middle.previous()?
-    return position = .none
+    return position = optional.none
 ```
 
 In a function whose result is optional, `?` on an absent value returns with the result absent.
@@ -879,7 +882,7 @@ the language's job.
 "fail on the first failure". Other policies are written on the scope:
 
 ```y
-within 24h supervise(restart: .each_failed, at_most: 5, per: 10min):
+within 24h supervise(restart: restart_policy.each_failed, at_most: 5, per: 10min):
     task ingest = run_ingest()
     task compaction = run_compaction()
 ```
@@ -914,14 +917,14 @@ hand you. There is no global state to reach.
 (`conflict at hold_and_charge#hold_one_unit`), and in the review packet ("transacts hold_one_unit — writes …"):
 
 ```y
-variable job = .none
+variable job = optional.none
 atomic take_next_job:
     job = jobs.pending.pop_front()
-    if nothing_pending = (job == .none):
+    if nothing_pending = (job == optional.none):
         retry
 orelse atomic take_retried_job:
     job = jobs.retried.pop_front()
-    if nothing_retried = (job == .none):
+    if nothing_retried = (job == optional.none):
         retry
 ```
 
@@ -1019,13 +1022,13 @@ workflow fulfil(hold) returns shipped fails fulfilment_error
         with orders, charges, shipments:
     let order = orders.for_hold(hold)?
     match submit charge_card(hold: hold, amount: order.total, method: order.payment_method):
-        .ok(receipt) => return shipped = submit create_shipment(order: order.id, receipt: receipt.id)?
-        .err(.failed(reason)) => fail .payment_declined(reason)
-        .err(.abandoned(abandonment)) => fail .payment_unreachable(abandonment)
+        result.ok(receipt) => return shipped = submit create_shipment(order: order.id, receipt: receipt.id)?
+        result.err(undelivered.failed(reason)) => fail fulfilment_error.payment_declined(reason)
+        result.err(undelivered.abandoned(abandonment)) => fail fulfilment_error.payment_unreachable(abandonment)
 ```
 
 - `submit` suspends the workflow durably until the command's outcome is recorded.
-- It succeeds with the handler's result, or fails with `undelivered<e>`, whose two failure cases are `.failed(e)` and `.abandoned(...)`. Abandonment is
+- It succeeds with the handler's result, or fails with `undelivered<e>`, whose two failure cases are `undelivered.failed(e)` and `undelivered.abandoned(...)`. Abandonment is
   therefore an ordinary failure that must be matched or propagated, and cannot be ignored.
 - A workflow may open `atomic` blocks.
 - A workflow's determinism is enforced by its capability set. It may hold `store`, `shared`, `submit` and `enqueue`,
@@ -1052,7 +1055,7 @@ public function withdraw(mutable account, amount) returns debit fails withdraw_e
         requires positive_amount = (amount > 0isk)
         ensures debited_exactly = (account.balance == old(account.balance) - amount):
     if short = (account.balance < amount):
-        fail .insufficient_funds(shortfall: amount - account.balance)
+        fail withdraw_error.insufficient_funds(shortfall: amount - account.balance)
     account.balance -= amount
     return debit = receipt(account: account.id, amount: amount)
 ```
@@ -1097,12 +1100,12 @@ state order:
 ------------------------------------------------------------------------------------------------------------------------
 Records that payment was requested for a new order.
 
-order: The new order, as order.created.
+created: The new order, as order.created.
 charge: The charge command that was submitted, as command_id.
 pending: The order, waiting for payment, as order.payment_pending.
 ------------------------------------------------------------------------------------------------------------------------
-transition request_payment(order, charge) returns pending:
-    return pending = order.becomes(.payment_pending(charge: charge))
+transition request_payment(created, charge) returns pending:
+    return pending = created.becomes(order.payment_pending(charge: charge))
 ```
 
 - `order.created` is a type, and a transition takes the value it starts from: the name passed to it cannot be used
@@ -1130,7 +1133,7 @@ schema customer v3:
 
 -- Version 3 adds explicit marketing consent; nobody is assumed to have given it.
 migrate customer v2 to v3:
-    marketing_consent = .not_given
+    marketing_consent = consent.not_given
 ```
 
 **Schemas.**
@@ -1546,7 +1549,7 @@ owner still decides; the recommendation is here so that deciding is quick.
 | Types that opt out of single ownership | None needed: values are shared freely; `shared<t>` for mutable state between tasks; arenas and typed indices for graphs | § 3.6 |
 | Effect annotation syntax | The `with` clause: effects are what capabilities carry | § 3.7 |
 | Capability declaration and passing | Declared per function, threaded by type from the caller's scope, overridden explicitly | § 3.7 |
-| Where handler failure escalates | Mandatory `on_abandon`: compensate or park; in workflows, `.abandoned` is a failure to handle | § 3.10 |
+| Where handler failure escalates | Mandatory `on_abandon`: compensate or park; in workflows, `undelivered.abandoned` is a failure to handle | § 3.10 |
 | `afterCommit` durability | Dropped; `enqueue` and buffered telemetry cover every case | § 3.10 |
 | Workflow syntax and body boundary | `workflow` may open `atomic`; determinism enforced by its permitted capabilities | § 3.10 |
 | Supervision source model | A policy on a task scope | § 3.8 |
@@ -1577,6 +1580,7 @@ premise changed, or because the iteration that tried them showed their cost. The
 | Types in signatures, `->` and `T ! E` | Earlier drafts of this proposal | `function f(a, mutable b) returns result fails e`; each type in the role that documents its name (`a: ..., as string.`) | Few symbols; a signature reads as words, and every name is documented with its type in one place |
 | Unnamed results and an implicit last-expression result | Earlier drafts of this proposal | `returns name`, and `return name = value` | A result has a name, which its documentation explains, and every exit is a visible `return` or `fail` |
 | References in source: `&t`, `&mutable t`, `move`, borrowing results, `copy` types, `reference_counted<t>`, `weak<t>`; "no clone the programmer did not write" | September → earlier drafts of this proposal | Value semantics, `mutable` at both ends of a call; the compiler chooses borrows, moves and copies, and reports each copy | Ownership syntax is about memory, not intent, and is where agents fail most; value semantics keep what borrowing was for |
+| A case written `.case` where the type is known | September → earlier drafts of this proposal | `type_name.case` everywhere, as YAPL had it (`color.red`) | The reader never infers which type a case belongs to |
 | `if` and `match` as expressions; a ternary operator | Earlier drafts of this proposal | Statements; a value is assigned in each branch | A decision is a statement with a name and a place, never a value hidden inside an expression |
 | Spec block in place of the signature | April 2026 | A signature naming parameters and result; documentation above it with closed roles and the types | The examples abandoned it for helpers; a signature is where a reader looks for names and modes |
 | `=` to bind, `:=` to rebind | YAPL → April 2026 | `let` / `variable` | Mutability is marked where the name is declared; `:=` fought every agent's habits |

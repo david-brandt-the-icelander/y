@@ -30,15 +30,14 @@ told about, because the compiler enumerates the cases.
 
   ```y
   type payment_result:
-      .approved(authorization)
-      .declined(decline_reason)
-      .unavailable
+      case approved(authorization: authorization)
+      case declined(reason: decline_reason)
+      case unavailable
   ```
 
-- ⚠️ A case is written `.name`, and the type it belongs to is taken from the context the expression
-  appears in — the declared type of the binding, the parameter it is passed to, or the return type of the
-  enclosing function. Where context does not determine a unique type, the case is written with its type
-  qualified, and an ambiguous case with no qualification is a compile error rather than a guess.
+- ⚠️ A case is always written with its type, `payment_result.approved(...)`, in an expression, a
+  pattern, a `return` and a `fail` alike. Y has no `.name` shorthand, so a reader never works out which
+  type a case belongs to.
 - ⚠️ A sum type is closed: its cases are fixed at declaration, and no other module adds one. Exhaustive
   matching depends on this and Y does not offer an open variant.
 - ⚠️ `void` is the type of an expression that produces no value, and is an ordinary type: it may be
@@ -55,8 +54,8 @@ told about, because the compiler enumerates the cases.
 
   ```y
   match customer:
-      .some(found) => use(found)
-      .none        => not_found()
+      optional.some(found) => use(found)
+      optional.none        => not_found()
   ```
 
 - ⚠️ `?.` reaches through absence: where `a` is `a_type?`, `a?.field` is the field's type made optional, and
@@ -81,9 +80,9 @@ told about, because the compiler enumerates the cases.
 
   ```y
   type startup_error:
-      .configuration(configuration_error)
-      .database(database_error)
-      .network(network_error)
+      case configuration(error: configuration_error)
+      case database(error: database_error)
+      case network(error: network_error)
 
   function startup() returns started fails startup_error:
       let configuration = load_configuration("app.json")?
@@ -95,7 +94,7 @@ told about, because the compiler enumerates the cases.
   program is rejected, naming both candidate cases. The compiler does not pick one.
 - ⚠️ A failure is narrowed by matching it, and a function may convert a failure set into a smaller one
   by handling the cases it can.
-- ⚠️ A call that can fail has a two-case sum as its outcome, `.ok(value)` or `.err(failure)`, so a
+- ⚠️ A call that can fail has a two-case sum as its outcome, `result.ok(value)` or `result.err(failure)`, so a
   single `match` ranges over a call's successes and failures together, and an optional result composes
   with failure without a special rule
   → [`../../proposal/Y-proposal.md` § 3.4](../../proposal/Y-proposal.md#34-failure).
@@ -120,7 +119,7 @@ told about, because the compiler enumerates the cases.
 | Exhaustiveness claimed by a guarded arm alone | That the guard is not evidence, and which case is still uncovered | ⚠️ |
 | `?` where the enclosing signature names no compatible failure | The failure type produced and the failure type permitted | ⚠️ |
 | `?` where two cases of the enclosing failure type could wrap the inner one | Both candidates | ⚠️ |
-| A bare `.case` whose type context is ambiguous | The candidate types | ⚠️ |
+| A case written without its type | The type to write before it | ⚠️ |
 | A `t` used where `t?` is expected, or the reverse | That absence is a distinct type | ⚠️ |
 
 ## Where it lives

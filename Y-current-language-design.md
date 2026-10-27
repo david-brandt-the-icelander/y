@@ -186,8 +186,8 @@ Pattern matching is preferred where behavior differs materially between cases.
 
 ```y
 match customer:
-    .some(found) => use(found)
-    .none        => not_found()
+    optional.some(found) => use(found)
+    optional.none        => not_found()
 ```
 
 Exact optional-case syntax is not yet frozen.
@@ -222,18 +222,18 @@ Variants/sum types:
 
 ```y
 type payment_result:
-    .approved(authorization)
-    .declined(decline_reason)
-    .unavailable
+    case approved(authorization: authorization)
+    case declined(reason: decline_reason)
+    case unavailable
 ```
 
 Pattern matching is a core control-flow mechanism:
 
 ```y
 match result:
-    .approved(authorization) => complete(authorization)
-    .declined(reason) => reject(reason)
-    .unavailable => retry_later()
+    payment_result.approved(authorization) => complete(authorization)
+    payment_result.declined(reason) => reject(reason)
+    payment_result.unavailable => retry_later()
 ```
 
 Exhaustiveness should be compiler checked.
@@ -409,7 +409,7 @@ Illustrative direction:
 
 ```y
 atomic:
-    order.status = .payment_pending
+    order.status = order_status.payment_pending
 
     enqueue charge_card(order_id: order.id, amount: order.total, payment_method: order.payment_method)
 ```
@@ -445,7 +445,7 @@ Illustrative syntax:
 
 ```y
 atomic:
-    order.status = .confirmed
+    order.status = order_status.confirmed
 
     afterCommit:
         enqueue send_confirmation(order.id)
@@ -645,11 +645,11 @@ Example direction:
 
 ```y
 state order:
-    .created
-    .payment_pending
-    .paid
-    .cancelled
-    .fulfilled
+    case created
+    case payment_pending
+    case paid
+    case cancelled
+    case fulfilled
 ```
 
 Transitions can be restricted:
@@ -699,7 +699,7 @@ Examples:
 
 ```y
 derived active_user_count =
-    users.where(.active).count()
+    users.where(user => user.active).count()
 ```
 
 and:
