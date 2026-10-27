@@ -51,14 +51,14 @@ public function hold_and_charge(item, buyer) returns hold fails hold_error
     within 5s?:
         atomic hold_one_unit:
             let stock = inventory.stock_of(item)?
-            if sold_out = (stock.available == 0) else in_stock:
+            if sold_out = (stock.available == 0):
                 retry
-            stock.available -= 1
-            let price = stock.price
-
-            let opened = inventory.open_hold(item: item, buyer: buyer.id)
-            enqueue charge_card(hold: opened.id, amount: price, method: buyer.payment_method)
-            return hold = opened
+            else in_stock:
+                stock.available -= 1
+                let price = stock.price
+                let opened = inventory.open_hold(item: item, buyer: buyer.id)
+                enqueue charge_card(hold: opened.id, amount: price, method: buyer.payment_method)
+                return hold = opened
 ```
 
 Without opening another file, a reviewer can see that this function touches exactly two things (one shared inventory,
@@ -123,7 +123,7 @@ the facts a reviewer needs into the declaration**, where they become checked cla
 | Which arguments a call lets the callee change | Call site (`mutable x`) | Agent, corrected by fix-its |
 | Authority, and therefore effects | `with` clause | `y fix`, from inference |
 | Failure set | `fails e` in the signature, and `fails` doc roles | Agent; the compiler checks exhaustiveness of documentation |
-| Preconditions and guarantees | `requires` / `ensures` | Agent |
+| Preconditions and guarantees | `where` / `ensures` | Agent |
 | Wait bounds | `within` | Agent; an unbounded wait does not compile |
 
 A pinned clause that no longer matches the body is a compile error, so a change in what a function may do cannot land
@@ -334,7 +334,7 @@ person can judge: is five seconds right, and is this the behaviour the business 
 - **Blocks are statements.** `if`, `switch`, loops, `within`, `atomic`, `orelse`, `with`, `arena`, `uncancellable` and
   `supervise` produce no value, and Y has no conditional expression and no ternary operator.
   - A value chosen by a condition is assigned in each branch. The decision then has a name and a place, like every
-    other: `variable head = " "`, then `if has_head = (misses >= 1) else no_head: head = "O"`.
+    other: `if has_head = (misses >= 1):` assigns `head = "O"`, and `else no_head:` assigns `head = " "`.
   - A value made inside a transaction or a deadline is returned from inside it, or assigned to a `variable` declared
     outside it.
   - A `switch` arm is a pattern ending in a colon, with its statements indented beneath it, as every block is:
@@ -387,6 +387,7 @@ let is_active = lambda is_active(user) returns active
         captures cutoff:
     return active = (user.last_seen > cutoff)
 
+
 let active_users = users.filter(is_active)
 ```
 
@@ -412,6 +413,9 @@ let active_users = users.filter(is_active)
 - **Blocks are a colon and indentation, as in Python.** A line that opens a block ends with `:`, and the block is the
   lines indented four spaces beneath it. A header that does not fit on one line continues on lines indented eight
   spaces, and its last line ends with the colon. There are no braces.
+- **One statement per line.** A block's body never shares its header's line, and two statements never share one line.
+- **Two blank lines separate one function from the next,** and one top-level declaration from the next; fewer or more is
+  a lint error, which formatting fixes. Inside a body, at most one blank line separates statements.
 - Lines are at most 120 columns. `y format` has no options and preserves every comment. It produces one layout for any
   program, so every diff is about content.
 - A function body longer than 60 lines is a lint warning, and longer than 120 is an error. A reviewable sample fits on
@@ -419,7 +423,7 @@ let active_users = users.filter(is_active)
 
 ### 3.2 Declarations and documentation
 
-**Declaration kinds.** Y has few: `function`, `record`, `type`, `enumeration`, `state`, `transition`, `trait`,
+**Declaration kinds.** Y has few: `function`, `structure`, `type`, `enumeration`, `state`, `transition`, `trait`,
 `implementation`, `constant`, `constants`, `unit`, `schema`, `migrate`, `command`, `handler`, `workflow`, `derived`,
 `rule`, `test`.
 
@@ -435,6 +439,7 @@ let active_users = users.filter(is_active)
 -- The number of seconds in a minute.
 public seconds_per_minute is constant int64 = 60
 
+
 -- The rules every game is played by.
 public constants game_rules:
     -- How many wrong guesses a player may make.
@@ -442,11 +447,13 @@ public constants game_rules:
     constants scoring:
         points_per_hit = 10
 
+
 -- Where a game stands.
 public constants outcome:
     playing = "playing"
     won = "won"
     lost = "lost"
+
 
 -- How serious a log entry is, from least to most.
 public enumeration severity is string:
@@ -536,10 +543,10 @@ Prose is constrained CommonMark:
 
 There is no truthiness, no null, and no implicit numeric widening.
 
-**Records** have named, typed fields and may declare named invariants:
+**Structures** have named, typed fields and may declare named invariants:
 
 ```y
-record stay:
+structure stay:
     guest: guest_id
     arrives: date
     departs: date
@@ -570,15 +577,15 @@ Referring to a case:
 
 - `t?` is a distinct type from `t`. Neither converts to the other implicitly.
 - `??` supplies a default, `?.` reaches through absence, and `switch` covers `optional.some(value)` and `optional.none`.
-- **A condition narrows.** Inside `if found = (user != optional.none) else absent: ...`, and after
-  `if missing = (user == optional.none) else present: return ...`, `user` is a `user`, no longer a `user?`. Nothing is written for
+- **A condition narrows.** In the branch of `if found = (user != optional.none):`, and in the `else present:` branch
+  of `if missing = (user == optional.none):`, `user` is a `user`, no longer a `user?`. Nothing is written for
   this: every condition adds its predicate as a fact at the points it guards (constraint language § 11.1.1), and the type checker reads the fact.
   - The fact ends where the value may change: an assignment to a `variable`, or a call that takes it `mutable`. A field path
     such as `order.customer` narrows the same way, until something may write to that path.
-  - The same facts discharge a callee's `requires` (§ 3.11) when they imply it.
+  - The same facts discharge a callee's `where` preconditions (§ 3.11) when they imply it.
 
-**Several results.** A function that produces several results returns one record. For a one-off result, its type is
-an anonymous record with named fields: `parts: The quotient and the remainder, as record(quotient: int64, remainder: int64).`
+**Several results.** A function that produces several results returns one structure. For a one-off result, its type is
+an anonymous structure with named fields: `parts: The quotient and the remainder, as structure(quotient: int64, remainder: int64).`
 
 **Refined types.** A type may be a named restriction of another. Each restriction has a name, and construction checks
 all of them:
@@ -687,12 +694,12 @@ This proposal restores the rule and extends it to every predicate in the languag
 
 | Construct | Form |
 | --- | --- |
-| Condition | `if found = (items[middle] == target) else not_found: ...` |
+| Condition | `if found = (items[middle] == target):` |
 | Alternative | `else if go_right = (items[middle] < target): ...` |
 | Fallback | `else go_left: ...` |
-| Loop | `while searching = (low <= high) else exhausted: ...` |
+| Loop | `while searching = (low <= high):`, then `else exhausted:` |
 | Guard | `optional.some(user) when active = (user.last_seen > cutoff): ...` |
-| Precondition, guarantee | `requires positive = (amount > 0isk)`, `ensures debited = (...)` |
+| Precondition, guarantee | `where positive = (amount > 0isk)`, `ensures debited = (...)` |
 | Invariant, constraint | `invariant departs_after_arrival = (...)`, `where positive = (value > 0)` |
 | Assertion | `assert charged_once = (charges.committed().count() == 1)` |
 | Transaction, task | `atomic hold_one_unit: ...`, `task profile = load_profile(id)` |
@@ -703,9 +710,13 @@ This proposal restores the rule and extends it to every predicate in the languag
 - **`else` always has a name of its own:** `else go_left:`. The name is bound to `true` when the fall-through branch
   runs, so tests, traces, debuggers and logs can say which branch ran, as for every other branch. An `else` without a
   name does not compile (the toolchain's rule, language reference § 7).
-- **Both outcomes of every decision have names.** An `if` with no `else` block names its other outcome at the end of
-  its header, `if sold_out = (stock.available == 0) else in_stock:`, and a `while` names the outcome that ends it,
-  `while searching = (low <= high) else exhausted:`. A decision with an unnamed outcome does not compile.
+- **Every outcome of every decision is a named branch.** An `if` always ends in a named `else` block, and a `while`
+  has one too, which runs when the loop ends, as Python's does: `while searching = (low <= high):`, then
+  `else exhausted:`. A decision with an unnamed outcome does not compile.
+  - Each branch is a line of its own: Y never puts two statements on one line, so the name of the other outcome cannot
+    ride on the header.
+  - Code that follows a decision usually belongs in its `else` block (`else in_stock:` in § 0), so the block is never
+    empty. A decision with nothing to do on one side is better written as a function with a named result.
 - A `for` loop is named by its variable. Inside nested loops, `break` and `continue` must name their loop:
   `break line`.
 - There is no `loop` and no `while true`.
@@ -731,7 +742,7 @@ position: The target's position, or nothing when it is absent, as index<element>
 public function position_of(target, items) returns position:
     variable low = items.first_index()?
     variable high = items.last_index()?
-    while searching = (low <= high) else exhausted:
+    while searching = (low <= high):
         let middle = low.midpoint(high)
         if found = (items[middle] == target):
             return position = optional.some(middle)
@@ -739,12 +750,13 @@ public function position_of(target, items) returns position:
             low = middle.next()
         else go_left:
             high = middle.previous()?
-    return position = optional.none
+    else exhausted:
+        return position = optional.none
 ```
 
 In a function whose result is optional, `?` on an absent value returns with the result absent.
 
-The parameter is a `sorted_list`, not a `list` with a `requires sorted` precondition. Where a property can be carried by
+The parameter is a `sorted_list`, not a `list` with a `where sorted` precondition. Where a property can be carried by
 a type, Y prefers the type (§ 1.5, rule 2).
 
 ### 3.6 Values and ownership
@@ -779,7 +791,7 @@ memory, not about intent. Value semantics keep what the borrow rules were for: n
 and two tasks never share a value that either may change (§ 3.8, § 3.9). The cost is the copies the compiler cannot
 avoid, and it reports each one.
 
-**No lifetimes.** Source has no references, so it has no lifetime parameters and no results that borrow. A record
+**No lifetimes.** Source has no references, so it has no lifetime parameters and no results that borrow. A structure
 holds values, never references to them. Borrows exist only in the generated code, where `rustc` and Miri check them
 (§ 4.6).
 
@@ -953,15 +965,26 @@ hand you. There is no global state to reach.
 (`conflict at hold_and_charge#hold_one_unit`), and in the review packet ("transacts hold_one_unit — writes …"):
 
 ```y
-variable job = optional.none
-atomic take_next_job:
-    job = jobs.pending.pop_front()
-    if nothing_pending = (job == optional.none) else got_pending:
-        retry
-orelse atomic take_retried_job:
-    job = jobs.retried.pop_front()
-    if nothing_retried = (job == optional.none) else got_retried:
-        retry
+------------------------------------------------------------------------------------------------------------------------
+Takes the next job, from the pending queue first and from the retried queue when it is empty.
+
+job: The job to run, as job.
+jobs: The queues, as shared<job_queues>.
+------------------------------------------------------------------------------------------------------------------------
+function take_job() returns job
+        with jobs:
+    atomic take_next_job:
+        let pending = jobs.pending.pop_front()
+        if nothing_pending = (pending == optional.none):
+            retry
+        else got_pending:
+            return job = pending
+    orelse atomic take_retried_job:
+        let retried = jobs.retried.pop_front()
+        if nothing_retried = (retried == optional.none):
+            retry
+        else got_retried:
+            return job = retried
 ```
 
 **Semantics:**
@@ -1010,6 +1033,7 @@ command charge_card:
         retry: backoff(first: 1s, factor: 2, attempts: 8)
         deadline: 24h
         on_abandon: compensate release_hold(hold: hold)
+
 
 ------------------------------------------------------------------------------------------------------------------------
 Performs the charge; runs outside any transaction.
@@ -1090,25 +1114,26 @@ debit: A receipt for the debit, as receipt.
 fails withdraw_error.insufficient_funds: The balance is lower than the amount.
 ------------------------------------------------------------------------------------------------------------------------
 public function withdraw(mutable account, amount) returns debit fails withdraw_error
-        requires positive_amount = (amount > 0isk)
+        where positive_amount = (amount > 0isk)
         ensures debited_exactly = (account.balance == old(account.balance) - amount):
-    if short = (account.balance < amount) else covered:
+    if short = (account.balance < amount):
         fail withdraw_error.insufficient_funds(shortfall: amount - account.balance)
-    account.balance -= amount
-    return debit = receipt(account: account.id, amount: amount)
+    else covered:
+        account.balance -= amount
+        return debit = receipt(account: account.id, amount: amount)
 ```
 
-**A precondition and a failure are not the same thing.** A zero amount is the caller's bug, so it is `requires`. An
+**A precondition and a failure are not the same thing.** A zero amount is the caller's bug, so it is a `where` precondition. An
 insufficient balance is a condition the caller must handle, so it is a failure case. Agents conflate the two, and the
-documentation rules make the choice visible: a `requires` has no `fails` role, and a failure has one.
+documentation rules make the choice visible: a `where` precondition has no `fails` role, and a failure has one.
 
 **Semantics.**
 
 - `ensures` holds when the function succeeds. `ensures on failure name = (...)` states what holds when it fails.
 - Contract expressions are pure, since they can have no `with` clause.
-- A record's `invariant` holds whenever the record is not being mutated. A function taking it `mutable` may break the
+- A structure's `invariant` holds whenever the structure is not being mutated. A function taking it `mutable` may break the
   invariant inside its body, and must restore it before returning.
-- An invariant on a record held in `shared<t>` is checked at the commit of every transaction that wrote the record.
+- An invariant on a structure held in `shared<t>` is checked at the commit of every transaction that wrote the structure.
   This is the April 2026 "watch list" idea, with the watch list taken from the fields.
 
 **Checking.**
@@ -1134,6 +1159,7 @@ state order:
     case payment_pending(charge: command_id)
     case paid(receipt: receipt_id)
     case cancelled(reason: cancel_reason)
+
 
 ------------------------------------------------------------------------------------------------------------------------
 Records that payment was requested for a new order.
@@ -1168,6 +1194,7 @@ schema customer v3:
     name: string
     email: email_address?
     marketing_consent: consent
+
 
 -- Version 3 adds explicit marketing consent; nobody is assumed to have given it.
 migrate customer v2 to v3:
@@ -1230,7 +1257,9 @@ let active_names = users.filter(active).map(name_of).sorted()
 -- user: The person to judge, as user.
 rule active(user) = (user.last_seen > 30d.ago())
 
+
 derived active_user_count: count<element> = users.filter(active).count()
+
 
 ------------------------------------------------------------------------------------------------------------------------
 A customer whose payments have failed often and who owes a lot.
@@ -1282,7 +1311,7 @@ Tests are part of the language, because the compiler must know what a test claim
 - Fakes record what happened (`charges.committed()`) and can be driven (`clock.advance(5s)`).
 - Every test gets fresh capabilities, so shared state and stores never leak between tests.
 - **Property tests come from declarations.** For every function with contracts or refined parameter types, the runner
-  generates inputs that satisfy the `requires` clauses and constraints, checks the `ensures` clauses, shrinks any
+  generates inputs that satisfy the `where` preconditions and constraints, checks the `ensures` clauses, shrinks any
   counterexample, and offers it as an ordinary test to commit.
 - **Concurrency is explored, not hoped for.** `y test --explore` enumerates the interleavings that matter, using the
   read and write sets in Core IR to skip equivalent ones. A failing schedule is recorded as a seed and committed with
@@ -1372,7 +1401,7 @@ function checksum(bytes) returns crc:
 - **The value is the one the call would return at run time.** Pure code in Y depends on nothing that differs between
   the build machine and the target: integers have fixed sizes and are checked, and there is no locale or hash order
   (§ 4.7).
-- **A fault is a build error.** A failed `assert`, an overflow, a violated `requires` or a reached `todo` produces the
+- **A fault is a build error.** A failed `assert`, an overflow, a violated `where` precondition or a reached `todo` produces the
   fault report of § 3.4, placed at the `compile` and at the construct that faulted.
 - **A failure is a build error too.** A call to a function that `fails` must succeed. A failure is reported with its
   case and the case's `fails` role, and the value is the function's result. Literal prefixes (`pattern"…"`, `url"…"`) are this rule with a shorter
@@ -1636,7 +1665,7 @@ premise changed, or because the iteration that tried them showed their cost. The
 
 | Dropped | Held in | Replaced by | Why |
 | --- | --- | --- | --- |
-| Classes, facets, factory methods, singletons, structures, properties, inheritance | YAPL → toolchain | Records, sum types, traits, `implementation` | Every iteration with more kinds spent its effort reconciling them; facets carried visibility, telemetry and override rules at once |
+| Classes, facets, factory methods, singletons, properties, inheritance | YAPL → toolchain | Structures, sum types, traits, `implementation` | Every iteration with more kinds spent its effort reconciling them; facets carried visibility, telemetry and override rules at once |
 | Exceptions, `throws`, wrapping in `unexpected_exception` | YAPL → April 2026 | `fails e`, and a two-case sum at the call | Values can be matched exhaustively; wrapping hid the failure set |
 | Ambient `using` contexts, context stacks, affinity-based name lookup | YAPL → toolchain | Capabilities in `with` | Action at a distance; March 2026 had already reversed it ("no global or thread-local state") |
 | Transactional memory for every variable; reference tracing; one OS thread per process as a guarantee | YAPL → July 2026 | `shared<t>` only; ownership; runtime's choice | Costs paid by code that shares nothing; semantics should not depend on the scheduler |
@@ -1736,10 +1765,10 @@ would have caught, the language has not yet done its job, and the packet or the 
 The complete list, so that the size of the surface is visible:
 
 ```text
-declarations   module from import public function returns fails record type case enumeration state transition trait
+declarations   module from import public function returns fails structure type case enumeration state transition trait
                implementation constant constants is unit schema migrate to command handler workflow test derived rule
                transient self
-contracts      requires ensures invariant where old assert
+contracts      where ensures invariant old assert
 control        if else switch when for in while break continue return fail
 bindings       let variable mutable lambda nested captures with arena compile
 concurrency    within task supervise detach forever uncancellable

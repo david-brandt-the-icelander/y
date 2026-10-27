@@ -2,6 +2,7 @@ module main
 
 from hangman import game_rules, parse_word_list, play, play_error
 
+
 ------------------------------------------------------------------------------------------------------------------------
 Plays one game of Hangman at the terminal.
 

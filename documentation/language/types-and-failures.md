@@ -16,16 +16,16 @@ told about, because the compiler enumerates the cases.
 
 ## Data
 
-- ⚠️ `record` declares a product type with named, typed, ordered fields.
+- ⚠️ `structure` declares a product type with named, typed, ordered fields.
 
   ```y
-  record customer:
+  structure customer:
       id: customer_id
       name: string
   ```
 
-- ⚠️ A record with few fields may be declared positionally on one line, and the two forms are the same
-  type: `record point(x: float, y: float)`.
+- ⚠️ A structure with few fields may be declared positionally on one line, and the two forms are the same
+  type: `structure point(x: float, y: float)`.
 - ⚠️ `type` declares a closed sum type. Each case names itself and carries zero or more payload types.
 
   ```y

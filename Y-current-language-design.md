@@ -153,11 +153,12 @@ maximum: The largest allowed, as int64.
 clamped: x, moved into the range, as int64.
 ------------------------------------------------------------------------------------------------------------------------
 function clamp(x, minimum, maximum) returns clamped:
-    if below = (x < minimum) else not_below:
+    if below = (x < minimum):
         return clamped = minimum
-    if above = (x > maximum) else not_above:
+    else if above = (x > maximum):
         return clamped = maximum
-    return clamped = x
+    else in_range:
+        return clamped = x
 ```
 
 (The October proposal settles the spelling: types are written in the documentation above a function, the result is
@@ -215,7 +216,7 @@ Pattern matching and propagation syntax should make the success path concise wit
 Working direction:
 
 ```y
-record customer:
+structure customer:
     id: customer_id
     name: string
 ```
@@ -264,6 +265,7 @@ Illustrative syntax may include familiar forms:
 ```y
 -- order: The order to look at, as order.
 function inspect(order): ...
+
 
 -- order: The order to change, as order.
 function update(mutable order): ...

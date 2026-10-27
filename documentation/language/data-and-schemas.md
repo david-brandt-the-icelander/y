@@ -132,7 +132,7 @@ failure mode is a deploy that cannot be rolled back.
   written; the expression that fills a new field is a design decision.
 - **Y does not own the database.** A schema projects onto storage; it does not require Y to be the only
   writer, and it does not make an external system's schema Y's business.
-- **A schema is not a record.** An in-memory `record` has no version, no codec and no migration
+- **A schema is not a structure.** An in-memory `structure` has no version, no codec and no migration
   → [Types and typed failure](types-and-failures.md).
 
 ## Where it lives

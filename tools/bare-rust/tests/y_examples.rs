@@ -116,16 +116,20 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
     let mut listed = BTreeSet::new();
     for (function, decisions) in facts["decisions"].as_object().unwrap() {
         for d in decisions.as_array().unwrap() {
-            let name = d["name"].as_str().unwrap();
-            assert!(at(d["y"].as_str().unwrap()).contains(&format!(" {name} = (")), "{function}#{name}: not at {}", d["y"]);
-            assert!(at(d["bare"].as_str().unwrap()).contains(&format!("// y: #{name}")), "{function}#{name}: not at {}", d["bare"]);
-            listed.insert(format!("{}#{name}", function.rsplit('.').next().unwrap()));
-            // the other outcome has a name of its own (Y-proposal § 3.5): an `else` block's, or the header's `else name`
-            let e = d.get("else").unwrap_or_else(|| panic!("{function}#{name}: the other outcome has no name"));
-            let other = e["name"].as_str().unwrap();
-            assert!(at(e["y"].as_str().unwrap()).contains(&format!("else {other}:")), "{function}#{other}: not at {}", e["y"]);
-            assert!(at(e["bare"].as_str().unwrap()).contains(&format!("#{other}")), "{function}#{other}: not at {}", e["bare"]);
-            listed.insert(format!("{}#{other}", function.rsplit('.').next().unwrap()));
+            // every outcome of a decision is a named branch (Y-proposal § 3.5): `if a = (…):`, `else if b = (…):`,
+            // `else c:`, each on a line of its own, and an `if` or a `while` always has its `else`
+            let branches = d["branches"].as_array().unwrap();
+            assert!(branches.len() >= 2, "{function}: a decision with one named outcome: {branches:?}");
+            for (k, b) in branches.iter().enumerate() {
+                let name = b["name"].as_str().unwrap();
+                let y = at(b["y"].as_str().unwrap());
+                let opens = if k == 0 { y.contains(&format!(" {name} = (")) && y.trim_end().ends_with("):") } else { y.contains(&format!("else if {name} = (")) || y.trim() == format!("else {name}:") };
+                assert!(opens, "{function}#{name}: not at {}: `{y}`", b["y"]);
+                assert!(at(b["bare"].as_str().unwrap()).contains(&format!("#{name}")), "{function}#{name}: not at {}", b["bare"]);
+                listed.insert(format!("{}#{name}", function.rsplit('.').next().unwrap()));
+            }
+            let last = branches.last().unwrap()["y"].as_str().unwrap();
+            assert!(at(last).trim().starts_with("else ") && !at(last).contains(" if "), "{function}: the decision ends without an `else`");
         }
     }
     // each copy the lowering made is where the facts say, in the Y source and in the bare body
@@ -147,7 +151,7 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
                 if (*w == "if" || *w == "while") && words.get(i + 2) == Some(&"=") && words.get(i + 3).is_some_and(|x| x.starts_with('(')) {
                     in_source.insert(format!("{function}#{}", words[i + 1]));
                 }
-                // `else name:`, a block's or the end of a header's
+                // `else name:`
                 if *w == "else" && words.get(i + 1).is_some_and(|x| x.ends_with(':') && *x != "if") {
                     in_source.insert(format!("{function}#{}", words[i + 1].trim_end_matches(':')));
                 }
@@ -155,6 +159,22 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
         }
     }
     assert_eq!(listed, in_source, "y-facts.json and the Y source name different decisions");
+    // two blank lines before every top-level declaration after the imports, never more (a lint rule of Y § 3.1)
+    for y in ["y/src/hangman.y", "y/src/main.y", "y/src/hangman.test.y"] {
+        let lines: Vec<String> = read(&dir.join(y)).lines().map(str::to_string).collect();
+        let mut inside = false;
+        for (i, l) in lines.iter().enumerate() {
+            let rule = l.trim().len() >= 3 && l.trim().chars().all(|c| c == '-');
+            let starts = !inside && !l.is_empty() && !l.starts_with(' ') && i > 0 && lines[i - 1].is_empty();
+            if rule {
+                inside = !inside;
+            }
+            if starts && !l.starts_with("from ") && !lines[..i].iter().all(|x| x.is_empty() || x.starts_with("module ")) {
+                let blanks = lines[..i].iter().rev().take_while(|x| x.is_empty()).count();
+                assert_eq!(blanks, 2, "{y}:{}: {blanks} blank lines before a declaration, not 2", i + 1);
+            }
+        }
+    }
     // no `else` goes without a name
     for y in ["y/src/hangman.y", "y/src/main.y", "y/src/hangman.test.y"] {
         assert!(!read(&dir.join(y)).lines().any(|l| l.trim() == "else:"), "{y}: an `else` without a name");

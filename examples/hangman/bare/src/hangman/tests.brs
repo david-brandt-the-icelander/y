@@ -5,8 +5,7 @@ use super::*;
 
 #[test]
 fn a_letter_in_the_word_is_a_hit() {
-    // y: covers guess#typed_something, guess#one_rune, guess#a_letter, guess#new_letter,
-    //    guess#in_word, shown_rune#known, shown_rune#unknown
+    // y: covers guess#in_word, shown_rune#known, shown_rune#unknown
     let game = new_game(Word::new("gallows".to_string()).expect("given"));
     let verdict = guess(&mut game, "l").expect("when");
     assert!(verdict == Verdict::Hit, "hit");
@@ -66,7 +65,7 @@ fn six_misses_hang_the_man() {
 
 #[test]
 fn finding_every_letter_wins() {
-    // y: covers outcome_of#misses_left, outcome_of#solved
+    // y: covers outcome_of#solved
     let hits = BTreeSet::from([Rune('r'), Rune('o'), Rune('p'), Rune('e')]);
     let game = Game { word: Word::new("rope".to_string()).expect("given"), hits, misses: vec![Rune('a')] };
     let ending = outcome_of(&game);
@@ -75,7 +74,7 @@ fn finding_every_letter_wins() {
 
 #[test]
 fn a_new_game_is_being_played() {
-    // y: covers outcome_of#letters_left
+    // y: covers outcome_of#undecided
     let game = new_game(Word::new("rope".to_string()).expect("given"));
     let ending = outcome_of(&game);
     assert!(ending == Outcome::Playing, "playing");
@@ -83,8 +82,7 @@ fn a_new_game_is_being_played() {
 
 #[test]
 fn the_empty_gallows() {
-    // y: covers gallows#no_head, gallows#no_body, gallows#no_left_arm, gallows#no_right_arm,
-    //    gallows#no_left_leg, gallows#no_right_leg
+    // y: covers part#not_yet
     let picture = gallows(0);
     let expected = ["  +---+", "  |   |", "      |", "      |", "      |", "      |", "========="].join("\n");
     assert!(picture == expected, "empty");
@@ -92,8 +90,7 @@ fn the_empty_gallows() {
 
 #[test]
 fn the_full_gallows() {
-    // y: covers gallows#has_head, gallows#has_body, gallows#has_left_arm, gallows#has_right_arm, gallows#has_left_leg,
-    //    gallows#has_right_leg
+    // y: covers part#reached
     let picture = gallows(6);
     let expected = ["  +---+", "  |   |", "  O   |", " /|\\  |", " / \\  |", "      |", "========="].join("\n");
     assert!(picture == expected, "full");
