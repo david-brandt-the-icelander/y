@@ -40,6 +40,7 @@ fails word_list_error.not_a_word: A piece of the list is not a `word`: it has a 
 ------------------------------------------------------------------------------------------------------------------------
 public function parse_word_list(text) returns words fails word_list_error:
     variable found = list.new()
+
     for piece in text.split(" "):
         if blank = (piece.is_empty()):
             continue
@@ -49,6 +50,7 @@ public function parse_word_list(text) returns words fails word_list_error:
                     found.push(parsed)
                 result.err(_):
                     fail word_list_error.not_a_word
+
     if empty = (found.is_empty()):
         fail word_list_error.empty
     else has_words:
@@ -124,6 +126,7 @@ public function guess(mutable game, line) returns answer fails guess_error
         where still_playing = (outcome_of(game) == outcome.playing):
     let trimmed = line.trim()
     let letter = trimmed.to_lowercase().single_rune()
+
     if nothing_typed = (trimmed.is_empty()):
         fail guess_error.empty
     else if not_one_rune = (letter == optional.none):
@@ -163,6 +166,7 @@ shown: Each letter of the word, found or not, separated by spaces (`_ o _ e`), a
 ------------------------------------------------------------------------------------------------------------------------
 public function masked(game) returns shown:
     variable letters = list.new()
+
     for letter in game.word.runes():
         letters.push(shown_rune(letter, game.hits))
     return shown = letters.join(separator: " ")
@@ -231,6 +235,7 @@ public function play(words) fails play_error
     let chosen = random.index_below(words.count())
     variable game = new_game(words[chosen])
     console.write_line("Hangman: find the word, one letter at a time.")?
+
     while playing = (outcome_of(game) == outcome.playing):
         let picture = gallows(game.misses.count())
         let shown = masked(game)
@@ -240,6 +245,7 @@ public function play(words) fails play_error
         console.write_line("Missed: {missed}")?
         console.write("Guess:  ")?
         let typed = (console.read_line() forever because "a player may think for as long as they like")?
+
         if closed = (typed == optional.none):
             fail play_error.input_closed
         else line_read:
@@ -257,6 +263,7 @@ public function play(words) fails play_error
     else game_over:
         let final_picture = gallows(game.misses.count())
         console.write_line(final_picture)?
+
         if won = (outcome_of(game) == outcome.won):
             console.write_line("You win! The word was {game.word}.")?
         else hanged:

@@ -51,6 +51,7 @@ public function hold_and_charge(item, buyer) returns hold fails hold_error
     within 5s?:
         atomic hold_one_unit:
             let stock = inventory.stock_of(item)?
+
             if sold_out = (stock.available == 0):
                 retry
             else in_stock:
@@ -416,6 +417,11 @@ let active_users = users.filter(is_active)
 - **One statement per line.** A block's body never shares its header's line, and two statements never share one line.
 - **Two blank lines separate one function from the next,** and one top-level declaration from the next; fewer or more is
   a lint error, which formatting fixes. Inside a body, at most one blank line separates statements.
+- **A blank line comes before every flow-control statement** (`if`, `while`, `for`, `switch`, `break`, `continue`,
+  `retry`, and the blocks `atomic`, `within`, `with`, `arena`, `uncancellable` and `supervise`), unless it is the first
+  statement of its block. Comments about the statement may sit between the blank line and the statement. `fail` and
+  `return` need no blank line, and neither do `else` and `orelse`, which continue the statement above them. A missing
+  blank line is a lint error, which formatting fixes.
 - Lines are at most 120 columns. `y format` has no options and preserves every comment. It produces one layout for any
   program, so every diff is about content.
 - A function body longer than 60 lines is a lint warning, and longer than 120 is an error. A reviewable sample fits on
@@ -742,8 +748,10 @@ position: The target's position, or nothing when it is absent, as index<element>
 public function position_of(target, items) returns position:
     variable low = items.first_index()?
     variable high = items.last_index()?
+
     while searching = (low <= high):
         let middle = low.midpoint(high)
+
         if found = (items[middle] == target):
             return position = optional.some(middle)
         else if go_right = (items[middle] < target):
@@ -975,12 +983,14 @@ function take_job() returns job
         with jobs:
     atomic take_next_job:
         let pending = jobs.pending.pop_front()
+
         if nothing_pending = (pending == optional.none):
             retry
         else got_pending:
             return job = pending
     orelse atomic take_retried_job:
         let retried = jobs.retried.pop_front()
+
         if nothing_retried = (retried == optional.none):
             retry
         else got_retried:
@@ -1080,6 +1090,7 @@ fails fulfilment_error.payment_unreachable: The charge could not be delivered.
 workflow fulfil(hold) returns shipped fails fulfilment_error
         with orders, charges, shipments:
     let order = orders.for_hold(hold)?
+
     switch submit charge_card(hold: hold, amount: order.total, method: order.payment_method):
         result.ok(receipt):
             return shipped = submit create_shipment(order: order.id, receipt: receipt.id)?

@@ -13,5 +13,6 @@ fails play_error.console: The terminal could not be read or written.
 public function main() fails play_error
         with system:
     let words = compile parse_word_list(game_rules.word_list)
+
     with console = system.console(), random = system.random(), forever = system.forever():
         play(words)?

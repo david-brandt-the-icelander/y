@@ -175,6 +175,29 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
             }
         }
     }
+    // a blank line before every flow-control statement that is not the first of its block; comments about the
+    // statement may come between (a lint rule of Y § 3.1)
+    let flow = ["if ", "while ", "for ", "switch ", "break", "continue", "retry", "atomic ", "within ", "arena ", "uncancellable", "supervise"];
+    for y in ["y/src/hangman.y", "y/src/main.y", "y/src/hangman.test.y"] {
+        let lines: Vec<String> = read(&dir.join(y)).lines().map(str::to_string).collect();
+        let mut inside = false;
+        for (i, l) in lines.iter().enumerate() {
+            let t = l.trim();
+            if t.len() >= 3 && t.chars().all(|c| c == '-') {
+                inside = !inside;
+            }
+            let with_block = t.starts_with("with ") && t.contains('=');
+            if inside || !(flow.iter().any(|f| t.starts_with(f)) || with_block) || t.ends_with("covers") {
+                continue;
+            }
+            let mut k = i;
+            while k > 0 && lines[k - 1].trim().starts_with("--") {
+                k -= 1;
+            }
+            let above = lines[k - 1].trim_end();
+            assert!(above.is_empty() || above.ends_with(':'), "{y}:{}: no blank line before `{t}`", i + 1);
+        }
+    }
     // no `else` goes without a name
     for y in ["y/src/hangman.y", "y/src/main.y", "y/src/hangman.test.y"] {
         assert!(!read(&dir.join(y)).lines().any(|l| l.trim() == "else:"), "{y}: an `else` without a name");
