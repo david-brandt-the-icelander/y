@@ -2,7 +2,7 @@
 test a_letter_in_the_word_is_a_hit
         covers guess#in_word, shown_rune#known, shown_rune#unknown:
     given:
-        variable game = new_game(word.new("gallows")?)
+        game = new_game(word.new("gallows")?)
     when:
         answer = guess(mutable game, "l")?
     then:
@@ -14,7 +14,7 @@ test a_letter_in_the_word_is_a_hit
 test a_letter_not_in_the_word_is_a_miss
         covers guess#not_in_word:
     given:
-        variable game = new_game(word.new("rope")?)
+        game = new_game(word.new("rope")?)
     when:
         answer = guess(mutable game, "z")?
     then:
@@ -26,7 +26,7 @@ test a_letter_not_in_the_word_is_a_miss
 test a_repeated_letter_is_refused
         covers guess#repeated, guess!guess_error.already_guessed:
     given:
-        variable game = game(word: word.new("rope")?, hits: set.new(), misses: ['z'])
+        game = game(word: word.new("rope")?, hits: set.new(), misses: ['z'])
     when:
         refused = guess(mutable game, "Z")
     then:
@@ -38,7 +38,7 @@ test a_repeated_letter_is_refused
 test typing_nothing_is_not_a_guess
         covers guess#nothing_typed, guess!guess_error.empty:
     given:
-        variable game = new_game(word.new("rope")?)
+        game = new_game(word.new("rope")?)
     when:
         refused = guess(mutable game, "   ")
     then:
@@ -49,7 +49,7 @@ test typing_nothing_is_not_a_guess
 test two_letters_are_not_a_guess
         covers guess#not_one_rune, guess!guess_error.not_one_letter:
     given:
-        variable game = new_game(word.new("rope")?)
+        game = new_game(word.new("rope")?)
     when:
         refused = guess(mutable game, "ab")
     then:
@@ -60,7 +60,7 @@ test two_letters_are_not_a_guess
 test a_digit_is_not_a_guess
         covers guess#not_a_letter:
     given:
-        variable game = new_game(word.new("rope")?)
+        game = new_game(word.new("rope")?)
     when:
         refused = guess(mutable game, "7")
     then:

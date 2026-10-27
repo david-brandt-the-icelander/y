@@ -39,7 +39,7 @@ fails word_list_error.not_a_word: A piece of the list is not a `word`: it has a 
   fewer than four.
 ------------------------------------------------------------------------------------------------------------------------
 public function parse_word_list(text) returns words fails word_list_error:
-    variable found = list.new()
+    found = list.new()
 
     for piece in text.split(" "):
         if blank = (piece.is_empty()):
@@ -165,7 +165,7 @@ game: The game, as game.
 shown: Each letter of the word, found or not, separated by spaces (`_ o _ e`), as string.
 ------------------------------------------------------------------------------------------------------------------------
 public function masked(game) returns shown:
-    variable letters = list.new()
+    letters = list.new()
 
     for letter in game.word.runes():
         letters.push(shown_rune(letter, game.hits))
@@ -233,7 +233,7 @@ public function play(words) fails play_error
         with console, random, forever
         where has_words = (not words.is_empty()):
     chosen = random.index_below(words.count())
-    variable game = new_game(words[chosen])
+    game = new_game(words[chosen])
     console.write_line("Hangman: find the word, one letter at a time.")?
 
     while playing = (outcome_of(game) == outcome.playing):

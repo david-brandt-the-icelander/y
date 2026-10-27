@@ -168,13 +168,12 @@ named, and every identifier is `lower_snake_case`; `proposal/Y-proposal.md` § 3
 
 ```y
 name = "Ada"
-variable attempts = 0
+attempts = 0
+attempts := attempts + 1
 ```
 
-A name bound with `=` is immutable.
-
-`variable` permits change, always written `attempts := attempts + 1`, subject to ownership, borrowing, transaction, and
-effect rules.
+`=` declares a name, and `:=` changes it. Nothing marks a name that changes at its declaration: each change is written
+`:=` or passed as a `mutable` argument, subject to ownership, borrowing, transaction, and effect rules.
 
 ### 3.3 Optional values
 

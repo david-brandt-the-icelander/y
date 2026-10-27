@@ -34,8 +34,8 @@ them tell a reviewer about memory, not about intent.
   function update(mutable order): ...
   ```
 
-- ⚠️ A name bound with `=` may not change, and a `variable` may, with `:=` or a `mutable` call. Method receivers are declared `self` or
-  `mutable self`, and are not marked at the call.
+- ⚠️ A name is declared with `=` and changed only with `:=` or a `mutable` call; nothing marks it at its
+  declaration. Method receivers are declared `self` or `mutable self`, and are not marked at the call.
 - ⚠️ **The compiler chooses the representation.** A parameter the callee only reads is passed as a
   shared borrow; a value the callee keeps is moved when the caller no longer uses it and copied when it
   does; a value that would be copied often may be counted and copied on write; a `mutable` parameter is

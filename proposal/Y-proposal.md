@@ -302,8 +302,8 @@ person can judge: is five seconds right, and is this the behaviour the business 
   - standard unit symbols (`s`, `ms`, `min`, `h`, `km`, `kb`), and currency codes (`isk`, `eur`).
 
   The linter checks this.
-  - The rule binds the language as much as its programs. Keywords are words: `public`, `function`, `variable`,
-    `constant`, `implementation`, `mutable`.
+  - The rule binds the language as much as its programs. Keywords are words: `public`, `function`, `constant`,
+    `implementation`, `mutable`.
   - So are the standard library's names (`boolean`, `divide_floor`, `remainder_euclidean`) and the toolchain's
     commands (`y format`).
 - Lengths, sizes and durations do not need units in their names, because units are in their types (§ 3.3).
@@ -314,8 +314,10 @@ person can judge: is five seconds right, and is this the behaviour the business 
   binding is initialised where it is declared.
 - **Every change to a name is written `:=`:** `low := middle.next()`, `account.balance := account.balance - amount`.
   `=` never changes a name, and there are no compound assignments (`-=`, `+=`), so a reader finds every change of a
-  value by searching for `:=`. A name that changes, by `:=` or by a call that takes it `mutable`, is declared
-  `variable`: `variable found = list.new()`. YAPL had `=` to bind and `:=` to rebind (§ 7).
+  value by searching for `:=`. YAPL had `=` to bind and `:=` to rebind (§ 7).
+- **No keyword marks a name that changes.** `found = list.new()` declares `found`, and `found.push(parsed)` or
+  `low := middle.next()` later changes it. Each change is visible where it happens, as `:=` or as a `mutable` argument,
+  so a marker at the declaration would say nothing new. There is no `let`, `var` or `variable`.
 - **No shadowing:** a name visible in a scope may not be declared again inside it, including parameter names. Within a
   function, a name means one thing.
 
@@ -341,7 +343,7 @@ person can judge: is five seconds right, and is this the behaviour the business 
   `supervise` produce no value, and Y has no conditional expression and no ternary operator.
   - A value chosen by a condition is assigned in each branch. The decision then has a name and a place, like every
     other: `if has_head = (misses >= 1):` assigns `head = "O"`, and `else no_head:` assigns `head = " "`.
-  - A value made inside a transaction or a deadline is returned from inside it, or assigned to a `variable` declared
+  - A value made inside a transaction or a deadline is returned from inside it, or assigned with `:=` to a name declared
     outside it.
   - A `switch` arm is a pattern ending in a colon, with its statements indented beneath it, as every block is:
     `result.ok(parsed):` then `found.push(parsed)`. There is no `=>`.
@@ -591,7 +593,7 @@ Referring to a case:
 - **A condition narrows.** In the branch of `if found = (user != optional.none):`, and in the `else present:` branch
   of `if missing = (user == optional.none):`, `user` is a `user`, no longer a `user?`. Nothing is written for
   this: every condition adds its predicate as a fact at the points it guards (constraint language § 11.1.1), and the type checker reads the fact.
-  - The fact ends where the value may change: an assignment to a `variable`, or a call that takes it `mutable`. A field path
+  - The fact ends where the value may change: an assignment with `:=`, or a call that takes it `mutable`. A field path
     such as `order.customer` narrows the same way, until something may write to that path.
   - The same facts discharge a callee's `where` preconditions (§ 3.11) when they imply it.
 
@@ -751,8 +753,8 @@ items: The list to search, as sorted_list<int64>.
 position: The target's position, or nothing when it is absent, as index<element>?.
 ------------------------------------------------------------------------------------------------------------------------
 public function position_of(target, items) returns position:
-    variable low = items.first_index()?
-    variable high = items.last_index()?
+    low = items.first_index()?
+    high = items.last_index()?
 
     while searching = (low <= high):
         middle = low.midpoint(high)
@@ -783,7 +785,8 @@ is change under someone who holds it: Y values have value semantics.
 - **`mutable` marks the exception, at both ends of the call.** A parameter `mutable x` lets the callee change the
   caller's value, and the call says so: `guess(mutable game, line)`. While the call runs, nothing else can reach that
   value. This is YAPL's two-sided `mutable` (2024): a reviewer sees at the call which arguments the callee may change.
-- **Bindings:** a `variable` may be changed, with `:=` or by a call that takes it `mutable`, and any other name may not.
+- **Bindings:** a local name may be changed, with `:=` or by a call that takes it `mutable`, and nothing marks it at its
+  declaration. A parameter may be changed only when it is declared `mutable`.
 - **Method receivers** are declared `self` or `mutable self`. They are not marked at the call (`order.cancel()`),
   because receiver syntax is where agents' habits are strongest. The elaborated view shows the mode.
 - **Keeping a value keeps it as it is.** When `new_game(word)` stores `word` in the game, nothing done to the game's
@@ -1257,7 +1260,7 @@ active_names = users.filter(active).map(name_of).sorted()
 - Each stage takes a named callable: a `rule` (`active`), a function, or a lambda bound above (§ 3.1). There is no
   inline lambda.
 - **A pipeline reads its source and produces a new value.** It never changes the source: changing the elements of a
-  collection is a `for` loop over a `variable`, which says so.
+  collection is a `for` loop whose body says so, with `:=` or a `mutable` call.
 - A pipeline over transactional state reads inside the enclosing transaction.
 - Unordered results make no promise about order beyond their source's. Order is asked for with `sorted`.
 
@@ -1664,7 +1667,7 @@ premise changed, or because the iteration that tried them showed their cost. The
 | `name is type`, and `is` in five roles | YAPL → April 2026 | `name: type`, except in constants, enumerations and refined types, which keep `is constant`, `is <type>` and `type name is base` | `is` meant annotation, predicate sugar, capture, mutability and optionality; the March 2026 review called it the most ambiguous token in the language |
 | File-wide width-matched `---` / `===` / `~~~` comment blocks | YAPL → April 2026 | `--` lines, and `---` blocks whose width belongs to each block | File-wide delimiter width makes one edit rewrite many lines of diff |
 | `//` and `///` comments | Earlier drafts of this proposal | `--` and `---`, Y's own since YAPL; documentation is the comment above a declaration | Spelling borrowed for agents' habits, which a diagnostic and `y fix` correct instead |
-| Abbreviated keywords and names: `pub`, `fn`, `var`, `const`, `impl`, `mut`, `Int`, `Bool` | Earlier drafts of this proposal | `public`, `function`, `variable`, `constant`, `implementation`, `mutable`, `int64`, `boolean` | The no-abbreviation rule binds the language's own words too; the sized numeric types and standard units are the few abbreviations kept |
+| Abbreviated keywords and names: `pub`, `fn`, `const`, `impl`, `mut`, `Int`, `Bool` | Earlier drafts of this proposal | `public`, `function`, `constant`, `implementation`, `mutable`, `int64`, `boolean` | The no-abbreviation rule binds the language's own words too; the sized numeric types and standard units are the few abbreviations kept |
 | `PascalCase` for types, cases, traits, states and commands | Earlier drafts of this proposal | `lower_snake_case` for every identifier, as in YAPL; any other casing is a compile error | One casing rule with no exceptions; a type is told from a value by where it stands |
 | Types in signatures, `->` and `T ! E` | Earlier drafts of this proposal | `function f(a, mutable b) returns result fails e`; each type in the role that documents its name (`a: ..., as string.`) | Few symbols; a signature reads as words, and every name is documented with its type in one place |
 | Unnamed results and an implicit last-expression result | Earlier drafts of this proposal | `returns name`, and `return name = value` | A result has a name, which its documentation explains, and every exit is a visible `return` or `fail` |
@@ -1672,6 +1675,7 @@ premise changed, or because the iteration that tried them showed their cost. The
 | `match` with `pattern => statement` arms | Earlier drafts of this proposal | `switch`, each arm a pattern and a colon with its block beneath, as in the toolchain's language reference § 7 | One way to write a block; no `=>` |
 | A case written `.case` where the type is known | September → earlier drafts of this proposal | `type_name.case` everywhere, as YAPL had it (`color.red`) | The reader never infers which type a case belongs to |
 | `let` | Earlier drafts of this proposal | `name = value` declares; `name := value` changes, as in YAPL | Every change to a value is spelled one way and found by one search |
+| `variable` (and `var` before it), marking a name that may change | Earlier drafts of this proposal | Nothing at the declaration; each change is `:=` or a `mutable` argument | The change is already marked where it happens, so the marker repeated it |
 | `if` and `switch` as expressions; a ternary operator | Earlier drafts of this proposal | Statements; a value is assigned in each branch | A decision is a statement with a name and a place, never a value hidden inside an expression |
 | Spec block in place of the signature | April 2026 | A signature naming parameters and result; documentation above it with closed roles and the types | The examples abandoned it for helpers; a signature is where a reader looks for names and modes |
 | Two spellings of one keyword, method synonyms | YAPL, toolchain | One spelling | Contradicts "one way to write it" |
@@ -1786,7 +1790,7 @@ declarations   module from import public function returns fails structure type c
                transient self
 contracts      where ensures invariant old assert
 control        if else switch when for in while break continue return fail
-bindings       variable mutable lambda nested captures with arena compile
+bindings       mutable lambda nested captures with arena compile
 concurrency    within task supervise detach forever uncancellable
 transactions   atomic retry orelse enqueue submit
 claims, gaps   unsafe assume allow reveal because todo
