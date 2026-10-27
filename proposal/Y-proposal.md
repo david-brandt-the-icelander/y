@@ -1169,8 +1169,9 @@ fn checksum(bytes: &Bytes) -> UInt32 {
 - **A failure is a build error too.** A call returning `T ! E` must succeed. A failure is reported with its case and the
   case's `fails` role, and the result has type `T`. Literal prefixes (`re"…"`, `url"…"`) are this rule with a shorter
   spelling: a literal that would not parse never builds.
-- **Evaluation that does not finish is a build error.** It is stopped by the toolchain's fixed step limit and reported
-  with the call stack where it stopped. Source cannot change the limit.
+- **Evaluation has no limit.** A call that runs long keeps running. The toolchain reports where evaluation is (its call
+  stack) while it runs, so whoever is waiting can see what is slow and stop the build if they choose. The report never
+  changes whether a program is accepted.
 
 **What a reviewer sees.**
 
