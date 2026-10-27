@@ -199,10 +199,10 @@
         {
           "kind": "require",
           "text": "require within_allowance : misses <= ALLOWED_MISSES",
-          "source": "y/src/hangman.y:153",
+          "source": "y/src/hangman.y:156",
           "status": { "lifted": "src/hangman.rs: y_runtime::require" }
         },
-        { "kind": "effects", "text": "pure", "source": "y/src/hangman.y:152" }
+        { "kind": "effects", "text": "pure", "source": "y/src/hangman.y:155" }
       ]
     },
     {
@@ -254,13 +254,12 @@
         {
           "kind": "require",
           "text": "require has_words : size(words) > 0",
-          "source": "y/src/hangman.y:200",
+          "source": "y/src/hangman.y:203",
           "status": { "lifted": "src/hangman.rs: y_runtime::require" }
         },
-        { "kind": "effects", "text": "effects only console, random", "source": "y/src/hangman.y:199" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/hangman.y:199" }
+        { "kind": "effects", "text": "effects only console, random", "source": "y/src/hangman.y:202" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/hangman.y:202" }
       ]
     }
-  ],
-  "holes": { "hangman_example::hangman::masked": { "locals": { "shown": "list<Rune> as 'Vec'" } } }
+  ]
 }

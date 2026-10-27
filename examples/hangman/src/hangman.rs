@@ -62,20 +62,20 @@ pub enum WordListError {
 /// - Fails `Empty`: the list has no words.
 /// - Fails `NotAWord`: a piece of the list is not a `Word`: it has a character other than `a` to `z`, or fewer than four.
 pub fn parse_word_list(text: &str) -> Result<Vec<Word>, WordListError> {
-    let mut words = Vec::new();
+    let mut found = Vec::new();
     for piece in text.split(" ") {
         if piece.is_empty() { // y: #blank
             continue;
         }
         match Word::new(piece.to_string()) {
-            Ok(parsed) => words.push(parsed),
+            Ok(parsed) => found.push(parsed),
             Err(_) => return Err(WordListError::NotAWord),
         }
     }
-    if words.is_empty() { // y: #empty
+    if found.is_empty() { // y: #empty
         return Err(WordListError::Empty);
     }
-    Ok(words)
+    Ok(found)
 }
 
 /// One game: the secret word, and every letter guessed so far.
@@ -182,8 +182,11 @@ fn shown_rune(letter: Rune, hits: &BTreeSet<Rune>) -> Rune {
 /// - `game`: the game.
 /// - Returns each letter of the word, found or not, separated by spaces: `_ o _ e`.
 pub fn masked(game: &Game) -> String {
-    let shown: Vec<Rune> = runes(game.word.as_text()).map(|letter| shown_rune(letter, &game.hits)).collect();
-    join_runes(&shown, " ")
+    let mut letters = Vec::new();
+    for letter in runes(game.word.as_text()) {
+        letters.push(shown_rune(letter, &game.hits));
+    }
+    join_runes(&letters, " ")
 }
 
 /// Draws the gallows, with one more part of the man for each miss.

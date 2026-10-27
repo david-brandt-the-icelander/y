@@ -699,7 +699,7 @@ Examples:
 
 ```y
 derived active_user_count =
-    users.where(user => user.active).count()
+    users.where(active).count()
 ```
 
 and:
@@ -724,8 +724,8 @@ Illustrative style:
 ```y
 let names =
     users
-        .where(user => user.active)
-        .map(user => user.name)
+        .where(active)
+        .map(name_of)
         .sorted()
 ```
 

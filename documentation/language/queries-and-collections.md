@@ -22,13 +22,14 @@ incrementally, and an explicit loop is one it must execute as written.
   ```y
   let names =
       users
-          .where(user => user.active)
-          .map(user => user.name)
+          .where(active)
+          .map(name_of)
           .sorted()
   ```
 
-- ⚠️ A lambda names its parameter, even when it has one: `.where(user => user.age >= 18)`. Y has no
-  shorthand that elides it, as it has none for a case's type.
+- ⚠️ Each stage takes a named callable — a `rule` such as `active`, a function, or a lambda bound with
+  `let adult = lambda adult(user) returns grown_up: …`. Y has no inline lambda expression
+  → [`../../proposal/Y-proposal.md` § 3.1](../../proposal/Y-proposal.md#31-source-form).
 - ⚠️ A chain is fused into a single traversal where the stages permit it, rather than materialising an
   intermediate collection per stage.
 - ⚠️ **A chain reads its receiver and produces a new value.** It never changes the receiver: changing
@@ -52,7 +53,7 @@ incrementally, and an explicit loop is one it must execute as written.
 
   ```y
   derived active_user_count =
-      users.where(user => user.active).count()
+      users.where(active).count()
   ```
 
 - ⚠️ A derived value is always consistent with the state it is defined over, and reading it inside a

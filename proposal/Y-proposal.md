@@ -56,9 +56,9 @@ public function hold_and_charge(item, buyer) returns hold fails hold_error
             stock.available -= 1
             let price = stock.price
 
-            hold = inventory.open_hold(item: item, buyer: buyer.id)
-            enqueue charge_card(hold: hold.id, amount: price, method: buyer.payment_method)
-    return hold
+            let opened = inventory.open_hold(item: item, buyer: buyer.id)
+            enqueue charge_card(hold: opened.id, amount: price, method: buyer.payment_method)
+            return hold = opened
 ```
 
 Without opening another file, a reviewer can see that this function touches exactly two things (one shared inventory,
@@ -335,7 +335,8 @@ person can judge: is five seconds right, and is this the behaviour the business 
   `supervise` produce no value, and Y has no conditional expression and no ternary operator.
   - A value chosen by a condition is assigned in each branch. The decision then has a name and a place, like every
     other: `variable head = " "`, then `if has_head = (misses >= 1): head = "O"`.
-  - A value made inside a transaction or a deadline is assigned to a name declared outside it (§ 0's `hold`).
+  - A value made inside a transaction or a deadline is returned from inside it, or assigned to a `variable` declared
+    outside it.
   - A `match` arm runs a statement: a call, an assignment, `return`, `fail`, `break` or `continue`.
 
 **Functions and their results.**
@@ -353,10 +354,12 @@ function meaning_of_life() returns answer:
 - **Types live in the documentation directly above** (§ 3.2). Each parameter, the result and each capability has a
   role that ends with `as` and its type: `line: What the player typed, as string.` A signature whose documentation lacks a
   type does not compile, so every function with parameters or a result is documented, private ones included.
-- **The result is a name.** `returns verdict` declares `verdict` as a variable of the function, unassigned until the
-  body assigns it.
-  - Every path ends in `return` or `fail`. `return answer = verdict.hit` assigns and returns in one statement.
-  - Where the result was assigned before, as inside a transaction, `return verdict` returns it.
+- **The result is a name.** `returns answer` names the result, and only the `return` that leaves the function gives
+  it a value: `return answer = verdict.hit`. Assigning to the result anywhere else is an error (the toolchain's rule,
+  language reference § 8).
+  - Every path ends in `return` or `fail`.
+  - A `return` inside `atomic` commits the transaction and then returns; inside `within`, it leaves the deadline's
+    block. So a value made inside a transaction is returned from inside it (§ 0's `hold`).
   - A function without `returns` has no result, and its `return` takes no name.
 - **A function that can fail says so in its signature:** `fails guess_error`. Its documentation then has a
   `fails <case>:` role for every case.
@@ -368,11 +371,30 @@ function meaning_of_life() returns answer:
 - The formatter removes names where positions are unambiguous and adds them where they are required, so there is one
   canonical spelling of every call.
 
-**Closures.**
+**Lambdas and nested functions.** Y has no inline lambda expression and no `=>` closure. Every callable has a name,
+documentation and a signature, as the toolchain's language reference (§ 8, "Lambda declarations") and YAPL's explicit
+closures (`closure … closes … over …`) both required:
 
-- A closure is a single expression: `users.filter(user => user.active)`.
-- Anything longer is a named local function that lists what it captures (`function add_line(line) captures mutable
-  total { ... }`, documented like any other). The name appears in traces, and the capture list shows what the helper can reach.
+```y
+------------------------------------------------------------------------------------------------------------------------
+Whether someone has signed in lately.
+
+user: The person, as user.
+active: Whether they have, as boolean.
+------------------------------------------------------------------------------------------------------------------------
+let is_active = lambda is_active(user) returns active
+        captures cutoff:
+    return active = (user.last_seen > cutoff)
+
+let active_users = users.filter(is_active)
+```
+
+- A lambda is bound by assignment, `let name = lambda name(…)`, and can be stored and passed like any value. A helper that
+  is only called is a `nested function` in the body.
+- **What a callable captures is listed:** `captures cutoff`, `captures mutable total`. A capture that is not listed is
+  an error, so the signature shows everything the helper can reach.
+- The name appears in traces and fault reports, as every function's does.
+- A named predicate over data that more than one function uses is a `rule` (§ 3.13), which a pipeline takes by name.
 
 **Comments and layout.**
 
@@ -420,26 +442,31 @@ public constants game_rules:
         points_per_hit = 10
 
 -- Where a game stands.
-public enumeration outcome:
-    playing
-    won
-    lost
+public constants outcome:
+    playing = "playing"
+    won = "won"
+    lost = "lost"
 
--- How a job ended, as the string a log shows.
-public enumeration job_status is string:
-    ok = "OK"
-    failed = "FAILED"
+-- How serious a log entry is, from least to most.
+public enumeration severity is string:
+    debug = "DEBUG"
+    warning = "WARNING"
+    error = "ERROR"
 ```
 
 - A single constant is `name is constant type = value`, and its type may be left to the value: `answer is constant = 42`.
   Inside a `constants` group the word `constant` is not repeated, and a group may hold groups. A member is reached
   through its group: `game_rules.allowed_misses`.
 - Every value is computed while the program is built (§ 3.17) and holds nothing mutable.
-- An enumeration names a closed set of values. They are numbered from zero unless given values, and the values have
-  one type, the smallest unsigned integer that holds them unless the enumeration names one (`is string`). A value is
-  always written with its enumeration, `outcome.won` (§ 3.3).
-- An enumeration is the type for a set of cases that carry nothing, failure types included. A `type` with `case`s is
-  for cases that carry data (§ 3.3).
+- **A constant group whose members share one type is also a closed type:** a value of `outcome` is one of its members.
+  A member is always written with its group, `outcome.won` (§ 3.3), and `match` over it must cover every member. This
+  is the type for a set of named values with no order: where a game stands, what a guess did, and the cases of a
+  failure that carry nothing.
+- **An enumeration is for a set that has an order and is iterated:** `for level in severity`, `severity.warning <
+  severity.error`. Its values are numbered from zero in the order written unless given values, and have one type, the
+  smallest unsigned integer that holds them unless the enumeration names one (`is string`). Without an order to use or
+  a reason to iterate, a constant group is the right declaration.
+- A `type` with `case`s is for cases that carry data (§ 3.3).
 - `is` appears only here, in `is constant` and in a typed member or enumeration, and in a refined type,
   `type word is string where …` (§ 3.3). § 7 records why `is` was dropped everywhere else.
 
@@ -559,7 +586,7 @@ all of them:
 type quantity is int64 where positive = (value > 0)
 type email_address is string where has_one_at_sign = (value.count_of('@') == 1)
 type word is string
-    where letters_only = value.runes().all(letter => letter.is_ascii_lowercase()) and
+    where letters_only = value.matches(pattern"^[a-z]*$") and
           long_enough = (value.count() >= 4)
 ```
 
@@ -986,8 +1013,7 @@ fails declined: The gateway refused the charge.
 handler charge_card(command) returns charged fails charge_error
         with gateway:
     within 30s?:
-        charged = gateway.charge(idempotency_key: command.id, method: command.method, amount: command.amount)?
-    return charged
+        return charged = gateway.charge(idempotency_key: command.id, method: command.method, amount: command.amount)?
 ```
 
 - `enqueue` submits a command from inside a transaction, which is the only place it may appear. The command is durable
@@ -1170,9 +1196,11 @@ must not prevent them, and does not need them.
 **Pipelines** say what the answer is, which leaves the compiler free to fuse, parallelise or index:
 
 ```y
-let active_names = users.filter(user => user.active).map(user => user.name).sorted()
+let active_names = users.filter(active).map(name_of).sorted()
 ```
 
+- Each stage takes a named callable: a `rule` (`active`), a function, or a lambda bound above (§ 3.1). There is no
+  inline lambda.
 - **A pipeline reads its source and produces a new value.** It never changes the source: changing the elements of a
   collection is a `for` loop over a `variable`, which says so.
 - A pipeline over transactional state reads inside the enclosing transaction.
@@ -1187,7 +1215,10 @@ let active_names = users.filter(user => user.active).map(user => user.name).sort
   Recursion, with the stratification it requires, can be added later.
 
 ```y
-derived active_user_count: count<element> = users.filter(user => user.active).count()
+-- user: The person to judge, as user.
+rule active(user) = (user.last_seen > 30d.ago())
+
+derived active_user_count: count<element> = users.filter(active).count()
 
 ------------------------------------------------------------------------------------------------------------------------
 A customer whose payments have failed often and who owes a lot.
@@ -1697,7 +1728,7 @@ declarations   module from use public function returns fails record type case en
                transient self
 contracts      requires ensures invariant where old assert
 control        if else match when for in while break continue return fail
-bindings       let variable mutable captures with arena compile
+bindings       let variable mutable lambda nested captures with arena compile
 concurrency    within task supervise detach forever uncancellable
 transactions   atomic retry orelse enqueue submit
 claims, gaps   unsafe assume allow reveal because todo

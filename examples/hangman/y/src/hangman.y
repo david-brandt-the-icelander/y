@@ -17,13 +17,13 @@ A word a game can be played with.
 why: A player must be able to type and see every letter, and a short word is too easy to guess.
 ------------------------------------------------------------------------------------------------------------------------
 public type word is string
-    where letters_only = value.runes().all(letter => letter.is_ascii_lowercase()) and
+    where letters_only = value.matches(pattern"^[a-z]*$") and
           long_enough = (value.count() >= 4)
 
 -- Why a word list cannot be played with.
-public enumeration word_list_error:
-    empty
-    not_a_word
+public constants word_list_error:
+    empty = "the list has no words"
+    not_a_word = "a piece of the list is not a word"
 
 ------------------------------------------------------------------------------------------------------------------------
 Reads a word list.
@@ -34,16 +34,16 @@ fails empty: The list has no words.
 fails not_a_word: A piece of the list is not a `word`: it has a character other than `a` to `z`, or fewer than four.
 ------------------------------------------------------------------------------------------------------------------------
 public function parse_word_list(text) returns words fails word_list_error:
-    words = list.new()
+    variable found = list.new()
     for piece in text.split(" "):
         if blank = (piece.is_empty()):
             continue
         match word.new(piece.to_string()):
-            result.ok(parsed) => words.push(parsed)
+            result.ok(parsed) => found.push(parsed)
             result.err(_) => fail word_list_error.not_a_word
-    if empty = (words.is_empty()):
+    if empty = (found.is_empty()):
         fail word_list_error.empty
-    return words
+    return words = found
 
 -- One game: the secret word, and every letter guessed so far.
 public record game:
@@ -54,21 +54,21 @@ public record game:
     invariant within_allowance = (misses.count() <= game_rules.allowed_misses)
 
 -- Where a game stands.
-public enumeration outcome:
-    playing
-    won
-    lost
+public constants outcome:
+    playing = "playing"
+    won = "won"
+    lost = "lost"
 
 -- What a guess did.
-public enumeration verdict:
-    hit
-    miss
+public constants verdict:
+    hit = "hit"
+    miss = "miss"
 
 -- Why what the player typed is not a guess.
-public enumeration guess_error:
-    empty
-    not_one_letter
-    already_guessed
+public constants guess_error:
+    empty = "nothing was typed"
+    not_one_letter = "not one letter"
+    already_guessed = "already guessed"
 
 ------------------------------------------------------------------------------------------------------------------------
 Starts a game.
@@ -89,7 +89,7 @@ standing: Lost once the player has used up the misses allowed, won once every le
 public function outcome_of(game) returns standing:
     if hanged = (game.misses.count() == game_rules.allowed_misses):
         return standing = outcome.lost
-    if solved = (game.word.runes().all(letter => game.hits.contains(letter))):
+    if solved = (game.word.runes().to_set().is_subset_of(game.hits)):
         return standing = outcome.won
     return standing = outcome.playing
 
@@ -141,7 +141,10 @@ game: The game, as game.
 shown: Each letter of the word, found or not, separated by spaces (`_ o _ e`), as string.
 ------------------------------------------------------------------------------------------------------------------------
 public function masked(game) returns shown:
-    return shown = game.word.runes().map(letter => shown_rune(letter, game.hits)).join(separator: " ")
+    variable letters = list.new()
+    for letter in game.word.runes():
+        letters.push(shown_rune(letter, game.hits))
+    return shown = letters.join(separator: " ")
 
 ------------------------------------------------------------------------------------------------------------------------
 Draws the gallows, with one more part of the man for each miss.
