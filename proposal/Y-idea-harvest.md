@@ -253,7 +253,7 @@ were Codex pull requests executing step-wise briefs. `ypm` (January 2026) added 
 | At most two positional arguments | 2025-10-19 | Adapted | § 3.1 — also named when two parameters share a type |
 | Module = file = import path; no re-exports (`NS005`), no wildcards, no cycles | 2025-10-21 | Adopted | § 3.1 |
 | One public symbol per module | 2025-10-21 | Dropped | Too strict for a type and its failure type; small files and body limits do the job |
-| A missing visibility modifier is an error | 2025-10-21 | Dropped | `pub` or private is simpler; nothing is silently exported |
+| A missing visibility modifier is an error | 2025-10-21 | Dropped | `public` or private is simpler; nothing is silently exported |
 | Package files hold metadata only: licence, platforms, `y.security.capabilities` | 2025-10-23 | Adapted | § 3.7 package manifest lists root capabilities |
 | Compiler-synthesised `Equatable` / `Hashable` / `Ordered`; user-written equality forbidden | 2025-11-14 | Adopted | § 3.3 |
 | `sensitive` data: `requires sensitive_access` propagates to callers; masked in logs | 2025-10-19 | Adapted | § 3.3 `Sensitive<T>`, § 3.7 `Reveal` capability |
@@ -334,12 +334,12 @@ construct … in a closed grammar."
 
 | Idea | Verdict | Where / why |
 | --- | --- | --- |
-| Spec block: structured, closed-grammar documentation of every declaration | Adapted | § 3.2 — `///` with closed roles |
+| Spec block: structured, closed-grammar documentation of every declaration | Adapted | § 3.2 — documentation comments with closed roles |
 | The spec block *replaces* the signature | Dropped | The April examples fell back to inline signatures for helpers; agents' priors; types are read in the signature |
 | Closed role vocabulary; a prose line shaped like `word:` must be a valid role | Adopted | § 3.2 (`Y0102`) |
 | Imports typed and formatter-expanded ("the committed source is always precise"); per-import comments | Adapted | § 3.1 — imports name what they bring; the formatter sorts |
 | Constrained CommonMark in comments; `y:` links resolved by the compiler | Adopted | § 3.2 |
-| `exports:` as the only visibility lever | Dropped | `pub` is simpler |
+| `exports:` as the only visibility lever | Dropped | `public` is simpler |
 | First-class `invariant` / `precondition` / `postcondition`; `snapshot` for pre-state; invariants checked at commit of transactions that touch their fields | Adapted | § 3.11 — `requires`, `ensures`, `old()`; record invariants checked at commit |
 | Properties must be non-blocking and non-throwing | Dropped with properties | § 7 |
 | `covers:` — "a test contributes to the coverage of only what it declares it covers" | Adopted | § 3.14 |

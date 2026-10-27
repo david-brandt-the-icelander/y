@@ -128,7 +128,7 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
         let mut function = String::new();
         for line in read(&dir.join(y)).lines() {
             let words: Vec<&str> = line.split_whitespace().collect();
-            if let Some(i) = words.iter().position(|w| *w == "fn") {
+            if let Some(i) = words.iter().position(|w| *w == "function") {
                 function = words[i + 1].split('(').next().unwrap().to_string();
             }
             for (i, w) in words.iter().enumerate() {

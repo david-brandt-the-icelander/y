@@ -20,13 +20,13 @@ borrow error. Y rejects the first and refuses to perform the second.
 - ⚠️ Every value has exactly one owner at a time. Assignment and argument passing transfer ownership,
   and using a value after it has been transferred is a compile error naming the transfer site.
 - ⚠️ `&T` is a shared borrow: any number may exist at once, and none of them permits mutation.
-- ⚠️ `&mut T` is an exclusive borrow: while one exists, no other borrow of that value exists, and it
+- ⚠️ `&mutable T` is an exclusive borrow: while one exists, no other borrow of that value exists, and it
   permits mutation.
 
   ```y
-  fn inspect(order: &Order) { ... }
+  function inspect(order: &Order) { ... }
 
-  fn update(order: &mut Order) { ... }
+  function update(order: &mutable Order) { ... }
   ```
 
 - ⚠️ A borrow may not outlive the value it borrows, and a function may return a borrow derived from a
@@ -81,7 +81,7 @@ borrow error. Y rejects the first and refuses to perform the second.
 | Program | Diagnostic | Status |
 | --- | --- | --- |
 | Use of a value after ownership transferred | Where it was transferred | ⚠️ |
-| `&mut` alongside any other live borrow | The conflicting borrow and its extent | ⚠️ |
+| `&mutable` alongside any other live borrow | The conflicting borrow and its extent | ⚠️ |
 | Mutation through a shared borrow | That `&` excludes mutation | ⚠️ |
 | A borrow outliving its referent | Where the referent dies | ⚠️ |
 | A program that would need an implicit clone | The ownership conflict, not a suggestion to copy | ⚠️ |

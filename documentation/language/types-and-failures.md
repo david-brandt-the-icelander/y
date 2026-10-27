@@ -71,7 +71,7 @@ told about, because the compiler enumerates the cases.
   signature exactly where a return type appears:
 
   ```y
-  fn loadCustomer(id: CustomerId) -> Customer ! CustomerError
+  function loadCustomer(id: CustomerId) -> Customer ! CustomerError
   ```
 
 - ⚠️ A failure is an ordinary typed value. There is no unwinding, no side channel, no ambient handler,
@@ -84,15 +84,15 @@ told about, because the compiler enumerates the cases.
 
   ```y
   type StartupError {
-      .Config(ConfigError)
-      .Database(DbError)
+      .Configuration(ConfigurationError)
+      .Database(DatabaseError)
       .Network(NetworkError)
   }
 
-  fn startup() -> App ! StartupError {
-      let config = loadConfig("app.json")?
-      let db = connect(config.database)?
-      App(config, db)
+  function startup() -> Application ! StartupError {
+      let configuration = loadConfiguration("app.json")?
+      let database = connect(configuration.database)?
+      Application(configuration, database)
   }
   ```
 

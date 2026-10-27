@@ -105,7 +105,7 @@ enforced; what to do instead is [External effects](external-effects.md).
   ```y
   atomic {
       account.balance -= amount
-      paymentProvider.charge(card, amount)   // rejected
+      paymentProvider.charge(card, amount)   -- rejected
   }
   ```
 

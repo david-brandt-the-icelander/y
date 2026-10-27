@@ -169,10 +169,9 @@ fn guess(game, line) {
 /// - Returns what the player sees in its place.
 fn shown_rune(rune, hits) {
     if hits.contains(&rune) { // y: #known
-        rune
-    } else {
-        Rune('_')
+        return rune;
     }
+    Rune('_')
 }
 
 /// Shows the word as the player sees it.
@@ -190,12 +189,30 @@ fn masked(game) {
 /// - Returns the picture, seven lines high.
 fn gallows(misses) {
     require(misses <= ALLOWED_MISSES, "hangman::gallows#within_allowance");
-    let head = if misses >= 1 { "O" } else { " " }; // y: #has_head
-    let body = if misses >= 2 { "|" } else { " " }; // y: #has_body
-    let left_arm = if misses >= 3 { "/" } else { " " }; // y: #has_left_arm
-    let right_arm = if misses >= 4 { "\\" } else { " " }; // y: #has_right_arm
-    let left_leg = if misses >= 5 { "/" } else { " " }; // y: #has_left_leg
-    let right_leg = if misses >= 6 { "\\" } else { " " }; // y: #has_right_leg
+    let head = " ";
+    if misses >= 1 { // y: #has_head
+        head = "O";
+    }
+    let body = " ";
+    if misses >= 2 { // y: #has_body
+        body = "|";
+    }
+    let left_arm = " ";
+    if misses >= 3 { // y: #has_left_arm
+        left_arm = "/";
+    }
+    let right_arm = " ";
+    if misses >= 4 { // y: #has_right_arm
+        right_arm = "\\";
+    }
+    let left_leg = " ";
+    if misses >= 5 { // y: #has_left_leg
+        left_leg = "/";
+    }
+    let right_leg = " ";
+    if misses >= 6 { // y: #has_right_leg
+        right_leg = "\\";
+    }
     let rows = [
         "  +---+".to_string(),
         "  |   |".to_string(),

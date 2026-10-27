@@ -22,7 +22,7 @@ worth their syntax cost.
   signature rather than statements in its body.
 
   ```y
-  fn withdraw(account: &mut Account, amount: Money) -> Receipt ! WithdrawError
+  function withdraw(account: &mutable Account, amount: Money) -> Receipt ! WithdrawError
       requires amount > 0
       requires account.balance >= amount
       ensures account.balance == old(account.balance) - amount

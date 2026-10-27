@@ -135,19 +135,19 @@ Unless otherwise stated, syntax in this document is **illustrative rather than f
 ### 3.1 Functions
 
 ```y
-fn square(x: Int) -> Int = x * x
+function square(x: Integer) -> Integer = x * x
 ```
 
 Block form:
 
 ```y
-fn clamp(x: Int, min: Int, max: Int) -> Int {
-    if x < min {
-        return min
+function clamp(x: Integer, minimum: Integer, maximum: Integer) -> Integer {
+    if x < minimum {
+        return minimum
     }
 
-    if x > max {
-        return max
+    if x > maximum {
+        return maximum
     }
 
     x
@@ -158,12 +158,12 @@ fn clamp(x: Int, min: Int, max: Int) -> Int {
 
 ```y
 let name = "Ada"
-var attempts = 0
+variable attempts = 0
 ```
 
 `let` is immutable.
 
-`var` permits reassignment, subject to ownership, borrowing, transaction, and effect rules.
+`variable` permits reassignment, subject to ownership, borrowing, transaction, and effect rules.
 
 ### 3.3 Optional values
 
@@ -199,7 +199,7 @@ meaning:
 For example:
 
 ```y
-fn loadCustomer(id: CustomerId) -> Customer ! CustomerError
+function loadCustomer(id: CustomerId) -> Customer ! CustomerError
 ```
 
 Failures are ordinary typed program values, not an untyped exception side-channel.
@@ -231,7 +231,7 @@ Pattern matching is a core control-flow mechanism:
 
 ```y
 match result {
-    .Approved(auth) => complete(auth)
+    .Approved(authorization) => complete(authorization)
     .Declined(reason) => reject(reason)
     .Unavailable => retryLater()
 }
@@ -258,9 +258,9 @@ The semantic model should be able to represent:
 Illustrative syntax may include familiar forms:
 
 ```y
-fn inspect(order: &Order) { ... }
+function inspect(order: &Order) { ... }
 
-fn update(order: &mut Order) { ... }
+function update(order: &mutable Order) { ... }
 
 let transferred = move value
 ```
@@ -387,7 +387,7 @@ For example, this is invalid in principle:
 ```y
 atomic {
     account.balance -= amount
-    paymentProvider.charge(card, amount) // forbidden
+    paymentProvider.charge(card, amount) -- forbidden
 }
 ```
 
@@ -591,7 +591,7 @@ Y should support machine-checkable preconditions, postconditions, and invariants
 Illustrative syntax:
 
 ```y
-fn withdraw(account: &mut Account, amount: Money) -> Receipt ! WithdrawError
+function withdraw(account: &mutable Account, amount: Money) -> Receipt ! WithdrawError
     requires amount > 0
     requires account.balance >= amount
     ensures account.balance == old(account.balance) - amount
@@ -742,8 +742,8 @@ Illustrative style:
 ```y
 let names =
     users
-        .where(u => u.active)
-        .map(u => u.name)
+        .where(user => user.active)
+        .map(user => user.name)
         .sorted()
 ```
 

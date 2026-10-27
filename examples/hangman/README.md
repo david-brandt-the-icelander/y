@@ -25,11 +25,11 @@ letter. Six misses hang the man.
 
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
-| Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 227, 280, 17 | hand |
-| Bare bodies | `bare/src/hangman.brs`, `bare/src/hangman/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 265, 168, 43, 3 | hand, as the Y compiler would lower the source |
+| Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 262, 280, 19 | hand |
+| Bare bodies | `bare/src/hangman.brs`, `bare/src/hangman/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 282, 168, 43, 3 | hand, as the Y compiler would lower the source |
 | Constraint files | `bare/src/*.constraints.json` (46 subjects, 19 clauses) | 398 | the same, then `bare-rust libfmt` for the canonical form |
 | Y facts | `bare/y-facts.json` | 345 | the same |
-| Rust | `src/hangman.rs`, `src/hangman/tests.rs`, `src/main.rs`, `src/lib.rs` | 265, 168, 43, 3 | `bare-rust weave` |
+| Rust | `src/hangman.rs`, `src/hangman/tests.rs`, `src/main.rs`, `src/lib.rs` | 282, 168, 43, 3 | `bare-rust weave` |
 | Y runtime | `../y-runtime/src/lib.rs` | 225 | hand: a small stand-in for the runtime that lowered code calls |
 
 The Y package has two modules. `hangman` holds the game, and `main` is the entry point. They lower to one Rust package:
@@ -39,8 +39,8 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 
 | Y | Bare body | Constraint file or `y-facts.json` | Rust |
 |---|---|---|---|
-| `fn f(x: T) -> R` | `fn f(x)` | a `function` subject: `params`, `result` | `fn f(x: T) -> R` |
-| `x: T` (moves in), `&T`, `&mut T` | the name | `type`, and `access` read/readers or write/exclusive | `T`, `&T`, `&mut T` |
+| `function f(x: T) -> R` | `fn f(x)` | a `function` subject: `params`, `result` | `fn f(x: T) -> R` |
+| `x: T` (moves in), `&T`, `&mutable T` | the name | `type`, and `access` read/readers or write/exclusive | `T`, `&T`, `&mut T` |
 | `R ! E`, `fail .Case(...)`, `?` | `return Err(E::Case { .. })`, `?` | `result.fails` | `Result<R, E>` |
 | `?` converting through the one case that carries the failure | `?` | an `impl From` subject | `impl From<ConsoleError> for PlayError` |
 | `type Word = Text where letters_only = ..., long_enough = ...` | `struct Word(_)` and a constructor that checks each constraint in order | two `invariant` clauses, with status `lifted` by the constructor | a newtype with `Word::new(..) -> Result<Word, ConstraintViolation>` |
@@ -58,9 +58,10 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | `Count<Element>`, `Count<Rune>` | — (units are erased) | `y-facts.json` `units` | `usize` |
 | `Text`, `&Text`, `Rune`, `List<T>`, `Set<T>` | — | `text`, `ref<text>`, `Rune`, `list<T> as 'Vec'`, `set<T> as 'BTreeSet'` | `String`, `&str`, `y_runtime::Rune`, `Vec<T>`, `BTreeSet<T>` |
 | Interpolation, `"{name}"` and `"{game.word}"` | `format!("{name}")`, `format!("{}", game.word)` | — | the same |
-| `var` | `let` | — | `let mut`, which `weave` derived through rustc (18 of them) |
+| `variable` | `let` | — | `let mut`, which `weave` derived through rustc (24 of them) |
 | `test name covers a, b { given / with / when / then }` | `#[test] fn name()`; a `?` in `given` or `when` lowers to `expect`; `fake Console(input: [...])` to `Console::fake(...)` | `y-facts.json` `tests`: what each covers; repeated in a comment in the test | the same |
-| `/// ...` with roles | `///` with the roles as a list | — | the same |
+| A value chosen by a condition: `variable head = " "`, then `if has_head = (misses >= 1) { head = "O" }` (Y's `if` is a statement and gives no value) | the same shape | — | the same |
+| Documentation: the `--` line or `---` block above a declaration, with roles | `///` with the roles as a list | — | the same |
 
 ## What had to be assumed
 
@@ -70,7 +71,7 @@ following:
 - **Standard capabilities and their methods:** a `Console` capability with `write_line`, `write` and `read_line`;
   `Random.index_below`; and `System.console()`, `System.random()` and `System.forever()`. The proposal lists `Clock`,
   `Random`, `FileSystem` and others, but not a terminal.
-- **The entry point** is `pub fn main() -> Void ! E with system: System`.
+- **The entry point** is `public function main() -> Void ! E with system: System`.
 - **One `with` block can bind several capabilities:** `with console = ..., random = ..., forever = ... { ... }`.
 - **A refined type can have several named constraints,** separated by commas after one `where`.
 - **Rune literals** are written `'z'`, as in `value.count_of('@')` in the proposal.
@@ -91,7 +92,7 @@ following:
 ## Checks
 
 - **`bare-rust weave`** of `bare/` (with `--crate .` and an output folder beside this one, so that the path to
-  `../y-runtime` resolves): 4 files woven, 0 weave errors, 18 `mut` derived, 0 holes undetermined, 0 warnings.
+  `../y-runtime` resolves): 4 files woven, 0 weave errors, 24 `mut` derived, 0 holes undetermined, 0 warnings.
 - **`cargo test`:** the 18 lowered Y tests and the generated check of the `compile` pass.
 - **`cargo clippy --all-targets`:** no warnings, here and in `../y-runtime`.
 - **Coverage:** the tests declare all 45 outcomes of the module. These are both sides of each of the 19 named decisions,

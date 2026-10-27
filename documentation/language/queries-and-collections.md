@@ -22,8 +22,8 @@ incrementally, and an explicit loop is one it must execute as written.
   ```y
   let names =
       users
-          .where(u => u.active)
-          .map(u => u.name)
+          .where(user => user.active)
+          .map(user => user.name)
           .sorted()
   ```
 
@@ -35,9 +35,9 @@ incrementally, and an explicit loop is one it must execute as written.
   stage name changes to say so:
 
   ```y
-  users.map { ... }        // consumes the collection
-  &users.map { ... }       // borrows it
-  &mut users.each { ... }  // mutably borrows it
+  users.map { ... }        -- consumes the collection
+  &users.map { ... }       -- borrows it
+  &mutable users.each { ... }  -- mutably borrows it
   ```
 
 - ⚠️ A chain that consumes its receiver may move each element out, and a chain that borrows it produces
