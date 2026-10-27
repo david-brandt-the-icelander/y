@@ -98,7 +98,7 @@ fn the_full_gallows() {
 
 #[test]
 fn a_word_list_is_read_in_order() {
-    // y: covers parse_word_list#blank, parse_word_list#has_text, parse_word_list#has_words
+    // y: covers parse_word_list#blank, parse_word_list#has_text, parse_word_list#valid, parse_word_list#has_words
     let words = parse_word_list("rope  gallows").expect("when");
     let expected = vec![Word::new("rope".to_string()).expect("then"), Word::new("gallows".to_string()).expect("then")];
     assert!(words == expected, "both_in_order");
@@ -113,14 +113,14 @@ fn an_empty_word_list_is_refused() {
 
 #[test]
 fn a_short_word_is_refused() {
-    // y: covers parse_word_list!word_list_error.not_a_word
+    // y: covers parse_word_list#invalid, parse_word_list!word_list_error.not_a_word
     let refused = parse_word_list("rope cat");
     assert!(refused == Err(WordListError::NotAWord), "refused_as_not_a_word");
 }
 
 #[test]
 fn a_player_who_finds_every_letter_wins() {
-    // y: covers play#playing, play#game_over, play#line_read, play#won
+    // y: covers play#playing, play#game_over, play#line_read, play#hit, play#won
     let words = vec![Word::new("rope".to_string()).expect("given")];
     let mut console = Console::fake(&["r", "o", "p", "e"], false);
     let mut random = Random::seeded(7);
@@ -132,7 +132,7 @@ fn a_player_who_finds_every_letter_wins() {
 
 #[test]
 fn a_player_who_misses_six_times_is_hanged() {
-    // y: covers play#hanged
+    // y: covers play#miss, play#hanged
     let words = vec![Word::new("rope".to_string()).expect("given")];
     let mut console = Console::fake(&["a", "b", "c", "d", "f", "g"], false);
     let mut random = Random::seeded(7);
@@ -140,6 +140,21 @@ fn a_player_who_misses_six_times_is_hanged() {
     play(&words, &mut console, &mut random, &forever).expect("when");
     let last = console.written().last().map(String::as_str);
     assert!(last == Some("Hanged! The word was rope."), "announced");
+}
+
+#[test]
+fn a_player_is_told_what_was_wrong() {
+    // y: covers play#typed_nothing, play#typed_other, play#typed_again
+    let words = vec![Word::new("rope".to_string()).expect("given")];
+    let mut console = Console::fake(&["", "ab", "r", "r", "o", "p", "e"], false);
+    let mut random = Random::seeded(7);
+    let forever = Forever::fake();
+    play(&words, &mut console, &mut random, &forever).expect("when");
+    let written = console.written();
+    assert!(written.iter().any(|line| line == "Type a letter."), "told_to_type");
+    assert!(written.iter().any(|line| line == "\"ab\" is not one letter."), "told_not_one");
+    assert!(written.iter().any(|line| line == "You have already guessed r."), "told_repeated");
+    assert!(written.last().map(String::as_str) == Some("You win! The word was rope."), "still_won");
 }
 
 #[test]

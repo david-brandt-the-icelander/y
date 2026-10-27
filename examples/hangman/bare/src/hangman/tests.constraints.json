@@ -69,6 +69,11 @@
     },
     {
       "kind": "function",
+      "name": "hangman_example::hangman::tests::a_player_is_told_what_was_wrong",
+      "params": []
+    },
+    {
+      "kind": "function",
       "name": "hangman_example::hangman::tests::a_closed_console_ends_the_game",
       "params": []
     },

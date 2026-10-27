@@ -23,7 +23,8 @@ The two statements that *are* about syntax, and are blocked:
 
 - ⚠️ **Y has a grammar** — a lexical structure, a reserved-word list, an expression precedence table,
   and a rule for how blocks are delimited. The language owner has decided the block rule: a colon and
-  indentation, as in Python, with `--` and `---` comments and `lower_snake_case` identifiers
+  indentation, as in Python, with `--` and `---` comments, `lower_snake_case` identifiers, fields written
+  `name is type`, named `switch` arms, and `public` written only on a facet
   → [`../../proposal/Y-proposal.md` § 3.1](../../proposal/Y-proposal.md#31-source-form). The rest of the
   grammar is still to be written.
 - ⚠️ **Y has a macro or metaprogramming model**, or a decision that it has none.

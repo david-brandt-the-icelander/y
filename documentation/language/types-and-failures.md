@@ -106,6 +106,9 @@ told about, because the compiler enumerates the cases.
 - ⚠️ `switch` is exhaustive. A switch that does not cover every case of the scrutinised type is a compile
   error that names the missing cases, and adding a case to a `type` turns every non-exhaustive switch on
   it into an error at the sites that need updating.
+- ⚠️ Every arm is named, `case known = result.ok(customer):`, and an arm that catches the rest is
+  `else name:`. The names are outcomes, which tests cover and traces report as they do a branch's
+  → [`../../proposal/Y-proposal.md` § 3.5](../../proposal/Y-proposal.md#35-every-decision-has-a-name).
 - ⚠️ Patterns nest, binding payloads positionally or by field name, and `_` matches without binding.
 - ⚠️ A `when` clause guards an arm with a boolean condition. A guarded arm never counts toward
   exhaustiveness, because the compiler does not reason about the guard's truth.

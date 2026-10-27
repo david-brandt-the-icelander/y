@@ -135,10 +135,10 @@ Unless otherwise stated, syntax in this document is **illustrative rather than f
 ### 3.1 Functions
 
 ```y
-------------------------------------------------------------------------------------------------------------------------
+------------------------------------
 x: The number to square, as int64.
 squared: x times x, as int64.
-------------------------------------------------------------------------------------------------------------------------
+------------------------------------
 function square(x) returns squared:
     return squared = x * x
 ```
@@ -146,12 +146,12 @@ function square(x) returns squared:
 With several paths:
 
 ```y
-------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------
 x: The number to limit, as int64.
 minimum: The smallest allowed, as int64.
 maximum: The largest allowed, as int64.
 clamped: x, moved into the range, as int64.
-------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------
 function clamp(x, minimum, maximum) returns clamped:
     if below = (x < minimum):
         return clamped = minimum
@@ -187,9 +187,9 @@ Pattern matching is preferred where behavior differs materially between cases.
 
 ```y
 switch customer:
-    optional.some(found):
+    case present = optional.some(found):
         use(found)
-    optional.none:
+    case absent = optional.none:
         not_found()
 ```
 
@@ -217,16 +217,16 @@ Working direction:
 
 ```y
 structure customer:
-    id: customer_id
-    name: string
+    id is customer_id
+    name is string
 ```
 
 Variants/sum types:
 
 ```y
 type payment_result:
-    case approved(authorization: authorization)
-    case declined(reason: decline_reason)
+    case approved(authorization is authorization)
+    case declined(reason is decline_reason)
     case unavailable
 ```
 
@@ -234,11 +234,11 @@ Pattern matching is a core control-flow mechanism:
 
 ```y
 switch result:
-    payment_result.approved(authorization):
+    case approved = payment_result.approved(authorization):
         complete(authorization)
-    payment_result.declined(reason):
+    case declined = payment_result.declined(reason):
         reject(reason)
-    payment_result.unavailable:
+    case unavailable = payment_result.unavailable:
         retry_later()
 ```
 
@@ -689,9 +689,9 @@ Illustrative direction:
 
 ```y
 schema customer v3:
-    id: customer_id
-    name: string
-    email: email?
+    id is customer_id
+    name is string
+    email is email?
 ```
 
 Migration syntax remains open.

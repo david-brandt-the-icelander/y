@@ -25,11 +25,11 @@ letter. Six misses hang the man.
 
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
-| Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 270, 225, 18 | hand |
-| Bare bodies | `bare/src/hangman.brs`, `bare/src/hangman/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 286, 168, 43, 3 | hand, as the Y compiler would lower the source |
-| Constraint files | `bare/src/*.constraints.json` (48 subjects, 20 clauses) | 396 | the same, then `bare-rust libfmt` for the canonical form |
-| Y facts | `bare/y-facts.json` | 403 | the same |
-| Rust | `src/hangman.rs`, `src/hangman/tests.rs`, `src/main.rs`, `src/lib.rs` | 286, 168, 43, 3 | `bare-rust weave` |
+| Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 278, 243, 18 | hand |
+| Bare bodies | `bare/src/hangman.brs`, `bare/src/hangman/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 287, 180, 43, 3 | hand, as the Y compiler would lower the source |
+| Constraint files | `bare/src/*.constraints.json` (49 subjects, 20 clauses) | 401 | the same, then `bare-rust libfmt` for the canonical form |
+| Y facts | `bare/y-facts.json` | 510 | the same |
+| Rust | `src/hangman.rs`, `src/hangman/tests.rs`, `src/main.rs`, `src/lib.rs` | 287, 180, 43, 3 | `bare-rust weave` |
 | Y runtime | `../y-runtime/src/lib.rs` | 225 | hand: a small stand-in for the runtime that lowered code calls |
 
 The Y package has two modules. `hangman` holds the game, and `main` is the entry point. They lower to one Rust package:
@@ -46,11 +46,13 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | A copy the compiler had to make (`new_game(words[chosen])`, where `words` is still read) | `.clone()`, marked `// y: a copy` | `y-facts.json` `copies` | the same |
 | `return answer = value`, `fail guess_error.empty`, `?` | `return Ok(value)` or the last expression, `return Err(E::Case { .. })`, `?` | `result.fails` | the same |
 | `?` converting through the one case that carries the failure | `?` | an `impl From` subject | `impl From<ConsoleError> for PlayError` |
+| A facet: `public facet setup:` makes its members visible to other modules; `shown_rune` and `part`, outside every facet, stay private | each member `pub`, the rest private; the facet itself leaves no trace in Rust | `visible` on each subject; `y-facts.json` `facets`: each facet, its visibility and its members | the same |
 | `lower_snake_case` type and case names (`guess_error`, `guess_error.not_one_letter`) | `GuessError`, `NotOneLetter`: the lowering's one renaming, to Rust's casing | Rust names | the same |
-| A constant group, `public constants game_rules:` with `allowed_misses is count<element> = 6` | a module `game_rules` holding `const ALLOWED_MISSES = 6;`; uses are `game_rules::ALLOWED_MISSES` | a `module` subject and its `const` subjects | the same |
+| A constant group, `constants game_rules:` with `allowed_misses is count<element> = 6` | a module `game_rules` holding `const ALLOWED_MISSES = 6;`; uses are `game_rules::ALLOWED_MISSES` | a `module` subject and its `const` subjects | the same |
 | `type word is string where letters_only = value.matches(pattern"^[a-z]*$") and long_enough = ...` | `struct Word(_)` and a constructor that checks each constraint in order | two `invariant` clauses, with status `lifted` by the constructor | a newtype with `Word::new(..) -> Result<Word, ConstraintViolation>` |
-| `structure`; a constant group used as a closed type (`outcome`, `verdict` and the failures `word_list_error`, `guess_error`: named values with no order, so not enumerations); a `type` with `case`s that carry data (`play_error`) | `struct`; `enum` with unit variants; `enum` with named fields | `fields`, `variants` | the same, deriving the structural equality Y always derives |
-| Blocks: a colon and indentation; `switch` with each arm a pattern and a colon, its statements beneath | braces, as Rust has; `match` with `=>` arms | — | the same |
+| `structure` with fields `word is word`, private to the module as Rust's fields are; a constant group used as a closed type (`outcome`, `verdict` and the failures `word_list_error`, `guess_error`: named values with no order, so not enumerations); a `type` with `case`s that carry data (`play_error`, `case console(error is console_error)`) | `struct`; `enum` with unit variants; `enum` with named fields | `fields`, `variants` | the same, deriving the structural equality Y always derives |
+| Blocks: a colon and indentation | braces, as Rust has | — | the same |
+| `switch` with named arms, `case valid = result.ok(parsed):`, the statements beneath | `match`, each arm marked `// y: #valid` | `y-facts.json` `decisions`, with `kind` `switch`: each arm's name, Y line and bare line | the same, with the comment |
 | No inline lambdas: `masked` builds its list with a `for` loop, and `outcome_of` asks `is_subset_of` | the loop; `.all(|letter| …)`, Rust's form of the subset test | — | the same |
 | No `with` clause: the function is pure | — | `effects` clause `pure` | — |
 | A `mutable` parameter and no `with` | — | `no io`, `no clock`, `no randomness`, `mutates only game.hits, game.misses` | — |
@@ -78,7 +80,8 @@ following:
 - **Standard capabilities and their methods:** a `console` capability with `write_line`, `write` and `read_line`;
   `random.index_below`; and `system.console()`, `system.random()` and `system.forever()`. The proposal lists `clock`,
   `random`, `file_system` and others, but not a terminal.
-- **The entry point** is `public function main() fails e with system`.
+- **The entry point** is `function main() fails e with system` in the module `main`. It is in no facet, so it is
+  private: the runtime calls it, and no module imports it.
 - **One `with` block can bind several capabilities:** `with console = ..., random = ..., forever = ...:`.
 - **Rune literals** are written `'z'`, as in `value.count_of('@')` in the proposal.
 - **Library names:** `set.of([...])`, `list.join(separator:)`, `string.single_rune()`, `string.split(...)`, `string.trim()`.
@@ -98,18 +101,20 @@ following:
 ## Checks
 
 - **`bare-rust weave`** of `bare/` (with `--crate .` and an output folder beside this one, so that the path to
-  `../y-runtime` resolves): 4 files woven, 0 weave errors, 19 `mut` derived, 0 holes undetermined, 0 warnings.
-- **`cargo test`:** the 18 lowered Y tests and the generated check of the `compile` pass.
+  `../y-runtime` resolves): 4 files woven, 0 weave errors, 21 `mut` derived, 0 holes undetermined, 0 warnings.
+- **`cargo test`:** the 19 lowered Y tests and the generated check of the `compile` pass.
 - **`cargo clippy --all-targets`:** no warnings, here and in `../y-runtime`.
-- **Coverage:** the tests declare all 30 outcomes of the module. These are the 23 named branches of its 9 decisions,
-  plus the 7 failure cases, which is what a Y release build requires (Y § 3.14).
+- **Coverage:** the tests declare all 37 outcomes of the module. These are the 30 named branches and arms of its 11
+  decisions, plus the 7 failure cases, which is what a Y release build requires (Y § 3.14).
 - **`tools/bare-rust/tests/y_examples.rs`** keeps the stages in step without cargo:
   - Weaving the committed bare files gives the committed Rust, apart from the derived `mut`.
   - Stripping the committed Rust gives the committed bare bodies byte for byte, and the same subjects and holes. What
     the lowering adds beyond `strip` is only the clauses and the file status.
   - The constraint files are valid, and their clauses are well formed. Clause texts are checked by the same linter as
     library files.
-  - `y-facts.json` agrees with the Y source and the bare bodies.
+  - `y-facts.json` agrees with the Y source and the bare bodies, and the tests cover every outcome.
+  - The Y source keeps the layout rules: two blank lines between declarations, at module level and in a facet, and a
+    blank line before each flow-control statement.
 - **`bare-rust check` does not run on this crate.** It copies the crate into a work folder, where the relative path
   to `../y-runtime` no longer resolves, so its woven copies cannot build.
 
@@ -118,14 +123,15 @@ following:
 - **The bare form is a workable target for a Y compiler.** The hand lowering was written to the format's rules, and
   stripping the woven Rust gave it back byte for byte. The compiler would write bare bodies and constraint files, and
   `weave` would do the rest, including deriving `mut`, which Y does not have.
-- **The constraint file holds the types and contracts, but not everything Y states.** Six kinds of fact had no slot,
-  so they went into `y-facts.json`:
+- **The constraint file holds the types and contracts, but not everything Y states.** Seven kinds of fact had no
+  slot, so they went into `y-facts.json`:
   1. units;
   2. named decisions;
   3. capabilities as Y declares them;
   4. claims;
   5. `compile` sites;
-  6. what each test covers.
+  6. what each test covers;
+  7. facets, of which Rust keeps only each member's `pub`.
 
   The constraint language already has units (`quantity`, `unit`) and could hold the others as clauses. The JSON format
   has no place for them yet.

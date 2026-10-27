@@ -1,5 +1,6 @@
 //! Lowered from `y/src/hangman.y`, the Y module `hangman`.
-//! Each named decision of the Y source is marked `// y: #name` where its condition is tested.
+//! Each named decision of the Y source is marked `// y: #name` where its condition is tested, and each named `switch`
+//! arm on its `match` arm.
 
 use std::collections::BTreeSet;
 use std::fmt;
@@ -68,8 +69,8 @@ pub fn parse_word_list(text: &str) -> Result<Vec<Word>, WordListError> {
             continue;
         }
         match Word::new(piece.to_string()) {
-            Ok(parsed) => found.push(parsed),
-            Err(_) => return Err(WordListError::NotAWord),
+            Ok(parsed) => found.push(parsed), // y: #valid
+            Err(_) => return Err(WordListError::NotAWord), // y: #invalid
         }
     }
     if found.is_empty() { // y: #empty, else #has_words
@@ -267,11 +268,11 @@ pub fn play(words: &[Word], console: &mut Console, random: &mut Random, forever:
             return Err(PlayError::InputClosed);
         };
         match guess(&mut game, &typed) {
-            Ok(Verdict::Hit) => console.write_line("Yes.")?,
-            Ok(Verdict::Miss) => console.write_line("No.")?,
-            Err(GuessError::Empty) => console.write_line("Type a letter.")?,
-            Err(GuessError::NotOneLetter) => console.write_line(&format!("\"{typed}\" is not one letter."))?,
-            Err(GuessError::AlreadyGuessed) => console.write_line(&format!("You have already guessed {typed}."))?,
+            Ok(Verdict::Hit) => console.write_line("Yes.")?, // y: #hit
+            Ok(Verdict::Miss) => console.write_line("No.")?, // y: #miss
+            Err(GuessError::Empty) => console.write_line("Type a letter.")?, // y: #typed_nothing
+            Err(GuessError::NotOneLetter) => console.write_line(&format!("\"{typed}\" is not one letter."))?, // y: #typed_other
+            Err(GuessError::AlreadyGuessed) => console.write_line(&format!("You have already guessed {typed}."))?, // y: #typed_again
         }
     }
     // y: #game_over, the `else` of `while playing`: the loop has no `break`, so it runs when the loop ends

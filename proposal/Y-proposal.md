@@ -34,32 +34,34 @@ Three rules follow, and most of this document is their consequences.
 A function, as a reviewer would be shown it:
 
 ```y
-------------------------------------------------------------------------------------------------------------------------
-Holds one unit of an item for a buyer and asks for payment, exactly once.
+-- Taking stock for a buyer.
+public facet checkout:
+    ----------------------------------------------------------------------------------------------------
+    Holds one unit of an item for a buyer and asks for payment, exactly once.
 
-why: Stock is never oversold, and a transaction that retries never charges twice.
-item: The item being bought, as item_id.
-buyer: Who pays, and with what, as buyer.
-hold: The hold, waiting for the charge to be confirmed, as hold.
-inventory: The stock and the holds on it, as shared<inventory>.
-charges: Where charges are queued, as enqueue<charge_card>.
-fails hold_error.unknown_item: The item is not stocked here.
-fails hold_error.timed_out: No unit became free within five seconds.
-------------------------------------------------------------------------------------------------------------------------
-public function hold_and_charge(item, buyer) returns hold fails hold_error
-        with inventory, charges:
-    within 5s?:
-        atomic hold_one_unit:
-            stock = inventory.stock_of(item)?
+    why: Stock is never oversold, and a transaction that retries never charges twice.
+    item: The item being bought, as item_id.
+    buyer: Who pays, and with what, as buyer.
+    hold: The hold, waiting for the charge to be confirmed, as hold.
+    inventory: The stock and the holds on it, as shared<inventory>.
+    charges: Where charges are queued, as enqueue<charge_card>.
+    fails hold_error.unknown_item: The item is not stocked here.
+    fails hold_error.timed_out: No unit became free within five seconds.
+    ----------------------------------------------------------------------------------------------------
+    function hold_and_charge(item, buyer) returns hold fails hold_error
+            with inventory, charges:
+        within 5s?:
+            atomic hold_one_unit:
+                stock = inventory.stock_of(item)?
 
-            if sold_out = (stock.available == 0):
-                retry
-            else in_stock:
-                stock.available := stock.available - 1
-                price = stock.price
-                opened = inventory.open_hold(item: item, buyer: buyer.id)
-                enqueue charge_card(hold: opened.id, amount: price, method: buyer.payment_method)
-                return hold = opened
+                if sold_out = (stock.available == 0):
+                    retry
+                else in_stock:
+                    stock.available := stock.available - 1
+                    price = stock.price
+                    opened = inventory.open_hold(item: item, buyer: buyer.id)
+                    enqueue charge_card(hold: opened.id, amount: price, method: buyer.payment_method)
+                    return hold = opened
 ```
 
 Without opening another file, a reviewer can see that this function touches exactly two things (one shared inventory,
@@ -77,10 +79,11 @@ contracts, typestate and units; versioned schemas; independent oracles.
 documentation (spec blocks, April 2026); authority passed explicitly, never ambient (YAPL's OS context, 2024; y-string's
 context object, March 2026); units on every length and index (July and March 2026); tests that declare what they cover
 (toolchain, October 2025); fixtures generated from constraints (October 2025); *provable or explicitly missing*
-(ai.lang, March 2026); gaps recorded where the code is (knowledge-driven development, August 2026).
+(ai.lang, March 2026); gaps recorded where the code is (knowledge-driven development, August 2026); facets as the one
+place visibility is written (toolchain, 2025); `name is type` for fields (YAPL).
 
-**Dropped**, with reasons in § 7: braces; `x is integer` annotations; classes,
-facets, factory methods and inheritance; exceptions; ambient `using` contexts; transactional memory for *all* state;
+**Dropped**, with reasons in § 7: braces; classes,
+factory methods and inheritance; exceptions; ambient `using` contexts; transactional memory for *all* state;
 affinities and placements in source; comments with runtime meaning; the spec block as a replacement for the signature;
 `afterCommit`; references, borrows and moves in source, which become the compiler's choices under value semantics
 (§ 3.6).
@@ -103,7 +106,7 @@ the loop. Two consequences:
   drifted into the mainstream forms they had been trained on — `let`, `name: type`, PascalCase, `$interp`, `#` comments
   — and nothing caught it, because nothing checked the spelling. Y borrows most of its shape from Rust, Swift and Kotlin, which is what agents already write
   and reviewers already read. Where it departs, the departure is a rule the compiler checks and `y fix` applies:
-  - Y spells its own words in full, as it requires of every name (`public function`, not `pub fn`).
+  - Y spells its own words in full, as it requires of every name (`public facet` and `function`, not `pub fn`).
   - Every identifier is `lower_snake_case`, types included.
   - Its comments are `--` and `---`, as they have been since YAPL.
   - Signatures name their result and carry no types and no `->`: the types are in the documentation above.
@@ -280,7 +283,8 @@ person can judge: is five seconds right, and is this the behaviour the business 
   re-exports and no relative paths. An import cycle is an error that lists the cycle.
 - The formatter sorts imports (standard library, then dependencies, then this package). Each name means the same thing
   everywhere in a package, so an alias (`as`) is allowed only to resolve a collision.
-- Visibility is `public` or private to the module.
+- **Everything is private to its module by default.** A declaration is visible to other modules only as a member of a
+  `public facet`, and `public` applies to nothing else (§ 3.2).
 - A module contains declarations only. There is no executable code at module scope, no module initialiser, and no
   mutable global state of any kind. State that outlives a call is passed in (§ 3.7).
 
@@ -291,7 +295,7 @@ person can judge: is five seconds right, and is this the behaviour the business 
 - This is the long-standing lowercase-everything rule. A reviewer tells a type from a value by where it stands, not by
   its case: types appear in the documentation of a function, in a field, after `type`, and before `.` in a
   constructor or a qualified case (`word.new(spelling)`, `payment_result.approved(...)`).
-- **Types and values have separate names, but one spelling.** A field may be `word: word`, and a capability
+- **Types and values have separate names, but one spelling.** A field may be `word is word`, and a capability
   `console` may have the type `console`. In an expression, a value hides a type of the same name; the type is then
   reached through its module (`bank.receipt(...)`), which the formatter writes only where it is needed.
 - Identifiers are ASCII. Bidirectional-control and invisible characters are rejected everywhere in source except as
@@ -345,8 +349,9 @@ person can judge: is five seconds right, and is this the behaviour the business 
     other: `if has_head = (misses >= 1):` assigns `head = "O"`, and `else no_head:` assigns `head = " "`.
   - A value made inside a transaction or a deadline is returned from inside it, or assigned with `:=` to a name declared
     outside it.
-  - A `switch` arm is a pattern ending in a colon, with its statements indented beneath it, as every block is:
-    `result.ok(parsed):` then `found.push(parsed)`. There is no `=>`.
+  - A `switch` arm is `case`, the arm's name, `=` and a pattern, ending in a colon, with its statements indented
+    beneath it, as every block is: `case valid = result.ok(parsed):` then `found.push(parsed)`. There is no `=>`, and
+    every arm is named (§ 3.5).
 
 **Functions and their results.**
 
@@ -385,12 +390,12 @@ documentation and a signature, as the toolchain's language reference (§ 8, "Lam
 closures (`closure … closes … over …`) both required:
 
 ```y
-------------------------------------------------------------------------------------------------------------------------
+----------------------------------------------------
 Whether someone has signed in lately.
 
 user: The person, as user.
 active: Whether they have, as boolean.
-------------------------------------------------------------------------------------------------------------------------
+----------------------------------------------------
 is_active = lambda is_active(user) returns active
         captures cutoff:
     return active = (user.last_seen > cutoff)
@@ -410,9 +415,12 @@ active_users = users.filter(is_active)
 
 - **`--` starts a comment** that runs to the end of its line.
 - **A line of three or more dashes, alone, opens a block comment,** and the next such line closes it.
-  - An author types `---`. `y format`, and every editor and agent that writes Y, widens each such line to a rule that
-    runs to the line limit (120 columns) from its indentation, so committed code shows a line across the page between
-    a declaration's documentation and its neighbours, never a bare `---`.
+  - Any number of dashes from three up is a rule. Its job is to show plainly that a block begins and ends, and to look
+    tidy doing it.
+  - An author types `---`. `y format`, and every editor and agent that writes Y, widens every rule in a file to end in
+    one column: the first multiple of four past the right-most character of code in the file, comments not counted. A
+    rule starts at its indentation, so the rules of a file share their right edge whatever their depth, and they
+    reach a little past the code beside them.
   - Two lines of one block that differ in width are a lint error, which formatting fixes.
 - **A comment directly above a declaration, with no blank line between, is its documentation** (§ 3.2). Every other
   comment is free text.
@@ -422,14 +430,17 @@ active_users = users.filter(is_active)
   lines indented four spaces beneath it. A header that does not fit on one line continues on lines indented eight
   spaces, and its last line ends with the colon. There are no braces.
 - **One statement per line.** A block's body never shares its header's line, and two statements never share one line.
-- **Two blank lines separate one function from the next,** and one top-level declaration from the next; fewer or more is
-  a lint error, which formatting fixes. Inside a body, at most one blank line separates statements.
+- **Two blank lines separate one declaration from the next,** at module level and inside a facet alike; fewer or more is
+  a lint error, which formatting fixes. Inside a body, at most one blank line separates statements. Members of a
+  structure, a type, a constant group or an enumeration are not declarations in this sense, and follow one another
+  directly.
 - **A blank line comes before every flow-control statement** (`if`, `while`, `for`, `switch`, `break`, `continue`,
   `retry`, and the blocks `atomic`, `within`, `with`, `arena`, `uncancellable` and `supervise`), unless it is the first
   statement of its block. Comments about the statement may sit between the blank line and the statement. `fail` and
-  `return` need no blank line, and neither do `else` and `orelse`, which continue the statement above them. A missing
-  blank line is a lint error, which formatting fixes.
-- Lines are at most 120 columns. `y format` has no options and preserves every comment. It produces one layout for any
+  `return` need no blank line, and neither do `else`, `orelse` and a `switch` arm's `case`, which continue the
+  statement above them. The rule holds in every block, not only in functions: a test's sections, a lambda, a handler,
+  a workflow. A missing blank line is a lint error, which formatting fixes.
+- Y sets no line length. `y format` has no options and preserves every comment. It produces one layout for any
   program, so every diff is about content.
 - A function body longer than 60 lines is a lint warning, and longer than 120 is an error. A reviewable sample fits on
   a screen.
@@ -438,9 +449,9 @@ active_users = users.filter(is_active)
 
 **Declaration kinds.** Y has few: `function`, `structure`, `type`, `enumeration`, `state`, `transition`, `trait`,
 `implementation`, `constant`, `constants`, `unit`, `schema`, `migrate`, `command`, `handler`, `workflow`, `derived`,
-`rule`, `test`.
+`rule`, `test`, and `facet`, which groups the others.
 
-- There are no classes, facets, singletons, factory methods or inheritance.
+- There are no classes, singletons, factory methods or inheritance.
 - A constructor is an ordinary function returning the type (`new`, `parse`, `from_…`).
 - Behaviour is shared through traits with explicit `implementation`s. Every iteration that had more kinds of type than
   this spent its time reconciling them.
@@ -450,11 +461,11 @@ active_users = users.filter(is_active)
 
 ```y
 -- The number of seconds in a minute.
-public seconds_per_minute is constant int64 = 60
+seconds_per_minute is constant int64 = 60
 
 
 -- The rules every game is played by.
-public constants game_rules:
+constants game_rules:
     -- How many wrong guesses a player may make.
     allowed_misses is count<element> = 6
     constants scoring:
@@ -462,14 +473,14 @@ public constants game_rules:
 
 
 -- Where a game stands.
-public constants outcome:
+constants outcome:
     playing = "playing"
     won = "won"
     lost = "lost"
 
 
 -- How serious a log entry is, from least to most.
-public enumeration severity is string:
+enumeration severity is string:
     debug = "DEBUG"
     warning = "WARNING"
     error = "ERROR"
@@ -488,8 +499,54 @@ public enumeration severity is string:
   smallest unsigned integer that holds them unless the enumeration names one (`is string`). Without an order to use or
   a reason to iterate, a constant group is the right declaration.
 - A `type` with `case`s is for cases that carry data (§ 3.3).
-- `is` appears only here, in `is constant` and in a typed member or enumeration, and in a refined type,
-  `type word is string where …` (§ 3.3). § 7 records why `is` was dropped everywhere else.
+- **`is` joins a name to its type wherever a declaration states one:** a field (`word is word`), a case's field
+  (`case console(error is console_error)`), a constant (`is constant`), a typed member or enumeration, and a refined
+  type (`type word is string where …`, § 3.3). A function's parameters and result take their types from the
+  documentation instead. `is` has no other meaning: it is never a predicate, a capture or a mutability marker (§ 7).
+
+**Facets** keep the toolchain's syntax and its rule that a facet's header sets the visibility of everything in it
+(`y-language-toolchain`, language reference § 10, "Module Bodies and Facets"):
+
+```y
+-- One game, and what a guess does to it.
+public facet rounds:
+    -- Where a game stands.
+    constants outcome:
+        playing = "playing"
+        won = "won"
+        lost = "lost"
+
+
+    ----------------------------------------------------------------------------
+    Starts a game.
+
+    word: The word the player must find, as word.
+    started: A game with nothing guessed, as game.
+    ----------------------------------------------------------------------------
+    function new_game(word) returns started:
+        return started = game(word: word, hits: set.new(), misses: list.new())
+
+
+-- Private: nothing outside this module can call it.
+function part(misses, needed, mark) returns drawn:
+    ...
+```
+
+- **A facet is a named group of declarations in a module.** Any declaration may be a member except a facet or a test.
+  Facets do not nest, and a declaration belongs to at most one.
+- **`public` is written only on a facet.** `public facet rounds:` makes every member visible to modules that import
+  them; `facet drawing:` groups members that stay private. A declaration outside every facet is private to its
+  module. No function, type or constant is ever marked `public` itself.
+- **Private is the default everywhere.** The cases of a type and the members of a constant group or an enumeration
+  are visible wherever the type or group is. A structure's fields are private to its module; a structure whose fields
+  other modules read or build declares them inside a `public facet` of the structure.
+- A facet's name is not part of its members' names. An importer writes `from hangman import new_game`, and the
+  facet's name says what the group is for, in the documentation and in the review packet (§ 4.5), which groups a
+  change to a module's surface by facet.
+- Every facet and every member of a public facet carries documentation: together they are the module's surface.
+- The toolchain's facets also carried override, abstraction and telemetry rules for classes. Y has no classes, so a
+  facet carries visibility and a name, and nothing else.
+- In this proposal, a *public* declaration means a member of a public facet.
 
 **Documentation is grammar, written as a comment.** The April 2026 spec block was right that every declaration a reader
 relies on needs structured documentation in a closed grammar. It went further and made the block *replace* the
@@ -499,26 +556,26 @@ Its documentation is the comment directly above it: a `--` line, or a `---` bloc
 set of roles, and it is where a function's types are written:
 
 ```y
-------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 Takes money out of an account.
 
 account: The account to debit, as account.
 amount: How much to take, as money<isk>.
 debit: A receipt for the debit, as receipt.
 fails withdraw_error.insufficient_funds: The balance is lower than the amount.
-------------------------------------------------------------------------------------------------------------------------
-public function withdraw(mutable account, amount) returns debit fails withdraw_error
+--------------------------------------------------------------------------------
+function withdraw(mutable account, amount) returns debit fails withdraw_error
 ```
 
 
 | Role | Meaning | Required on |
 | --- | --- | --- |
-| *(summary)* | First paragraph; one sentence saying what the declaration is for | Every `public` declaration, every `test`, every `command` |
+| *(summary)* | First paragraph; one sentence saying what the declaration is for | Every facet, every public declaration, every `test`, every `command` |
 | `why:` | Why it exists or is shaped this way, where the name does not say | Optional; required on claims (§ 3.15) |
 | `<parameter>: …, as <type>.` | One per parameter, by name: what it means, and its type | Every parameter of every function |
 | `<result>: …, as <type>.` | What the result named after `returns` means, and its type | Every function with a result |
 | `<capability>: …, as <type>.` | One per capability of the `with` clause | Every capability |
-| `fails <type>.<case>:` | When and why each failure case occurs, the case written with its type (§ 3.3) | Every case of a `public function`'s failure type |
+| `fails <type>.<case>:` | When and why each failure case occurs, the case written with its type (§ 3.3) | Every case of a public function's failure type |
 | `satisfies:` | A `y:` link to the requirement or journey this implements | Optional |
 | `see:` | A `y:` link to a related declaration or document | Optional |
 | `gap:` / `defect:` / `blocked:` | Unfinished or broken behaviour (§ 3.16) | Where it applies |
@@ -556,13 +613,13 @@ Prose is constrained CommonMark:
 
 There is no truthiness, no null, and no implicit numeric widening.
 
-**Structures** have named, typed fields and may declare named invariants:
+**Structures** have named, typed fields, each `name is type`, and may declare named invariants:
 
 ```y
 structure stay:
-    guest: guest_id
-    arrives: date
-    departs: date
+    guest is guest_id
+    arrives is date
+    departs is date
 
     invariant departs_after_arrival = (departs > arrives)
 ```
@@ -571,8 +628,8 @@ structure stay:
 
 ```y
 type payment_result:
-    case approved(authorization: authorization)
-    case declined(reason: decline_reason)
+    case approved(authorization is authorization)
+    case declined(reason is decline_reason)
     case unavailable
 ```
 
@@ -677,11 +734,11 @@ A function that can fail names its failure type in its signature: `returns debit
 
 ```y
 switch load_customer(id):
-    result.ok(customer):
+    case known = result.ok(customer):
         greet(customer)
-    result.err(customer_error.not_found(id: missing_id)):
+    case new_visitor = result.err(customer_error.not_found(id: missing_id)):
         offer_signup(missing_id)
-    result.err(customer_error.unavailable(retry_after)):
+    case unreachable = result.err(customer_error.unavailable(retry_after)):
         try_later(retry_after)
 ```
 
@@ -711,7 +768,8 @@ This proposal restores the rule and extends it to every predicate in the languag
 | Alternative | `else if go_right = (items[middle] < target): ...` |
 | Fallback | `else go_left: ...` |
 | Loop | `while searching = (low <= high):`, then `else exhausted:` |
-| Guard | `optional.some(user) when active = (user.last_seen > cutoff): ...` |
+| Switch arm | `case known = result.ok(customer):`, and `else other:` for the rest |
+| Guard | `case active = optional.some(user) when (user.last_seen > cutoff):` |
 | Precondition, guarantee | `where positive = (amount > 0isk)`, `ensures debited = (...)` |
 | Invariant, constraint | `invariant departs_after_arrival = (...)`, `where positive = (value > 0)` |
 | Assertion | `assert charged_once = (charges.committed().count() == 1)` |
@@ -730,6 +788,9 @@ This proposal restores the rule and extends it to every predicate in the languag
     ride on the header.
   - Code that follows a decision usually belongs in its `else` block (`else in_stock:` in § 0), so the block is never
     empty. A decision with nothing to do on one side is better written as a function with a named result.
+- **Every `switch` arm is named:** `case known = result.ok(customer):`. An arm that catches what the others leave is
+  `else name:`, as in an `if`. The arm's name covers its guard: `case active = optional.some(user) when (…):` needs no
+  second name. A test covers an arm as it covers a branch, `load#new_visitor` (§ 3.14).
 - A `for` loop is named by its variable. Inside nested loops, `break` and `continue` must name their loop:
   `break line`.
 - There is no `loop` and no `while true`.
@@ -745,14 +806,14 @@ This proposal restores the rule and extends it to every predicate in the languag
   wrong. This is ai.lang's "zoom", as a view rather than a data model.
 
 ```y
-------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------
 Finds where a value sits in a sorted list.
 
 target: The value to look for, as int64.
 items: The list to search, as sorted_list<int64>.
 position: The target's position, or nothing when it is absent, as index<element>?.
-------------------------------------------------------------------------------------------------------------------------
-public function position_of(target, items) returns position:
+--------------------------------------------------------
+function position_of(target, items) returns position:
     low = items.first_index()?
     high = items.last_index()?
 
@@ -838,7 +899,7 @@ effects are what capabilities do. This merges September's two open questions, ef
 into one clause:
 
 ```y
-------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------
 Exports one month's invoices as files.
 
 month: The month to export, as month.
@@ -847,8 +908,8 @@ invoices: The stored invoices, as store<invoice>.
 uploads: Where the files go, as file_system.
 clock: The time the export is stamped with, as clock.
 fails export_error.write_failed: A file could not be written.
-------------------------------------------------------------------------------------------------------------------------
-public function export_invoices(month) returns exported fails export_error
+--------------------------------------------------------------------
+function export_invoices(month) returns exported fails export_error
         with invoices, uploads, clock
 ```
 
@@ -981,12 +1042,12 @@ hand you. There is no global state to reach.
 (`conflict at hold_and_charge#hold_one_unit`), and in the review packet ("transacts hold_one_unit — writes …"):
 
 ```y
-------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------
 Takes the next job, from the pending queue first and from the retried queue when it is empty.
 
 job: The job to run, as job.
 jobs: The queues, as shared<job_queues>.
-------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------
 function take_job() returns job
         with jobs:
     atomic take_next_job:
@@ -1041,9 +1102,9 @@ decision someone has to make:
 ```y
 -- Charges a buyer's payment method for a hold.
 command charge_card:
-    hold: hold_id
-    amount: money<isk>
-    method: payment_method_id
+    hold is hold_id
+    amount is money<isk>
+    method is payment_method_id
 
     policy:
         deduplicate_by: hold
@@ -1084,7 +1145,7 @@ handler charge_card(command) returns charged fails charge_error
 **Workflows** are durable, long-running functions:
 
 ```y
-------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------
 Takes a held item from payment to shipment.
 
 hold: The hold to fulfil, as hold_id.
@@ -1094,17 +1155,17 @@ charges: Where charges are submitted, as submit<charge_card>.
 shipments: Where shipments are submitted, as submit<create_shipment>.
 fails fulfilment_error.payment_declined: The charge was refused.
 fails fulfilment_error.payment_unreachable: The charge could not be delivered.
-------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------
 workflow fulfil(hold) returns shipped fails fulfilment_error
         with orders, charges, shipments:
     order = orders.for_hold(hold)?
 
     switch submit charge_card(hold: hold, amount: order.total, method: order.payment_method):
-        result.ok(receipt):
+        case charged = result.ok(receipt):
             return shipped = submit create_shipment(order: order.id, receipt: receipt.id)?
-        result.err(undelivered.failed(reason)):
+        case declined = result.err(undelivered.failed(reason)):
             fail fulfilment_error.payment_declined(reason)
-        result.err(undelivered.abandoned(abandonment)):
+        case abandoned = result.err(undelivered.abandoned(abandonment)):
             fail fulfilment_error.payment_unreachable(abandonment)
 ```
 
@@ -1124,15 +1185,15 @@ workflow fulfil(hold) returns shipped fails fulfilment_error
 **Contracts** are part of the declaration and, like every predicate, are named:
 
 ```y
-------------------------------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------
 Takes money out of an account.
 
 account: The account to debit, as account.
 amount: How much to take, as money<isk>.
 debit: A receipt for the debit, as receipt.
 fails withdraw_error.insufficient_funds: The balance is lower than the amount.
-------------------------------------------------------------------------------------------------------------------------
-public function withdraw(mutable account, amount) returns debit fails withdraw_error
+----------------------------------------------------------------------------------------
+function withdraw(mutable account, amount) returns debit fails withdraw_error
         where positive_amount = (amount > 0isk)
         ensures debited_exactly = (account.balance == old(account.balance) - amount):
     if short = (account.balance < amount):
@@ -1171,22 +1232,22 @@ documentation rules make the choice visible: a `where` precondition has no `fail
 ```y
 -- An order's life from creation to payment.
 state order:
-    id: order_id
-    lines: list<line>
+    id is order_id
+    lines is list<line>
 
     case created
-    case payment_pending(charge: command_id)
-    case paid(receipt: receipt_id)
-    case cancelled(reason: cancel_reason)
+    case payment_pending(charge is command_id)
+    case paid(receipt is receipt_id)
+    case cancelled(reason is cancel_reason)
 
 
-------------------------------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------
 Records that payment was requested for a new order.
 
 created: The new order, as order.created.
 charge: The charge command that was submitted, as command_id.
 pending: The order, waiting for payment, as order.payment_pending.
-------------------------------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------
 transition request_payment(created, charge) returns pending:
     return pending = created.becomes(order.payment_pending(charge: charge))
 ```
@@ -1209,10 +1270,10 @@ A record that outlives its process has a second type: the one on disk. Y makes t
 ```y
 -- A customer as stored, version 3.
 schema customer v3:
-    key id: customer_id
-    name: string
-    email: email_address?
-    marketing_consent: consent
+    key id is customer_id
+    name is string
+    email is email_address?
+    marketing_consent is consent
 
 
 -- Version 3 adds explicit marketing consent; nobody is assumed to have given it.
@@ -1280,11 +1341,11 @@ rule active(user) = (user.last_seen > 30d.ago())
 derived active_user_count: count<element> = users.filter(active).count()
 
 
-------------------------------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------
 A customer whose payments have failed often and who owes a lot.
 
 customer: The customer to judge, as customer.
-------------------------------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------
 rule high_risk(customer) = (customer.failed_payments > 3) and (customer.outstanding > 100_000isk)
 ```
 
@@ -1315,9 +1376,9 @@ Tests are part of the language, because the compiler must know what a test claim
 
 **Coverage is declared, then verified.**
 
-- A function's *outcomes* are both named sides of every decision (`f#sold_out` and `f#in_stock`; in an `if` with an
-  `else` block, the block's own name, `f#go_left`) and every case of its failure type, written with its type
-  (`f!failure_type.case`).
+- A function's *outcomes* are the named branches of every decision (`f#sold_out` and `f#in_stock`; in an `if` with an
+  `else` block, the block's own name, `f#go_left`), every named `switch` arm (`f#new_visitor`), and every case of its
+  failure type, written with its type (`f!failure_type.case`).
 - A test lists the outcomes it covers. The runner fails the test if it did not actually reach every one of them.
 - A test contributes coverage only for what it declares. This is the April 2026 rule, and it keeps coverage an auditable
   claim rather than an accident.
@@ -1392,12 +1453,12 @@ Together with claims and the coverage gate, this gives Y ai.lang's fifth invaria
 `compile` runs a call while the program is built, and the program holds the result as a value:
 
 ```y
-------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------
 Computes the CRC-32 of some bytes.
 
 bytes: The bytes to check, as bytes.
 crc: Their CRC-32, as uint32.
-------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------
 function checksum(bytes) returns crc:
     table = compile crc_table(polynomial: 0xEDB8_8320)
     ...
@@ -1664,15 +1725,18 @@ premise changed, or because the iteration that tried them showed their cost. The
 | Dropped | Held in | Replaced by | Why |
 | --- | --- | --- | --- |
 | Braces for blocks | Earlier drafts of this proposal | A colon and indentation, as in Python and YAPL v4 | Indentation is what a reader follows anyway; the formatter and the parser agree on it, and an agent that sends code through a tool that eats whitespace is told so by the parser |
-| `name is type`, and `is` in five roles | YAPL → April 2026 | `name: type`, except in constants, enumerations and refined types, which keep `is constant`, `is <type>` and `type name is base` | `is` meant annotation, predicate sugar, capture, mutability and optionality; the March 2026 review called it the most ambiguous token in the language |
-| File-wide width-matched `---` / `===` / `~~~` comment blocks | YAPL → April 2026 | `--` lines, and `---` blocks whose width belongs to each block | File-wide delimiter width makes one edit rewrite many lines of diff |
+| `is` in five roles | YAPL → April 2026 | `is` in one role, a declared name and its type: `word is word` in fields, `is constant`, `is <type>`, `type name is base` | `is` meant annotation, predicate sugar, capture, mutability and optionality; the March 2026 review called it the most ambiguous token in the language |
+| `name: type` for fields | Earlier drafts of this proposal | `name is type`, as YAPL wrote it | One form joins a name to its type; the colon is left to documentation roles and named arguments |
+| Hand-matched `---` / `===` / `~~~` delimiter widths | YAPL → April 2026 | `--` lines, and `---` rules that tooling widens to one right edge per file, the first multiple of four past the widest code | Nobody counts dashes; the tool sets a width a reader finds tidy |
+| A fixed line length (120 columns) | Earlier drafts of this proposal | No limit; the formatter's layout | The limit served the comment rules, which now take their width from the code |
 | `//` and `///` comments | Earlier drafts of this proposal | `--` and `---`, Y's own since YAPL; documentation is the comment above a declaration | Spelling borrowed for agents' habits, which a diagnostic and `y fix` correct instead |
 | Abbreviated keywords and names: `pub`, `fn`, `const`, `impl`, `mut`, `Int`, `Bool` | Earlier drafts of this proposal | `public`, `function`, `constant`, `implementation`, `mutable`, `int64`, `boolean` | The no-abbreviation rule binds the language's own words too; the sized numeric types and standard units are the few abbreviations kept |
 | `PascalCase` for types, cases, traits, states and commands | Earlier drafts of this proposal | `lower_snake_case` for every identifier, as in YAPL; any other casing is a compile error | One casing rule with no exceptions; a type is told from a value by where it stands |
 | Types in signatures, `->` and `T ! E` | Earlier drafts of this proposal | `function f(a, mutable b) returns result fails e`; each type in the role that documents its name (`a: ..., as string.`) | Few symbols; a signature reads as words, and every name is documented with its type in one place |
 | Unnamed results and an implicit last-expression result | Earlier drafts of this proposal | `returns name`, and `return name = value` | A result has a name, which its documentation explains, and every exit is a visible `return` or `fail` |
 | References in source: `&t`, `&mutable t`, `move`, borrowing results, `copy` types, `reference_counted<t>`, `weak<t>`; "no clone the programmer did not write" | September → earlier drafts of this proposal | Value semantics, `mutable` at both ends of a call; the compiler chooses borrows, moves and copies, and reports each copy | Ownership syntax is about memory, not intent, and is where agents fail most; value semantics keep what borrowing was for |
-| `match` with `pattern => statement` arms | Earlier drafts of this proposal | `switch`, each arm a pattern and a colon with its block beneath, as in the toolchain's language reference § 7 | One way to write a block; no `=>` |
+| `match` with `pattern => statement` arms | Earlier drafts of this proposal | `switch`, each arm `case name = pattern:` with its block beneath, as in the toolchain's language reference § 7 | One way to write a block; no `=>`; every outcome named |
+| `public` on any declaration | Earlier drafts of this proposal | `public facet`, as in the toolchain; private by default | Visibility is written in one place per group, and a module's surface reads as a list of facets |
 | A case written `.case` where the type is known | September → earlier drafts of this proposal | `type_name.case` everywhere, as YAPL had it (`color.red`) | The reader never infers which type a case belongs to |
 | `let` | Earlier drafts of this proposal | `name = value` declares; `name := value` changes, as in YAPL | Every change to a value is spelled one way and found by one search |
 | `variable` (and `var` before it), marking a name that may change | Earlier drafts of this proposal | Nothing at the declaration; each change is `:=` or a `mutable` argument | The change is already marked where it happens, so the marker repeated it |
@@ -1685,7 +1749,7 @@ premise changed, or because the iteration that tried them showed their cost. The
 
 | Dropped | Held in | Replaced by | Why |
 | --- | --- | --- | --- |
-| Classes, facets, factory methods, singletons, properties, inheritance | YAPL → toolchain | Structures, sum types, traits, `implementation` | Every iteration with more kinds spent its effort reconciling them; facets carried visibility, telemetry and override rules at once |
+| Classes, factory methods, singletons, properties, inheritance; facets' override and telemetry rules | YAPL → toolchain | Structures, sum types, traits, `implementation`; facets that carry visibility only | Every iteration with more kinds spent its effort reconciling them; facets carried visibility, telemetry and override rules at once |
 | Exceptions, `throws`, wrapping in `unexpected_exception` | YAPL → April 2026 | `fails e`, and a two-case sum at the call | Values can be matched exhaustively; wrapping hid the failure set |
 | Ambient `using` contexts, context stacks, affinity-based name lookup | YAPL → toolchain | Capabilities in `with` | Action at a distance; March 2026 had already reversed it ("no global or thread-local state") |
 | Transactional memory for every variable; reference tracing; one OS thread per process as a guarantee | YAPL → July 2026 | `shared<t>` only; ownership; runtime's choice | Costs paid by code that shares nothing; semantics should not depend on the scheduler |
@@ -1785,7 +1849,7 @@ would have caught, the language has not yet done its job, and the packet or the 
 The complete list, so that the size of the surface is visible:
 
 ```text
-declarations   module from import public function returns fails structure type case enumeration state transition trait
+declarations   module from import public facet function returns fails structure type case enumeration state transition trait
                implementation constant constants is unit schema migrate to command handler workflow test derived rule
                transient self
 contracts      where ensures invariant old assert

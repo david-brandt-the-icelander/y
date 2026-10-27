@@ -117,19 +117,27 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
     for (function, decisions) in facts["decisions"].as_object().unwrap() {
         for d in decisions.as_array().unwrap() {
             // every outcome of a decision is a named branch (Y-proposal § 3.5): `if a = (…):`, `else if b = (…):`,
-            // `else c:`, each on a line of its own, and an `if` or a `while` always has its `else`
+            // `else c:`, each on a line of its own, and an `if` or a `while` always has its `else`; a `switch` names
+            // each arm, `case a = pattern:`, and may end in `else c:`
+            let switch = d["kind"] == "switch";
             let branches = d["branches"].as_array().unwrap();
             assert!(branches.len() >= 2, "{function}: a decision with one named outcome: {branches:?}");
             for (k, b) in branches.iter().enumerate() {
                 let name = b["name"].as_str().unwrap();
                 let y = at(b["y"].as_str().unwrap());
-                let opens = if k == 0 { y.contains(&format!(" {name} = (")) && y.trim_end().ends_with("):") } else { y.contains(&format!("else if {name} = (")) || y.trim() == format!("else {name}:") };
+                let opens = if switch {
+                    (y.trim_start().starts_with(&format!("case {name} = ")) && y.ends_with(':')) || (k > 0 && y.trim() == format!("else {name}:"))
+                } else if k == 0 {
+                    y.contains(&format!(" {name} = (")) && y.trim_end().ends_with("):")
+                } else {
+                    y.contains(&format!("else if {name} = (")) || y.trim() == format!("else {name}:")
+                };
                 assert!(opens, "{function}#{name}: not at {}: `{y}`", b["y"]);
                 assert!(at(b["bare"].as_str().unwrap()).contains(&format!("#{name}")), "{function}#{name}: not at {}", b["bare"]);
                 listed.insert(format!("{}#{name}", function.rsplit('.').next().unwrap()));
             }
             let last = branches.last().unwrap()["y"].as_str().unwrap();
-            assert!(at(last).trim().starts_with("else ") && !at(last).contains(" if "), "{function}: the decision ends without an `else`");
+            assert!(switch || (at(last).trim().starts_with("else ") && !at(last).contains(" if ")), "{function}: the decision ends without an `else`");
         }
     }
     // each copy the lowering made is where the facts say, in the Y source and in the bare body
@@ -138,7 +146,7 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
         assert!(at(c["y"].as_str().unwrap()).contains(what), "copy of {what}: not at {}", c["y"]);
         assert!(at(c["bare"].as_str().unwrap()).contains("// y: a copy"), "copy of {what}: not marked at {}", c["bare"]);
     }
-    // every named decision of the Y source is listed: `if name = (` and `while name = (`
+    // every named decision of the Y source is listed: `if name = (`, `while name = (`, `case name = ` and `else name:`
     let mut in_source = BTreeSet::new();
     for y in ["y/src/hangman.y", "y/src/main.y"] {
         let mut function = String::new();
@@ -151,6 +159,9 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
                 if (*w == "if" || *w == "while") && words.get(i + 2) == Some(&"=") && words.get(i + 3).is_some_and(|x| x.starts_with('(')) {
                     in_source.insert(format!("{function}#{}", words[i + 1]));
                 }
+                if i == 0 && *w == "case" && words.get(2) == Some(&"=") {
+                    in_source.insert(format!("{function}#{}", words[1]));
+                }
                 // `else name:`
                 if *w == "else" && words.get(i + 1).is_some_and(|x| x.ends_with(':') && *x != "if") {
                     in_source.insert(format!("{function}#{}", words[i + 1].trim_end_matches(':')));
@@ -159,13 +170,19 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
         }
     }
     assert_eq!(listed, in_source, "y-facts.json and the Y source name different decisions");
-    // two blank lines before every top-level declaration after the imports, never more (a lint rule of Y § 3.1)
+    // two blank lines before every declaration after the imports, at module level and in a facet, never more (a lint
+    // rule of Y § 3.1)
     for y in ["y/src/hangman.y", "y/src/main.y", "y/src/hangman.test.y"] {
         let lines: Vec<String> = read(&dir.join(y)).lines().map(str::to_string).collect();
         let mut inside = false;
+        let mut in_facet = false;
         for (i, l) in lines.iter().enumerate() {
             let rule = l.trim().len() >= 3 && l.trim().chars().all(|c| c == '-');
-            let starts = !inside && !l.is_empty() && !l.starts_with(' ') && i > 0 && lines[i - 1].is_empty();
+            if !l.is_empty() && !l.starts_with(' ') && !rule && !inside {
+                in_facet = l.starts_with("public facet ") || l.starts_with("facet ");
+            }
+            let level = !l.starts_with(' ') || (in_facet && l.starts_with("    ") && !l.starts_with("     "));
+            let starts = !inside && !l.is_empty() && level && i > 0 && lines[i - 1].is_empty();
             if rule {
                 inside = !inside;
             }
@@ -198,6 +215,21 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
             assert!(above.is_empty() || above.ends_with(':'), "{y}:{}: no blank line before `{t}`", i + 1);
         }
     }
+    // the tests cover every outcome: each named branch, and each failure case its function documents (Y § 3.14)
+    let mut outcomes = listed.clone();
+    let mut failures = Vec::new();
+    for line in read(&dir.join("y/src/hangman.y")).lines() {
+        let t = line.trim();
+        if let Some(case) = t.strip_prefix("fails ").and_then(|r| r.split(':').next()).filter(|c| c.contains('.') && !c.contains(' ')) {
+            failures.push(case.to_string());
+        }
+        if let Some(name) = t.strip_prefix("function ") {
+            let name = name.split('(').next().unwrap();
+            outcomes.extend(failures.drain(..).map(|f| format!("{name}!{f}")));
+        }
+    }
+    let covered: BTreeSet<String> = facts["tests"].as_object().unwrap().values().flat_map(|t| t["covers"].as_array().unwrap().iter().map(|c| c.as_str().unwrap().to_string())).collect();
+    assert_eq!(covered, outcomes, "the tests and the outcomes of the module differ");
     // no `else` goes without a name
     for y in ["y/src/hangman.y", "y/src/main.y", "y/src/hangman.test.y"] {
         assert!(!read(&dir.join(y)).lines().any(|l| l.trim() == "else:"), "{y}: an `else` without a name");

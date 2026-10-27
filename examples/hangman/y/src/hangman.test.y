@@ -140,7 +140,7 @@ test the_full_gallows
 
 -- A word list is read word by word, and runs of spaces between words are allowed.
 test a_word_list_is_read_in_order
-        covers parse_word_list#blank, parse_word_list#has_text, parse_word_list#has_words:
+        covers parse_word_list#blank, parse_word_list#has_text, parse_word_list#valid, parse_word_list#has_words:
     when:
         words = parse_word_list("rope  gallows")?
     then:
@@ -158,7 +158,7 @@ test an_empty_word_list_is_refused
 
 -- A list with a short word is refused.
 test a_short_word_is_refused
-        covers parse_word_list!word_list_error.not_a_word:
+        covers parse_word_list#invalid, parse_word_list!word_list_error.not_a_word:
     when:
         refused = parse_word_list("rope cat")
     then:
@@ -167,7 +167,7 @@ test a_short_word_is_refused
 
 -- A player who finds every letter wins, and is told the word.
 test a_player_who_finds_every_letter_wins
-        covers play#playing, play#game_over, play#line_read, play#won:
+        covers play#playing, play#game_over, play#line_read, play#hit, play#won:
     given:
         words = [word.new("rope")?]
     with:
@@ -182,7 +182,7 @@ test a_player_who_finds_every_letter_wins
 
 -- A player who misses six times is hanged, and is told the word.
 test a_player_who_misses_six_times_is_hanged
-        covers play#hanged:
+        covers play#miss, play#hanged:
     given:
         words = [word.new("rope")?]
     with:
@@ -193,6 +193,24 @@ test a_player_who_misses_six_times_is_hanged
         play(words)?
     then:
         assert announced = (console.written().last() == optional.some("Hanged! The word was rope."))
+
+
+-- A player who types something other than a new letter is told what was wrong, and the game goes on.
+test a_player_is_told_what_was_wrong
+        covers play#typed_nothing, play#typed_other, play#typed_again:
+    given:
+        words = [word.new("rope")?]
+    with:
+        console = fake console(input: ["", "ab", "r", "r", "o", "p", "e"])
+        random = fake random(seed: 7)
+        forever = fake forever
+    when:
+        play(words)?
+    then:
+        assert told_to_type = (console.written().contains("Type a letter."))
+        assert told_not_one = (console.written().contains("\"ab\" is not one letter."))
+        assert told_repeated = (console.written().contains("You have already guessed r."))
+        assert still_won = (console.written().last() == optional.some("You win! The word was rope."))
 
 
 -- A console that closes in the middle of a game ends it with a failure.
