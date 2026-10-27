@@ -440,8 +440,8 @@ public enumeration job_status is string:
   written `.won` where the type is known, and `outcome.won` where it is not.
 - An enumeration is the type for a set of cases that carry nothing, failure types included. A `type` with `case`s is
   for cases that carry data (§ 3.3).
-- `is` appears only here, in `is constant` and in a typed member or enumeration (§ 7 records why `is` was dropped
-  everywhere else).
+- `is` appears only here, in `is constant` and in a typed member or enumeration, and in a refined type,
+  `type word is string where …` (§ 3.3). § 7 records why `is` was dropped everywhere else.
 
 **Documentation is grammar, written as a comment.** The April 2026 spec block was right that every declaration a reader
 relies on needs structured documentation in a closed grammar. It went further and made the block *replace* the
@@ -553,9 +553,15 @@ an anonymous record with named fields: `parts: The quotient and the remainder, a
 all of them:
 
 ```y
-type quantity = int64 where positive = (value > 0)
-type email_address = string where has_one_at_sign = (value.count_of('@') == 1)
+type quantity is int64 where positive = (value > 0)
+type email_address is string where has_one_at_sign = (value.count_of('@') == 1)
+type word is string
+    where letters_only = value.runes().all(letter => letter.is_ascii_lowercase()) and
+          long_enough = (value.count() >= 4)
 ```
+
+- A refined type is `type name is base where …`. Several restrictions are joined with `and`, each with its own name,
+  and a long list continues on the following lines, aligned under the first.
 
 - `quantity.new(n)` returns a `quantity`, and fails with `constraint_violation`.
 - A literal is checked at compile time: `let q: quantity = 0` does not compile.
@@ -1563,7 +1569,7 @@ premise changed, or because the iteration that tried them showed their cost. The
 | Dropped | Held in | Replaced by | Why |
 | --- | --- | --- | --- |
 | Braces for blocks | Earlier drafts of this proposal | A colon and indentation, as in Python and YAPL v4 | Indentation is what a reader follows anyway; the formatter and the parser agree on it, and an agent that sends code through a tool that eats whitespace is told so by the parser |
-| `name is type`, and `is` in five roles | YAPL → April 2026 | `name: type`, except in constants and enumerations, which keep `is constant` and `is <type>` | `is` meant annotation, predicate sugar, capture, mutability and optionality; the March 2026 review called it the most ambiguous token in the language |
+| `name is type`, and `is` in five roles | YAPL → April 2026 | `name: type`, except in constants, enumerations and refined types, which keep `is constant`, `is <type>` and `type name is base` | `is` meant annotation, predicate sugar, capture, mutability and optionality; the March 2026 review called it the most ambiguous token in the language |
 | File-wide width-matched `---` / `===` / `~~~` comment blocks | YAPL → April 2026 | `--` lines, and `---` blocks whose width belongs to each block | File-wide delimiter width makes one edit rewrite many lines of diff |
 | `//` and `///` comments | Earlier drafts of this proposal | `--` and `---`, Y's own since YAPL; documentation is the comment above a declaration | Spelling borrowed for agents' habits, which a diagnostic and `y fix` correct instead |
 | Abbreviated keywords and names: `pub`, `fn`, `var`, `const`, `impl`, `mut`, `Int`, `Bool` | Earlier drafts of this proposal | `public`, `function`, `variable`, `constant`, `implementation`, `mutable`, `int64`, `boolean` | The no-abbreviation rule binds the language's own words too; the sized numeric types and standard units are the few abbreviations kept |

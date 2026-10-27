@@ -16,8 +16,8 @@ A word a game can be played with.
 
 why: A player must be able to type and see every letter, and a short word is too easy to guess.
 ------------------------------------------------------------------------------------------------------------------------
-public type word = string
-    where letters_only = value.runes().all(letter => letter.is_ascii_lowercase()),
+public type word is string
+    where letters_only = value.runes().all(letter => letter.is_ascii_lowercase()) and
           long_enough = (value.count() >= 4)
 
 -- Why a word list cannot be played with.

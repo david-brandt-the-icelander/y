@@ -48,7 +48,7 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | `?` converting through the one case that carries the failure | `?` | an `impl From` subject | `impl From<ConsoleError> for PlayError` |
 | `lower_snake_case` type and case names (`guess_error`, `.not_one_letter`) | `GuessError`, `NotOneLetter`: the lowering's one renaming, to Rust's casing | Rust names | the same |
 | A constant group, `public constants game_rules:` with `allowed_misses is count<element> = 6` | a module `game_rules` holding `const ALLOWED_MISSES = 6;`; uses are `game_rules::ALLOWED_MISSES` | a `module` subject and its `const` subjects | the same |
-| `type word = string where letters_only = ..., long_enough = ...` | `struct Word(_)` and a constructor that checks each constraint in order | two `invariant` clauses, with status `lifted` by the constructor | a newtype with `Word::new(..) -> Result<Word, ConstraintViolation>` |
+| `type word is string where letters_only = ... and long_enough = ...` | `struct Word(_)` and a constructor that checks each constraint in order | two `invariant` clauses, with status `lifted` by the constructor | a newtype with `Word::new(..) -> Result<Word, ConstraintViolation>` |
 | `record`; `enumeration` (`outcome`, `verdict` and the failures `word_list_error`, `guess_error`); a `type` with `case`s that carry data (`play_error`) | `struct`; `enum` with unit variants; `enum` with named fields | `fields`, `variants` | the same, deriving the structural equality Y always derives |
 | Blocks: a colon and indentation | braces, as Rust has | — | the same |
 | No `with` clause: the function is pure | — | `effects` clause `pure` | — |
@@ -79,7 +79,6 @@ following:
   `random`, `file_system` and others, but not a terminal.
 - **The entry point** is `public function main() fails e with system`.
 - **One `with` block can bind several capabilities:** `with console = ..., random = ..., forever = ... { ... }`.
-- **A refined type can have several named constraints,** separated by commas after one `where`.
 - **Rune literals** are written `'z'`, as in `value.count_of('@')` in the proposal.
 - **Library names:** `set.of([...])`, `list.join(separator:)`, `string.single_rune()`, `string.split(...)`, `string.trim()`.
 - **Fakes for tests:** `fake console(input: [...], read_fails: ...)`, `fake random(seed: ...)` and `fake forever`.
