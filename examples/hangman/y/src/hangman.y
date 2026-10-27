@@ -124,8 +124,8 @@ fails guess_error.already_guessed: The letter was guessed before. The game is un
 ------------------------------------------------------------------------------------------------------------------------
 public function guess(mutable game, line) returns answer fails guess_error
         where still_playing = (outcome_of(game) == outcome.playing):
-    let trimmed = line.trim()
-    let letter = trimmed.to_lowercase().single_rune()
+    trimmed = line.trim()
+    letter = trimmed.to_lowercase().single_rune()
 
     if nothing_typed = (trimmed.is_empty()):
         fail guess_error.empty
@@ -195,13 +195,13 @@ picture: The drawing, seven lines high, as string.
 ------------------------------------------------------------------------------------------------------------------------
 public function gallows(misses) returns picture
         where within_allowance = (misses <= game_rules.allowed_misses):
-    let head = part(misses: misses, needed: 1, mark: "O")
-    let body = part(misses: misses, needed: 2, mark: "|")
-    let left_arm = part(misses: misses, needed: 3, mark: "/")
-    let right_arm = part(misses: misses, needed: 4, mark: "\\")
-    let left_leg = part(misses: misses, needed: 5, mark: "/")
-    let right_leg = part(misses: misses, needed: 6, mark: "\\")
-    let rows = [
+    head = part(misses: misses, needed: 1, mark: "O")
+    body = part(misses: misses, needed: 2, mark: "|")
+    left_arm = part(misses: misses, needed: 3, mark: "/")
+    right_arm = part(misses: misses, needed: 4, mark: "\\")
+    left_leg = part(misses: misses, needed: 5, mark: "/")
+    right_leg = part(misses: misses, needed: 6, mark: "\\")
+    rows = [
         "  +---+",
         "  |   |",
         "  {head}   |",
@@ -232,19 +232,19 @@ fails play_error.console: The console could not be read or written.
 public function play(words) fails play_error
         with console, random, forever
         where has_words = (not words.is_empty()):
-    let chosen = random.index_below(words.count())
+    chosen = random.index_below(words.count())
     variable game = new_game(words[chosen])
     console.write_line("Hangman: find the word, one letter at a time.")?
 
     while playing = (outcome_of(game) == outcome.playing):
-        let picture = gallows(game.misses.count())
-        let shown = masked(game)
-        let missed = game.misses.join(separator: " ")
+        picture = gallows(game.misses.count())
+        shown = masked(game)
+        missed = game.misses.join(separator: " ")
         console.write_line(picture)?
         console.write_line("Word:   {shown}")?
         console.write_line("Missed: {missed}")?
         console.write("Guess:  ")?
-        let typed = (console.read_line() forever because "a player may think for as long as they like")?
+        typed = (console.read_line() forever because "a player may think for as long as they like")?
 
         if closed = (typed == optional.none):
             fail play_error.input_closed
@@ -261,7 +261,7 @@ public function play(words) fails play_error
                 result.err(guess_error.already_guessed):
                     console.write_line("You have already guessed {typed}.")?
     else game_over:
-        let final_picture = gallows(game.misses.count())
+        final_picture = gallows(game.misses.count())
         console.write_line(final_picture)?
 
         if won = (outcome_of(game) == outcome.won):

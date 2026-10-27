@@ -66,7 +66,7 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | `count<element>`, `count<rune>` | — (units are erased) | `y-facts.json` `units` | `usize` |
 | `string` (and a read-only `string` parameter), `rune`, `list<t>`, `set<t>` | — | `text`, `ref<text>`, `Rune`, `list<T> as 'Vec'`, `set<T> as 'BTreeSet'` | `String`, `&str`, `y_runtime::Rune`, `Vec<T>`, `BTreeSet<T>` |
 | Interpolation, `"{name}"` and `"{game.word}"` | `format!("{name}")`, `format!("{}", game.word)` | — | the same |
-| `variable` | `let` | — | `let mut`, which `weave` derived through rustc (19 of them) |
+| A binding, `picture = gallows(…)`; a `variable`; a change, `name := value` | `let`; `let`; `name = value` | — | `let`; `let mut`, which `weave` derived through rustc (19 of them); `name = value` |
 | `test name covers a, b { given / with / when / then }` | `#[test] fn name()`; a `?` in `given` or `when` lowers to `expect`; `fake console(input: [...])` to `Console::fake(...)` | `y-facts.json` `tests`: what each covers; repeated in a comment in the test | the same |
 | Documentation: the `--` line, or the block between two rules of dashes, above a declaration, with roles; the types leave it for the signature | `///` with the roles as a list | — | the same |
 

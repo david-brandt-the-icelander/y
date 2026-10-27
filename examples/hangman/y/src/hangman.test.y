@@ -4,7 +4,7 @@ test a_letter_in_the_word_is_a_hit
     given:
         variable game = new_game(word.new("gallows")?)
     when:
-        let answer = guess(mutable game, "l")?
+        answer = guess(mutable game, "l")?
     then:
         assert hit = (answer == verdict.hit)
         assert shown_twice = (masked(game) == "_ _ l l _ _ _")
@@ -16,7 +16,7 @@ test a_letter_not_in_the_word_is_a_miss
     given:
         variable game = new_game(word.new("rope")?)
     when:
-        let answer = guess(mutable game, "z")?
+        answer = guess(mutable game, "z")?
     then:
         assert miss = (answer == verdict.miss)
         assert recorded = (game.misses == ['z'])
@@ -28,7 +28,7 @@ test a_repeated_letter_is_refused
     given:
         variable game = game(word: word.new("rope")?, hits: set.new(), misses: ['z'])
     when:
-        let refused = guess(mutable game, "Z")
+        refused = guess(mutable game, "Z")
     then:
         assert refused_as_repeated = (refused == result.err(guess_error.already_guessed))
         assert no_new_miss = (game.misses.count() == 1)
@@ -40,7 +40,7 @@ test typing_nothing_is_not_a_guess
     given:
         variable game = new_game(word.new("rope")?)
     when:
-        let refused = guess(mutable game, "   ")
+        refused = guess(mutable game, "   ")
     then:
         assert refused_as_empty = (refused == result.err(guess_error.empty))
 
@@ -51,7 +51,7 @@ test two_letters_are_not_a_guess
     given:
         variable game = new_game(word.new("rope")?)
     when:
-        let refused = guess(mutable game, "ab")
+        refused = guess(mutable game, "ab")
     then:
         assert refused_as_two = (refused == result.err(guess_error.not_one_letter))
 
@@ -62,7 +62,7 @@ test a_digit_is_not_a_guess
     given:
         variable game = new_game(word.new("rope")?)
     when:
-        let refused = guess(mutable game, "7")
+        refused = guess(mutable game, "7")
     then:
         assert refused_as_digit = (refused == result.err(guess_error.not_one_letter))
 
@@ -71,9 +71,9 @@ test a_digit_is_not_a_guess
 test six_misses_hang_the_man
         covers outcome_of#hanged:
     given:
-        let game = game(word: word.new("rope")?, hits: set.new(), misses: ['a', 'b', 'c', 'd', 'f', 'g'])
+        game = game(word: word.new("rope")?, hits: set.new(), misses: ['a', 'b', 'c', 'd', 'f', 'g'])
     when:
-        let ending = outcome_of(game)
+        ending = outcome_of(game)
     then:
         assert lost = (ending == outcome.lost)
 
@@ -82,9 +82,9 @@ test six_misses_hang_the_man
 test finding_every_letter_wins
         covers outcome_of#solved:
     given:
-        let game = game(word: word.new("rope")?, hits: set.of(['r', 'o', 'p', 'e']), misses: ['a'])
+        game = game(word: word.new("rope")?, hits: set.of(['r', 'o', 'p', 'e']), misses: ['a'])
     when:
-        let ending = outcome_of(game)
+        ending = outcome_of(game)
     then:
         assert won = (ending == outcome.won)
 
@@ -93,9 +93,9 @@ test finding_every_letter_wins
 test a_new_game_is_being_played
         covers outcome_of#undecided:
     given:
-        let game = new_game(word.new("rope")?)
+        game = new_game(word.new("rope")?)
     when:
-        let ending = outcome_of(game)
+        ending = outcome_of(game)
     then:
         assert playing = (ending == outcome.playing)
 
@@ -104,7 +104,7 @@ test a_new_game_is_being_played
 test the_empty_gallows
         covers part#not_yet:
     given:
-        let expected = [
+        expected = [
             "  +---+",
             "  |   |",
             "      |",
@@ -114,7 +114,7 @@ test the_empty_gallows
             "=========",
         ].join(separator: "\n")
     when:
-        let picture = gallows(0)
+        picture = gallows(0)
     then:
         assert empty = (picture == expected)
 
@@ -123,7 +123,7 @@ test the_empty_gallows
 test the_full_gallows
         covers part#reached:
     given:
-        let expected = [
+        expected = [
             "  +---+",
             "  |   |",
             "  O   |",
@@ -133,7 +133,7 @@ test the_full_gallows
             "=========",
         ].join(separator: "\n")
     when:
-        let picture = gallows(6)
+        picture = gallows(6)
     then:
         assert full = (picture == expected)
 
@@ -142,7 +142,7 @@ test the_full_gallows
 test a_word_list_is_read_in_order
         covers parse_word_list#blank, parse_word_list#has_text, parse_word_list#has_words:
     when:
-        let words = parse_word_list("rope  gallows")?
+        words = parse_word_list("rope  gallows")?
     then:
         assert both_in_order = (words == [word.new("rope")?, word.new("gallows")?])
 
@@ -151,7 +151,7 @@ test a_word_list_is_read_in_order
 test an_empty_word_list_is_refused
         covers parse_word_list#empty, parse_word_list!word_list_error.empty:
     when:
-        let refused = parse_word_list("   ")
+        refused = parse_word_list("   ")
     then:
         assert refused_as_empty = (refused == result.err(word_list_error.empty))
 
@@ -160,7 +160,7 @@ test an_empty_word_list_is_refused
 test a_short_word_is_refused
         covers parse_word_list!word_list_error.not_a_word:
     when:
-        let refused = parse_word_list("rope cat")
+        refused = parse_word_list("rope cat")
     then:
         assert refused_as_not_a_word = (refused == result.err(word_list_error.not_a_word))
 
@@ -169,7 +169,7 @@ test a_short_word_is_refused
 test a_player_who_finds_every_letter_wins
         covers play#playing, play#game_over, play#line_read, play#won:
     given:
-        let words = [word.new("rope")?]
+        words = [word.new("rope")?]
     with:
         console = fake console(input: ["r", "o", "p", "e"])
         random = fake random(seed: 7)
@@ -184,7 +184,7 @@ test a_player_who_finds_every_letter_wins
 test a_player_who_misses_six_times_is_hanged
         covers play#hanged:
     given:
-        let words = [word.new("rope")?]
+        words = [word.new("rope")?]
     with:
         console = fake console(input: ["a", "b", "c", "d", "f", "g"])
         random = fake random(seed: 7)
@@ -199,13 +199,13 @@ test a_player_who_misses_six_times_is_hanged
 test a_closed_console_ends_the_game
         covers play#closed, play!play_error.input_closed:
     given:
-        let words = [word.new("rope")?]
+        words = [word.new("rope")?]
     with:
         console = fake console(input: ["r"])
         random = fake random(seed: 7)
         forever = fake forever
     when:
-        let ended = play(words)
+        ended = play(words)
     then:
         assert closed = (ended == result.err(play_error.input_closed))
 
@@ -214,12 +214,12 @@ test a_closed_console_ends_the_game
 test a_failing_console_ends_the_game
         covers play!play_error.console:
     given:
-        let words = [word.new("rope")?]
+        words = [word.new("rope")?]
     with:
         console = fake console(input: [], read_fails: true)
         random = fake random(seed: 7)
         forever = fake forever
     when:
-        let ended = play(words)
+        ended = play(words)
     then:
         assert failed_reading = (ended == result.err(play_error.console(error: console_error.fake_read_failure())))

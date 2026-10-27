@@ -40,12 +40,12 @@ external effects inside a transaction, and why an entire second mechanism exists
 
   ```y
   atomic:
-      let item = inventory[item_id]
+      item = inventory[item_id]
 
       if item.available == 0:
           retry
 
-      item.available -= 1
+      item.available := item.available - 1
   ```
 
 - ⚠️ The runtime records what the transaction read and wrote, detects conflict with a committed
@@ -100,7 +100,7 @@ enforced; what to do instead is [External effects](external-effects.md).
 
   ```y
   atomic:
-      account.balance -= amount
+      account.balance := account.balance - amount
       payment_provider.charge(card, amount)   -- rejected
   ```
 

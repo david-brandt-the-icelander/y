@@ -50,14 +50,14 @@ public function hold_and_charge(item, buyer) returns hold fails hold_error
         with inventory, charges:
     within 5s?:
         atomic hold_one_unit:
-            let stock = inventory.stock_of(item)?
+            stock = inventory.stock_of(item)?
 
             if sold_out = (stock.available == 0):
                 retry
             else in_stock:
-                stock.available -= 1
-                let price = stock.price
-                let opened = inventory.open_hold(item: item, buyer: buyer.id)
+                stock.available := stock.available - 1
+                price = stock.price
+                opened = inventory.open_hold(item: item, buyer: buyer.id)
                 enqueue charge_card(hold: opened.id, amount: price, method: buyer.payment_method)
                 return hold = opened
 ```
@@ -175,7 +175,7 @@ told this story in prose. Here it is in the proposed language.
 ```y
         atomic hold_one_unit:
             -- ...
-            stock.available -= 1
+            stock.available := stock.available - 1
             gateway.charge(method: buyer.payment_method, amount: stock.price)?
 ```
 
@@ -227,15 +227,15 @@ supplies capabilities the same way production code receives them, and forces the
 test charges_once_when_the_transaction_retries
         covers hold_and_charge#in_stock:
     given:
-        let widget = item_id.parse("widget")?
-        let buyer = any<buyer>(seed: 11)
+        widget = item_id.parse("widget")?
+        buyer = any<buyer>(seed: 11)
     with:
         inventory = shared.new(inventory.stocked(item: widget, available: 1, price: 1_500isk))
         charges = fake enqueue<charge_card>
     faults:
         conflict at hold_and_charge#hold_one_unit, times: 2
     when:
-        let hold = hold_and_charge(widget, buyer)?
+        hold = hold_and_charge(widget, buyer)?
     then:
         assert charged_once = (charges.committed().count() == 1)
         assert held_the_widget = (hold.item == widget)
@@ -310,7 +310,12 @@ person can judge: is five seconds right, and is this the behaviour the business 
 
 **Bindings.**
 
-- `let` binds once and `variable` may be reassigned. Every binding is initialised where it is declared.
+- **`name = value` binds a name.** There is no `let`: the first `=` for a name in a scope declares it, and every
+  binding is initialised where it is declared.
+- **Every change to a name is written `:=`:** `low := middle.next()`, `account.balance := account.balance - amount`.
+  `=` never changes a name, and there are no compound assignments (`-=`, `+=`), so a reader finds every change of a
+  value by searching for `:=`. A name that changes, by `:=` or by a call that takes it `mutable`, is declared
+  `variable`: `variable found = list.new()`. YAPL had `=` to bind and `:=` to rebind (§ 7).
 - **No shadowing:** a name visible in a scope may not be declared again inside it, including parameter names. Within a
   function, a name means one thing.
 
@@ -384,15 +389,15 @@ Whether someone has signed in lately.
 user: The person, as user.
 active: Whether they have, as boolean.
 ------------------------------------------------------------------------------------------------------------------------
-let is_active = lambda is_active(user) returns active
+is_active = lambda is_active(user) returns active
         captures cutoff:
     return active = (user.last_seen > cutoff)
 
 
-let active_users = users.filter(is_active)
+active_users = users.filter(is_active)
 ```
 
-- A lambda is bound by assignment, `let name = lambda name(…)`, and can be stored and passed like any value. A helper that
+- A lambda is bound by assignment, `name = lambda name(…)`, and can be stored and passed like any value. A helper that
   is only called is a `nested function` in the body.
 - **What a callable captures is listed:** `captures cutoff`, `captures mutable total`. A capture that is not listed is
   an error, so the signature shows everything the helper can reach.
@@ -608,7 +613,7 @@ type word is string
   and a long list continues on the following lines, aligned under the first.
 
 - `quantity.new(n)` returns a `quantity`, and fails with `constraint_violation`.
-- A literal is checked at compile time: `let q: quantity = 0` does not compile.
+- A literal is checked at compile time: `ship(quantity: 0)` does not compile when the parameter is a `quantity`.
 - A violation names the constraint that failed and the values of its subexpressions. Constraints never carry
   hand-written messages; the name *is* the message.
 - The same declaration drives test data. `any<quantity>(seed: 7)` produces values that satisfy every constraint, and
@@ -750,14 +755,14 @@ public function position_of(target, items) returns position:
     variable high = items.last_index()?
 
     while searching = (low <= high):
-        let middle = low.midpoint(high)
+        middle = low.midpoint(high)
 
         if found = (items[middle] == target):
             return position = optional.some(middle)
         else if go_right = (items[middle] < target):
-            low = middle.next()
+            low := middle.next()
         else go_left:
-            high = middle.previous()?
+            high := middle.previous()?
     else exhausted:
         return position = optional.none
 ```
@@ -778,7 +783,7 @@ is change under someone who holds it: Y values have value semantics.
 - **`mutable` marks the exception, at both ends of the call.** A parameter `mutable x` lets the callee change the
   caller's value, and the call says so: `guess(mutable game, line)`. While the call runs, nothing else can reach that
   value. This is YAPL's two-sided `mutable` (2024): a reviewer sees at the call which arguments the callee may change.
-- **Bindings:** a `variable` may be reassigned and changed, and a `let` may not.
+- **Bindings:** a `variable` may be changed, with `:=` or by a call that takes it `mutable`, and any other name may not.
 - **Method receivers** are declared `self` or `mutable self`. They are not marked at the call (`order.cancel()`),
   because receiver syntax is where agents' habits are strongest. The elaborated view shows the mode.
 - **Keeping a value keeps it as it is.** When `new_game(word)` stores `word` in the game, nothing done to the game's
@@ -982,14 +987,14 @@ jobs: The queues, as shared<job_queues>.
 function take_job() returns job
         with jobs:
     atomic take_next_job:
-        let pending = jobs.pending.pop_front()
+        pending = jobs.pending.pop_front()
 
         if nothing_pending = (pending == optional.none):
             retry
         else got_pending:
             return job = pending
     orelse atomic take_retried_job:
-        let retried = jobs.retried.pop_front()
+        retried = jobs.retried.pop_front()
 
         if nothing_retried = (retried == optional.none):
             retry
@@ -1089,7 +1094,7 @@ fails fulfilment_error.payment_unreachable: The charge could not be delivered.
 ------------------------------------------------------------------------------------------------------------------------
 workflow fulfil(hold) returns shipped fails fulfilment_error
         with orders, charges, shipments:
-    let order = orders.for_hold(hold)?
+    order = orders.for_hold(hold)?
 
     switch submit charge_card(hold: hold, amount: order.total, method: order.payment_method):
         result.ok(receipt):
@@ -1130,7 +1135,7 @@ public function withdraw(mutable account, amount) returns debit fails withdraw_e
     if short = (account.balance < amount):
         fail withdraw_error.insufficient_funds(shortfall: amount - account.balance)
     else covered:
-        account.balance -= amount
+        account.balance := account.balance - amount
         return debit = receipt(account: account.id, amount: amount)
 ```
 
@@ -1209,7 +1214,7 @@ schema customer v3:
 
 -- Version 3 adds explicit marketing consent; nobody is assumed to have given it.
 migrate customer v2 to v3:
-    marketing_consent = consent.not_given
+    marketing_consent := consent.not_given
 ```
 
 **Schemas.**
@@ -1246,7 +1251,7 @@ must not prevent them, and does not need them.
 **Pipelines** say what the answer is, which leaves the compiler free to fuse, parallelise or index:
 
 ```y
-let active_names = users.filter(active).map(name_of).sorted()
+active_names = users.filter(active).map(name_of).sorted()
 ```
 
 - Each stage takes a named callable: a `rule` (`active`), a function, or a lambda bound above (§ 3.1). There is no
@@ -1391,7 +1396,7 @@ bytes: The bytes to check, as bytes.
 crc: Their CRC-32, as uint32.
 ------------------------------------------------------------------------------------------------------------------------
 function checksum(bytes) returns crc:
-    let table = compile crc_table(polynomial: 0xEDB8_8320)
+    table = compile crc_table(polynomial: 0xEDB8_8320)
     ...
 ```
 
@@ -1666,9 +1671,9 @@ premise changed, or because the iteration that tried them showed their cost. The
 | References in source: `&t`, `&mutable t`, `move`, borrowing results, `copy` types, `reference_counted<t>`, `weak<t>`; "no clone the programmer did not write" | September → earlier drafts of this proposal | Value semantics, `mutable` at both ends of a call; the compiler chooses borrows, moves and copies, and reports each copy | Ownership syntax is about memory, not intent, and is where agents fail most; value semantics keep what borrowing was for |
 | `match` with `pattern => statement` arms | Earlier drafts of this proposal | `switch`, each arm a pattern and a colon with its block beneath, as in the toolchain's language reference § 7 | One way to write a block; no `=>` |
 | A case written `.case` where the type is known | September → earlier drafts of this proposal | `type_name.case` everywhere, as YAPL had it (`color.red`) | The reader never infers which type a case belongs to |
+| `let` | Earlier drafts of this proposal | `name = value` declares; `name := value` changes, as in YAPL | Every change to a value is spelled one way and found by one search |
 | `if` and `switch` as expressions; a ternary operator | Earlier drafts of this proposal | Statements; a value is assigned in each branch | A decision is a statement with a name and a place, never a value hidden inside an expression |
 | Spec block in place of the signature | April 2026 | A signature naming parameters and result; documentation above it with closed roles and the types | The examples abandoned it for helpers; a signature is where a reader looks for names and modes |
-| `=` to bind, `:=` to rebind | YAPL → April 2026 | `let` / `variable` | Mutability is marked where the name is declared; `:=` fought every agent's habits |
 | Two spellings of one keyword, method synonyms | YAPL, toolchain | One spelling | Contradicts "one way to write it" |
 | `loop` / `leave` / `next` | YAPL → toolchain | `break` / `continue`, named when nested; no unbounded `loop` | Keeps YAPL's rule, not its words |
 
@@ -1781,7 +1786,7 @@ declarations   module from import public function returns fails structure type c
                transient self
 contracts      where ensures invariant old assert
 control        if else switch when for in while break continue return fail
-bindings       let variable mutable lambda nested captures with arena compile
+bindings       variable mutable lambda nested captures with arena compile
 concurrency    within task supervise detach forever uncancellable
 transactions   atomic retry orelse enqueue submit
 claims, gaps   unsafe assume allow reveal because todo

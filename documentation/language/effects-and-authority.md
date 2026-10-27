@@ -51,7 +51,7 @@ human will stop reading, so Y infers effects and prints them on request.
   needs.
 
   ```y
-  let response = http.get(url) within 2s
+  response = http.get(url) within 2s
   ```
 
 - ⚠️ A suspension point is nevertheless a semantic fact the compiler will name on request, because a

@@ -87,8 +87,8 @@ told about, because the compiler enumerates the cases.
       case network(error: network_error)
 
   function startup() returns started fails startup_error:
-      let configuration = load_configuration("app.json")?
-      let database = connect(configuration.database)?
+      configuration = load_configuration("app.json")?
+      database = connect(configuration.database)?
       return started = application(configuration, database)
   ```
 

@@ -58,8 +58,8 @@ failure mode is a deploy that cannot be rolled back.
 
   ```y
   migrate customer v1 to v2:
-      display_name = first_name + " " + last_name
-      normalized_name = normalize(display_name)
+      display_name := first_name + " " + last_name
+      normalized_name := normalize(display_name)
   ```
 
 - ⚠️ A migration declares what it reads and what it writes, and may read schemas other than the one it is

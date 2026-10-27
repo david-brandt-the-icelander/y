@@ -167,13 +167,14 @@ named, and every identifier is `lower_snake_case`; `proposal/Y-proposal.md` § 3
 ### 3.2 Immutable and mutable bindings
 
 ```y
-let name = "Ada"
+name = "Ada"
 variable attempts = 0
 ```
 
-`let` is immutable.
+A name bound with `=` is immutable.
 
-`variable` permits reassignment, subject to ownership, borrowing, transaction, and effect rules.
+`variable` permits change, always written `attempts := attempts + 1`, subject to ownership, borrowing, transaction, and
+effect rules.
 
 ### 3.3 Optional values
 
@@ -338,12 +339,12 @@ Transactional mutation:
 
 ```y
 atomic:
-    let item = inventory[item_id]
+    item = inventory[item_id]
 
     if item.available == 0:
         retry
 
-    item.available -= 1
+    item.available := item.available - 1
 ```
 
 ### 6.1 `atomic`
@@ -391,7 +392,7 @@ For example, this is invalid in principle:
 
 ```y
 atomic:
-    account.balance -= amount
+    account.balance := account.balance - amount
     payment_provider.charge(card, amount) -- forbidden
 ```
 
@@ -416,7 +417,7 @@ Illustrative direction:
 
 ```y
 atomic:
-    order.status = order_status.payment_pending
+    order.status := order_status.payment_pending
 
     enqueue charge_card(order_id: order.id, amount: order.total, payment_method: order.payment_method)
 ```
@@ -452,7 +453,7 @@ Illustrative syntax:
 
 ```y
 atomic:
-    order.status = order_status.confirmed
+    order.status := order_status.confirmed
 
     afterCommit:
         enqueue send_confirmation(order.id)
@@ -490,7 +491,7 @@ Potentially suspending operations are still semantically known.
 Example:
 
 ```y
-let response = http.get(url) within 2s
+response = http.get(url) within 2s
 ```
 
 The caller need not necessarily be declared `async`, and the source should ideally not require a mandatory `await` keyword.
@@ -509,15 +510,15 @@ Every suspension must have a finite bound through one or both of:
 Illustrative syntax:
 
 ```y
-let result = queue.receive() within 5s
+result = queue.receive() within 5s
 ```
 
 or:
 
 ```y
 within 30s:
-    let user = load_user(id)
-    let orders = load_orders(user.id)
+    user = load_user(id)
+    orders = load_orders(user.id)
     render(user, orders)
 ```
 
@@ -557,10 +558,10 @@ Illustrative syntax:
 
 ```y
 workflow fulfill(order_id):
-    let order = load_order(order_id)
+    order = load_order(order_id)
 
-    let payment = submit charge_card(order.payment)
-    let shipment = submit create_shipment(order)
+    payment = submit charge_card(order.payment)
+    shipment = submit create_shipment(order)
 
     complete(order, payment, shipment)
 ```
@@ -612,9 +613,9 @@ Physical and business units should be representable in the type system.
 Examples:
 
 ```y
-let timeout: seconds = 5s
-let distance: kilometers = 12.4km
-let amount: isk = 1500kr
+timeout: seconds = 5s
+distance: kilometers = 12.4km
+amount: isk = 1500kr
 ```
 
 This prevents entire classes of category errors and gives AI-generated code more semantic structure to work with.
@@ -729,7 +730,7 @@ Collection operations should be concise and composable.
 Illustrative style:
 
 ```y
-let names =
+names =
     users
         .where(active)
         .map(name_of)

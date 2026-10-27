@@ -20,7 +20,7 @@ incrementally, and an explicit loop is one it must execute as written.
 - ⚠️ Collection operations compose as a chain, each stage naming what it does:
 
   ```y
-  let names =
+  names =
       users
           .where(active)
           .map(name_of)
@@ -28,7 +28,7 @@ incrementally, and an explicit loop is one it must execute as written.
   ```
 
 - ⚠️ Each stage takes a named callable — a `rule` such as `active`, a function, or a lambda bound with
-  `let adult = lambda adult(user) returns grown_up: …`. Y has no inline lambda expression
+  `adult = lambda adult(user) returns grown_up: …`. Y has no inline lambda expression
   → [`../../proposal/Y-proposal.md` § 3.1](../../proposal/Y-proposal.md#31-source-form).
 - ⚠️ A chain is fused into a single traversal where the stages permit it, rather than materialising an
   intermediate collection per stage.

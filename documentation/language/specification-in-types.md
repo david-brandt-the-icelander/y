@@ -106,9 +106,9 @@ worth their syntax cost.
 - ⚠️ A unit is part of a type, and a literal may carry one:
 
   ```y
-  let timeout: seconds = 5s
-  let distance: kilometers = 12.4km
-  let amount: isk = 1500kr
+  timeout: seconds = 5s
+  distance: kilometers = 12.4km
+  amount: isk = 1500kr
   ```
 
 - ⚠️ Arithmetic respects units: adding two `seconds` yields `seconds`, dividing `kilometers` by `hours`

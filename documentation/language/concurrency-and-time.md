@@ -25,15 +25,15 @@ cancellation needs to propagate; and if cancellation propagates, failure isolati
 - ⚠️ `within` bounds a single operation:
 
   ```y
-  let result = queue.receive() within 5s
+  result = queue.receive() within 5s
   ```
 
 - ⚠️ `within` bounds a scope, and every suspension inside it shares the one deadline:
 
   ```y
   within 30s:
-      let user = load_user(id)
-      let orders = load_orders(user.id)
+      user = load_user(id)
+      orders = load_orders(user.id)
       render(user, orders)
   ```
 
