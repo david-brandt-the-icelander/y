@@ -25,7 +25,7 @@ letter. Six misses hang the man.
 
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
-| Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 290, 243, 19 | hand |
+| Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 290, 243, 22 | hand |
 | Bare bodies | `bare/src/hangman.brs`, `bare/src/hangman/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 309, 181, 44, 3 | hand, as the Y compiler would lower the source |
 | Constraint files | `bare/src/*.constraints.json` (53 subjects, 20 clauses) | 432 | the same, then `bare-rust libfmt` for the canonical form |
 | Y facts | `bare/y-facts.json` | 518 | the same |
@@ -83,7 +83,7 @@ following:
   `random`, `file_system` and others, but not a terminal.
 - **The entry point** is `function main() fails e dependency system` in the module `main`. It is in no facet, so it is
   private: the runtime calls it, and no module imports it.
-- **One `inject` block can supply several capabilities:** `inject console = ..., random = ..., forever = ...:`.
+- **One `inject:` block can supply several capabilities,** one binding per line beneath it.
 - **Rune literals** are written `'z'`, as in `value.count_of('@')` in the proposal.
 - **Library names:** `set.of([...])`, `list.join(separator:)`, `string.single_rune()`, `string.split(...)`, `string.trim()`.
 - **Fakes for tests:** `fake console(input: [...], read_fails: ...)`, `fake random(seed: ...)` and `fake forever`.

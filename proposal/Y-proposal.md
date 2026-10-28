@@ -237,8 +237,8 @@ test charges_once_when_the_transaction_retries
         widget = item_id.parse("widget")?
         buyer = any<buyer>(seed: 11)
     inject:
-        inventory = shared.new(inventory.stocked(item: widget, available: 1, price: 1_500isk))
-        charges = fake enqueue<charge_card>
+            inventory = shared.new(inventory.stocked(item: widget, available: 1, price: 1_500isk))
+            charges = fake enqueue<charge_card>
     faults:
         conflict at hold_and_charge#hold_one_unit, times: 2
     when:
@@ -997,21 +997,32 @@ needs no annotation because the missing clause is the annotation. Contract expre
 `inject`, 2020):
 
 - **`dependency`, at the receiving site,** declares what a function needs: `dependency console, random, forever`.
-- **`inject`, at the sending site,** supplies it: `inject console = system.console(), random = system.random():`
-  opens a block in which every call that needs a `console` or a `random` receives these.
+- **`inject`, at the sending site,** supplies it. `inject:` opens a block. Its bindings come first, one per line,
+  indented eight spaces as a header's continuation is, and the statements follow, indented four. Every call in the
+  block that needs a `console` or a `random` receives these:
+
+  ```y
+  inject:
+          console = system.console()
+          random = system.random()
+      play(words)?
+  ```
+
+  A test's `inject:` section has the same bindings, usually fakes (`console = fake console(input: ["r"])`), and no
+  statements.
 - A callee's dependencies are satisfied, by type, from the capabilities in the caller's scope: the caller's own
   `dependency` clause and any enclosing `inject` block. Call sites do not spell them out, so adding a capability to a
   deep function does not edit every call.
 - Every function between the entry point and that deep function must still *declare* the capability, because a
   declaration is where a reviewer looks. `y fix` maintains those clauses.
 - When two capabilities in scope could satisfy a requirement, the call must choose:
-  `notify(order) inject mailer = receipts_mailer`.
+  an `inject:` block around the call, `mailer = receipts_mailer`.
 
 **Deriving capabilities.**
 
 - The entry point receives the root, `system`, and every other capability derives from it.
 - There is no way to construct a capability from nothing, read one from a global, or recover one from a type.
-- Attenuation only narrows: `inject uploads = uploads.subtree(path"/var/app/exports"): ...`. This is the single place
+- Attenuation only narrows: an `inject:` block binding `uploads = uploads.subtree(path"/var/app/exports")`. This is the single place
   where a name may be rebound in an inner scope, and it is allowed because it can only reduce authority.
 - A package manifest lists the root capabilities a program may request. A package's public functions declare what
   they require, so a dependency upgrade that widens required authority is a review item, not a surprise. This is

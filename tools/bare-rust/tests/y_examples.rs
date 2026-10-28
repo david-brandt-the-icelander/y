@@ -203,7 +203,7 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
             if t.len() >= 3 && t.chars().all(|c| c == '-') {
                 inside = !inside;
             }
-            let inject_block = t.starts_with("inject ") && t.contains('=');
+            let inject_block = t == "inject:" && !y.ends_with(".test.y");
             if inside || !(flow.iter().any(|f| t.starts_with(f)) || inject_block) || t.ends_with("covers") {
                 continue;
             }

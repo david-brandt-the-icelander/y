@@ -15,5 +15,8 @@ function main() fails play_error
         dependency system:
     words = compile parse_word_list(game_rules.word_list)
 
-    inject console = system.console(), random = system.random(), forever = system.forever():
+    inject:
+            console = system.console()
+            random = system.random()
+            forever = system.forever()
         play(words)?

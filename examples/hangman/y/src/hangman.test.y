@@ -171,9 +171,9 @@ test a_player_who_finds_every_letter_wins
     given:
         words = [word.new("rope")?]
     inject:
-        console = fake console(input: ["r", "o", "p", "e"])
-        random = fake random(seed: 7)
-        forever = fake forever
+            console = fake console(input: ["r", "o", "p", "e"])
+            random = fake random(seed: 7)
+            forever = fake forever
     when:
         play(words)?
     then:
@@ -186,9 +186,9 @@ test a_player_who_misses_six_times_is_hanged
     given:
         words = [word.new("rope")?]
     inject:
-        console = fake console(input: ["a", "b", "c", "d", "f", "g"])
-        random = fake random(seed: 7)
-        forever = fake forever
+            console = fake console(input: ["a", "b", "c", "d", "f", "g"])
+            random = fake random(seed: 7)
+            forever = fake forever
     when:
         play(words)?
     then:
@@ -201,9 +201,9 @@ test a_player_is_told_what_was_wrong
     given:
         words = [word.new("rope")?]
     inject:
-        console = fake console(input: ["", "ab", "r", "r", "o", "p", "e"])
-        random = fake random(seed: 7)
-        forever = fake forever
+            console = fake console(input: ["", "ab", "r", "r", "o", "p", "e"])
+            random = fake random(seed: 7)
+            forever = fake forever
     when:
         play(words)?
     then:
@@ -219,9 +219,9 @@ test a_closed_console_ends_the_game
     given:
         words = [word.new("rope")?]
     inject:
-        console = fake console(input: ["r"])
-        random = fake random(seed: 7)
-        forever = fake forever
+            console = fake console(input: ["r"])
+            random = fake random(seed: 7)
+            forever = fake forever
     when:
         ended = play(words)
     then:
@@ -234,9 +234,9 @@ test a_failing_console_ends_the_game
     given:
         words = [word.new("rope")?]
     inject:
-        console = fake console(input: [], read_fails: true)
-        random = fake random(seed: 7)
-        forever = fake forever
+            console = fake console(input: [], read_fails: true)
+            random = fake random(seed: 7)
+            forever = fake forever
     when:
         ended = play(words)
     then:
