@@ -203,8 +203,8 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
             if t.len() >= 3 && t.chars().all(|c| c == '-') {
                 inside = !inside;
             }
-            let with_block = t.starts_with("with ") && t.contains('=');
-            if inside || !(flow.iter().any(|f| t.starts_with(f)) || with_block) || t.ends_with("covers") {
+            let inject_block = t.starts_with("inject ") && t.contains('=');
+            if inside || !(flow.iter().any(|f| t.starts_with(f)) || inject_block) || t.ends_with("covers") {
                 continue;
             }
             let mut k = i;
@@ -251,7 +251,7 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
             let text = header.join(" ");
             let params: Vec<String> = text.split_once('(').and_then(|(_, r)| r.split_once(')')).map(|(p, _)| p.split(',').map(|x| x.trim().trim_start_matches("mutable ").to_string()).collect()).unwrap_or_default();
             let result = text.split_once(" returns ").map(|(_, r)| r.split_whitespace().next().unwrap().to_string());
-            let caps: Vec<String> = header.iter().map(|l| l.trim()).filter(|l| l.starts_with("with ") && !l.contains('=')).flat_map(|l| l[5..].split(',').map(|c| c.trim().trim_end_matches(':').to_string())).collect();
+            let caps: Vec<String> = header.iter().map(|l| l.trim()).filter(|l| l.starts_with("dependency ") && !l.contains('=')).flat_map(|l| l[11..].split(',').map(|c| c.trim().trim_end_matches(':').to_string())).collect();
             let kind = |l: &str| -> Option<String> {
                 let t = l.trim();
                 if t.starts_with("fails ") {

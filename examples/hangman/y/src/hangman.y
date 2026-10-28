@@ -250,7 +250,7 @@ public facet console_play:
     fails play_error.console: The console could not be read or written.
     ------------------------------------------------------------------------------------------------------------
     function play(words) fails play_error
-            with console, random, forever
+            dependency console, random, forever
             where has_words = (not words.is_empty()):
         chosen = random.index_below(words.count())
         game = new_game(words[chosen])

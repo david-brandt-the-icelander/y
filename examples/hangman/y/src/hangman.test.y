@@ -170,7 +170,7 @@ test a_player_who_finds_every_letter_wins
         covers play#playing, play#game_over, play#line_read, play#hit, play#won:
     given:
         words = [word.new("rope")?]
-    with:
+    inject:
         console = fake console(input: ["r", "o", "p", "e"])
         random = fake random(seed: 7)
         forever = fake forever
@@ -185,7 +185,7 @@ test a_player_who_misses_six_times_is_hanged
         covers play#miss, play#hanged:
     given:
         words = [word.new("rope")?]
-    with:
+    inject:
         console = fake console(input: ["a", "b", "c", "d", "f", "g"])
         random = fake random(seed: 7)
         forever = fake forever
@@ -200,7 +200,7 @@ test a_player_is_told_what_was_wrong
         covers play#typed_nothing, play#typed_other, play#typed_again:
     given:
         words = [word.new("rope")?]
-    with:
+    inject:
         console = fake console(input: ["", "ab", "r", "r", "o", "p", "e"])
         random = fake random(seed: 7)
         forever = fake forever
@@ -218,7 +218,7 @@ test a_closed_console_ends_the_game
         covers play#closed, play!play_error.input_closed:
     given:
         words = [word.new("rope")?]
-    with:
+    inject:
         console = fake console(input: ["r"])
         random = fake random(seed: 7)
         forever = fake forever
@@ -233,7 +233,7 @@ test a_failing_console_ends_the_game
         covers play!play_error.console:
     given:
         words = [word.new("rope")?]
-    with:
+    inject:
         console = fake console(input: [], read_fails: true)
         random = fake random(seed: 7)
         forever = fake forever

@@ -100,7 +100,7 @@
   "capabilities": [
     {
       "subject": "hangman_example::hangman::console_play::play",
-      "with": [
+      "dependency": [
         "console as console",
         "random as random",
         "forever as forever"
@@ -110,7 +110,7 @@
     },
     {
       "subject": "hangman_example::main",
-      "with": [
+      "dependency": [
         "system as system"
       ],
       "lowered": "System::root(), made by the entry point",
