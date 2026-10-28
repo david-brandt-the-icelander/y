@@ -249,13 +249,8 @@ public facet console_play:
     fails play_error.input_closed: The console closed before the game ended.
     fails play_error.console: The console could not be read or written.
     ------------------------------------------------------------------------------------------------------------
-    function play(words) fails play_error
+    function play(words, injected console, injected random, injected forever) fails play_error
             where has_words = (not words.is_empty()):
-        dependencies:
-                console
-                random
-                forever
-
         chosen = random.index_below(words.count())
         game = new_game(words[chosen])
         console.write_line("Hangman: find the word, one letter at a time.") or fail

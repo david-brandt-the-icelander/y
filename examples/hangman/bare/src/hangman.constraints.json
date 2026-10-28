@@ -299,8 +299,8 @@
           "source": "y/src/hangman.y:253",
           "status": { "lifted": "src/hangman.rs: y_runtime::require" }
         },
-        { "kind": "effects", "text": "effects only console, random", "source": "y/src/hangman.y:254" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/hangman.y:254" }
+        { "kind": "effects", "text": "effects only console, random", "source": "y/src/hangman.y:252" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/hangman.y:252" }
       ]
     }
   ]

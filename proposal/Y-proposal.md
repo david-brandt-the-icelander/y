@@ -36,7 +36,7 @@ A function, as a reviewer would be shown it:
 ```y
 -- Taking stock for a buyer.
 public facet holds:
-    ----------------------------------------------------------------------------------------------------
+    ------------------------------------------------------------------------------------------------------------
     Holds one unit of an item for a buyer and asks for payment, exactly once.
 
     why: Stock is never oversold, and a transaction that retries never charges twice.
@@ -51,12 +51,8 @@ public facet holds:
 
     fails hold_error.unknown_item: The item is not stocked here.
     fails hold_error.timed_out: No unit became free within five seconds.
-    ----------------------------------------------------------------------------------------------------
-    function hold_and_charge(item, buyer) returns hold fails hold_error:
-        dependencies:
-                inventory
-                charges
-
+    ------------------------------------------------------------------------------------------------------------
+    function hold_and_charge(item, buyer, injected inventory, injected charges) returns hold fails hold_error:
         within 5s or fail:
             atomic hold_one_unit:
                 stock = inventory.stock_of(item) or fail
@@ -132,7 +128,7 @@ the facts a reviewer needs into the declaration**, where they become checked cla
 | Parameter, result and capability types | Documentation above the signature (`line: ..., as string.`) | Agent (public signatures are never inferred) |
 | Which parameters the function may change | Signature (`x` or `mutable x`) | Agent, corrected by fix-its |
 | Which arguments a call lets the callee change | Call site (`mutable x`) | Agent, corrected by fix-its |
-| Authority, and therefore effects | `dependencies:` block | `y fix`, from inference |
+| Authority, and therefore effects | `injected` parameters | `y fix`, from inference |
 | Failure set | `fails e` in the signature, and `fails` doc roles | Agent; the compiler checks exhaustiveness of documentation |
 | Preconditions and guarantees | `where` / `ensures` | Agent |
 | Wait bounds | `within` | Agent; an unbounded wait does not compile |
@@ -202,7 +198,7 @@ error[Y0412]: external effect inside a transaction
    = why: `atomic hold_one_unit` may run more than once; this call cannot be undone, so it may happen more than once
    = fix: submit a durable command, which is persisted if and only if the transaction commits:
           enqueue charge_card(hold: ..., amount: ..., method: ...)
-          (needs a capability of type `enqueue<charge_card>` in the `dependencies:` block; `y fix` adds it)
+          (needs a capability of type `enqueue<charge_card>` as an `injected` parameter; `y fix` adds it)
    = spec: y:spec/shared-state#no-external-effect
 ```
 
@@ -376,8 +372,7 @@ function meaning_of_life() returns answer:
 
 - **A signature names its parameters and its result, and nothing else.** It has no types and no `->`:
   - `function guess(mutable game, line) returns verdict fails guess_error`;
-  - then the colon, and as the body's first block its capabilities, `dependencies:` with `console` and `random`
-    beneath it;
+  - its capabilities are parameters too, marked `injected`: `function play(words, injected console)`;
   - then its contracts.
 - **Types live in the documentation directly above** (§ 3.2). Each parameter, the result and each capability has a
   role that ends with `as` and its type: `line: What the player typed, as string.` A signature whose documentation lacks a
@@ -618,14 +613,14 @@ function withdraw(mutable account, amount) returns debit fails withdraw_error
 | `why:` | Why it exists or is shaped this way, where the name does not say | Optional; required on claims (§ 3.15) |
 | `<parameter>: …, as <type>.` | One per parameter, by name: what it means, and its type | Every parameter of every function |
 | `<result>: …, as <type>.` | What the result named after `returns` means, and its type | Every function with a result |
-| `<capability>: …, as <type>.` | One per capability in `dependencies:` | Every capability |
+| `<capability>: …, as <type>.` | One per `injected` parameter: how the function uses it, and its type | Every capability |
 | `fails <type>.<case>:` | When and why each failure case occurs, the case written with its type (§ 3.3) | Every case of a public function's failure type |
 | `satisfies:` | A `y:` link to the requirement or journey this implements | Optional |
 | `see:` | A `y:` link to a related declaration or document | Optional |
 | `gap:` / `defect:` / `blocked:` | Unfinished or broken behaviour (§ 3.16) | Where it applies |
 
 **Roles of one kind sit together, and one blank line separates the kinds.** The parameters form one group, the
-result another, then the capabilities, the failures, and each other role (`why:`, `see:`, …). Inside a group the
+result another, then the injected parameters (the capabilities), the failures, and each other role (`why:`, `see:`, …). Inside a group the
 lines follow one another directly; between two groups exactly one blank line is required. A missing or extra blank
 line is a lint error, which formatting fixes. A reader sees at a glance what goes in, what comes out, what is held
 and what can go wrong:
@@ -982,7 +977,7 @@ effects are what capabilities do. This merges September's two open questions, ef
 into one clause:
 
 ```y
-------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------------------------------
 Exports one month's invoices as files.
 
 month: The month to export, as month.
@@ -994,12 +989,8 @@ uploads: Where the files go, as file_system.
 clock: The time the export is stamped with, as clock.
 
 fails export_error.write_failed: A file could not be written.
-------------------------------------------------------------------------
-function export_invoices(month) returns exported fails export_error:
-    dependencies:
-            invoices
-            uploads
-            clock
+----------------------------------------------------------------------------------------------------------------------------
+function export_invoices(month, injected invoices, injected uploads, injected clock) returns exported fails export_error:
 ```
 
 **The capability kinds**, each declaring the effects it carries:
@@ -1013,30 +1004,28 @@ function export_invoices(month) returns exported fails export_error:
 | `enqueue<command>`, `submit<command>` | Durable command submission (§ 3.10) |
 | `detach`, `forever`, `reveal`, `native` | Trust-requiring operations, each also a claim (§ 3.15) |
 
-**A function with no `dependencies:` block is pure.** It may allocate, compute and fault, but it touches nothing else. Purity
+**A function with no `injected` parameter is pure.** It may allocate, compute and fault, but it touches nothing else. Purity
 needs no annotation because the missing clause is the annotation. Contract expressions, constraints, `derived`,
 `rule` and migrations must be pure, and it is visible that they are.
 
-**Passing capabilities is dependency injection,** with two keywords, one at each end (YAPL v0's `dependency` and
-`inject`, 2020, here `dependencies` and `inject`):
+**Passing capabilities is dependency injection,** with two keywords, one at each end (after YAPL v0's `dependency` and
+`inject`, 2020):
 
-- **`dependencies:`, at the receiving site,** declares what a function needs. It is the first block of the body, and
-  its names sit one per line beneath it, indented eight spaces, as `inject:`'s bindings do. There is no one-line
-  form, and no singular `dependency`, even for one capability:
+- **`injected`, at the receiving site,** marks a parameter that the caller does not pass: the function needs it, and
+  it arrives by injection. It is written as `mutable` is, before the name, and injected parameters come after the
+  others:
 
   ```y
-  function play(words) fails play_error
+  function play(words, injected console, injected random, injected forever) fails play_error
           where has_words = (not words.is_empty()):
-      dependencies:
-              console
-              random
-              forever
-
       chosen = random.index_below(words.count())
   ```
 
-  The block is part of the signature, though it sits beneath the header: `y explain`, the review packet and the
-  compatibility signature read it with the parameters.
+  Everything a function receives is in one list, and the marker says how each one arrives. A caller writes
+  `play(words)`; the other three are injected.
+- **An injected parameter is documented as every parameter is,** in the comment above, by saying how the function
+  uses it: `console: Where the game is shown and the guesses are read, as console.` The injected parameters form
+  their own group of roles, after the other parameters and the result (§ 3.2).
 - **`inject`, at the sending site,** supplies it. `inject(…):` names what it injects in its parentheses, as a call
   names its arguments, and the block beneath it holds only the statements that receive them. Every call in the
   block that needs a `console` or a `random` receives these:
@@ -1049,7 +1038,7 @@ needs no annotation because the missing clause is the annotation. Contract expre
   A test's `inject:` section holds only the injectables, one per line beneath it, usually fakes
   (`console = fake console(input: ["r"])`).
 - A callee's dependencies are satisfied, by type, from the capabilities in the caller's scope: the caller's own
-  `dependencies:` block and any enclosing `inject(…)` block. Call sites do not spell them out, so adding a capability to a
+  `injected` parameters and any enclosing `inject(…)` block. Call sites do not spell them out, so adding a capability to a
   deep function does not edit every call.
 - Every function between the entry point and that deep function must still *declare* the capability, because a
   declaration is where a reviewer looks. `y fix` maintains those clauses.
@@ -1068,7 +1057,7 @@ needs no annotation because the missing clause is the annotation. Contract expre
 
 **Checking.**
 
-- A `dependencies:` block that declares less than the body uses is an error naming the capability and the call path that needs
+- `injected` parameters that declare less than the body uses is an error naming the capability and the call path that needs
   it.
 - One that declares more is a fixable lint on a private function. On a public function or trait method it is allowed,
   because a public signature may reserve room, and the review packet shows it.
@@ -1167,10 +1156,7 @@ job: The job to run, as job.
 
 jobs: The queues, as shared<job_queues>.
 ------------------------------------------------------------
-function take_job() returns job:
-    dependencies:
-            jobs
-
+function take_job(injected jobs) returns job:
     atomic take_next_job:
         pending = jobs.pending.pop_front()
 
@@ -1246,10 +1232,7 @@ gateway: The payment gateway, as http<payment_gateway>.
 
 fails charge_error.declined: The gateway refused the charge.
 --------------------------------------------------------------------------------------------------------------------------------
-handler charge_card(command) returns charged fails charge_error:
-    dependencies:
-            gateway
-
+handler charge_card(command, injected gateway) returns charged fails charge_error:
     within 30s or fail:
         return charged = gateway.charge(idempotency_key: command.id, method: command.method, amount: command.amount) or fail
 ```
@@ -1271,7 +1254,7 @@ handler charge_card(command) returns charged fails charge_error:
 **Workflows** are durable, long-running functions:
 
 ```y
-----------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------
 Takes a held item from payment to shipment.
 
 hold: The hold to fulfil, as hold_id.
@@ -1284,13 +1267,8 @@ shipments: Where shipments are submitted, as submit<create_shipment>.
 
 fails fulfilment_error.payment_declined: The charge was refused.
 fails fulfilment_error.payment_unreachable: The charge could not be delivered.
-----------------------------------------------------------------------------------------------------
-workflow fulfil(hold) returns shipped fails fulfilment_error:
-    dependencies:
-            orders
-            charges
-            shipments
-
+------------------------------------------------------------------------------------------------------------------------
+workflow fulfil(hold, injected orders, injected charges, injected shipments) returns shipped fails fulfilment_error:
     order = orders.for_hold(hold) or fail
 
     switch submit charge_card(hold: hold, amount: order.total, method: order.payment_method):
@@ -1345,7 +1323,7 @@ documentation rules make the choice visible: a `where` precondition has no `fail
 **Semantics.**
 
 - `ensures` holds when the function succeeds. `ensures on failure name = (...)` states what holds when it fails.
-- Contract expressions are pure, since they can have no `dependencies:` block.
+- Contract expressions are pure, since they can have no `injected` parameter.
 - A structure's `invariant` holds whenever the structure is not being mutated. A function taking it `mutable` may break the
   invariant inside its body, and must restore it before returning.
 - An invariant on a structure held in `shared<t>` is checked at the commit of every transaction that wrote the structure.
@@ -1618,7 +1596,7 @@ function checksum(bytes) returns crc:
 
 **What can be compiled.**
 
-- The operand is one call to a function with no `dependencies:` block, which makes it pure (§ 3.7).
+- The operand is one call to a function with no `injected` parameter, which makes it pure (§ 3.7).
 - The function carries no mark. The same function runs while building and while running, as suspension needs no
   `async`. Unlike C++'s `constexpr` and Rust's `const fn`, there is no second kind of function to keep in step with the
   first.
@@ -1852,7 +1830,7 @@ owner still decides; the recommendation is here so that deciding is quick.
 | Failure: distinct channel or sum type | `fails e` in the signature; a call's outcome is a built-in two-case sum; Core IR records propagation edges | § 3.4 |
 | Degree of ownership inference | All of it: source has value semantics and `mutable` at both ends of a call; borrows, moves and copies are the compiler's, and it reports copies | § 3.6 |
 | Types that opt out of single ownership | None needed: values are shared freely; `shared<t>` for mutable state between tasks; arenas and typed indices for graphs | § 3.6 |
-| Effect annotation syntax | The `dependencies:` block: effects are what capabilities carry | § 3.7 |
+| Effect annotation syntax | `injected` parameters: effects are what capabilities carry | § 3.7 |
 | Capability declaration and passing | Declared per function, threaded by type from the caller's scope, overridden explicitly | § 3.7 |
 | Where handler failure escalates | Mandatory `on_abandon`: compensate or park; in workflows, `undelivered.abandoned` is a failure to handle | § 3.10 |
 | `afterCommit` durability | Dropped; `enqueue` and buffered telemetry cover every case | § 3.10 |
@@ -1888,7 +1866,7 @@ premise changed, or because the iteration that tried them showed their cost. The
 | Unnamed results and an implicit last-expression result | Earlier drafts of this proposal | `returns name`, and `return name = value` | A result has a name, which its documentation explains, and every exit is a visible `return` or `fail` |
 | References in source: `&t`, `&mutable t`, `move`, borrowing results, `copy` types, `reference_counted<t>`, `weak<t>`; "no clone the programmer did not write" | September → earlier drafts of this proposal | Value semantics, `mutable` at both ends of a call; the compiler chooses borrows, moves and copies, and reports each copy | Ownership syntax is about memory, not intent, and is where agents fail most; value semantics keep what borrowing was for |
 | `match` with `pattern => statement` arms | Earlier drafts of this proposal | `switch`, each arm `case name = pattern:` with its block beneath, as in the toolchain's language reference § 7 | One way to write a block; no `=>`; every outcome named |
-| `with` for capabilities, at both ends | Earlier drafts of this proposal | `dependencies:` where a function declares what it needs, `inject:` where a caller supplies it, after YAPL v0's `dependency` and `inject` | One keyword per side of the injection; a reader sees which side a line is on |
+| `with` for capabilities, at both ends | Earlier drafts of this proposal | `injected` parameters where a function declares what it needs, `inject(…)` where a caller supplies it, after YAPL v0's `dependency` and `inject` | One keyword per side of the injection; a reader sees which side a line is on |
 | `?` to pass a failure on | Earlier drafts of this proposal | `or fail`, and `or fail as <case>` to name the conversion | A symbol a reader has to know; with the words, every failure exit contains `fail` |
 | `??` for a default and `?.` through absence | September → earlier drafts of this proposal | A named decision: `if`, `else if`, `else`, or `switch` | Each hides a branch that tests, traces and debuggers cannot name |
 | `t?` for an optional type | September → earlier drafts of this proposal | `optional<t>` | Spelled as the type it is, as `optional.some` and `optional.none` already were |
@@ -1907,7 +1885,7 @@ premise changed, or because the iteration that tried them showed their cost. The
 | --- | --- | --- | --- |
 | Classes, factory methods, singletons, properties, inheritance; facets' override and telemetry rules | YAPL → toolchain | Structures, sum types, traits, `implementation`; facets that carry visibility only | Every iteration with more kinds spent its effort reconciling them; facets carried visibility, telemetry and override rules at once |
 | Exceptions, `throws`, wrapping in `unexpected_exception` | YAPL → April 2026 | `fails e`, and a two-case sum at the call | Values can be matched exhaustively; wrapping hid the failure set |
-| Ambient `using` contexts, context stacks, affinity-based name lookup | YAPL → toolchain | Capabilities in `dependencies:` and `inject(…)` | Action at a distance; March 2026 had already reversed it ("no global or thread-local state") |
+| Ambient `using` contexts, context stacks, affinity-based name lookup | YAPL → toolchain | Capabilities as `injected` parameters and `inject(…)` | Action at a distance; March 2026 had already reversed it ("no global or thread-local state") |
 | Transactional memory for every variable; reference tracing; one OS thread per process as a guarantee | YAPL → July 2026 | `shared<t>` only; ownership; runtime's choice | Costs paid by code that shares nothing; semantics should not depend on the scheduler |
 | Affinities and placements in types | Toolchain | Physical parameters behind Core IR | Runtime detail in source, which agents misuse |
 | Comments with runtime meaning (interpolated, traced) | YAPL → toolchain | `log` statements | A comment that runs surprises the reviewer |
@@ -2010,7 +1988,7 @@ declarations   module from import public facet function returns fails structure 
                transient self
 contracts      where ensures invariant old assert
 control        if else switch when for in while break continue return fail
-bindings       mutable lambda nested captures dependencies inject arena compile
+bindings       mutable lambda nested captures injected inject arena compile
 concurrency    within task supervise detach forever uncancellable
 transactions   atomic retry orelse enqueue submit
 claims, gaps   unsafe assume allow reveal because todo

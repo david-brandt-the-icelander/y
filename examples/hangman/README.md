@@ -25,7 +25,7 @@ letter. Six misses hang the man.
 
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
-| Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 294, 244, 21 | hand |
+| Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 289, 244, 18 | hand |
 | Bare bodies | `bare/src/hangman.brs`, `bare/src/hangman/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 309, 181, 44, 3 | hand, as the Y compiler would lower the source |
 | Constraint files | `bare/src/*.constraints.json` (53 subjects, 20 clauses) | 432 | the same, then `bare-rust libfmt` for the canonical form |
 | Y facts | `bare/y-facts.json` | 518 | the same |
@@ -55,10 +55,10 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | Blocks: a colon and indentation | braces, as Rust has | — | the same |
 | `switch` with named arms, `case valid = result.ok(parsed):`, the statements beneath | `match`, each arm marked `// y: #valid` | `y-facts.json` `decisions`, with `kind` `switch`: each arm's name, Y line and bare line | the same, with the comment |
 | No inline lambdas: `masked` builds its list with a `for` loop, and `outcome_of` asks `is_subset_of` | the loop; `.all(|letter| …)`, Rust's form of the subset test | — | the same |
-| No `dependencies:` block: the function is pure | — | `effects` clause `pure` | — |
-| A `mutable` parameter and no `dependencies:` | — | `no io`, `no clock`, `no randomness`, `mutates only game.hits, game.misses` | — |
-| `dependencies:` with `console`, `random` and `forever` beneath it, typed in the documentation | three more parameters | their types and access; `effects only console, random`; the clause also in `y-facts.json` `capabilities` | `&mut Console, &mut Random, &Forever` |
-| `dependencies:` with `system`, on the entry point | `System::root()` | `y-facts.json` `capabilities` | the same |
+| No `injected` parameter: the function is pure | — | `effects` clause `pure` | — |
+| A `mutable` parameter and no `injected` one | — | `no io`, `no clock`, `no randomness`, `mutates only game.hits, game.misses` | — |
+| `injected console, injected random, injected forever` after `words`, each documented by how `play` uses it | the same three parameters | their types and access; `effects only console, random`; the clause also in `y-facts.json` `capabilities` | `&mut Console, &mut Random, &Forever` |
+| `injected system` on the entry point | `System::root()` | `y-facts.json` `capabilities` | the same |
 | a `where name = p` precondition | `require(p, "hangman::f#name")` | a `require` clause, status `lifted` by that call | a run-time check whose failure is a fault (a panic naming the construct) |
 | `invariant name = p` on a structure | `invariant(p, "hangman::Game#name")` after the one write that can break it | an `invariant` clause on the type | the same |
 | A decision: `if a = p:`, `else if b = q:`, `else c:`, or `while a = p:` with `else c:` after the loop, every branch on its own line and named | `if p { // y: #a`, `} else if q { // y: #b`, `} else { // y: #c`; after a `while`, a `// y: #c` comment | `y-facts.json` `decisions`: each decision's branches, with the Y line and the bare line of each | the same, with the comment |
@@ -81,7 +81,7 @@ following:
 - **Standard capabilities and their methods:** a `console` capability with `write_line`, `write` and `read_line`;
   `random.index_below`; and `system.console()`, `system.random()` and `system.forever()`. The proposal lists `clock`,
   `random`, `file_system` and others, but not a terminal.
-- **The entry point** is `function main() fails e:`, whose body opens with `dependencies:` and `system` in the module `main`. It is in no facet, so it is
+- **The entry point** is `function main(injected system) fails e:` in the module `main`. It is in no facet, so it is
   private: the runtime calls it, and no module imports it.
 - **One `inject(...)` can supply several capabilities:** `inject(console = ..., random = ..., forever = ...):`.
 - **Rune literals** are written `'z'`, as in `value.count_of('@')` in the proposal.

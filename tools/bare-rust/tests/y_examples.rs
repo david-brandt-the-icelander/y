@@ -251,15 +251,8 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
             let text = header.join(" ");
             let params: Vec<String> = text.split_once('(').and_then(|(_, r)| r.split_once(')')).map(|(p, _)| p.split(',').map(|x| x.trim().trim_start_matches("mutable ").to_string()).collect()).unwrap_or_default();
             let result = text.split_once(" returns ").map(|(_, r)| r.split_whitespace().next().unwrap().to_string());
-            // the capabilities are the names beneath `dependencies:`, the body's first block
-            let body = &lines[(end + 1 + header.len()).min(lines.len())..];
-            let caps: Vec<String> = match body.first() {
-                Some(first) if first.trim() == "dependencies:" => {
-                    let depth = first.len() - first.trim_start().len();
-                    body[1..].iter().take_while(|l| !l.trim().is_empty() && l.len() - l.trim_start().len() > depth).map(|l| l.trim().to_string()).collect()
-                }
-                _ => Vec::new(),
-            };
+            // the capabilities are the parameters marked `injected`
+            let caps: Vec<String> = params.iter().filter_map(|p| p.strip_prefix("injected ").map(str::to_string)).collect();
             let kind = |l: &str| -> Option<String> {
                 let t = l.trim();
                 if t.starts_with("fails ") {
