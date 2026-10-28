@@ -25,7 +25,7 @@ letter. Six misses hang the man.
 
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
-| Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 278, 243, 18 | hand |
+| Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 290, 243, 19 | hand |
 | Bare bodies | `bare/src/hangman.brs`, `bare/src/hangman/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 309, 181, 44, 3 | hand, as the Y compiler would lower the source |
 | Constraint files | `bare/src/*.constraints.json` (53 subjects, 20 clauses) | 432 | the same, then `bare-rust libfmt` for the canonical form |
 | Y facts | `bare/y-facts.json` | 518 | the same |
@@ -50,7 +50,7 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | An import by path, `from hangman import setup.parse_word_list, console_play.play` | `use hangman_example::hangman::setup::Word;` and so on | — | the same |
 | `lower_snake_case` type and case names (`guess_error`, `guess_error.not_one_letter`) | `GuessError`, `NotOneLetter`: the lowering's one renaming, to Rust's casing | Rust names | the same |
 | A constant group, `constants game_rules:` with `allowed_misses is count<element> = 6` | a module `game_rules` holding `const ALLOWED_MISSES = 6;`; uses are `game_rules::ALLOWED_MISSES` | a `module` subject and its `const` subjects | the same |
-| `type word is string where letters_only = value.matches(pattern"^[a-z]*$") and long_enough = ...` | `struct Word(_)` and a constructor that checks each constraint in order | two `invariant` clauses, with status `lifted` by the constructor | a newtype with `Word::new(..) -> Result<Word, ConstraintViolation>` |
+| `type word is string:` with the block `where letters_only = value.matches(pattern"^[a-z]*$") and long_enough = ...` | `struct Word(_)` and a constructor that checks each constraint in order | two `invariant` clauses, with status `lifted` by the constructor | a newtype with `Word::new(..) -> Result<Word, ConstraintViolation>` |
 | `structure` with fields `word is word`, private to the module: `pub(super)` from the facet's Rust module; a constant group used as a closed type (`outcome`, `verdict` and the failures `word_list_error`, `guess_error`: named values with no order, so not enumerations); a `type` with `case`s that carry data (`play_error`, `case console(error is console_error)`) | `struct`; `enum` with unit variants; `enum` with named fields | `fields`, `variants` | the same, deriving the structural equality Y always derives |
 | Blocks: a colon and indentation | braces, as Rust has | — | the same |
 | `switch` with named arms, `case valid = result.ok(parsed):`, the statements beneath | `match`, each arm marked `// y: #valid` | `y-facts.json` `decisions`, with `kind` `switch`: each arm's name, Y line and bare line | the same, with the comment |
@@ -59,9 +59,9 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | A `mutable` parameter and no `with` | — | `no io`, `no clock`, `no randomness`, `mutates only game.hits, game.misses` | — |
 | `with console, random, forever`, typed in the documentation | three more parameters | their types and access; `effects only console, random`; the clause also in `y-facts.json` `capabilities` | `&mut Console, &mut Random, &Forever` |
 | `with system` on the entry point | `System::root()` | `y-facts.json` `capabilities` | the same |
-| a `where name = (p)` precondition | `require(p, "hangman::f#name")` | a `require` clause, status `lifted` by that call | a run-time check whose failure is a fault (a panic naming the construct) |
-| `invariant name = (p)` on a structure | `invariant(p, "hangman::Game#name")` after the one write that can break it | an `invariant` clause on the type | the same |
-| A decision: `if a = (p):`, `else if b = (q):`, `else c:`, or `while a = (p):` with `else c:` after the loop, every branch on its own line and named | `if p { // y: #a`, `} else if q { // y: #b`, `} else { // y: #c`; after a `while`, a `// y: #c` comment | `y-facts.json` `decisions`: each decision's branches, with the Y line and the bare line of each | the same, with the comment |
+| a `where name = p` precondition | `require(p, "hangman::f#name")` | a `require` clause, status `lifted` by that call | a run-time check whose failure is a fault (a panic naming the construct) |
+| `invariant name = p` on a structure | `invariant(p, "hangman::Game#name")` after the one write that can break it | an `invariant` clause on the type | the same |
+| A decision: `if a = p:`, `else if b = q:`, `else c:`, or `while a = p:` with `else c:` after the loop, every branch on its own line and named | `if p { // y: #a`, `} else if q { // y: #b`, `} else { // y: #c`; after a `while`, a `// y: #c` comment | `y-facts.json` `decisions`: each decision's branches, with the Y line and the bare line of each | the same, with the comment |
 | A value chosen by a condition, which Y's blocks cannot give: a small function with a named result, `part(misses: misses, needed: 1, mark: "O")`, whose branches `return drawn = mark` and `return drawn = " "` | the same | — | the same |
 | A condition that narrows (`if not_one_rune = (letter == optional.none): fail ...`) | `let Some(letter) = letter else { ... }` | — | let-else, so rustc checks the narrowing |
 | `forever because "..."` | the `&Forever` argument of the call that waits | `y-facts.json` `claims` | `console.read_line(forever)` |

@@ -128,9 +128,9 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
                 let opens = if switch {
                     (y.trim_start().starts_with(&format!("case {name} = ")) && y.ends_with(':')) || (k > 0 && y.trim() == format!("else {name}:"))
                 } else if k == 0 {
-                    y.contains(&format!(" {name} = (")) && y.trim_end().ends_with("):")
+                    y.contains(&format!(" {name} = ")) && y.trim_end().ends_with(':')
                 } else {
-                    y.contains(&format!("else if {name} = (")) || y.trim() == format!("else {name}:")
+                    (y.contains(&format!("else if {name} = ")) && y.trim_end().ends_with(':')) || y.trim() == format!("else {name}:")
                 };
                 assert!(opens, "{function}#{name}: not at {}: `{y}`", b["y"]);
                 assert!(at(b["bare"].as_str().unwrap()).contains(&format!("#{name}")), "{function}#{name}: not at {}", b["bare"]);
@@ -146,7 +146,7 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
         assert!(at(c["y"].as_str().unwrap()).contains(what), "copy of {what}: not at {}", c["y"]);
         assert!(at(c["bare"].as_str().unwrap()).contains("// y: a copy"), "copy of {what}: not marked at {}", c["bare"]);
     }
-    // every named decision of the Y source is listed: `if name = (`, `while name = (`, `case name = ` and `else name:`
+    // every named decision of the Y source is listed: `if name = …:`, `while name = …:`, `case name = …:` and `else name:`
     let mut in_source = BTreeSet::new();
     for y in ["y/src/hangman.y", "y/src/main.y"] {
         let mut function = String::new();
@@ -156,7 +156,7 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
                 function = words[i + 1].split('(').next().unwrap().to_string();
             }
             for (i, w) in words.iter().enumerate() {
-                if (*w == "if" || *w == "while") && words.get(i + 2) == Some(&"=") && words.get(i + 3).is_some_and(|x| x.starts_with('(')) {
+                if (*w == "if" || *w == "while") && words.get(i + 2) == Some(&"=") && line.trim_end().ends_with(':') {
                     in_source.insert(format!("{function}#{}", words[i + 1]));
                 }
                 if i == 0 && *w == "case" && words.get(2) == Some(&"=") {
@@ -230,6 +230,90 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
     }
     let covered: BTreeSet<String> = facts["tests"].as_object().unwrap().values().flat_map(|t| t["covers"].as_array().unwrap().iter().map(|c| c.as_str().unwrap().to_string())).collect();
     assert_eq!(covered, outcomes, "the tests and the outcomes of the module differ");
+    // documentation roles of one kind sit together, and one blank line separates the kinds (a lint rule of Y § 3.2)
+    for y in ["y/src/hangman.y", "y/src/main.y"] {
+        let source = read(&dir.join(y));
+        let lines: Vec<&str> = source.lines().collect();
+        let is_rule = |l: &str| l.trim().len() >= 3 && l.trim().chars().all(|c| c == '-');
+        let mut i = 0;
+        while i < lines.len() {
+            if !is_rule(lines[i]) {
+                i += 1;
+                continue;
+            }
+            let end = i + 1 + lines[i + 1..].iter().position(|l| is_rule(l)).unwrap();
+            let indent = lines[i].len() - lines[i].trim_start().len();
+            let header: Vec<&str> = lines[end + 1..].iter().copied().take_while(|l| !l.trim().is_empty()).scan(false, |done, l| {
+                if *done { return None; }
+                *done = l.trim_end().ends_with(':');
+                Some(l)
+            }).collect();
+            let text = header.join(" ");
+            let params: Vec<String> = text.split_once('(').and_then(|(_, r)| r.split_once(')')).map(|(p, _)| p.split(',').map(|x| x.trim().trim_start_matches("mutable ").to_string()).collect()).unwrap_or_default();
+            let result = text.split_once(" returns ").map(|(_, r)| r.split_whitespace().next().unwrap().to_string());
+            let caps: Vec<String> = header.iter().map(|l| l.trim()).filter(|l| l.starts_with("with ") && !l.contains('=')).flat_map(|l| l[5..].split(',').map(|c| c.trim().trim_end_matches(':').to_string())).collect();
+            let kind = |l: &str| -> Option<String> {
+                let t = l.trim();
+                if t.starts_with("fails ") {
+                    return Some("fails".into());
+                }
+                let name = t.split_once(':')?.0;
+                if name.is_empty() || !name.chars().all(|c| c.is_ascii_lowercase() || c == '_') {
+                    return None;
+                }
+                Some(if params.iter().any(|p| p == name) { "parameter".into() } else if result.as_deref() == Some(name) { "result".into() } else if caps.iter().any(|c| c == name) { "capability".into() } else { format!("role {name}") })
+            };
+            let (mut previous, mut blanks): (Option<String>, usize) = (None, 0);
+            for (k, l) in lines[i + 1..end].iter().enumerate() {
+                let at = i + 2 + k;
+                if l.trim().is_empty() {
+                    blanks += 1;
+                } else if l.len() - l.trim_start().len() > indent {
+                    blanks = 0;
+                } else if let Some(this) = kind(l) {
+                    if let Some(before) = &previous {
+                        let want = usize::from(*before != this);
+                        assert_eq!(blanks, want, "{y}:{at}: {blanks} blank lines between a {before} and a {this}, not {want}");
+                    }
+                    (previous, blanks) = (Some(this), 0);
+                } else {
+                    (previous, blanks) = (None, 0);
+                }
+            }
+            i = end + 1;
+        }
+    }
+    // no parentheses around a single element: a name, a literal, a field path, an index or a call (a lint rule of Y § 3.1)
+    for y in ["y/src/hangman.y", "y/src/main.y", "y/src/hangman.test.y"] {
+        for (n, line) in read(&dir.join(y)).lines().enumerate() {
+            if line.trim_start().starts_with("--") {
+                continue;
+            }
+            let chars: Vec<char> = line.chars().collect();
+            for (k, c) in chars.iter().enumerate() {
+                let opens_group = *c == '(' && (k == 0 || !(chars[k - 1].is_alphanumeric() || "_)]>\"".contains(chars[k - 1])));
+                if !opens_group {
+                    continue;
+                }
+                let (mut depth, mut in_string, mut grouped) = (0, false, false);
+                for d in &chars[k..] {
+                    match d {
+                        '"' => in_string = !in_string,
+                        '(' | '[' if !in_string => depth += 1,
+                        ')' | ']' if !in_string => {
+                            depth -= 1;
+                            if depth == 0 {
+                                break;
+                            }
+                        }
+                        ' ' | ',' if !in_string && depth == 1 => grouped = true,
+                        _ => {}
+                    }
+                }
+                assert!(grouped, "{y}:{}: parentheses around a single element: `{}`", n + 1, line.trim());
+            }
+        }
+    }
     // no `else` goes without a name
     for y in ["y/src/hangman.y", "y/src/main.y", "y/src/hangman.test.y"] {
         assert!(!read(&dir.join(y)).lines().any(|l| l.trim() == "else:"), "{y}: an `else` without a name");

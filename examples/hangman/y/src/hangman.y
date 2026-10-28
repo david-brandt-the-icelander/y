@@ -20,9 +20,9 @@ public facet setup:
 
     why: A player must be able to type and see every letter, and a short word is too easy to guess.
     ------------------------------------------------------------------------------------------------------------
-    type word is string
-            where letters_only = value.matches(pattern"^[a-z]*$") and
-                  long_enough = (value.count() >= 4)
+    type word is string:
+        where letters_only = value.matches(pattern"^[a-z]*$") and
+              long_enough = (value.count() >= 4)
 
 
     -- Why a word list cannot be played with.
@@ -35,7 +35,9 @@ public facet setup:
     Reads a word list.
 
     text: The words, separated by spaces, as string.
+
     words: Every word of the list, in order, as list<word>.
+
     fails word_list_error.empty: The list has no words.
     fails word_list_error.not_a_word: A piece of the list is not a `word`: it has a character other than `a` to `z`, or
       fewer than four.
@@ -44,7 +46,7 @@ public facet setup:
         found = list.new()
 
         for piece in text.split(" "):
-            if blank = (piece.is_empty()):
+            if blank = piece.is_empty():
                 continue
             else has_text:
                 switch word.new(piece.to_string()):
@@ -53,7 +55,7 @@ public facet setup:
                     case invalid = result.err(_):
                         fail word_list_error.not_a_word
 
-        if empty = (found.is_empty()):
+        if empty = found.is_empty():
             fail word_list_error.empty
         else has_words:
             return words = found
@@ -94,6 +96,7 @@ public facet rounds:
     Starts a game.
 
     word: The word the player must find, as word.
+
     started: A game with nothing guessed, as game.
     ------------------------------------------------------------------------------------------------------------
     function new_game(word) returns started:
@@ -104,13 +107,14 @@ public facet rounds:
     Says whether a game is won, lost or still going.
 
     game: The game to judge, as game.
+
     standing: Lost once the player has used up the misses allowed, won once every letter of the word is found, and
       playing otherwise, as outcome.
     ------------------------------------------------------------------------------------------------------------
     function outcome_of(game) returns standing:
         if hanged = (game.misses.count() == game_rules.allowed_misses):
             return standing = outcome.lost
-        else if solved = (game.word.runes().to_set().is_subset_of(game.hits)):
+        else if solved = game.word.runes().to_set().is_subset_of(game.hits):
             return standing = outcome.won
         else undecided:
             return standing = outcome.playing
@@ -121,7 +125,9 @@ public facet rounds:
 
     game: The game, which gains the letter, as game.
     line: What the player typed, without its line ending, as string.
+
     answer: Whether the letter is in the word, as verdict.
+
     fails guess_error.empty: The player typed nothing but spaces.
     fails guess_error.not_one_letter: The player typed more than one character, or one that is not a letter.
     fails guess_error.already_guessed: The letter was guessed before. The game is unchanged.
@@ -131,7 +137,7 @@ public facet rounds:
         trimmed = line.trim()
         letter = trimmed.to_lowercase().single_rune()
 
-        if nothing_typed = (trimmed.is_empty()):
+        if nothing_typed = trimmed.is_empty():
             fail guess_error.empty
         else if not_one_rune = (letter == optional.none):
             fail guess_error.not_one_letter
@@ -140,7 +146,7 @@ public facet rounds:
             fail guess_error.not_one_letter
         else if repeated = (game.hits.contains(letter) or game.misses.contains(letter)):
             fail guess_error.already_guessed
-        else if in_word = (game.word.runes().contains(letter)):
+        else if in_word = game.word.runes().contains(letter):
             game.hits.insert(letter)
             return answer = verdict.hit
         else not_in_word:
@@ -154,6 +160,7 @@ public facet display:
     Shows the word as the player sees it.
 
     game: The game, as game.
+
     shown: Each letter of the word, found or not, separated by spaces (`_ o _ e`), as string.
     ------------------------------------------------------------------------------------------------------------
     function masked(game) returns shown:
@@ -168,6 +175,7 @@ public facet display:
     Draws the gallows, with one more part of the man for each miss.
 
     misses: How many wrong guesses the player has made, as count<element>.
+
     picture: The drawing, seven lines high, as string.
     ------------------------------------------------------------------------------------------------------------
     function gallows(misses) returns picture
@@ -195,10 +203,11 @@ Shows one letter of the word: the letter once it is found, and an underscore unt
 
 letter: The letter of the word, as rune.
 hits: The letters found so far, as set<rune>.
+
 shown: What the player sees in its place, as rune.
 ----------------------------------------------------------------------------------------------------------------
 function shown_rune(letter, hits) returns shown:
-    if known = (hits.contains(letter)):
+    if known = hits.contains(letter):
         return shown = letter
     else unknown:
         return shown = '_'
@@ -210,6 +219,7 @@ One part of the man, drawn once the player has missed often enough.
 misses: How many wrong guesses the player has made, as count<element>.
 needed: How many misses draw this part, as count<element>.
 mark: The character that draws it, as string.
+
 drawn: The mark, or a space while the part is not drawn yet, as string.
 ----------------------------------------------------------------------------------------------------------------
 function part(misses, needed, mark) returns drawn:
@@ -231,9 +241,11 @@ public facet console_play:
     Plays one game at the console, with a word chosen at random, until it is won or lost.
 
     words: The words to choose from, as list<word>.
+
     console: Where the game is shown and the guesses are read, as console.
     random: What chooses the word, as random.
     forever: The right to wait for the player as long as they take, as forever.
+
     fails play_error.input_closed: The console closed before the game ended.
     fails play_error.console: The console could not be read or written.
     ------------------------------------------------------------------------------------------------------------

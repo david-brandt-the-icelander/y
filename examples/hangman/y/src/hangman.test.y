@@ -207,9 +207,9 @@ test a_player_is_told_what_was_wrong
     when:
         play(words)?
     then:
-        assert told_to_type = (console.written().contains("Type a letter."))
-        assert told_not_one = (console.written().contains("\"ab\" is not one letter."))
-        assert told_repeated = (console.written().contains("You have already guessed r."))
+        assert told_to_type = console.written().contains("Type a letter.")
+        assert told_not_one = console.written().contains("\"ab\" is not one letter.")
+        assert told_repeated = console.written().contains("You have already guessed r.")
         assert still_won = (console.written().last() == optional.some("You win! The word was rope."))
 
 

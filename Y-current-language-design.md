@@ -137,6 +137,7 @@ Unless otherwise stated, syntax in this document is **illustrative rather than f
 ```y
 ------------------------------------
 x: The number to square, as int64.
+
 squared: x times x, as int64.
 ------------------------------------
 function square(x) returns squared:
@@ -150,6 +151,7 @@ With several paths:
 x: The number to limit, as int64.
 minimum: The smallest allowed, as int64.
 maximum: The largest allowed, as int64.
+
 clamped: x, moved into the range, as int64.
 --------------------------------------------------------
 function clamp(x, minimum, maximum) returns clamped:

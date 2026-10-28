@@ -40,11 +40,15 @@ public facet holds:
     Holds one unit of an item for a buyer and asks for payment, exactly once.
 
     why: Stock is never oversold, and a transaction that retries never charges twice.
+
     item: The item being bought, as item_id.
     buyer: Who pays, and with what, as buyer.
+
     hold: The hold, waiting for the charge to be confirmed, as hold.
+
     inventory: The stock and the holds on it, as shared<inventory>.
     charges: Where charges are queued, as enqueue<charge_card>.
+
     fails hold_error.unknown_item: The item is not stocked here.
     fails hold_error.timed_out: No unit became free within five seconds.
     ----------------------------------------------------------------------------------------------------
@@ -333,6 +337,11 @@ person can judge: is five seconds right, and is this the behaviour the business 
 - Mixing operator families requires parentheses. Write `a + (b * c)` and `(a < b) and (c < d)`. Chains of one
   operator need none (`a + b + c`). Chained comparisons (`a < b < c`) are rejected. A reader should never have to
   recall a precedence table.
+- **Parentheses around a single element are a lint error,** which formatting fixes. A name, a literal, a field path,
+  an index or a call needs none: `if blank = piece.is_empty():`, not `if blank = (piece.is_empty()):`. A comparison,
+  an arithmetic or boolean expression, and `not` keep theirs where a named condition binds them:
+  `if reached = (misses >= needed):`. Parentheses are there to show grouping, and where nothing is grouped they
+  only add noise.
 - `/` is defined only on fractional types.
   - Integer division is spelled with the rounding it performs: `divide_floor`, `divide_truncated`, `divide_euclidean`,
     or `divide_exact`, which fails with `inexact` if there would be a remainder.
@@ -395,6 +404,7 @@ closures (`closure … closes … over …`) both required:
 Whether someone has signed in lately.
 
 user: The person, as user.
+
 active: Whether they have, as boolean.
 ----------------------------------------------------
 is_active = lambda is_active(user) returns active
@@ -522,6 +532,7 @@ public facet rounds:
     Starts a game.
 
     word: The word the player must find, as word.
+
     started: A game with nothing guessed, as game.
     ----------------------------------------------------------------------------
     function new_game(word) returns started:
@@ -588,7 +599,9 @@ Takes money out of an account.
 
 account: The account to debit, as account.
 amount: How much to take, as money<isk>.
+
 debit: A receipt for the debit, as receipt.
+
 fails withdraw_error.insufficient_funds: The balance is lower than the amount.
 --------------------------------------------------------------------------------
 function withdraw(mutable account, amount) returns debit fails withdraw_error
@@ -606,6 +619,26 @@ function withdraw(mutable account, amount) returns debit fails withdraw_error
 | `satisfies:` | A `y:` link to the requirement or journey this implements | Optional |
 | `see:` | A `y:` link to a related declaration or document | Optional |
 | `gap:` / `defect:` / `blocked:` | Unfinished or broken behaviour (§ 3.16) | Where it applies |
+
+**Roles of one kind sit together, and one blank line separates the kinds.** The parameters form one group, the
+result another, then the capabilities, the failures, and each other role (`why:`, `see:`, …). Inside a group the
+lines follow one another directly; between two groups exactly one blank line is required. A missing or extra blank
+line is a lint error, which formatting fixes. A reader sees at a glance what goes in, what comes out, what is held
+and what can go wrong:
+
+```y
+--------------------------------------------------------------------
+Reads a word list.
+
+text: The words, separated by spaces, as string.
+
+words: Every word of the list, in order, as list<word>.
+
+fails word_list_error.empty: The list has no words.
+fails word_list_error.not_a_word: A piece of the list is not a `word`.
+--------------------------------------------------------------------
+function parse_word_list(text) returns words fails word_list_error:
+```
 
 The compiler checks the documentation against the declaration:
 
@@ -690,13 +723,14 @@ all of them:
 ```y
 type quantity is int64 where positive = (value > 0)
 type email_address is string where has_one_at_sign = (value.count_of('@') == 1)
-type word is string
+type word is string:
     where letters_only = value.matches(pattern"^[a-z]*$") and
           long_enough = (value.count() >= 4)
 ```
 
-- A refined type is `type name is base where …`. Several restrictions are joined with `and`, each with its own name,
-  and a long list continues on the following lines, aligned under the first.
+- A refined type is `type name is base where …` on one line. Several restrictions are joined with `and`, each with
+  its own name. When they do not fit on one line, the header ends with a colon, `type word is string:`, and the
+  `where` clause is its block, indented beneath it, with each further restriction aligned under the first.
 
 - `quantity.new(n)` returns a `quantity`, and fails with `constraint_violation`.
 - A literal is checked at compile time: `ship(quantity: 0)` does not compile when the parameter is a `quantity`.
@@ -838,6 +872,7 @@ Finds where a value sits in a sorted list.
 
 target: The value to look for, as int64.
 items: The list to search, as sorted_list<int64>.
+
 position: The target's position, or nothing when it is absent, as index<element>?.
 --------------------------------------------------------
 function position_of(target, items) returns position:
@@ -930,10 +965,13 @@ into one clause:
 Exports one month's invoices as files.
 
 month: The month to export, as month.
+
 exported: How many invoices were written, as count<element>.
+
 invoices: The stored invoices, as store<invoice>.
 uploads: Where the files go, as file_system.
 clock: The time the export is stamped with, as clock.
+
 fails export_error.write_failed: A file could not be written.
 --------------------------------------------------------------------
 function export_invoices(month) returns exported fails export_error
@@ -1073,6 +1111,7 @@ hand you. There is no global state to reach.
 Takes the next job, from the pending queue first and from the retried queue when it is empty.
 
 job: The job to run, as job.
+
 jobs: The queues, as shared<job_queues>.
 ------------------------------------------------------------
 function take_job() returns job
@@ -1145,8 +1184,11 @@ command charge_card:
 Performs the charge; runs outside any transaction.
 
 command: The charge to make, as charge_card.
+
 charged: The payment gateway's receipt, as charge_receipt.
+
 gateway: The payment gateway, as http<payment_gateway>.
+
 fails charge_error.declined: The gateway refused the charge.
 ------------------------------------------------------------------------------------------------------------------------
 handler charge_card(command) returns charged fails charge_error
@@ -1176,10 +1218,13 @@ handler charge_card(command) returns charged fails charge_error
 Takes a held item from payment to shipment.
 
 hold: The hold to fulfil, as hold_id.
+
 shipped: The shipment, as shipment.
+
 orders: The stored orders, as store<order>.
 charges: Where charges are submitted, as submit<charge_card>.
 shipments: Where shipments are submitted, as submit<create_shipment>.
+
 fails fulfilment_error.payment_declined: The charge was refused.
 fails fulfilment_error.payment_unreachable: The charge could not be delivered.
 ------------------------------------------------------------------------------------------------
@@ -1217,7 +1262,9 @@ Takes money out of an account.
 
 account: The account to debit, as account.
 amount: How much to take, as money<isk>.
+
 debit: A receipt for the debit, as receipt.
+
 fails withdraw_error.insufficient_funds: The balance is lower than the amount.
 ----------------------------------------------------------------------------------------
 function withdraw(mutable account, amount) returns debit fails withdraw_error
@@ -1273,6 +1320,7 @@ Records that payment was requested for a new order.
 
 created: The new order, as order.created.
 charge: The charge command that was submitted, as command_id.
+
 pending: The order, waiting for payment, as order.payment_pending.
 ----------------------------------------------------------------------------
 transition request_payment(created, charge) returns pending:
@@ -1438,7 +1486,7 @@ Some things the compiler cannot check. Y does not pretend otherwise; it makes ea
 | `forever because "..."` | This wait is meant to be unbounded | `forever` |
 | `detach because "..." within 1h: ...` | This work may outlive its scope | `detach` |
 | `reveal(secret) because "..."` | This sensitive value may be seen here | `reveal` |
-| `assume name = (predicate) because "..."` | The prover may take this as true without proof | — |
+| `assume name = predicate because "..."` | The prover may take this as true without proof | — |
 | `allow(Y2031) because "..."` | This lint does not apply here | — |
 
 **How claims are handled.**
@@ -1484,6 +1532,7 @@ Together with claims and the coverage gate, this gives Y ai.lang's fifth invaria
 Computes the CRC-32 of some bytes.
 
 bytes: The bytes to check, as bytes.
+
 crc: Their CRC-32, as uint32.
 --------------------------------------------------------
 function checksum(bytes) returns crc:
