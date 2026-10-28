@@ -17,8 +17,5 @@ function main() fails play_error:
 
     words = compile parse_word_list(game_rules.word_list)
 
-    inject:
-            console = system.console()
-            random = system.random()
-            forever = system.forever()
-        play(words)?
+    inject(console = system.console(), random = system.random(), forever = system.forever()):
+        play(words) or fail

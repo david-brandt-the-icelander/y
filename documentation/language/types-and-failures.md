@@ -30,8 +30,8 @@ told about, because the compiler enumerates the cases.
 
   ```y
   type payment_result:
-      case approved(authorization: authorization)
-      case declined(reason: decline_reason)
+      case approved(authorization is authorization)
+      case declined(reason is decline_reason)
       case unavailable
   ```
 
@@ -45,23 +45,20 @@ told about, because the compiler enumerates the cases.
 
 ## Absence
 
-- ⚠️ `t?` is a value that is either a `t` or absent. It is a distinct type from `t`, there is no null,
-  and no `t` is implicitly an absent `t?` or the reverse.
-- ⚠️ `??` supplies a value for the absent case: `user.nickname ?? user.name` has type `string` where
-  `nickname` is `string?`.
-- ⚠️ Absence is matched like any other case where the two branches do more than substitute a value, and
-  `switch` over a `t?` is exhaustive in exactly the way it is over any sum type.
+- ⚠️ `optional<t>` is a value that is either a `t` or absent. It is a distinct type from `t`, there is no
+  null, and no `t` is implicitly an absent `optional<t>` or the reverse.
+- ⚠️ Absence is handled by a named decision, never by an operator: Y has no `??` default and no `?.`
+  reach-through. An `if` with a named `else`, or a `switch` over an `optional<t>`, which is exhaustive in
+  exactly the way it is over any sum type, gives each way through a name for tests and traces.
 
   ```y
   switch customer:
-      optional.some(found):
+      case present = optional.some(found):
           use(found)
-      optional.none:
+      case absent = optional.none:
           not_found()
   ```
 
-- ⚠️ `?.` reaches through absence: where `a` is `a_type?`, `a?.field` is the field's type made optional, and
-  the chain produces absence without evaluating the rest.
 
 ## Failure
 
@@ -74,21 +71,21 @@ told about, because the compiler enumerates the cases.
 
 - ⚠️ A failure is an ordinary typed value. There is no unwinding, no side channel, no ambient handler,
   and no way for a failure to leave a function whose signature does not name it.
-- ⚠️ `?` propagates: applied to a call that can fail with `e`, inside a function that also fails with
-  `e`, it yields the call's result on success and returns the failure unchanged otherwise.
+- ⚠️ `or fail` passes a failure on: after a call that can fail with `e`, inside a function that also
+  fails with `e`, it yields the call's result on success and fails with the failure unchanged otherwise.
 - ⚠️ Where the enclosing function's failure type is a sum type with exactly one case whose payload is
-  the inner failure type, `?` converts through that case, and the conversion is derived rather than
-  written.
+  the inner failure type, `or fail` converts through that case, and the conversion is derived rather than
+  written. `or fail as startup_error.database` names the case where the author wants it seen.
 
   ```y
   type startup_error:
-      case configuration(error: configuration_error)
-      case database(error: database_error)
-      case network(error: network_error)
+      case configuration(error is configuration_error)
+      case database(error is database_error)
+      case network(error is network_error)
 
   function startup() returns started fails startup_error:
-      configuration = load_configuration("app.json")?
-      database = connect(configuration.database)?
+      configuration = load_configuration("app.json") or fail
+      database = connect(configuration.database) or fail
       return started = application(configuration, database)
   ```
 
@@ -122,10 +119,10 @@ told about, because the compiler enumerates the cases.
 | A `switch` missing a case of a closed sum type | The missing cases, by name | ⚠️ |
 | An arm subsumed by an earlier arm | Which arm shadows it | ⚠️ |
 | Exhaustiveness claimed by a guarded arm alone | That the guard is not evidence, and which case is still uncovered | ⚠️ |
-| `?` where the enclosing signature names no compatible failure | The failure type produced and the failure type permitted | ⚠️ |
-| `?` where two cases of the enclosing failure type could wrap the inner one | Both candidates | ⚠️ |
+| `or fail` where the enclosing signature names no compatible failure | The failure type produced and the failure type permitted | ⚠️ |
+| `or fail` where two cases of the enclosing failure type could wrap the inner one | Both candidates | ⚠️ |
 | A case written without its type | The type to write before it | ⚠️ |
-| A `t` used where `t?` is expected, or the reverse | That absence is a distinct type | ⚠️ |
+| A `t` used where `optional<t>` is expected, or the reverse | That absence is a distinct type | ⚠️ |
 
 ## Where it lives
 

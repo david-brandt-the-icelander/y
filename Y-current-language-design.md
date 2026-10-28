@@ -180,7 +180,7 @@ attempts := attempts + 1
 ### 3.3 Optional values
 
 ```y
-customer?
+optional<customer>
 ```
 
 This represents either a `customer` or absence.
@@ -693,7 +693,7 @@ Illustrative direction:
 schema customer v3:
     id is customer_id
     name is string
-    email is email?
+    email is optional<email>
 ```
 
 Migration syntax remains open.

@@ -25,7 +25,7 @@ letter. Six misses hang the man.
 
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
-| Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 294, 244, 24 | hand |
+| Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 294, 244, 21 | hand |
 | Bare bodies | `bare/src/hangman.brs`, `bare/src/hangman/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 309, 181, 44, 3 | hand, as the Y compiler would lower the source |
 | Constraint files | `bare/src/*.constraints.json` (53 subjects, 20 clauses) | 432 | the same, then `bare-rust libfmt` for the canonical form |
 | Y facts | `bare/y-facts.json` | 518 | the same |
@@ -44,8 +44,8 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | `x` that the function keeps (`new_game(word)`) | the name | `type` `t` | `T` by value; the caller's last use moves it, and any other use is a copy |
 | `mutable x` in the signature, and `mutable x` at the call | the name; `&mut x` at the call | `type` `ref<t>`, `access` write/exclusive | `&mut T` |
 | A copy the compiler had to make (`new_game(words[chosen])`, where `words` is still read) | `.clone()`, marked `// y: a copy` | `y-facts.json` `copies` | the same |
-| `return answer = value`, `fail guess_error.empty`, `?` | `return Ok(value)` or the last expression, `return Err(E::Case { .. })`, `?` | `result.fails` | the same |
-| `?` converting through the one case that carries the failure | `?` | an `impl From` subject | `impl From<ConsoleError> for PlayError` |
+| `return answer = value`, `fail guess_error.empty`, `or fail` | `return Ok(value)` or the last expression, `return Err(E::Case { .. })`, `?` | `result.fails` | the same |
+| `or fail` converting through the one case that carries the failure | `?` | an `impl From` subject | `impl From<ConsoleError> for PlayError` |
 | A facet: `public facet setup:` makes its members visible to other modules, and its name is part of their paths (`hangman.setup.parse_word_list`); `shown_rune` and `part`, outside every facet, stay private | a module `mod setup { use super::*; … }`, so the Rust path keeps the facet too; the parent imports the facets it uses, `use self::{display::*, rounds::*, setup::*};`, so the members reach one another by their own names, as in Y | a `module` subject per facet, and `visible` on each member; `y-facts.json` `facets`: each facet, its path, its visibility and its members | `pub mod setup`; members `pub`, helpers private to `hangman`, which its facet modules can call |
 | An import by path, `from hangman import setup.parse_word_list, console_play.play` | `use hangman_example::hangman::setup::Word;` and so on | — | the same |
 | `lower_snake_case` type and case names (`guess_error`, `guess_error.not_one_letter`) | `GuessError`, `NotOneLetter`: the lowering's one renaming, to Rust's casing | Rust names | the same |
@@ -70,7 +70,7 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | `string` (and a read-only `string` parameter), `rune`, `list<t>`, `set<t>` | — | `text`, `ref<text>`, `Rune`, `list<T> as 'Vec'`, `set<T> as 'BTreeSet'` | `String`, `&str`, `y_runtime::Rune`, `Vec<T>`, `BTreeSet<T>` |
 | Interpolation, `"{name}"` and `"{game.word}"` | `format!("{name}")`, `format!("{}", game.word)` | — | the same |
 | A binding, `picture = gallows(…)`, including one that later changes; a change, `name := value` | `let`; `name = value` | — | `let`; `let mut`, which `weave` derived through rustc (19 of them); `name = value` |
-| `test name covers a, b:` with the sections `given:`, `inject:`, `when:`, `then:` | `#[test] fn name()`; a `?` in `given` or `when` lowers to `expect`; `fake console(input: [...])` to `Console::fake(...)`; each named check of `then`, `name = p`, to `assert!(p, "name")`, with the comment above it, if any, added to the message | `y-facts.json` `tests`: what each covers; repeated in a comment in the test | the same |
+| `test name covers a, b:` with the sections `given:`, `inject:`, `when:`, `then:` | `#[test] fn name()`; an `or fail` in `given` or `when` lowers to `expect`; `fake console(input: [...])` to `Console::fake(...)`; each named check of `then`, `name = p`, to `assert!(p, "name")`, with the comment above it, if any, added to the message | `y-facts.json` `tests`: what each covers; repeated in a comment in the test | the same |
 | Documentation: the `--` line, or the block between two rules of dashes, above a declaration, with roles; the types leave it for the signature | `///` with the roles as a list | — | the same |
 
 ## What had to be assumed
@@ -83,7 +83,7 @@ following:
   `random`, `file_system` and others, but not a terminal.
 - **The entry point** is `function main() fails e:`, whose body opens with `dependencies:` and `system` in the module `main`. It is in no facet, so it is
   private: the runtime calls it, and no module imports it.
-- **One `inject:` block can supply several capabilities,** one binding per line beneath it.
+- **One `inject(...)` can supply several capabilities:** `inject(console = ..., random = ..., forever = ...):`.
 - **Rune literals** are written `'z'`, as in `value.count_of('@')` in the proposal.
 - **Library names:** `set.of([...])`, `list.join(separator:)`, `string.single_rune()`, `string.split(...)`, `string.trim()`.
 - **Fakes for tests:** `fake console(input: [...], read_fails: ...)`, `fake random(seed: ...)` and `fake forever`.

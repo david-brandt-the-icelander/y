@@ -57,9 +57,9 @@ public facet holds:
                 inventory
                 charges
 
-        within 5s?:
+        within 5s or fail:
             atomic hold_one_unit:
-                stock = inventory.stock_of(item)?
+                stock = inventory.stock_of(item) or fail
 
                 if sold_out = (stock.available == 0):
                     retry
@@ -186,7 +186,7 @@ told this story in prose. Here it is in the proposed language.
         atomic hold_one_unit:
             -- ...
             stock.available := stock.available - 1
-            gateway.charge(method: buyer.payment_method, amount: stock.price)?
+            gateway.charge(method: buyer.payment_method, amount: stock.price) or fail
 ```
 
 **The compiler rejects it**, and the diagnostic names the replacement rather than only the prohibition — a rule this
@@ -196,12 +196,12 @@ strict gets worked around if it only says no:
 error[Y0412]: external effect inside a transaction
   --> src/shop/checkout.y:27:13
    |
-27 |             gateway.charge(method: buyer.payment_method, amount: stock.price)?
+27 |             gateway.charge(method: buyer.payment_method, amount: stock.price) or fail
    |             ^^^^^^^^^^^^^^ `http<payment_gateway>` performs network I/O
    |
    = why: `atomic hold_one_unit` may run more than once; this call cannot be undone, so it may happen more than once
    = fix: submit a durable command, which is persisted if and only if the transaction commits:
-          enqueue charge_card { hold: ..., amount: ..., method: ... }
+          enqueue charge_card(hold: ..., amount: ..., method: ...)
           (needs a capability of type `enqueue<charge_card>` in the `dependencies:` block; `y fix` adds it)
    = spec: y:spec/shared-state#no-external-effect
 ```
@@ -216,11 +216,11 @@ error[Y0301]: unbounded wait
 22 |                 retry
    |                 ^^^^^ waits until `inventory.stocks` changes, with no deadline above it
    |
-   = fix: bound the enclosing scope, e.g. `within 5s?: ...`; the expiry becomes a typed failure
+   = fix: bound the enclosing scope, e.g. `within 5s or fail: ...`; the expiry becomes a typed failure
 ```
 
-After `within 5s?:`, the compiler reports that the failure set now includes `expired` and that `hold_error` has
-no case carrying it. The agent adds `case timed_out(deadline: expired)`, and `y fix` pins the authority it inferred:
+After `within 5s or fail:`, the compiler reports that the failure set now includes `expired` and that `hold_error` has
+no case carrying it. The agent adds `case timed_out(deadline is expired)`, and `y fix` pins the authority it inferred:
 
 ```text
 $ y fix src/shop/checkout.y
@@ -237,7 +237,7 @@ supplies capabilities the same way production code receives them, and forces the
 test charges_once_when_the_transaction_retries
         covers hold_and_charge#in_stock:
     given:
-        widget = item_id.parse("widget")?
+        widget = item_id.parse("widget") or fail
         buyer = any<buyer>(seed: 11)
     inject:
             inventory = shared.new(inventory.stocked(item: widget, available: 1, price: 1_500isk))
@@ -245,11 +245,11 @@ test charges_once_when_the_transaction_retries
     faults:
         conflict at hold_and_charge#hold_one_unit, times: 2
     when:
-        hold = hold_and_charge(widget, buyer)?
+        hold = hold_and_charge(widget, buyer) or fail
     then:
         charged_once = (charges.committed().count() == 1)
         held_the_widget = (hold.item == widget)
-        no_stock_left = (inventory.snapshot().stock_of(widget)?.available == 0)
+        no_stock_left = (inventory.snapshot().available_of(widget) == 0)
 ```
 
 **The reviewer** does not open the diff first. They open the review packet, which is ordered by risk:
@@ -709,10 +709,15 @@ Referring to a case:
 
 **Absence.**
 
-- `t?` is a distinct type from `t`. Neither converts to the other implicitly.
-- `??` supplies a default, `?.` reaches through absence, and `switch` covers `optional.some(value)` and `optional.none`.
+- A value that may be absent has the type `optional<t>`, which is distinct from `t`. Neither converts to the other
+  implicitly.
+- **Absence is handled by a named decision, never by an operator.** There is no default operator (`??`) and no
+  operator that reaches through absence (`?.`). A program tests for absence with `if`, `else if` and `else`, or
+  `switch`es over `optional.some(value)` and `optional.none`, so every way through has a name that tests cover and
+  traces, logs and debuggers report. Such operators make code quicker to write and slower to read, maintain and
+  observe.
 - **A condition narrows.** In the branch of `if found = (user != optional.none):`, and in the `else present:` branch
-  of `if missing = (user == optional.none):`, `user` is a `user`, no longer a `user?`. Nothing is written for
+  of `if missing = (user == optional.none):`, `user` is a `user`, no longer an `optional<user>`. Nothing is written for
   this: every condition adds its predicate as a fact at the points it guards (constraint language § 11.1.1), and the type checker reads the fact.
   - The fact ends where the value may change: an assignment with `:=`, or a call that takes it `mutable`. A field path
     such as `order.customer` narrows the same way, until something may write to that path.
@@ -787,13 +792,18 @@ A function that can fail names its failure type in its signature: `returns debit
 
 - **A call's outcome is a built-in two-case sum,** `result.ok(value)` or `result.err(failure)`. This settles the September open
   question: one `switch` ranges over success and failure together, and an optional result that can fail (`as
-  receipt?` with `fails e`) composes without a special rule. Core IR still records every propagation edge explicitly,
+  optional<receipt>` with `fails e`) composes without a special rule. Core IR still records every propagation edge explicitly,
   so *which failures can escape, and from where* is always answerable.
 - Inside the function, success is `return debit = value`, never `result.ok(value)`, and failure is written
-  `fail withdraw_error.insufficient_funds(shortfall: gap)`. Every failure exit is spelled `fail` or `?`, so every one of them can be
-  found with a search, and there is exactly one way to write each.
-- `?` propagates a failure unchanged, or converts it through the single case of the enclosing failure type that
-  carries it. If two cases could carry it, the program is rejected and the error names both candidates.
+  `fail withdraw_error.insufficient_funds(shortfall: gap)`. Every failure exit is spelled with `fail`, so a search for it finds every
+  one of them, and there is exactly one way to write each.
+- **`or fail` after a call passes its failure on:** `play(words) or fail`. On success the expression is the call's
+  value (`stock = inventory.stock_of(item) or fail`). On failure the function stops and fails, with the failure
+  unchanged, or converted through the single case of the enclosing failure type that carries it. If two cases could
+  carry it, the program is rejected and the error names both candidates.
+- **`or fail as <case>` names the conversion** where the author wants it seen:
+  `typed = console.read_line() or fail as play_error.console`. The named case must be the one the conversion would
+  choose, or one that carries the failure when two could; it is optional otherwise.
 - A failure leaving an `atomic` block aborts the transaction, which leaves no trace (§ 3.9). This is the July 2026
   rollback-on-failure rule, carried into the language.
 
@@ -871,32 +881,39 @@ This proposal restores the rule and extends it to every predicate in the languag
   wrong. This is ai.lang's "zoom", as a view rather than a data model.
 
 ```y
---------------------------------------------------------
+----------------------------------------------------------------
 Finds where a value sits in a sorted list.
 
 target: The value to look for, as int64.
 items: The list to search, as sorted_list<int64>.
 
-position: The target's position, or nothing when it is absent, as index<element>?.
---------------------------------------------------------
+position: The target's position, or nothing when it is absent, as optional<index<element>>.
+----------------------------------------------------------------
 function position_of(target, items) returns position:
-    low = items.first_index()?
-    high = items.last_index()?
-
-    while searching = (low <= high):
-        middle = low.midpoint(high)
-
-        if found = (items[middle] == target):
-            return position = optional.some(middle)
-        else if go_right = (items[middle] < target):
-            low := middle.next()
-        else go_left:
-            high := middle.previous()?
-    else exhausted:
+    if empty = items.is_empty():
         return position = optional.none
+    else has_items:
+        low = items.first_index()
+        high = items.last_index()
+
+        while searching = (low <= high):
+            middle = low.midpoint(high)
+
+            if found = (items[middle] == target):
+                return position = optional.some(middle)
+            else if go_right = (items[middle] < target):
+                low := middle.next()
+            else if at_start = (middle == items.first_index()):
+                return position = optional.none
+            else go_left:
+                high := middle.previous()
+        else exhausted:
+            return position = optional.none
 ```
 
-In a function whose result is optional, `?` on an absent value returns with the result absent.
+`first_index` and `last_index` require a list that is not empty, and `previous` an index past the first. The
+branches `has_items` and `go_left` already establish both, so the calls need no checks of their own (§ 3.3,
+narrowing). Every way the search can end is a named branch.
 
 The parameter is a `sorted_list`, not a `list` with a `where sorted` precondition. Where a property can be carried by
 a type, Y prefers the type (§ 1.5, rule 2).
@@ -1020,32 +1037,30 @@ needs no annotation because the missing clause is the annotation. Contract expre
 
   The block is part of the signature, though it sits beneath the header: `y explain`, the review packet and the
   compatibility signature read it with the parameters.
-- **`inject`, at the sending site,** supplies it. `inject:` opens a block. Its bindings come first, one per line,
-  indented eight spaces as a header's continuation is, and the statements follow, indented four. Every call in the
+- **`inject`, at the sending site,** supplies it. `inject(…):` names what it injects in its parentheses, as a call
+  names its arguments, and the block beneath it holds only the statements that receive them. Every call in the
   block that needs a `console` or a `random` receives these:
 
   ```y
-  inject:
-          console = system.console()
-          random = system.random()
-      play(words)?
+  inject(console = system.console(), random = system.random()):
+      play(words) or fail
   ```
 
-  A test's `inject:` section has the same bindings, usually fakes (`console = fake console(input: ["r"])`), and no
-  statements.
+  A test's `inject:` section holds only the injectables, one per line beneath it, usually fakes
+  (`console = fake console(input: ["r"])`).
 - A callee's dependencies are satisfied, by type, from the capabilities in the caller's scope: the caller's own
-  `dependencies:` block and any enclosing `inject:` block. Call sites do not spell them out, so adding a capability to a
+  `dependencies:` block and any enclosing `inject(…)` block. Call sites do not spell them out, so adding a capability to a
   deep function does not edit every call.
 - Every function between the entry point and that deep function must still *declare* the capability, because a
   declaration is where a reviewer looks. `y fix` maintains those clauses.
 - When two capabilities in scope could satisfy a requirement, the call must choose:
-  an `inject:` block around the call, `mailer = receipts_mailer`.
+  `inject(mailer = receipts_mailer):` around the call.
 
 **Deriving capabilities.**
 
 - The entry point receives the root, `system`, and every other capability derives from it.
 - There is no way to construct a capability from nothing, read one from a global, or recover one from a type.
-- Attenuation only narrows: an `inject:` block binding `uploads = uploads.subtree(path"/var/app/exports")`. This is the single place
+- Attenuation only narrows: `inject(uploads = uploads.subtree(path"/var/app/exports")): ...`. This is the single place
   where a name may be rebound in an inner scope, and it is allowed because it can only reduce authority.
 - A package manifest lists the root capabilities a program may request. A package's public functions declare what
   they require, so a dependency upgrade that widens required authority is a review item, not a surprise. This is
@@ -1080,10 +1095,10 @@ the language's job.
 
 **Every wait is bounded, and the bound is checked.**
 
-- `within 30s?: ...` sets an absolute deadline shared by everything inside it. `queue.receive() within 5s` bounds a
+- `within 30s or fail: ...` sets an absolute deadline shared by everything inside it. `queue.receive() within 5s` bounds a
   single operation.
 - A nested `within` can only shorten the deadline, never extend it.
-- Expiry is a typed failure (`expired`). `within 5s?:` propagates it, as `?` after a call propagates a failure, so the
+- Expiry is a typed failure (`expired`). `within 5s or fail:` passes it on, as `or fail` after a call does, so the
   exit is spelled where the reader looks.
 - A suspension with no finite bound above it does not compile. A wait that is genuinely indefinite is written
   `forever because "..."`, which requires the `forever` capability and is a claim (§ 3.15).
@@ -1220,7 +1235,7 @@ command charge_card:
         on_abandon: compensate release_hold(hold: hold)
 
 
-------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------
 Performs the charge; runs outside any transaction.
 
 command: The charge to make, as charge_card.
@@ -1230,13 +1245,13 @@ charged: The payment gateway's receipt, as charge_receipt.
 gateway: The payment gateway, as http<payment_gateway>.
 
 fails charge_error.declined: The gateway refused the charge.
-------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------
 handler charge_card(command) returns charged fails charge_error:
     dependencies:
             gateway
 
-    within 30s?:
-        return charged = gateway.charge(idempotency_key: command.id, method: command.method, amount: command.amount)?
+    within 30s or fail:
+        return charged = gateway.charge(idempotency_key: command.id, method: command.method, amount: command.amount) or fail
 ```
 
 - `enqueue` submits a command from inside a transaction, which is the only place it may appear. The command is durable
@@ -1256,7 +1271,7 @@ handler charge_card(command) returns charged fails charge_error:
 **Workflows** are durable, long-running functions:
 
 ```y
-------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------
 Takes a held item from payment to shipment.
 
 hold: The hold to fulfil, as hold_id.
@@ -1269,18 +1284,18 @@ shipments: Where shipments are submitted, as submit<create_shipment>.
 
 fails fulfilment_error.payment_declined: The charge was refused.
 fails fulfilment_error.payment_unreachable: The charge could not be delivered.
-------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------
 workflow fulfil(hold) returns shipped fails fulfilment_error:
     dependencies:
             orders
             charges
             shipments
 
-    order = orders.for_hold(hold)?
+    order = orders.for_hold(hold) or fail
 
     switch submit charge_card(hold: hold, amount: order.total, method: order.payment_method):
         case charged = result.ok(receipt):
-            return shipped = submit create_shipment(order: order.id, receipt: receipt.id)?
+            return shipped = submit create_shipment(order: order.id, receipt: receipt.id) or fail
         case declined = result.err(undelivered.failed(reason)):
             fail fulfilment_error.payment_declined(reason)
         case abandoned = result.err(undelivered.abandoned(abandonment)):
@@ -1393,7 +1408,7 @@ A record that outlives its process has a second type: the one on disk. Y makes t
 schema customer v3:
     key id is customer_id
     name is string
-    email is email_address?
+    email is optional<email_address>
     marketing_consent is consent
 
 
@@ -1873,7 +1888,10 @@ premise changed, or because the iteration that tried them showed their cost. The
 | Unnamed results and an implicit last-expression result | Earlier drafts of this proposal | `returns name`, and `return name = value` | A result has a name, which its documentation explains, and every exit is a visible `return` or `fail` |
 | References in source: `&t`, `&mutable t`, `move`, borrowing results, `copy` types, `reference_counted<t>`, `weak<t>`; "no clone the programmer did not write" | September → earlier drafts of this proposal | Value semantics, `mutable` at both ends of a call; the compiler chooses borrows, moves and copies, and reports each copy | Ownership syntax is about memory, not intent, and is where agents fail most; value semantics keep what borrowing was for |
 | `match` with `pattern => statement` arms | Earlier drafts of this proposal | `switch`, each arm `case name = pattern:` with its block beneath, as in the toolchain's language reference § 7 | One way to write a block; no `=>`; every outcome named |
-| `with` for capabilities, at both ends | Earlier drafts of this proposal | `dependencies:` where a function declares what it needs, `inject:` where a caller supplies it, each a block with one name per line, after YAPL v0's `dependency` and `inject` | One keyword per side of the injection; a reader sees which side a line is on |
+| `with` for capabilities, at both ends | Earlier drafts of this proposal | `dependencies:` where a function declares what it needs, `inject:` where a caller supplies it, after YAPL v0's `dependency` and `inject` | One keyword per side of the injection; a reader sees which side a line is on |
+| `?` to pass a failure on | Earlier drafts of this proposal | `or fail`, and `or fail as <case>` to name the conversion | A symbol a reader has to know; with the words, every failure exit contains `fail` |
+| `??` for a default and `?.` through absence | September → earlier drafts of this proposal | A named decision: `if`, `else if`, `else`, or `switch` | Each hides a branch that tests, traces and debuggers cannot name |
+| `t?` for an optional type | September → earlier drafts of this proposal | `optional<t>` | Spelled as the type it is, as `optional.some` and `optional.none` already were |
 | `public` on any declaration | Earlier drafts of this proposal | `public facet`, as in the toolchain; private by default | Visibility is written in one place per group, and a module's surface reads as a list of facets |
 | A case written `.case` where the type is known | September → earlier drafts of this proposal | `type_name.case` everywhere, as YAPL had it (`color.red`) | The reader never infers which type a case belongs to |
 | `let` | Earlier drafts of this proposal | `name = value` declares; `name := value` changes, as in YAPL | Every change to a value is spelled one way and found by one search |
@@ -1889,11 +1907,11 @@ premise changed, or because the iteration that tried them showed their cost. The
 | --- | --- | --- | --- |
 | Classes, factory methods, singletons, properties, inheritance; facets' override and telemetry rules | YAPL → toolchain | Structures, sum types, traits, `implementation`; facets that carry visibility only | Every iteration with more kinds spent its effort reconciling them; facets carried visibility, telemetry and override rules at once |
 | Exceptions, `throws`, wrapping in `unexpected_exception` | YAPL → April 2026 | `fails e`, and a two-case sum at the call | Values can be matched exhaustively; wrapping hid the failure set |
-| Ambient `using` contexts, context stacks, affinity-based name lookup | YAPL → toolchain | Capabilities in `dependencies:` and `inject:` | Action at a distance; March 2026 had already reversed it ("no global or thread-local state") |
+| Ambient `using` contexts, context stacks, affinity-based name lookup | YAPL → toolchain | Capabilities in `dependencies:` and `inject(…)` | Action at a distance; March 2026 had already reversed it ("no global or thread-local state") |
 | Transactional memory for every variable; reference tracing; one OS thread per process as a guarantee | YAPL → July 2026 | `shared<t>` only; ownership; runtime's choice | Costs paid by code that shares nothing; semantics should not depend on the scheduler |
 | Affinities and placements in types | Toolchain | Physical parameters behind Core IR | Runtime detail in source, which agents misuse |
 | Comments with runtime meaning (interpolated, traced) | YAPL → toolchain | `log` statements | A comment that runs surprises the reviewer |
-| Two kinds of absence (`nada`/`nothing` and `undefined`) | Toolchain → April 2026 | `t?` and definite initialisation | Definite initialisation makes "not yet provided" unrepresentable |
+| Two kinds of absence (`nada`/`nothing` and `undefined`) | Toolchain → April 2026 | `optional<t>` and definite initialisation | Definite initialisation makes "not yet provided" unrepresentable |
 | `afterCommit` | September 2026 | `enqueue`; buffered telemetry | Redundant if durable, a bug if not |
 | Module-level `shared` declarations | September 2026 | `shared<t>` values passed down | Global state by another name |
 | Tests reading a function's locals | YAPL (2024) | Named outcomes and fault injection | Couples tests to implementation |
@@ -1921,7 +1939,7 @@ These are genuinely the owner's to decide. Each has a leaning, not a decision.
      v1.
    - YAPL settled on invariant generics in 2024. The toolchain's `allow_subtypes` vocabulary is the fallback if
      variance proves necessary.
-3. **Coverage granularity for failures.** Is covering every failure *case* enough, or must every `?` *site* be reached?
+3. **Coverage granularity for failures.** Is covering every failure *case* enough, or must every `or fail` *site* be reached?
    Leaning: cases, because sites multiply without adding much a reviewer would read.
 4. **How far implicit capability threading can go.**
    - By-type resolution from lexical scope keeps call sites clean and signatures honest.

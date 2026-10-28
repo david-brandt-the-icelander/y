@@ -258,37 +258,37 @@ public facet console_play:
 
         chosen = random.index_below(words.count())
         game = new_game(words[chosen])
-        console.write_line("Hangman: find the word, one letter at a time.")?
+        console.write_line("Hangman: find the word, one letter at a time.") or fail
 
         while playing = (outcome_of(game) == outcome.playing):
             picture = gallows(game.misses.count())
             shown = masked(game)
             missed = game.misses.join(separator: " ")
-            console.write_line(picture)?
-            console.write_line("Word:   {shown}")?
-            console.write_line("Missed: {missed}")?
-            console.write("Guess:  ")?
-            typed = (console.read_line() forever because "a player may think for as long as they like")?
+            console.write_line(picture) or fail
+            console.write_line("Word:   {shown}") or fail
+            console.write_line("Missed: {missed}") or fail
+            console.write("Guess:  ") or fail
+            typed = console.read_line() forever because "a player may think for as long as they like" or fail
 
             if closed = (typed == optional.none):
                 fail play_error.input_closed
             else line_read:
                 switch guess(mutable game, typed):
                     case hit = result.ok(verdict.hit):
-                        console.write_line("Yes.")?
+                        console.write_line("Yes.") or fail
                     case miss = result.ok(verdict.miss):
-                        console.write_line("No.")?
+                        console.write_line("No.") or fail
                     case typed_nothing = result.err(guess_error.empty):
-                        console.write_line("Type a letter.")?
+                        console.write_line("Type a letter.") or fail
                     case typed_other = result.err(guess_error.not_one_letter):
-                        console.write_line("\"{typed}\" is not one letter.")?
+                        console.write_line("\"{typed}\" is not one letter.") or fail
                     case typed_again = result.err(guess_error.already_guessed):
-                        console.write_line("You have already guessed {typed}.")?
+                        console.write_line("You have already guessed {typed}.") or fail
         else game_over:
             final_picture = gallows(game.misses.count())
-            console.write_line(final_picture)?
+            console.write_line(final_picture) or fail
 
             if won = (outcome_of(game) == outcome.won):
-                console.write_line("You win! The word was {game.word}.")?
+                console.write_line("You win! The word was {game.word}.") or fail
             else hanged:
-                console.write_line("Hanged! The word was {game.word}.")?
+                console.write_line("Hanged! The word was {game.word}.") or fail

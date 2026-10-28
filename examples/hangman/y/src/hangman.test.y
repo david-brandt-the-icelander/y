@@ -2,9 +2,9 @@
 test a_letter_in_the_word_is_a_hit
         covers guess#in_word, shown_rune#known, shown_rune#unknown:
     given:
-        game = new_game(word.new("gallows")?)
+        game = new_game(word.new("gallows") or fail)
     when:
-        answer = guess(mutable game, "l")?
+        answer = guess(mutable game, "l") or fail
     then:
         hit = (answer == verdict.hit)
         shown_twice = (masked(game) == "_ _ l l _ _ _")
@@ -14,9 +14,9 @@ test a_letter_in_the_word_is_a_hit
 test a_letter_not_in_the_word_is_a_miss
         covers guess#not_in_word:
     given:
-        game = new_game(word.new("rope")?)
+        game = new_game(word.new("rope") or fail)
     when:
-        answer = guess(mutable game, "z")?
+        answer = guess(mutable game, "z") or fail
     then:
         miss = (answer == verdict.miss)
         recorded = (game.misses == ['z'])
@@ -26,7 +26,7 @@ test a_letter_not_in_the_word_is_a_miss
 test a_repeated_letter_is_refused
         covers guess#repeated, guess!guess_error.already_guessed:
     given:
-        game = game(word: word.new("rope")?, hits: set.new(), misses: ['z'])
+        game = game(word: word.new("rope") or fail, hits: set.new(), misses: ['z'])
     when:
         refused = guess(mutable game, "Z")
     then:
@@ -38,7 +38,7 @@ test a_repeated_letter_is_refused
 test typing_nothing_is_not_a_guess
         covers guess#nothing_typed, guess!guess_error.empty:
     given:
-        game = new_game(word.new("rope")?)
+        game = new_game(word.new("rope") or fail)
     when:
         refused = guess(mutable game, "   ")
     then:
@@ -49,7 +49,7 @@ test typing_nothing_is_not_a_guess
 test two_letters_are_not_a_guess
         covers guess#not_one_rune, guess!guess_error.not_one_letter:
     given:
-        game = new_game(word.new("rope")?)
+        game = new_game(word.new("rope") or fail)
     when:
         refused = guess(mutable game, "ab")
     then:
@@ -60,7 +60,7 @@ test two_letters_are_not_a_guess
 test a_digit_is_not_a_guess
         covers guess#not_a_letter:
     given:
-        game = new_game(word.new("rope")?)
+        game = new_game(word.new("rope") or fail)
     when:
         refused = guess(mutable game, "7")
     then:
@@ -71,7 +71,7 @@ test a_digit_is_not_a_guess
 test six_misses_hang_the_man
         covers outcome_of#hanged:
     given:
-        game = game(word: word.new("rope")?, hits: set.new(), misses: ['a', 'b', 'c', 'd', 'f', 'g'])
+        game = game(word: word.new("rope") or fail, hits: set.new(), misses: ['a', 'b', 'c', 'd', 'f', 'g'])
     when:
         ending = outcome_of(game)
     then:
@@ -82,7 +82,7 @@ test six_misses_hang_the_man
 test finding_every_letter_wins
         covers outcome_of#solved:
     given:
-        game = game(word: word.new("rope")?, hits: set.of(['r', 'o', 'p', 'e']), misses: ['a'])
+        game = game(word: word.new("rope") or fail, hits: set.of(['r', 'o', 'p', 'e']), misses: ['a'])
     when:
         ending = outcome_of(game)
     then:
@@ -93,7 +93,7 @@ test finding_every_letter_wins
 test a_new_game_is_being_played
         covers outcome_of#undecided:
     given:
-        game = new_game(word.new("rope")?)
+        game = new_game(word.new("rope") or fail)
     when:
         ending = outcome_of(game)
     then:
@@ -142,9 +142,9 @@ test the_full_gallows
 test a_word_list_is_read_in_order
         covers parse_word_list#blank, parse_word_list#has_text, parse_word_list#valid, parse_word_list#has_words:
     when:
-        words = parse_word_list("rope  gallows")?
+        words = parse_word_list("rope  gallows") or fail
     then:
-        both_in_order = (words == [word.new("rope")?, word.new("gallows")?])
+        both_in_order = (words == [word.new("rope") or fail, word.new("gallows") or fail])
 
 
 -- A list with no words is refused.
@@ -169,13 +169,13 @@ test a_short_word_is_refused
 test a_player_who_finds_every_letter_wins
         covers play#playing, play#game_over, play#line_read, play#hit, play#won:
     given:
-        words = [word.new("rope")?]
+        words = [word.new("rope") or fail]
     inject:
             console = fake console(input: ["r", "o", "p", "e"])
             random = fake random(seed: 7)
             forever = fake forever
     when:
-        play(words)?
+        play(words) or fail
     then:
         announced = (console.written().last() == optional.some("You win! The word was rope."))
 
@@ -184,13 +184,13 @@ test a_player_who_finds_every_letter_wins
 test a_player_who_misses_six_times_is_hanged
         covers play#miss, play#hanged:
     given:
-        words = [word.new("rope")?]
+        words = [word.new("rope") or fail]
     inject:
             console = fake console(input: ["a", "b", "c", "d", "f", "g"])
             random = fake random(seed: 7)
             forever = fake forever
     when:
-        play(words)?
+        play(words) or fail
     then:
         announced = (console.written().last() == optional.some("Hanged! The word was rope."))
 
@@ -199,13 +199,13 @@ test a_player_who_misses_six_times_is_hanged
 test a_player_is_told_what_was_wrong
         covers play#typed_nothing, play#typed_other, play#typed_again:
     given:
-        words = [word.new("rope")?]
+        words = [word.new("rope") or fail]
     inject:
             console = fake console(input: ["", "ab", "r", "r", "o", "p", "e"])
             random = fake random(seed: 7)
             forever = fake forever
     when:
-        play(words)?
+        play(words) or fail
     then:
         -- Expected the player to be told to type a letter.
         told_to_type = console.written().contains("Type a letter.")
@@ -218,7 +218,7 @@ test a_player_is_told_what_was_wrong
 test a_closed_console_ends_the_game
         covers play#closed, play!play_error.input_closed:
     given:
-        words = [word.new("rope")?]
+        words = [word.new("rope") or fail]
     inject:
             console = fake console(input: ["r"])
             random = fake random(seed: 7)
@@ -233,7 +233,7 @@ test a_closed_console_ends_the_game
 test a_failing_console_ends_the_game
         covers play!play_error.console:
     given:
-        words = [word.new("rope")?]
+        words = [word.new("rope") or fail]
     inject:
             console = fake console(input: [], read_fails: true)
             random = fake random(seed: 7)

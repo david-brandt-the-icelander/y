@@ -257,7 +257,7 @@ mod console_play {
         Console { error },
     }
 
-    /// `?` on a `ConsoleError` converts through `PlayError`'s one case that carries it (Y § 3.4).
+    /// Y's `or fail` on a `ConsoleError` converts through `PlayError`'s one case that carries it (Y § 3.4).
     impl From for PlayError {
         fn from(error) {
             PlayError::Console { error }
