@@ -1,6 +1,7 @@
 //! Lowered from `y/src/hangman.test.y`. Each test says, in a comment, the outcomes its Y source declares it covers.
 //! A `?` in a test's `given` or `when` lowers to `expect`: a failure there fails the test.
 
+use super::console_play::*;
 use super::*;
 
 #[test]

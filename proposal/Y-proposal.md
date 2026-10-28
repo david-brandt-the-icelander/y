@@ -35,7 +35,7 @@ A function, as a reviewer would be shown it:
 
 ```y
 -- Taking stock for a buyer.
-public facet checkout:
+public facet holds:
     ----------------------------------------------------------------------------------------------------
     Holds one unit of an item for a buyer and asks for payment, exactly once.
 
@@ -153,7 +153,7 @@ computable. Three mechanisms, each described later:
 Stable identity is needed by coverage (which branch did this test reach?), by traces (which decision did production
 take?), by review (was *this* function approved before?), by oracles (which construct disagrees?), and — later — by
 hot swap (§ 5). Line numbers change on every edit; names do not. So Y names things aggressively, derives every
-identifier from a name (`shop.checkout.hold_and_charge#sold_out`), and treats renaming as a refactoring the toolchain
+identifier from a name (`shop.checkout.holds.hold_and_charge#sold_out`), and treats renaming as a refactoring the toolchain
 records (`y rename`), not as a text edit.
 
 ### 1.5 Tie-breaks for open questions
@@ -251,7 +251,7 @@ test charges_once_when_the_transaction_retries
 $ y review main..hold-and-charge
 
 Signatures
-  + shop.checkout.hold_and_charge                         new, public
+  + shop.checkout.holds.hold_and_charge                   new, public
       authority    shared<inventory>, enqueue<charge_card>
       fails        hold_error.unknown_item, hold_error.timed_out
       waits        at most 5s
@@ -279,7 +279,8 @@ person can judge: is five seconds right, and is this the behaviour the business 
 
 - A module is one file. Its first line is `module shop.checkout`, and it must match the path `src/shop/checkout.y`.
   The redundancy is deliberate: a sample shown out of context still says where it lives.
-- Imports name what they bring in: `from shop.inventory import inventory, item_id`. There are no wildcard imports, no
+- Imports name what they bring in, by their path inside the module, facet included:
+  `from shop.inventory import stock.inventory, stock.item_id`. There are no wildcard imports, no
   re-exports and no relative paths. An import cycle is an error that lists the cycle.
 - The formatter sorts imports (standard library, then dependencies, then this package). Each name means the same thing
   everywhere in a package, so an alias (`as`) is allowed only to resolve a collision.
@@ -532,17 +533,43 @@ function part(misses, needed, mark) returns drawn:
     ...
 ```
 
-- **A facet is a named group of declarations in a module.** Any declaration may be a member except a facet or a test.
-  Facets do not nest, and a declaration belongs to at most one.
+A structure may hold facets of its own, and so facets nest, one structure apart:
+
+```y
+-- Accounts, as other modules see them.
+public facet ledgers:
+    -- An account and its balance.
+    structure account:
+        -- What every holder of an account may read.
+        public facet statement:
+            number is account_number
+            balance is money<isk>
+
+        -- Kept to this module: changed only through `withdraw` and `deposit`.
+        facet bookkeeping:
+            entries is list<entry>
+```
+
+- **A facet is a named group of declarations,** in a module or in a structure. It holds any declaration except a
+  facet or a test, and a declaration belongs to at most one facet.
+- **Facets nest, though never directly.** A facet holds no facet, but it may hold a structure, the structure may hold
+  facets, and those may hold structures in turn: module, facet, structure, facet, and so on, as deep as the design
+  needs.
 - **`public` is written only on a facet.** `public facet rounds:` makes every member visible to modules that import
   them; `facet drawing:` groups members that stay private. A declaration outside every facet is private to its
   module. No function, type or constant is ever marked `public` itself.
 - **Private is the default everywhere.** The cases of a type and the members of a constant group or an enumeration
   are visible wherever the type or group is. A structure's fields are private to its module; a structure whose fields
-  other modules read or build declares them inside a `public facet` of the structure.
-- A facet's name is not part of its members' names. An importer writes `from hangman import new_game`, and the
-  facet's name says what the group is for, in the documentation and in the review packet (§ 4.5), which groups a
-  change to a module's surface by facet.
+  other modules read or build declares them inside a `public facet` of the structure, as `account` does above.
+- **A facet's name is part of each member's path.** `new_game` in the facet `rounds` of the module `hangman` is
+  `hangman.rounds.new_game`, and an importer writes `from hangman import rounds.new_game`. The path goes on through
+  each structure and facet that holds a member: `bank.ledgers.account.statement.balance`. The address of a decision
+  includes it too: `hangman.rounds.guess#repeated`.
+- The import binds the last segment of the path, so the importer calls `new_game(word)`. Inside its own module, a
+  declaration names the others by their own names, whichever facet holds them.
+- A field is still read from a value by its own name, `account.balance`: the path names the declaration, and a
+  value already knows its type.
+- The review packet (§ 4.5) groups a change to a module's surface by facet.
 - Every facet and every member of a public facet carries documentation: together they are the module's surface.
 - The toolchain's facets also carried override, abstraction and telemetry rules for classes. Y has no classes, so a
   facet carries visibility and a name, and nothing else.
@@ -592,7 +619,7 @@ Prose is constrained CommonMark:
 
 - No HTML and no images.
 - Links go only to `https:`, `mailto:` or `y:`.
-- `y:` links are resolved by the compiler: `y:shop.checkout.hold_and_charge#sold_out`,
+- `y:` links are resolved by the compiler: `y:shop.checkout.holds.hold_and_charge#sold_out`,
   `y:requirements/checkout.md#no-oversell`, `y:spec/shared-state#no-external-effect`. A broken link is a build error.
 
 **Traceability is one role, not an ontology.**
@@ -795,7 +822,7 @@ This proposal restores the rule and extends it to every predicate in the languag
   `break line`.
 - There is no `loop` and no `while true`.
 
-**What the names are for.** Each name becomes part of a stable address: `shop.checkout.hold_and_charge#sold_out`,
+**What the names are for.** Each name becomes part of a stable address: `shop.checkout.holds.hold_and_charge#sold_out`,
 `#in_stock`, `#hold_one_unit`. Those addresses are what:
 
 - tests declare they cover (§ 3.14);

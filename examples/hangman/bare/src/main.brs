@@ -1,6 +1,7 @@
 //! Lowered from `y/src/main.y`, the Y module `main`: the entry point.
 
-use hangman_example::hangman::{play, PlayError, Word};
+use hangman_example::hangman::console_play::{play, PlayError};
+use hangman_example::hangman::setup::Word;
 use std::sync::LazyLock;
 use y_runtime::System;
 
@@ -33,7 +34,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hangman_example::hangman::{game_rules, parse_word_list};
+    use hangman_example::hangman::setup::{game_rules, parse_word_list};
 
     #[test]
     fn compiled_word_list_matches_run_time() {

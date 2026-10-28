@@ -25,8 +25,10 @@
     {
       "module": "hangman",
       "facet": "setup",
+      "path": "hangman.setup",
       "visible": "public",
       "y": "y/src/hangman.y:9",
+      "rust": "hangman_example::hangman::setup",
       "members": [
         "game_rules",
         "word",
@@ -37,8 +39,10 @@
     {
       "module": "hangman",
       "facet": "rounds",
+      "path": "hangman.rounds",
       "visible": "public",
       "y": "y/src/hangman.y:63",
+      "rust": "hangman_example::hangman::rounds",
       "members": [
         "game",
         "outcome",
@@ -52,8 +56,10 @@
     {
       "module": "hangman",
       "facet": "display",
+      "path": "hangman.display",
       "visible": "public",
       "y": "y/src/hangman.y:152",
+      "rust": "hangman_example::hangman::display",
       "members": [
         "masked",
         "gallows"
@@ -62,8 +68,10 @@
     {
       "module": "hangman",
       "facet": "console_play",
+      "path": "hangman.console_play",
       "visible": "public",
       "y": "y/src/hangman.y:223",
+      "rust": "hangman_example::hangman::console_play",
       "members": [
         "play_error",
         "play"
@@ -72,18 +80,18 @@
   ],
   "units": [
     {
-      "subject": "hangman_example::hangman::game_rules::ALLOWED_MISSES",
+      "subject": "hangman_example::hangman::setup::game_rules::ALLOWED_MISSES",
       "unit": "count<element>",
       "y": "y/src/hangman.y:15"
     },
     {
-      "subject": "hangman_example::hangman::gallows",
+      "subject": "hangman_example::hangman::display::gallows",
       "param": "misses",
       "unit": "count<element>",
       "y": "y/src/hangman.y:173"
     },
     {
-      "subject": "hangman_example::hangman::Word",
+      "subject": "hangman_example::hangman::setup::Word",
       "constraint": "long_enough",
       "unit": "count<rune>",
       "y": "y/src/hangman.y:25"
@@ -91,7 +99,7 @@
   ],
   "capabilities": [
     {
-      "subject": "hangman_example::hangman::play",
+      "subject": "hangman_example::hangman::console_play::play",
       "with": [
         "console as console",
         "random as random",
@@ -115,7 +123,7 @@
       "because": "a player may think for as long as they like",
       "requires": "Forever",
       "y": "y/src/hangman.y:255",
-      "bare": "bare/src/hangman.brs:266"
+      "bare": "bare/src/hangman.brs:287"
     }
   ],
   "compiled": [
@@ -124,7 +132,7 @@
       "value": "hangman_example::COMPILED_WORD_LIST",
       "check": "hangman_example::tests::compiled_word_list_matches_run_time",
       "y": "y/src/main.y:15",
-      "bare": "bare/src/main.brs:9"
+      "bare": "bare/src/main.brs:10"
     }
   ],
   "copies": [
@@ -132,7 +140,7 @@
       "what": "words[chosen]",
       "why": "new_game keeps its word, and words is still read",
       "y": "y/src/hangman.y:244",
-      "bare": "bare/src/hangman.brs:256"
+      "bare": "bare/src/hangman.brs:277"
     }
   ],
   "decisions": {
@@ -143,12 +151,12 @@
           {
             "name": "blank",
             "y": "y/src/hangman.y:47",
-            "bare": "bare/src/hangman.brs:68"
+            "bare": "bare/src/hangman.brs:74"
           },
           {
             "name": "has_text",
             "y": "y/src/hangman.y:49",
-            "bare": "bare/src/hangman.brs:68"
+            "bare": "bare/src/hangman.brs:74"
           }
         ]
       },
@@ -158,12 +166,12 @@
           {
             "name": "valid",
             "y": "y/src/hangman.y:51",
-            "bare": "bare/src/hangman.brs:72"
+            "bare": "bare/src/hangman.brs:78"
           },
           {
             "name": "invalid",
             "y": "y/src/hangman.y:53",
-            "bare": "bare/src/hangman.brs:73"
+            "bare": "bare/src/hangman.brs:79"
           }
         ]
       },
@@ -173,12 +181,12 @@
           {
             "name": "empty",
             "y": "y/src/hangman.y:56",
-            "bare": "bare/src/hangman.brs:76"
+            "bare": "bare/src/hangman.brs:82"
           },
           {
             "name": "has_words",
             "y": "y/src/hangman.y:58",
-            "bare": "bare/src/hangman.brs:76"
+            "bare": "bare/src/hangman.brs:82"
           }
         ]
       }
@@ -190,17 +198,17 @@
           {
             "name": "hanged",
             "y": "y/src/hangman.y:111",
-            "bare": "bare/src/hangman.brs:127"
+            "bare": "bare/src/hangman.brs:138"
           },
           {
             "name": "solved",
             "y": "y/src/hangman.y:113",
-            "bare": "bare/src/hangman.brs:129"
+            "bare": "bare/src/hangman.brs:140"
           },
           {
             "name": "undecided",
             "y": "y/src/hangman.y:115",
-            "bare": "bare/src/hangman.brs:131"
+            "bare": "bare/src/hangman.brs:142"
           }
         ]
       }
@@ -212,32 +220,32 @@
           {
             "name": "nothing_typed",
             "y": "y/src/hangman.y:134",
-            "bare": "bare/src/hangman.brs:149"
+            "bare": "bare/src/hangman.brs:160"
           },
           {
             "name": "not_one_rune",
             "y": "y/src/hangman.y:136",
-            "bare": "bare/src/hangman.brs:152"
+            "bare": "bare/src/hangman.brs:163"
           },
           {
             "name": "not_a_letter",
             "y": "y/src/hangman.y:139",
-            "bare": "bare/src/hangman.brs:155"
+            "bare": "bare/src/hangman.brs:166"
           },
           {
             "name": "repeated",
             "y": "y/src/hangman.y:141",
-            "bare": "bare/src/hangman.brs:157"
+            "bare": "bare/src/hangman.brs:168"
           },
           {
             "name": "in_word",
             "y": "y/src/hangman.y:143",
-            "bare": "bare/src/hangman.brs:159"
+            "bare": "bare/src/hangman.brs:170"
           },
           {
             "name": "not_in_word",
             "y": "y/src/hangman.y:146",
-            "bare": "bare/src/hangman.brs:162"
+            "bare": "bare/src/hangman.brs:173"
           }
         ]
       }
@@ -249,12 +257,12 @@
           {
             "name": "known",
             "y": "y/src/hangman.y:201",
-            "bare": "bare/src/hangman.brs:175"
+            "bare": "bare/src/hangman.brs:228"
           },
           {
             "name": "unknown",
             "y": "y/src/hangman.y:203",
-            "bare": "bare/src/hangman.brs:177"
+            "bare": "bare/src/hangman.brs:230"
           }
         ]
       }
@@ -266,12 +274,12 @@
           {
             "name": "reached",
             "y": "y/src/hangman.y:216",
-            "bare": "bare/src/hangman.brs:201"
+            "bare": "bare/src/hangman.brs:242"
           },
           {
             "name": "not_yet",
             "y": "y/src/hangman.y:218",
-            "bare": "bare/src/hangman.brs:203"
+            "bare": "bare/src/hangman.brs:244"
           }
         ]
       }
@@ -283,12 +291,12 @@
           {
             "name": "playing",
             "y": "y/src/hangman.y:247",
-            "bare": "bare/src/hangman.brs:258"
+            "bare": "bare/src/hangman.brs:279"
           },
           {
             "name": "game_over",
             "y": "y/src/hangman.y:271",
-            "bare": "bare/src/hangman.brs:278"
+            "bare": "bare/src/hangman.brs:299"
           }
         ]
       },
@@ -298,12 +306,12 @@
           {
             "name": "closed",
             "y": "y/src/hangman.y:257",
-            "bare": "bare/src/hangman.brs:267"
+            "bare": "bare/src/hangman.brs:288"
           },
           {
             "name": "line_read",
             "y": "y/src/hangman.y:259",
-            "bare": "bare/src/hangman.brs:267"
+            "bare": "bare/src/hangman.brs:288"
           }
         ]
       },
@@ -313,27 +321,27 @@
           {
             "name": "hit",
             "y": "y/src/hangman.y:261",
-            "bare": "bare/src/hangman.brs:271"
+            "bare": "bare/src/hangman.brs:292"
           },
           {
             "name": "miss",
             "y": "y/src/hangman.y:263",
-            "bare": "bare/src/hangman.brs:272"
+            "bare": "bare/src/hangman.brs:293"
           },
           {
             "name": "typed_nothing",
             "y": "y/src/hangman.y:265",
-            "bare": "bare/src/hangman.brs:273"
+            "bare": "bare/src/hangman.brs:294"
           },
           {
             "name": "typed_other",
             "y": "y/src/hangman.y:267",
-            "bare": "bare/src/hangman.brs:274"
+            "bare": "bare/src/hangman.brs:295"
           },
           {
             "name": "typed_again",
             "y": "y/src/hangman.y:269",
-            "bare": "bare/src/hangman.brs:275"
+            "bare": "bare/src/hangman.brs:296"
           }
         ]
       },
@@ -343,12 +351,12 @@
           {
             "name": "won",
             "y": "y/src/hangman.y:275",
-            "bare": "bare/src/hangman.brs:281"
+            "bare": "bare/src/hangman.brs:302"
           },
           {
             "name": "hanged",
             "y": "y/src/hangman.y:277",
-            "bare": "bare/src/hangman.brs:283"
+            "bare": "bare/src/hangman.brs:304"
           }
         ]
       }

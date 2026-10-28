@@ -26,10 +26,10 @@ letter. Six misses hang the man.
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
 | Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 278, 243, 18 | hand |
-| Bare bodies | `bare/src/hangman.brs`, `bare/src/hangman/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 287, 180, 43, 3 | hand, as the Y compiler would lower the source |
-| Constraint files | `bare/src/*.constraints.json` (49 subjects, 20 clauses) | 401 | the same, then `bare-rust libfmt` for the canonical form |
-| Y facts | `bare/y-facts.json` | 510 | the same |
-| Rust | `src/hangman.rs`, `src/hangman/tests.rs`, `src/main.rs`, `src/lib.rs` | 287, 180, 43, 3 | `bare-rust weave` |
+| Bare bodies | `bare/src/hangman.brs`, `bare/src/hangman/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 309, 181, 44, 3 | hand, as the Y compiler would lower the source |
+| Constraint files | `bare/src/*.constraints.json` (53 subjects, 20 clauses) | 432 | the same, then `bare-rust libfmt` for the canonical form |
+| Y facts | `bare/y-facts.json` | 518 | the same |
+| Rust | `src/hangman.rs`, `src/hangman/tests.rs`, `src/main.rs`, `src/lib.rs` | 309, 181, 44, 3 | `bare-rust weave` |
 | Y runtime | `../y-runtime/src/lib.rs` | 225 | hand: a small stand-in for the runtime that lowered code calls |
 
 The Y package has two modules. `hangman` holds the game, and `main` is the entry point. They lower to one Rust package:
@@ -46,11 +46,12 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | A copy the compiler had to make (`new_game(words[chosen])`, where `words` is still read) | `.clone()`, marked `// y: a copy` | `y-facts.json` `copies` | the same |
 | `return answer = value`, `fail guess_error.empty`, `?` | `return Ok(value)` or the last expression, `return Err(E::Case { .. })`, `?` | `result.fails` | the same |
 | `?` converting through the one case that carries the failure | `?` | an `impl From` subject | `impl From<ConsoleError> for PlayError` |
-| A facet: `public facet setup:` makes its members visible to other modules; `shown_rune` and `part`, outside every facet, stay private | each member `pub`, the rest private; the facet itself leaves no trace in Rust | `visible` on each subject; `y-facts.json` `facets`: each facet, its visibility and its members | the same |
+| A facet: `public facet setup:` makes its members visible to other modules, and its name is part of their paths (`hangman.setup.parse_word_list`); `shown_rune` and `part`, outside every facet, stay private | a module `mod setup { use super::*; … }`, so the Rust path keeps the facet too; the parent imports the facets it uses, `use self::{display::*, rounds::*, setup::*};`, so the members reach one another by their own names, as in Y | a `module` subject per facet, and `visible` on each member; `y-facts.json` `facets`: each facet, its path, its visibility and its members | `pub mod setup`; members `pub`, helpers private to `hangman`, which its facet modules can call |
+| An import by path, `from hangman import setup.parse_word_list, console_play.play` | `use hangman_example::hangman::setup::Word;` and so on | — | the same |
 | `lower_snake_case` type and case names (`guess_error`, `guess_error.not_one_letter`) | `GuessError`, `NotOneLetter`: the lowering's one renaming, to Rust's casing | Rust names | the same |
 | A constant group, `constants game_rules:` with `allowed_misses is count<element> = 6` | a module `game_rules` holding `const ALLOWED_MISSES = 6;`; uses are `game_rules::ALLOWED_MISSES` | a `module` subject and its `const` subjects | the same |
 | `type word is string where letters_only = value.matches(pattern"^[a-z]*$") and long_enough = ...` | `struct Word(_)` and a constructor that checks each constraint in order | two `invariant` clauses, with status `lifted` by the constructor | a newtype with `Word::new(..) -> Result<Word, ConstraintViolation>` |
-| `structure` with fields `word is word`, private to the module as Rust's fields are; a constant group used as a closed type (`outcome`, `verdict` and the failures `word_list_error`, `guess_error`: named values with no order, so not enumerations); a `type` with `case`s that carry data (`play_error`, `case console(error is console_error)`) | `struct`; `enum` with unit variants; `enum` with named fields | `fields`, `variants` | the same, deriving the structural equality Y always derives |
+| `structure` with fields `word is word`, private to the module: `pub(super)` from the facet's Rust module; a constant group used as a closed type (`outcome`, `verdict` and the failures `word_list_error`, `guess_error`: named values with no order, so not enumerations); a `type` with `case`s that carry data (`play_error`, `case console(error is console_error)`) | `struct`; `enum` with unit variants; `enum` with named fields | `fields`, `variants` | the same, deriving the structural equality Y always derives |
 | Blocks: a colon and indentation | braces, as Rust has | — | the same |
 | `switch` with named arms, `case valid = result.ok(parsed):`, the statements beneath | `match`, each arm marked `// y: #valid` | `y-facts.json` `decisions`, with `kind` `switch`: each arm's name, Y line and bare line | the same, with the comment |
 | No inline lambdas: `masked` builds its list with a `for` loop, and `outcome_of` asks `is_subset_of` | the loop; `.all(|letter| …)`, Rust's form of the subset test | — | the same |
