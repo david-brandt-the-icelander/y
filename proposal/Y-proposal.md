@@ -52,8 +52,11 @@ public facet holds:
     fails hold_error.unknown_item: The item is not stocked here.
     fails hold_error.timed_out: No unit became free within five seconds.
     ----------------------------------------------------------------------------------------------------
-    function hold_and_charge(item, buyer) returns hold fails hold_error
-            dependency inventory, charges:
+    function hold_and_charge(item, buyer) returns hold fails hold_error:
+        dependencies:
+                inventory
+                charges
+
         within 5s?:
             atomic hold_one_unit:
                 stock = inventory.stock_of(item)?
@@ -129,7 +132,7 @@ the facts a reviewer needs into the declaration**, where they become checked cla
 | Parameter, result and capability types | Documentation above the signature (`line: ..., as string.`) | Agent (public signatures are never inferred) |
 | Which parameters the function may change | Signature (`x` or `mutable x`) | Agent, corrected by fix-its |
 | Which arguments a call lets the callee change | Call site (`mutable x`) | Agent, corrected by fix-its |
-| Authority, and therefore effects | `dependency` clause | `y fix`, from inference |
+| Authority, and therefore effects | `dependencies:` block | `y fix`, from inference |
 | Failure set | `fails e` in the signature, and `fails` doc roles | Agent; the compiler checks exhaustiveness of documentation |
 | Preconditions and guarantees | `where` / `ensures` | Agent |
 | Wait bounds | `within` | Agent; an unbounded wait does not compile |
@@ -199,7 +202,7 @@ error[Y0412]: external effect inside a transaction
    = why: `atomic hold_one_unit` may run more than once; this call cannot be undone, so it may happen more than once
    = fix: submit a durable command, which is persisted if and only if the transaction commits:
           enqueue charge_card { hold: ..., amount: ..., method: ... }
-          (needs a capability of type `enqueue<charge_card>` in the `dependency` clause; `y fix` adds it)
+          (needs a capability of type `enqueue<charge_card>` in the `dependencies:` block; `y fix` adds it)
    = spec: y:spec/shared-state#no-external-effect
 ```
 
@@ -244,9 +247,9 @@ test charges_once_when_the_transaction_retries
     when:
         hold = hold_and_charge(widget, buyer)?
     then:
-        assert charged_once = (charges.committed().count() == 1)
-        assert held_the_widget = (hold.item == widget)
-        assert no_stock_left = (inventory.snapshot().stock_of(widget)?.available == 0)
+        charged_once = (charges.committed().count() == 1)
+        held_the_widget = (hold.item == widget)
+        no_stock_left = (inventory.snapshot().stock_of(widget)?.available == 0)
 ```
 
 **The reviewer** does not open the diff first. They open the review packet, which is ordered by risk:
@@ -373,7 +376,8 @@ function meaning_of_life() returns answer:
 
 - **A signature names its parameters and its result, and nothing else.** It has no types and no `->`:
   - `function guess(mutable game, line) returns verdict fails guess_error`;
-  - then its capabilities, `dependency console, random`;
+  - then the colon, and as the body's first block its capabilities, `dependencies:` with `console` and `random`
+    beneath it;
   - then its contracts.
 - **Types live in the documentation directly above** (§ 3.2). Each parameter, the result and each capability has a
   role that ends with `as` and its type: `line: What the player typed, as string.` A signature whose documentation lacks a
@@ -614,7 +618,7 @@ function withdraw(mutable account, amount) returns debit fails withdraw_error
 | `why:` | Why it exists or is shaped this way, where the name does not say | Optional; required on claims (§ 3.15) |
 | `<parameter>: …, as <type>.` | One per parameter, by name: what it means, and its type | Every parameter of every function |
 | `<result>: …, as <type>.` | What the result named after `returns` means, and its type | Every function with a result |
-| `<capability>: …, as <type>.` | One per capability of the `dependency` clause | Every capability |
+| `<capability>: …, as <type>.` | One per capability in `dependencies:` | Every capability |
 | `fails <type>.<case>:` | When and why each failure case occurs, the case written with its type (§ 3.3) | Every case of a public function's failure type |
 | `satisfies:` | A `y:` link to the requirement or journey this implements | Optional |
 | `see:` | A `y:` link to a related declaration or document | Optional |
@@ -961,7 +965,7 @@ effects are what capabilities do. This merges September's two open questions, ef
 into one clause:
 
 ```y
---------------------------------------------------------------------
+------------------------------------------------------------------------
 Exports one month's invoices as files.
 
 month: The month to export, as month.
@@ -973,9 +977,12 @@ uploads: Where the files go, as file_system.
 clock: The time the export is stamped with, as clock.
 
 fails export_error.write_failed: A file could not be written.
---------------------------------------------------------------------
-function export_invoices(month) returns exported fails export_error
-        dependency invoices, uploads, clock
+------------------------------------------------------------------------
+function export_invoices(month) returns exported fails export_error:
+    dependencies:
+            invoices
+            uploads
+            clock
 ```
 
 **The capability kinds**, each declaring the effects it carries:
@@ -989,14 +996,30 @@ function export_invoices(month) returns exported fails export_error
 | `enqueue<command>`, `submit<command>` | Durable command submission (§ 3.10) |
 | `detach`, `forever`, `reveal`, `native` | Trust-requiring operations, each also a claim (§ 3.15) |
 
-**A function with no `dependency` clause is pure.** It may allocate, compute and fault, but it touches nothing else. Purity
+**A function with no `dependencies:` block is pure.** It may allocate, compute and fault, but it touches nothing else. Purity
 needs no annotation because the missing clause is the annotation. Contract expressions, constraints, `derived`,
 `rule` and migrations must be pure, and it is visible that they are.
 
 **Passing capabilities is dependency injection,** with two keywords, one at each end (YAPL v0's `dependency` and
-`inject`, 2020):
+`inject`, 2020, here `dependencies` and `inject`):
 
-- **`dependency`, at the receiving site,** declares what a function needs: `dependency console, random, forever`.
+- **`dependencies:`, at the receiving site,** declares what a function needs. It is the first block of the body, and
+  its names sit one per line beneath it, indented eight spaces, as `inject:`'s bindings do. There is no one-line
+  form, and no singular `dependency`, even for one capability:
+
+  ```y
+  function play(words) fails play_error
+          where has_words = (not words.is_empty()):
+      dependencies:
+              console
+              random
+              forever
+
+      chosen = random.index_below(words.count())
+  ```
+
+  The block is part of the signature, though it sits beneath the header: `y explain`, the review packet and the
+  compatibility signature read it with the parameters.
 - **`inject`, at the sending site,** supplies it. `inject:` opens a block. Its bindings come first, one per line,
   indented eight spaces as a header's continuation is, and the statements follow, indented four. Every call in the
   block that needs a `console` or a `random` receives these:
@@ -1011,7 +1034,7 @@ needs no annotation because the missing clause is the annotation. Contract expre
   A test's `inject:` section has the same bindings, usually fakes (`console = fake console(input: ["r"])`), and no
   statements.
 - A callee's dependencies are satisfied, by type, from the capabilities in the caller's scope: the caller's own
-  `dependency` clause and any enclosing `inject` block. Call sites do not spell them out, so adding a capability to a
+  `dependencies:` block and any enclosing `inject:` block. Call sites do not spell them out, so adding a capability to a
   deep function does not edit every call.
 - Every function between the entry point and that deep function must still *declare* the capability, because a
   declaration is where a reviewer looks. `y fix` maintains those clauses.
@@ -1030,7 +1053,7 @@ needs no annotation because the missing clause is the annotation. Contract expre
 
 **Checking.**
 
-- A `dependency` clause that declares less than the body uses is an error naming the capability and the call path that needs
+- A `dependencies:` block that declares less than the body uses is an error naming the capability and the call path that needs
   it.
 - One that declares more is a fixable lint on a private function. On a public function or trait method it is allowed,
   because a public signature may reserve room, and the review packet shows it.
@@ -1129,8 +1152,10 @@ job: The job to run, as job.
 
 jobs: The queues, as shared<job_queues>.
 ------------------------------------------------------------
-function take_job() returns job
-        dependency jobs:
+function take_job() returns job:
+    dependencies:
+            jobs
+
     atomic take_next_job:
         pending = jobs.pending.pop_front()
 
@@ -1206,8 +1231,10 @@ gateway: The payment gateway, as http<payment_gateway>.
 
 fails charge_error.declined: The gateway refused the charge.
 ------------------------------------------------------------------------------------------------------------------------
-handler charge_card(command) returns charged fails charge_error
-        dependency gateway:
+handler charge_card(command) returns charged fails charge_error:
+    dependencies:
+            gateway
+
     within 30s?:
         return charged = gateway.charge(idempotency_key: command.id, method: command.method, amount: command.amount)?
 ```
@@ -1243,8 +1270,12 @@ shipments: Where shipments are submitted, as submit<create_shipment>.
 fails fulfilment_error.payment_declined: The charge was refused.
 fails fulfilment_error.payment_unreachable: The charge could not be delivered.
 ------------------------------------------------------------------------------------------------
-workflow fulfil(hold) returns shipped fails fulfilment_error
-        dependency orders, charges, shipments:
+workflow fulfil(hold) returns shipped fails fulfilment_error:
+    dependencies:
+            orders
+            charges
+            shipments
+
     order = orders.for_hold(hold)?
 
     switch submit charge_card(hold: hold, amount: order.total, method: order.payment_method):
@@ -1299,7 +1330,7 @@ documentation rules make the choice visible: a `where` precondition has no `fail
 **Semantics.**
 
 - `ensures` holds when the function succeeds. `ensures on failure name = (...)` states what holds when it fails.
-- Contract expressions are pure, since they can have no `dependency` clause.
+- Contract expressions are pure, since they can have no `dependencies:` block.
 - A structure's `invariant` holds whenever the structure is not being mutated. A function taking it `mutable` may break the
   invariant inside its body, and must restore it before returning.
 - An invariant on a structure held in `shared<t>` is checked at the commit of every transaction that wrote the structure.
@@ -1462,7 +1493,22 @@ Tests are part of the language, because the compiler must know what a test claim
 | `inject` | The capabilities the code under test receives: real, attenuated, or `fake` |
 | `faults` | What to force: `conflict at f#txn, times: 2`, `crash after commit f#txn`, `expire at f#txn`, `cancel at f#task` |
 | `when` | The single action under test |
-| `then` | Named assertions only |
+| `then` | Named checks only, one per line: `charged_once = (charges.committed().count() == 1)` |
+
+**Checks.** Each line of `then` is a named boolean expression, written as a named condition is: `name = expression`.
+No `assert` keyword is needed there, because the section holds nothing else.
+
+- The test fails when a check is false. The report names the check (`charges_once_when_the_transaction_retries#
+  held_the_widget`) and shows the values of its subexpressions.
+- A comment directly above a check is its failure message, and is optional:
+
+  ```y
+  then:
+      -- Expected the player to be told to type a letter.
+      told_to_type = console.written().contains("Type a letter.")
+  ```
+
+- `assert name = …` stays the statement for a check inside ordinary code, where its failure is a fault (§ 3.4).
 
 **Coverage is declared, then verified.**
 
@@ -1557,7 +1603,7 @@ function checksum(bytes) returns crc:
 
 **What can be compiled.**
 
-- The operand is one call to a function with no `dependency` clause, which makes it pure (§ 3.7).
+- The operand is one call to a function with no `dependencies:` block, which makes it pure (§ 3.7).
 - The function carries no mark. The same function runs while building and while running, as suspension needs no
   `async`. Unlike C++'s `constexpr` and Rust's `const fn`, there is no second kind of function to keep in step with the
   first.
@@ -1791,7 +1837,7 @@ owner still decides; the recommendation is here so that deciding is quick.
 | Failure: distinct channel or sum type | `fails e` in the signature; a call's outcome is a built-in two-case sum; Core IR records propagation edges | § 3.4 |
 | Degree of ownership inference | All of it: source has value semantics and `mutable` at both ends of a call; borrows, moves and copies are the compiler's, and it reports copies | § 3.6 |
 | Types that opt out of single ownership | None needed: values are shared freely; `shared<t>` for mutable state between tasks; arenas and typed indices for graphs | § 3.6 |
-| Effect annotation syntax | The `dependency` clause: effects are what capabilities carry | § 3.7 |
+| Effect annotation syntax | The `dependencies:` block: effects are what capabilities carry | § 3.7 |
 | Capability declaration and passing | Declared per function, threaded by type from the caller's scope, overridden explicitly | § 3.7 |
 | Where handler failure escalates | Mandatory `on_abandon`: compensate or park; in workflows, `undelivered.abandoned` is a failure to handle | § 3.10 |
 | `afterCommit` durability | Dropped; `enqueue` and buffered telemetry cover every case | § 3.10 |
@@ -1827,7 +1873,7 @@ premise changed, or because the iteration that tried them showed their cost. The
 | Unnamed results and an implicit last-expression result | Earlier drafts of this proposal | `returns name`, and `return name = value` | A result has a name, which its documentation explains, and every exit is a visible `return` or `fail` |
 | References in source: `&t`, `&mutable t`, `move`, borrowing results, `copy` types, `reference_counted<t>`, `weak<t>`; "no clone the programmer did not write" | September → earlier drafts of this proposal | Value semantics, `mutable` at both ends of a call; the compiler chooses borrows, moves and copies, and reports each copy | Ownership syntax is about memory, not intent, and is where agents fail most; value semantics keep what borrowing was for |
 | `match` with `pattern => statement` arms | Earlier drafts of this proposal | `switch`, each arm `case name = pattern:` with its block beneath, as in the toolchain's language reference § 7 | One way to write a block; no `=>`; every outcome named |
-| `with` for capabilities, at both ends | Earlier drafts of this proposal | `dependency` where a function declares what it needs, `inject` where a caller supplies it, as in YAPL v0 | One keyword per side of the injection; a reader sees which side a line is on |
+| `with` for capabilities, at both ends | Earlier drafts of this proposal | `dependencies:` where a function declares what it needs, `inject:` where a caller supplies it, each a block with one name per line, after YAPL v0's `dependency` and `inject` | One keyword per side of the injection; a reader sees which side a line is on |
 | `public` on any declaration | Earlier drafts of this proposal | `public facet`, as in the toolchain; private by default | Visibility is written in one place per group, and a module's surface reads as a list of facets |
 | A case written `.case` where the type is known | September → earlier drafts of this proposal | `type_name.case` everywhere, as YAPL had it (`color.red`) | The reader never infers which type a case belongs to |
 | `let` | Earlier drafts of this proposal | `name = value` declares; `name := value` changes, as in YAPL | Every change to a value is spelled one way and found by one search |
@@ -1843,7 +1889,7 @@ premise changed, or because the iteration that tried them showed their cost. The
 | --- | --- | --- | --- |
 | Classes, factory methods, singletons, properties, inheritance; facets' override and telemetry rules | YAPL → toolchain | Structures, sum types, traits, `implementation`; facets that carry visibility only | Every iteration with more kinds spent its effort reconciling them; facets carried visibility, telemetry and override rules at once |
 | Exceptions, `throws`, wrapping in `unexpected_exception` | YAPL → April 2026 | `fails e`, and a two-case sum at the call | Values can be matched exhaustively; wrapping hid the failure set |
-| Ambient `using` contexts, context stacks, affinity-based name lookup | YAPL → toolchain | Capabilities in `dependency` and `inject` | Action at a distance; March 2026 had already reversed it ("no global or thread-local state") |
+| Ambient `using` contexts, context stacks, affinity-based name lookup | YAPL → toolchain | Capabilities in `dependencies:` and `inject:` | Action at a distance; March 2026 had already reversed it ("no global or thread-local state") |
 | Transactional memory for every variable; reference tracing; one OS thread per process as a guarantee | YAPL → July 2026 | `shared<t>` only; ownership; runtime's choice | Costs paid by code that shares nothing; semantics should not depend on the scheduler |
 | Affinities and placements in types | Toolchain | Physical parameters behind Core IR | Runtime detail in source, which agents misuse |
 | Comments with runtime meaning (interpolated, traced) | YAPL → toolchain | `log` statements | A comment that runs surprises the reviewer |
@@ -1946,7 +1992,7 @@ declarations   module from import public facet function returns fails structure 
                transient self
 contracts      where ensures invariant old assert
 control        if else switch when for in while break continue return fail
-bindings       mutable lambda nested captures dependency inject arena compile
+bindings       mutable lambda nested captures dependencies inject arena compile
 concurrency    within task supervise detach forever uncancellable
 transactions   atomic retry orelse enqueue submit
 claims, gaps   unsafe assume allow reveal because todo

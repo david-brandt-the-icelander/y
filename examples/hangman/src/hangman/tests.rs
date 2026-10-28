@@ -152,7 +152,7 @@ fn a_player_is_told_what_was_wrong() {
     let forever = Forever::fake();
     play(&words, &mut console, &mut random, &forever).expect("when");
     let written = console.written();
-    assert!(written.iter().any(|line| line == "Type a letter."), "told_to_type");
+    assert!(written.iter().any(|line| line == "Type a letter."), "told_to_type: Expected the player to be told to type a letter.");
     assert!(written.iter().any(|line| line == "\"ab\" is not one letter."), "told_not_one");
     assert!(written.iter().any(|line| line == "You have already guessed r."), "told_repeated");
     assert!(written.last().map(String::as_str) == Some("You win! The word was rope."), "still_won");

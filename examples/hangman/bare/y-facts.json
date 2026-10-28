@@ -100,17 +100,17 @@
   "capabilities": [
     {
       "subject": "hangman_example::hangman::console_play::play",
-      "dependency": [
+      "dependencies": [
         "console as console",
         "random as random",
         "forever as forever"
       ],
       "lowered": "as the last three parameters, in order",
-      "y": "y/src/hangman.y:253"
+      "y": "y/src/hangman.y:254"
     },
     {
       "subject": "hangman_example::main",
-      "dependency": [
+      "dependencies": [
         "system as system"
       ],
       "lowered": "System::root(), made by the entry point",
@@ -122,7 +122,7 @@
       "claim": "forever",
       "because": "a player may think for as long as they like",
       "requires": "Forever",
-      "y": "y/src/hangman.y:267",
+      "y": "y/src/hangman.y:271",
       "bare": "bare/src/hangman.brs:287"
     }
   ],
@@ -131,7 +131,7 @@
       "call": "parse_word_list(game_rules.word_list)",
       "value": "hangman_example::COMPILED_WORD_LIST",
       "check": "hangman_example::tests::compiled_word_list_matches_run_time",
-      "y": "y/src/main.y:16",
+      "y": "y/src/main.y:18",
       "bare": "bare/src/main.brs:10"
     }
   ],
@@ -139,7 +139,7 @@
     {
       "what": "words[chosen]",
       "why": "new_game keeps its word, and words is still read",
-      "y": "y/src/hangman.y:256",
+      "y": "y/src/hangman.y:260",
       "bare": "bare/src/hangman.brs:277"
     }
   ],
@@ -290,12 +290,12 @@
         "branches": [
           {
             "name": "playing",
-            "y": "y/src/hangman.y:259",
+            "y": "y/src/hangman.y:263",
             "bare": "bare/src/hangman.brs:279"
           },
           {
             "name": "game_over",
-            "y": "y/src/hangman.y:283",
+            "y": "y/src/hangman.y:287",
             "bare": "bare/src/hangman.brs:299"
           }
         ]
@@ -305,12 +305,12 @@
         "branches": [
           {
             "name": "closed",
-            "y": "y/src/hangman.y:269",
+            "y": "y/src/hangman.y:273",
             "bare": "bare/src/hangman.brs:288"
           },
           {
             "name": "line_read",
-            "y": "y/src/hangman.y:271",
+            "y": "y/src/hangman.y:275",
             "bare": "bare/src/hangman.brs:288"
           }
         ]
@@ -320,27 +320,27 @@
         "branches": [
           {
             "name": "hit",
-            "y": "y/src/hangman.y:273",
+            "y": "y/src/hangman.y:277",
             "bare": "bare/src/hangman.brs:292"
           },
           {
             "name": "miss",
-            "y": "y/src/hangman.y:275",
+            "y": "y/src/hangman.y:279",
             "bare": "bare/src/hangman.brs:293"
           },
           {
             "name": "typed_nothing",
-            "y": "y/src/hangman.y:277",
+            "y": "y/src/hangman.y:281",
             "bare": "bare/src/hangman.brs:294"
           },
           {
             "name": "typed_other",
-            "y": "y/src/hangman.y:279",
+            "y": "y/src/hangman.y:283",
             "bare": "bare/src/hangman.brs:295"
           },
           {
             "name": "typed_again",
-            "y": "y/src/hangman.y:281",
+            "y": "y/src/hangman.y:285",
             "bare": "bare/src/hangman.brs:296"
           }
         ]
@@ -350,12 +350,12 @@
         "branches": [
           {
             "name": "won",
-            "y": "y/src/hangman.y:287",
+            "y": "y/src/hangman.y:291",
             "bare": "bare/src/hangman.brs:302"
           },
           {
             "name": "hanged",
-            "y": "y/src/hangman.y:289",
+            "y": "y/src/hangman.y:293",
             "bare": "bare/src/hangman.brs:304"
           }
         ]
@@ -500,7 +500,7 @@
       ]
     },
     "a_closed_console_ends_the_game": {
-      "y": "y/src/hangman.test.y:217",
+      "y": "y/src/hangman.test.y:218",
       "rust": "hangman_example::hangman::tests::a_closed_console_ends_the_game",
       "covers": [
         "play#closed",
@@ -508,7 +508,7 @@
       ]
     },
     "a_failing_console_ends_the_game": {
-      "y": "y/src/hangman.test.y:232",
+      "y": "y/src/hangman.test.y:233",
       "rust": "hangman_example::hangman::tests::a_failing_console_ends_the_game",
       "covers": [
         "play!play_error.console"

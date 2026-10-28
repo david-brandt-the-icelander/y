@@ -250,8 +250,12 @@ public facet console_play:
     fails play_error.console: The console could not be read or written.
     ------------------------------------------------------------------------------------------------------------
     function play(words) fails play_error
-            dependency console, random, forever
             where has_words = (not words.is_empty()):
+        dependencies:
+                console
+                random
+                forever
+
         chosen = random.index_below(words.count())
         game = new_game(words[chosen])
         console.write_line("Hangman: find the word, one letter at a time.")?

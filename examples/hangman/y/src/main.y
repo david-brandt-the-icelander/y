@@ -11,8 +11,10 @@ system: The root capability, from which the console, the random source and the r
 fails play_error.input_closed: The terminal closed before the game ended.
 fails play_error.console: The terminal could not be read or written.
 --------------------------------------------------------------------------------------------------------
-function main() fails play_error
-        dependency system:
+function main() fails play_error:
+    dependencies:
+            system
+
     words = compile parse_word_list(game_rules.word_list)
 
     inject:

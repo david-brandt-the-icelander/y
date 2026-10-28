@@ -267,7 +267,7 @@ pub mod console_play {
     /// Plays one game at the console, with a word chosen at random, until it is won or lost.
     ///
     /// - `words`: the words to choose from.
-    /// - `console`, `random`, `forever`: the capabilities of the Y `dependency` clause.
+    /// - `console`, `random`, `forever`: the capabilities in the Y `dependencies:` block.
     /// - Returns nothing. The console shows the player how the game ended.
     /// - Fails `InputClosed`: the console closed before the game ended.
     /// - Fails `Console`: the console could not be read or written.

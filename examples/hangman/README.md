@@ -25,7 +25,7 @@ letter. Six misses hang the man.
 
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
-| Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 290, 243, 22 | hand |
+| Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 294, 244, 24 | hand |
 | Bare bodies | `bare/src/hangman.brs`, `bare/src/hangman/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 309, 181, 44, 3 | hand, as the Y compiler would lower the source |
 | Constraint files | `bare/src/*.constraints.json` (53 subjects, 20 clauses) | 432 | the same, then `bare-rust libfmt` for the canonical form |
 | Y facts | `bare/y-facts.json` | 518 | the same |
@@ -55,10 +55,10 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | Blocks: a colon and indentation | braces, as Rust has | — | the same |
 | `switch` with named arms, `case valid = result.ok(parsed):`, the statements beneath | `match`, each arm marked `// y: #valid` | `y-facts.json` `decisions`, with `kind` `switch`: each arm's name, Y line and bare line | the same, with the comment |
 | No inline lambdas: `masked` builds its list with a `for` loop, and `outcome_of` asks `is_subset_of` | the loop; `.all(|letter| …)`, Rust's form of the subset test | — | the same |
-| No `dependency` clause: the function is pure | — | `effects` clause `pure` | — |
-| A `mutable` parameter and no `dependency` | — | `no io`, `no clock`, `no randomness`, `mutates only game.hits, game.misses` | — |
-| `dependency console, random, forever`, typed in the documentation | three more parameters | their types and access; `effects only console, random`; the clause also in `y-facts.json` `capabilities` | `&mut Console, &mut Random, &Forever` |
-| `dependency system` on the entry point | `System::root()` | `y-facts.json` `capabilities` | the same |
+| No `dependencies:` block: the function is pure | — | `effects` clause `pure` | — |
+| A `mutable` parameter and no `dependencies:` | — | `no io`, `no clock`, `no randomness`, `mutates only game.hits, game.misses` | — |
+| `dependencies:` with `console`, `random` and `forever` beneath it, typed in the documentation | three more parameters | their types and access; `effects only console, random`; the clause also in `y-facts.json` `capabilities` | `&mut Console, &mut Random, &Forever` |
+| `dependencies:` with `system`, on the entry point | `System::root()` | `y-facts.json` `capabilities` | the same |
 | a `where name = p` precondition | `require(p, "hangman::f#name")` | a `require` clause, status `lifted` by that call | a run-time check whose failure is a fault (a panic naming the construct) |
 | `invariant name = p` on a structure | `invariant(p, "hangman::Game#name")` after the one write that can break it | an `invariant` clause on the type | the same |
 | A decision: `if a = p:`, `else if b = q:`, `else c:`, or `while a = p:` with `else c:` after the loop, every branch on its own line and named | `if p { // y: #a`, `} else if q { // y: #b`, `} else { // y: #c`; after a `while`, a `// y: #c` comment | `y-facts.json` `decisions`: each decision's branches, with the Y line and the bare line of each | the same, with the comment |
@@ -70,7 +70,7 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | `string` (and a read-only `string` parameter), `rune`, `list<t>`, `set<t>` | — | `text`, `ref<text>`, `Rune`, `list<T> as 'Vec'`, `set<T> as 'BTreeSet'` | `String`, `&str`, `y_runtime::Rune`, `Vec<T>`, `BTreeSet<T>` |
 | Interpolation, `"{name}"` and `"{game.word}"` | `format!("{name}")`, `format!("{}", game.word)` | — | the same |
 | A binding, `picture = gallows(…)`, including one that later changes; a change, `name := value` | `let`; `name = value` | — | `let`; `let mut`, which `weave` derived through rustc (19 of them); `name = value` |
-| `test name covers a, b:` with the sections `given:`, `inject:`, `when:`, `then:` | `#[test] fn name()`; a `?` in `given` or `when` lowers to `expect`; `fake console(input: [...])` to `Console::fake(...)` | `y-facts.json` `tests`: what each covers; repeated in a comment in the test | the same |
+| `test name covers a, b:` with the sections `given:`, `inject:`, `when:`, `then:` | `#[test] fn name()`; a `?` in `given` or `when` lowers to `expect`; `fake console(input: [...])` to `Console::fake(...)`; each named check of `then`, `name = p`, to `assert!(p, "name")`, with the comment above it, if any, added to the message | `y-facts.json` `tests`: what each covers; repeated in a comment in the test | the same |
 | Documentation: the `--` line, or the block between two rules of dashes, above a declaration, with roles; the types leave it for the signature | `///` with the roles as a list | — | the same |
 
 ## What had to be assumed
@@ -81,7 +81,7 @@ following:
 - **Standard capabilities and their methods:** a `console` capability with `write_line`, `write` and `read_line`;
   `random.index_below`; and `system.console()`, `system.random()` and `system.forever()`. The proposal lists `clock`,
   `random`, `file_system` and others, but not a terminal.
-- **The entry point** is `function main() fails e dependency system` in the module `main`. It is in no facet, so it is
+- **The entry point** is `function main() fails e:`, whose body opens with `dependencies:` and `system` in the module `main`. It is in no facet, so it is
   private: the runtime calls it, and no module imports it.
 - **One `inject:` block can supply several capabilities,** one binding per line beneath it.
 - **Rune literals** are written `'z'`, as in `value.count_of('@')` in the proposal.

@@ -172,7 +172,7 @@ vocabulary.
 | `clone()` is always deep and always explicit; "YAPL should favour correctness over performance" | 2024 (14) | Adopted | § 3.6 — no hidden clone |
 | **OS access only through context properties** (`file_system_library`, `socket_library`, …); packages declare the categories they need and the developer approves them | 2022 (v4: "yapl has no globals. it has context and capabilities and sandboxes"); 2024 (56, 146) | Adopted | § 3.7 capabilities and package manifests |
 | `context.drop(…)` disables a capability even for third-party code below | 2024 (55) | Adapted | § 3.7 attenuation |
-| Context values injected by declaring them in the signature, so "the compiler … track[s] dependencies" and tests can mock them | 2024 (54, 77) | Adapted | § 3.7 — the `dependency` clause, filled by `inject` |
+| Context values injected by declaring them in the signature, so "the compiler … track[s] dependencies" and tests can mock them | 2024 (54, 77) | Adapted | § 3.7 — the `dependencies:` block, filled by `inject:` |
 | `using` contexts as a statically checked dynamic scope; a per-fiber context stack | 2024 (22, 79, 99) | Dropped | Action at a distance; replaced by capabilities (§ 7) |
 | MVCC timestamps from a sequence counter, not the wall clock | 2024 (50) | Adopted | § 4.7 determinism |
 | Transactions as named blocks with an operator message; hierarchical transaction IDs; fibers run in child transactions; "logs and metrics emitted only on commit" | 2024 (51, 52, 149) | Adapted | § 3.9 named `atomic`; § 3.7 buffered telemetry |
@@ -198,13 +198,13 @@ vocabulary.
 | Classes with facets; factory methods instead of constructors; `get`/`set` properties; singletons; opt-in overriding | 2024 (12, 33, 103, 147, 150) | Dropped | § 7 — too many kinds |
 | `=` to bind and `:=` to rebind, "so the operator's visual weight discourages mutation" | 2024 (32) | Dropped | § 7 — `let` / `var` |
 | Deterministic reference tracking; "any object that contains a resource is itself a resource" | 2024 (22, 149) | Adapted | § 3.6 — ownership; a scope owning something with fallible release carries that failure |
-| Mocks must be declared on the function they replace (`mockable(os.path.exists)`) | 2020 (98xx) | Adapted | § 3.14 — the only things a test can replace are capabilities, and those are declared in `dependency` and supplied in a test's `inject` |
+| Mocks must be declared on the function they replace (`mockable(os.path.exists)`) | 2020 (98xx) | Adapted | § 3.14 — the only things a test can replace are capabilities, and those are declared in `dependencies:` and supplied in a test's `inject:` |
 | A new version must reproduce the recorded inputs and outputs of the live one before it ships | 2020 (98xx) | Deferred | § 5 — shadow execution and replay; six years before the September riff |
 | Functions carrying performance targets that emit metrics and alarms | 2020 (99xx) | Deferred | A natural addition to compatibility signatures |
 | Returning a coroutine without awaiting it is illegal; chained promise pipelines banned | 2020 (99xx) | Superseded | § 3.8 — no futures or promises at all |
 | Exactly one owner, traceable to a frame; resources split into handle and open state (`File` / `OpenFile`); mutable objects confined to the narrowest execution context at compile time | 2020 (`aspirational/04`) | Adopted | § 3.6, § 3.9 |
 | Leaving a resource undisposed is a compile error | 2024 (02) | Adopted | § 3.6 — ownership guarantees release |
-| Declared dependencies with `dependency (user: …)` and `inject … into { }` | 2020 (v0) | Adopted | § 3.7 — the keywords `dependency` and `inject`, resolved lexically by type |
+| Declared dependencies with `dependency (user: …)` and `inject … into { }` | 2020 (v0) | Adopted | § 3.7 — the blocks `dependencies:` and `inject:`, resolved lexically by type |
 | Deployables as constructs: `process { }`, `service { }` | 2020 (v0) | Dropped | An entry point with supervised scopes (§ 3.8) covers it |
 | Method sections `input:` / `code:` / `output:` / `postcondition:` | 2022 (v4) | Adapted | § 3.11 `requires` / `ensures` |
 | Effects in the signature: `emits`, `raises`, `returns`, handled at the call site | 2022 (v6, v8) | Adapted | § 3.4, § 3.7 |
@@ -399,7 +399,7 @@ fared.
 | `T ! E`, `?`, derived conversion only when unambiguous | Adopted | § 3.4 — resolved as a built-in sum type |
 | `T?`, `??`, `?.`; exhaustive `match`; guarded arms do not count; subsumed arms are errors | Adopted | § 3.3, § 3.5 |
 | Ownership without hidden clones; `&`, `&mut`, `move`; arenas; "arena-owned is not transactional" | Adopted | § 3.6 — plus explicit call sites, `from` on returned borrows, no borrows in types |
-| Effects inferred and mostly unwritten | Adapted | § 1.2 — inferred, then pinned in `dependency` |
+| Effects inferred and mostly unwritten | Adapted | § 1.2 — inferred, then pinned in `dependencies:` |
 | Capabilities as ordinary, attenuable, unforgeable values | Adopted | § 3.7 |
 | No `async` colouring; suspension is an effect | Adopted | § 3.7 |
 | Every suspension bounded; `within`; "forever" explicit and greppable | Adopted | § 3.8; `forever` is a claim |
