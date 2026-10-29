@@ -1,0 +1,681 @@
+{
+  "format": "y-facts/0",
+  "about": "What the Y source says that neither the bare bodies nor the constraint files can hold. Nothing in bare-rust reads this file; it is for the Y toolchain (y explain, y review, coverage), and tools/bare-rust/tests/y_examples.rs checks it against the Y source and the bare bodies.",
+  "modules": [
+    {
+      "y": "y/src/memory.y",
+      "module": "memory",
+      "bare": "bare/src/memory.brs",
+      "rust": "src/memory.rs"
+    },
+    {
+      "y": "y/src/memory.test.y",
+      "module": "memory",
+      "bare": "bare/src/memory/tests.brs",
+      "rust": "src/memory/tests.rs"
+    },
+    {
+      "y": "y/src/main.y",
+      "module": "main",
+      "bare": "bare/src/main.brs",
+      "rust": "src/main.rs"
+    }
+  ],
+  "facets": [
+    {
+      "module": "memory",
+      "facet": "setup",
+      "path": "memory.setup",
+      "visible": "public",
+      "y": "y/src/memory.y:11",
+      "rust": "memory_example::memory::setup",
+      "members": [
+        "board",
+        "game_rules",
+        "faces",
+        "side",
+        "outcome",
+        "game",
+        "setup_error",
+        "new_game"
+      ]
+    },
+    {
+      "module": "memory",
+      "facet": "rules",
+      "path": "memory.rules",
+      "visible": "public",
+      "y": "y/src/memory.y:142",
+      "rust": "memory_example::memory::rules",
+      "members": [
+        "choosable",
+        "turn_over",
+        "turn_back",
+        "standing",
+        "score"
+      ]
+    },
+    {
+      "module": "memory",
+      "facet": "drawing",
+      "path": "memory.drawing",
+      "visible": "public",
+      "y": "y/src/memory.y:289",
+      "rust": "memory_example::memory::drawing",
+      "members": [
+        "layout",
+        "palette",
+        "banner",
+        "draw"
+      ]
+    },
+    {
+      "module": "memory",
+      "facet": "window_play",
+      "path": "memory.window_play",
+      "visible": "public",
+      "y": "y/src/memory.y:434",
+      "rust": "memory_example::memory::window_play",
+      "members": [
+        "play"
+      ]
+    }
+  ],
+  "units": [
+    {
+      "subject": "memory_example::memory::setup::game_rules::SHOW_TIME",
+      "unit": "duration",
+      "literal": "1s",
+      "lowered": "std::time::Duration::from_secs(1)",
+      "y": "y/src/memory.y:28"
+    },
+    {
+      "subject": "memory_example::memory::setup::game_rules::FETCH_TIME",
+      "unit": "duration",
+      "literal": "20s",
+      "lowered": "std::time::Duration::from_secs(20)",
+      "y": "y/src/memory.y:30"
+    },
+    {
+      "subject": "memory_example::memory::setup::game_rules::PAR_TIME",
+      "unit": "duration",
+      "literal": "120s",
+      "lowered": "std::time::Duration::from_secs(120)",
+      "y": "y/src/memory.y:38"
+    }
+  ],
+  "capabilities": [
+    {
+      "subject": "memory_example::memory::setup::new_game",
+      "injected": [
+        "random as random",
+        "clock as clock",
+        "site as site"
+      ],
+      "lowered": "as the last three parameters, in order",
+      "y": "y/src/memory.y:113"
+    },
+    {
+      "subject": "memory_example::memory::drawing::draw",
+      "injected": [
+        "window as window"
+      ],
+      "lowered": "as the last parameter",
+      "y": "y/src/memory.y:357"
+    },
+    {
+      "subject": "memory_example::memory::draw_card",
+      "injected": [
+        "window as window"
+      ],
+      "lowered": "as the last parameter",
+      "y": "y/src/memory.y:382"
+    },
+    {
+      "subject": "memory_example::memory::fill_card",
+      "injected": [
+        "window as window"
+      ],
+      "lowered": "as the last parameter",
+      "y": "y/src/memory.y:402"
+    },
+    {
+      "subject": "memory_example::memory::draw_picture",
+      "injected": [
+        "window as window"
+      ],
+      "lowered": "as the last parameter",
+      "y": "y/src/memory.y:415"
+    },
+    {
+      "subject": "memory_example::memory::show_fetching",
+      "injected": [
+        "window as window",
+        "forever as forever"
+      ],
+      "lowered": "as the last two parameters, in order",
+      "y": "y/src/memory.y:426"
+    },
+    {
+      "subject": "memory_example::memory::window_play::play",
+      "injected": [
+        "window as window",
+        "clock as clock",
+        "random as random",
+        "site as site",
+        "forever as forever"
+      ],
+      "lowered": "as the last five parameters, in order",
+      "y": "y/src/memory.y:451"
+    },
+    {
+      "subject": "memory_example::main",
+      "injected": [
+        "system as system"
+      ],
+      "lowered": "System::root(), made by the entry point",
+      "y": "y/src/main.y:22"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "forever",
+      "because": "a hidden window shows no frames, and the game waits until it is shown",
+      "requires": "Forever",
+      "y": "y/src/memory.y:430",
+      "bare": "bare/src/memory.brs:433"
+    },
+    {
+      "claim": "forever",
+      "because": "a hidden window shows no frames, and the game waits until it is shown",
+      "requires": "Forever",
+      "y": "y/src/memory.y:482",
+      "bare": "bare/src/memory.brs:474"
+    }
+  ],
+  "suspensions": [
+    {
+      "subject": "memory_example::memory::setup::new_game",
+      "point": "site.get(",
+      "because": "the http capability may suspend (Y \u00a7 3.7)",
+      "lowered": "async fn, and .await at the point",
+      "y": "y/src/memory.y:119",
+      "bare": "bare/src/memory.brs:147"
+    },
+    {
+      "subject": "memory_example::memory::show_fetching",
+      "point": "window.next_frame()",
+      "because": "the window capability may suspend (Y \u00a7 3.7)",
+      "lowered": "async fn, and .await at the point",
+      "y": "y/src/memory.y:430",
+      "bare": "bare/src/memory.brs:433"
+    },
+    {
+      "subject": "memory_example::memory::window_play::play",
+      "point": "show_fetching()",
+      "because": "show_fetching may suspend",
+      "lowered": ".await at the call",
+      "y": "y/src/memory.y:452",
+      "bare": "bare/src/memory.brs:447"
+    },
+    {
+      "subject": "memory_example::memory::window_play::play",
+      "point": "new_game()",
+      "because": "new_game may suspend",
+      "lowered": ".await at the call",
+      "y": "y/src/memory.y:453",
+      "bare": "bare/src/memory.brs:448"
+    },
+    {
+      "subject": "memory_example::memory::window_play::play",
+      "point": "show_fetching()",
+      "because": "show_fetching may suspend",
+      "lowered": ".await at the call",
+      "y": "y/src/memory.y:465",
+      "bare": "bare/src/memory.brs:457"
+    },
+    {
+      "subject": "memory_example::memory::window_play::play",
+      "point": "new_game()",
+      "because": "new_game may suspend",
+      "lowered": ".await at the call",
+      "y": "y/src/memory.y:466",
+      "bare": "bare/src/memory.brs:458"
+    },
+    {
+      "subject": "memory_example::memory::window_play::play",
+      "point": "window.next_frame()",
+      "because": "the window capability may suspend (Y \u00a7 3.7)",
+      "lowered": ".await at the point",
+      "y": "y/src/memory.y:482",
+      "bare": "bare/src/memory.brs:474"
+    },
+    {
+      "subject": "memory_example::main",
+      "point": "play()",
+      "because": "play may suspend",
+      "lowered": "async fn entry, run on Macroquad's executor by y_window::run, and .await at the call",
+      "y": "y/src/main.y:31",
+      "bare": "bare/src/main.brs:52"
+    }
+  ],
+  "deadlines": [
+    {
+      "subject": "memory_example::memory::setup::new_game",
+      "bound": "game_rules.fetch_time",
+      "covers": [
+        "site.get("
+      ],
+      "expiry": "setup_error.timed_out",
+      "lowered": "Deadline::after at the scope's start, passed to each wait inside it; an expiry converts through SetupError::TimedOut",
+      "y": "y/src/memory.y:117",
+      "bare": "bare/src/memory.brs:145"
+    }
+  ],
+  "compiled": [],
+  "copies": [],
+  "decisions": {
+    "memory.choosable": [
+      {
+        "kind": "conditional",
+        "label": "judged",
+        "branches": [
+          {
+            "name": "judged.off_cards",
+            "y": "y/src/memory.y:156",
+            "bare": "bare/src/memory.brs:183"
+          },
+          {
+            "name": "judged.waiting",
+            "y": "y/src/memory.y:158",
+            "bare": "bare/src/memory.brs:186"
+          },
+          {
+            "name": "judged.showing",
+            "y": "y/src/memory.y:160",
+            "bare": "bare/src/memory.brs:188"
+          },
+          {
+            "name": "judged.free",
+            "y": "y/src/memory.y:162",
+            "bare": "bare/src/memory.brs:190"
+          }
+        ]
+      }
+    ],
+    "memory.turn_over": [
+      {
+        "kind": "conditional",
+        "label": "turn",
+        "branches": [
+          {
+            "name": "turn.first",
+            "y": "y/src/memory.y:177",
+            "bare": "bare/src/memory.brs:203"
+          },
+          {
+            "name": "turn.matching",
+            "y": "y/src/memory.y:180",
+            "bare": "bare/src/memory.brs:206"
+          },
+          {
+            "name": "turn.different",
+            "y": "y/src/memory.y:185",
+            "bare": "bare/src/memory.brs:211"
+          }
+        ]
+      }
+    ],
+    "memory.standing": [
+      {
+        "kind": "conditional",
+        "label": "judged",
+        "branches": [
+          {
+            "name": "judged.won",
+            "y": "y/src/memory.y:213",
+            "bare": "bare/src/memory.brs:235"
+          },
+          {
+            "name": "judged.lost",
+            "y": "y/src/memory.y:215",
+            "bare": "bare/src/memory.brs:237"
+          },
+          {
+            "name": "judged.playing",
+            "y": "y/src/memory.y:217",
+            "bare": "bare/src/memory.brs:239"
+          }
+        ]
+      }
+    ],
+    "memory.score": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "won",
+            "y": "y/src/memory.y:232",
+            "bare": "bare/src/memory.brs:251"
+          },
+          {
+            "name": "unfinished",
+            "y": "y/src/memory.y:234",
+            "bare": "bare/src/memory.brs:253"
+          }
+        ]
+      }
+    ],
+    "memory.time_bonus": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "quick",
+            "y": "y/src/memory.y:246",
+            "bare": "bare/src/memory.brs:264"
+          },
+          {
+            "name": "slow",
+            "y": "y/src/memory.y:248",
+            "bare": "bare/src/memory.brs:266"
+          }
+        ]
+      }
+    ],
+    "memory.card_at": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "inside",
+            "y": "y/src/memory.y:269",
+            "bare": "bare/src/memory.brs:283"
+          },
+          {
+            "name": "outside",
+            "y": "y/src/memory.y:271",
+            "bare": "bare/src/memory.brs:285"
+          }
+        ]
+      }
+    ],
+    "memory.banner": [
+      {
+        "kind": "conditional",
+        "label": "shown",
+        "branches": [
+          {
+            "name": "shown.playing",
+            "y": "y/src/memory.y:332",
+            "bare": "bare/src/memory.brs:348"
+          },
+          {
+            "name": "shown.won",
+            "y": "y/src/memory.y:337",
+            "bare": "bare/src/memory.brs:352"
+          },
+          {
+            "name": "shown.lost",
+            "y": "y/src/memory.y:342",
+            "bare": "bare/src/memory.brs:356"
+          }
+        ]
+      }
+    ],
+    "memory.draw_card": [
+      {
+        "kind": "conditional",
+        "label": "shown",
+        "branches": [
+          {
+            "name": "shown.face_down",
+            "y": "y/src/memory.y:384",
+            "bare": "bare/src/memory.brs:394"
+          },
+          {
+            "name": "shown.face_up",
+            "y": "y/src/memory.y:386",
+            "bare": "bare/src/memory.brs:395"
+          },
+          {
+            "name": "shown.matched",
+            "y": "y/src/memory.y:389",
+            "bare": "bare/src/memory.brs:399"
+          }
+        ]
+      }
+    ],
+    "memory.play": [
+      {
+        "kind": "while",
+        "branches": [
+          {
+            "name": "open",
+            "y": "y/src/memory.y:457",
+            "bare": "bare/src/memory.brs:451"
+          },
+          {
+            "name": "closed",
+            "y": "y/src/memory.y:483",
+            "bare": "bare/src/memory.brs:476"
+          }
+        ]
+      },
+      {
+        "kind": "conditional",
+        "label": "moment",
+        "branches": [
+          {
+            "name": "moment.again",
+            "y": "y/src/memory.y:464",
+            "bare": "bare/src/memory.brs:456"
+          },
+          {
+            "name": "moment.hiding",
+            "y": "y/src/memory.y:467",
+            "bare": "bare/src/memory.brs:459"
+          },
+          {
+            "name": "moment.picking",
+            "y": "y/src/memory.y:469",
+            "bare": "bare/src/memory.brs:461"
+          },
+          {
+            "name": "moment.over",
+            "y": "y/src/memory.y:479",
+            "bare": "bare/src/memory.brs:470"
+          }
+        ]
+      },
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "chosen",
+            "y": "y/src/memory.y:475",
+            "bare": "bare/src/memory.brs:466"
+          },
+          {
+            "name": "ignored",
+            "y": "y/src/memory.y:477",
+            "bare": "bare/src/memory.brs:467"
+          }
+        ]
+      }
+    ]
+  },
+  "tests": {
+    "a_click_between_the_cards_chooses_nothing": {
+      "y": "y/src/memory.test.y:46",
+      "rust": "memory_example::memory::tests::a_click_between_the_cards_chooses_nothing",
+      "covers": [
+        "choosable#judged.off_cards",
+        "card_at#outside"
+      ]
+    },
+    "a_click_on_a_card_chooses_it": {
+      "y": "y/src/memory.test.y:59",
+      "rust": "memory_example::memory::tests::a_click_on_a_card_chooses_it",
+      "covers": [
+        "choosable#judged.free",
+        "card_at#inside"
+      ]
+    },
+    "a_face_up_card_cannot_be_chosen_again": {
+      "y": "y/src/memory.test.y:72",
+      "rust": "memory_example::memory::tests::a_face_up_card_cannot_be_chosen_again",
+      "covers": [
+        "choosable#judged.showing",
+        "turn_over#turn.first"
+      ]
+    },
+    "a_matching_pair_stays_face_up": {
+      "y": "y/src/memory.test.y:87",
+      "rust": "memory_example::memory::tests::a_matching_pair_stays_face_up",
+      "covers": [
+        "turn_over#turn.matching"
+      ]
+    },
+    "a_pair_that_does_not_match_costs_a_life": {
+      "y": "y/src/memory.test.y:105",
+      "rust": "memory_example::memory::tests::a_pair_that_does_not_match_costs_a_life",
+      "covers": [
+        "turn_over#turn.different",
+        "choosable#judged.waiting"
+      ]
+    },
+    "two_cards_that_do_not_match_turn_back": {
+      "y": "y/src/memory.test.y:122",
+      "rust": "memory_example::memory::tests::two_cards_that_do_not_match_turn_back",
+      "covers": [
+        "turn_over#turn.different"
+      ]
+    },
+    "a_new_game_is_being_played": {
+      "y": "y/src/memory.test.y:139",
+      "rust": "memory_example::memory::tests::a_new_game_is_being_played",
+      "covers": [
+        "standing#judged.playing"
+      ]
+    },
+    "finding_every_pair_wins": {
+      "y": "y/src/memory.test.y:152",
+      "rust": "memory_example::memory::tests::finding_every_pair_wins",
+      "covers": [
+        "standing#judged.won"
+      ]
+    },
+    "losing_every_life_loses": {
+      "y": "y/src/memory.test.y:166",
+      "rust": "memory_example::memory::tests::losing_every_life_loses",
+      "covers": [
+        "standing#judged.lost"
+      ]
+    },
+    "an_unfinished_game_scores_its_pairs": {
+      "y": "y/src/memory.test.y:180",
+      "rust": "memory_example::memory::tests::an_unfinished_game_scores_its_pairs",
+      "covers": [
+        "score#unfinished"
+      ]
+    },
+    "a_quick_win_scores_lives_and_seconds": {
+      "y": "y/src/memory.test.y:195",
+      "rust": "memory_example::memory::tests::a_quick_win_scores_lives_and_seconds",
+      "covers": [
+        "score#won",
+        "time_bonus#quick"
+      ]
+    },
+    "a_slow_win_scores_no_seconds": {
+      "y": "y/src/memory.test.y:212",
+      "rust": "memory_example::memory::tests::a_slow_win_scores_no_seconds",
+      "covers": [
+        "time_bonus#slow"
+      ]
+    },
+    "the_banner_says_how_the_game_stands": {
+      "y": "y/src/memory.test.y:228",
+      "rust": "memory_example::memory::tests::the_banner_says_how_the_game_stands",
+      "covers": [
+        "banner#shown.playing",
+        "banner#shown.won",
+        "banner#shown.lost"
+      ]
+    },
+    "a_new_game_deals_two_cards_of_each_picture": {
+      "y": "y/src/memory.test.y:252",
+      "rust": "memory_example::memory::tests::a_new_game_deals_two_cards_of_each_picture",
+      "covers": [
+        "standing#judged.playing"
+      ]
+    },
+    "a_site_that_fails_fails_the_setup": {
+      "y": "y/src/memory.test.y:268",
+      "rust": "memory_example::memory::tests::a_site_that_fails_fails_the_setup",
+      "covers": [
+        "new_game!setup_error.unreachable"
+      ]
+    },
+    "a_site_too_slow_fails_the_setup": {
+      "y": "y/src/memory.test.y:281",
+      "rust": "memory_example::memory::tests::a_site_too_slow_fails_the_setup",
+      "covers": [
+        "new_game!setup_error.timed_out"
+      ]
+    },
+    "what_is_not_a_drawing_fails_the_setup": {
+      "y": "y/src/memory.test.y:294",
+      "rust": "memory_example::memory::tests::what_is_not_a_drawing_fails_the_setup",
+      "covers": [
+        "new_game!setup_error.not_a_picture"
+      ]
+    },
+    "a_whole_game_is_won_and_another_begun": {
+      "y": "y/src/memory.test.y:310",
+      "rust": "memory_example::memory::tests::a_whole_game_is_won_and_another_begun",
+      "covers": [
+        "play#open",
+        "play#moment.picking",
+        "play#chosen",
+        "play#moment.over",
+        "play#moment.again",
+        "play#closed",
+        "draw_card#shown.face_down",
+        "draw_card#shown.face_up",
+        "draw_card#shown.matched",
+        "banner#shown.won"
+      ]
+    },
+    "a_pair_that_does_not_match_is_shown_then_turned_back": {
+      "y": "y/src/memory.test.y:345",
+      "rust": "memory_example::memory::tests::a_pair_that_does_not_match_is_shown_then_turned_back",
+      "covers": [
+        "play#ignored",
+        "play#moment.hiding"
+      ]
+    },
+    "a_site_that_fails_ends_play": {
+      "y": "y/src/memory.test.y:368",
+      "rust": "memory_example::memory::tests::a_site_that_fails_ends_play",
+      "covers": [
+        "play!setup_error.unreachable"
+      ]
+    },
+    "a_site_too_slow_ends_play": {
+      "y": "y/src/memory.test.y:383",
+      "rust": "memory_example::memory::tests::a_site_too_slow_ends_play",
+      "covers": [
+        "play!setup_error.timed_out"
+      ]
+    },
+    "what_is_not_a_drawing_ends_play": {
+      "y": "y/src/memory.test.y:398",
+      "rust": "memory_example::memory::tests::what_is_not_a_drawing_ends_play",
+      "covers": [
+        "play!setup_error.not_a_picture"
+      ]
+    }
+  }
+}

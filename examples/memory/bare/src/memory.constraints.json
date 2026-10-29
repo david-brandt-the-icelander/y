@@ -1,0 +1,567 @@
+{
+  "format": "y-constraints/0",
+  "host": "rust",
+  "crate": "memory-example 0.0.0",
+  "module": "src/memory.rs",
+  "status": {
+    "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
+  },
+  "subjects": [
+    { "kind": "module", "name": "memory_example::memory::setup", "visible": "public" },
+    { "kind": "module", "name": "memory_example::memory::setup::board", "visible": "public" },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::setup::board::COLUMNS",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::setup::board::ROWS",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::setup::board::CARDS",
+      "visible": "public",
+      "type": "u32"
+    },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::setup::board::PAIRS",
+      "visible": "public",
+      "type": "u32"
+    },
+    { "kind": "module", "name": "memory_example::memory::setup::game_rules", "visible": "public" },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::setup::game_rules::LIVES",
+      "visible": "public",
+      "type": "u32"
+    },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::setup::game_rules::SHOW_TIME",
+      "visible": "public",
+      "type": "Duration"
+    },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::setup::game_rules::FETCH_TIME",
+      "visible": "public",
+      "type": "Duration"
+    },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::setup::game_rules::POINTS_PER_PAIR",
+      "visible": "public",
+      "type": "u32"
+    },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::setup::game_rules::POINTS_PER_LIFE",
+      "visible": "public",
+      "type": "u32"
+    },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::setup::game_rules::POINTS_PER_SECOND",
+      "visible": "public",
+      "type": "u32"
+    },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::setup::game_rules::PAR_TIME",
+      "visible": "public",
+      "type": "Duration"
+    },
+    { "kind": "module", "name": "memory_example::memory::setup::faces", "visible": "public" },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::setup::faces::CODES",
+      "visible": "public",
+      "type": "list<ref<text>> where size(value) == 20 as 'std::primitive::array'",
+      "access": { "rights": "read", "guarantee": "readers" }
+    },
+    { "kind": "module", "name": "memory_example::memory::setup::openmoji", "visible": "public" },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::setup::openmoji::ADDRESS",
+      "visible": "public",
+      "type": "ref<text>",
+      "access": { "rights": "read", "guarantee": "readers" }
+    },
+    {
+      "kind": "type",
+      "name": "memory_example::memory::setup::Side",
+      "visible": "public",
+      "variants": [{ "name": "FaceDown" }, { "name": "FaceUp" }, { "name": "Matched" }]
+    },
+    {
+      "kind": "type",
+      "name": "memory_example::memory::setup::Outcome",
+      "visible": "public",
+      "variants": [{ "name": "Playing" }, { "name": "Won" }, { "name": "Lost" }]
+    },
+    {
+      "kind": "type",
+      "name": "memory_example::memory::setup::Game",
+      "visible": "public",
+      "fields": [
+        {
+          "name": "pairs",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "list<u32> as 'Vec'",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "sides",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "list<Side> as 'Vec'",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "pictures",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "list<Picture> as 'Vec'",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "turned",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "list<u32> as 'Vec'",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "turned_at",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "Instant",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "matches",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "u32",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "lives",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "u32",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "started",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "Instant",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "elapsed",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "Duration",
+          "hold": { "kind": "owns" }
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "memory_example::memory::setup::SetupError",
+      "visible": "public",
+      "variants": [
+        {
+          "name": "Unreachable",
+          "fields": [{ "name": "error", "type": "HttpError", "hold": { "kind": "owns" } }]
+        },
+        {
+          "name": "TimedOut",
+          "fields": [{ "name": "deadline", "type": "Expired", "hold": { "kind": "owns" } }]
+        },
+        {
+          "name": "NotAPicture",
+          "fields": [{ "name": "error", "type": "PictureError", "hold": { "kind": "owns" } }]
+        }
+      ],
+      "implements": [
+        { "trait": "From<Within<HttpError>>", "impl": "memory_example::memory::setup::SetupError as From" },
+        { "trait": "From<PictureError>", "impl": "memory_example::memory::setup::SetupError as From#2" }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "memory_example::memory::setup::SetupError as From",
+      "trait": "From<Within<HttpError>>"
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::setup::SetupError as From::from",
+      "params": [{ "name": "failed", "type": "Within<HttpError>" }],
+      "result": { "type": "SetupError" }
+    },
+    {
+      "kind": "impl",
+      "name": "memory_example::memory::setup::SetupError as From#2",
+      "trait": "From<PictureError>"
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::setup::SetupError as From#2::from",
+      "params": [{ "name": "error", "type": "PictureError" }],
+      "result": { "type": "SetupError" }
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::setup::new_game",
+      "visible": "public",
+      "params": [
+        {
+          "name": "random",
+          "type": "ref<Random>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        { "name": "clock", "type": "ref<Clock>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        { "name": "site", "type": "ref<Http>", "access": { "rights": "write", "guarantee": "exclusive" } }
+      ],
+      "result": { "type": "Game", "fails": "SetupError" },
+      "clauses": [
+        { "kind": "effects", "text": "effects only random, clock, site", "source": "y/src/memory.y:113" }
+      ]
+    },
+    { "kind": "module", "name": "memory_example::memory::rules", "visible": "public" },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::rules::choosable",
+      "visible": "public",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
+        { "name": "place", "type": "Point" }
+      ],
+      "result": { "type": "u32?" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/memory.y:152" }]
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::rules::turn_over",
+      "visible": "public",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        { "name": "number", "type": "u32" },
+        { "name": "now", "type": "Instant" }
+      ],
+      "clauses": [
+        {
+          "kind": "require",
+          "text": "require may_turn : game.sides[number - 1] is FaceDown and size(game.turned) < 2",
+          "source": "y/src/memory.y:175",
+          "status": { "lifted": "src/memory.rs: y_runtime::require" }
+        },
+        { "kind": "effects", "text": "no io", "source": "y/src/memory.y:174" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/memory.y:174" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/memory.y:174" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/memory.y:174" },
+        { "kind": "access", "text": "mutates only game", "source": "y/src/memory.y:174" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::rules::turn_back",
+      "visible": "public",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "write", "guarantee": "exclusive" } }
+      ],
+      "clauses": [
+        {
+          "kind": "require",
+          "text": "require two_turned : size(game.turned) == 2",
+          "source": "y/src/memory.y:198",
+          "status": { "lifted": "src/memory.rs: y_runtime::require" }
+        },
+        { "kind": "effects", "text": "no io", "source": "y/src/memory.y:197" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/memory.y:197" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/memory.y:197" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/memory.y:197" },
+        { "kind": "access", "text": "mutates only game", "source": "y/src/memory.y:197" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::rules::standing",
+      "visible": "public",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "Outcome" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/memory.y:211" }]
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::rules::score",
+      "visible": "public",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "u32" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/memory.y:229" }]
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::time_bonus",
+      "params": [{ "name": "elapsed", "type": "Duration" }],
+      "result": { "type": "u32" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/memory.y:245" }]
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::card_at",
+      "params": [{ "name": "place", "type": "Point" }],
+      "result": { "type": "u32?" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/memory.y:259" }]
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::corner_of",
+      "params": [{ "name": "row", "type": "i32" }, { "name": "column", "type": "i32" }],
+      "result": { "type": "Point" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/memory.y:284" }]
+    },
+    { "kind": "module", "name": "memory_example::memory::drawing", "visible": "public" },
+    { "kind": "module", "name": "memory_example::memory::drawing::layout", "visible": "public" },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::drawing::layout::CARD_SIZE",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::drawing::layout::GAP",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::drawing::layout::STEP",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::drawing::layout::PICTURE_INSET",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::drawing::layout::PICTURE_SIZE",
+      "visible": "public",
+      "type": "u16"
+    },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::drawing::layout::BAR_HEIGHT",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::drawing::layout::TEXT_SIZE",
+      "visible": "public",
+      "type": "u32"
+    },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::drawing::layout::WIDTH",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::drawing::layout::HEIGHT",
+      "visible": "public",
+      "type": "i32"
+    },
+    { "kind": "module", "name": "memory_example::memory::drawing::palette", "visible": "public" },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::drawing::palette::BACKGROUND",
+      "visible": "public",
+      "type": "Colour"
+    },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::drawing::palette::BACK",
+      "visible": "public",
+      "type": "Colour"
+    },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::drawing::palette::FACE",
+      "visible": "public",
+      "type": "Colour"
+    },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::drawing::palette::MATCHED",
+      "visible": "public",
+      "type": "Colour"
+    },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::drawing::palette::TEXT",
+      "visible": "public",
+      "type": "Colour"
+    },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::drawing::palette::CREDIT",
+      "visible": "public",
+      "type": "Colour"
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::drawing::banner",
+      "visible": "public",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
+        { "name": "highest", "type": "u32" }
+      ],
+      "result": { "type": "list<text> as 'Vec'" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/memory.y:328" }]
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::drawing::draw",
+      "visible": "public",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
+        { "name": "highest", "type": "u32" },
+        {
+          "name": "window",
+          "type": "ref<Window>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "clauses": [
+        { "kind": "effects", "text": "effects only window", "source": "y/src/memory.y:357" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/memory.y:357" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/memory.y:357" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/memory.y:357" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::draw_card",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
+        { "name": "number", "type": "u32" },
+        { "name": "corner", "type": "Point" },
+        {
+          "name": "window",
+          "type": "ref<Window>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "clauses": [
+        { "kind": "effects", "text": "effects only window", "source": "y/src/memory.y:382" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/memory.y:382" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/memory.y:382" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/memory.y:382" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::fill_card",
+      "params": [
+        { "name": "corner", "type": "Point" },
+        { "name": "shade", "type": "Colour" },
+        {
+          "name": "window",
+          "type": "ref<Window>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "clauses": [
+        { "kind": "effects", "text": "effects only window", "source": "y/src/memory.y:402" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/memory.y:402" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/memory.y:402" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/memory.y:402" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::draw_picture",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
+        { "name": "number", "type": "u32" },
+        { "name": "corner", "type": "Point" },
+        {
+          "name": "window",
+          "type": "ref<Window>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "clauses": [
+        { "kind": "effects", "text": "effects only window", "source": "y/src/memory.y:415" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/memory.y:415" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/memory.y:415" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/memory.y:415" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::show_fetching",
+      "params": [
+        {
+          "name": "window",
+          "type": "ref<Window>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        { "name": "forever", "type": "ref<Forever>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "clauses": [
+        { "kind": "effects", "text": "effects only window", "source": "y/src/memory.y:426" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/memory.y:426" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/memory.y:426" }
+      ]
+    },
+    { "kind": "module", "name": "memory_example::memory::window_play", "visible": "public" },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::window_play::play",
+      "visible": "public",
+      "params": [
+        {
+          "name": "window",
+          "type": "ref<Window>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        { "name": "clock", "type": "ref<Clock>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        {
+          "name": "random",
+          "type": "ref<Random>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        { "name": "site", "type": "ref<Http>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        { "name": "forever", "type": "ref<Forever>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "u32", "fails": "SetupError" },
+      "clauses": [
+        {
+          "kind": "effects",
+          "text": "effects only window, clock, random, site",
+          "source": "y/src/memory.y:451"
+        }
+      ]
+    }
+  ]
+}

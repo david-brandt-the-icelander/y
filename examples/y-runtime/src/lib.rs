@@ -1,7 +1,7 @@
 //! A small stand-in for the Y runtime, written by hand.
 //!
 //! Rust lowered from Y calls this crate for what Y has and Rust does not: capabilities (`System`, `Console`, `Random`,
-//! `Clock`, `Forever`), the standard library's text operations on runes and list operations by number, refined types' constraint violations, and faults.
+//! `Clock`, `Forever`), deadlines (`Deadline`, `Expired`), the standard library's text operations on runes and list operations by number, refined types' constraint violations, and faults.
 //! It is only as large as the examples need. Where it is simpler than Y's semantics, the item says so.
 use std::collections::VecDeque;
 use std::fmt;
@@ -107,6 +107,15 @@ pub mod list {
         match position(items.len(), number) {
             Some(at) => items[at],
             None => fault("y_runtime::list::at_number", "no element with that number"),
+        }
+    }
+
+    /// The element numbered `number`, counting from 1, borrowed: Y's `at_number` on a list of values that are not
+    /// copied, such as pictures. A number outside the list is a fault.
+    pub fn at_number_ref<T>(items: &[T], number: u32) -> &T {
+        match position(items.len(), number) {
+            Some(at) => &items[at],
+            None => fault("y_runtime::list::at_number_ref", "no element with that number"),
         }
     }
 
@@ -284,6 +293,24 @@ impl Random {
         let drawn = self.state.wrapping_mul(0x2545_F491_4F6C_DD1D);
         (drawn % count as u64) as usize
     }
+
+    /// The list in an order drawn at random: Y's `random.shuffled(items)`.
+    pub fn shuffled<T: Clone>(&mut self, items: &[T]) -> Vec<T> {
+        let mut out = items.to_vec();
+        for last in (1..out.len()).rev() {
+            let other = self.index_below(last + 1);
+            out.swap(last, other);
+        }
+        out
+    }
+
+    /// `count` elements of the list, each drawn at most once, in the order drawn: Y's `random.chosen(from:, count:)`.
+    /// A count larger than the list is a fault.
+    pub fn chosen<T: Clone>(&mut self, items: &[T], count: u32) -> Vec<T> {
+        let count = usize::try_from(count).unwrap_or(usize::MAX);
+        require(count <= items.len(), "y_runtime::Random::chosen#enough");
+        self.shuffled(items).into_iter().take(count).collect()
+    }
 }
 
 /// The capability to read the time (Y § 3.7). Y's `instant` and `duration` lower to `std::time::Instant` and
@@ -308,6 +335,56 @@ impl Clock {
                 *start + *tick * *readings
             }
         }
+    }
+}
+
+/// Y's `within d or fail:` (Y § 3.8): an absolute deadline shared by every wait inside the scope. It is read from the
+/// runtime's monotonic time, not from a `clock` capability.
+#[derive(Clone, Copy, Debug)]
+pub struct Deadline {
+    at: Instant,
+}
+
+impl Deadline {
+    /// The deadline `bound` from now.
+    pub fn after(bound: Duration) -> Deadline {
+        Deadline { at: Instant::now() + bound }
+    }
+
+    /// The time left before the deadline, or `Expired` when it has passed.
+    pub fn remaining(&self) -> Result<Duration, Expired> {
+        self.at.checked_duration_since(Instant::now()).filter(|left| !left.is_zero()).ok_or(Expired { _private: () })
+    }
+}
+
+/// Y's `expired`: the failure of a wait whose deadline passed (Y § 3.8).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Expired {
+    _private: (),
+}
+
+impl Expired {
+    /// An expiry, for a fake capability whose waits always expire.
+    pub fn fake() -> Expired {
+        Expired { _private: () }
+    }
+}
+
+/// How a call that waits inside `within` fails: with its own failure, or because the deadline passed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Within<E> {
+    Failed(E),
+    Expired(Expired),
+}
+
+/// Y's operations on `duration` that Rust's `Duration` does not have in the same form.
+pub mod time {
+    use std::time::Duration;
+
+    /// The whole seconds in a duration, as a `uint32`: Y's `duration.whole_seconds()`. The part of a second left over
+    /// is dropped, and a duration too long for a `uint32` gives its largest value.
+    pub fn whole_seconds(span: Duration) -> u32 {
+        u32::try_from(span.as_secs()).unwrap_or(u32::MAX)
     }
 }
 

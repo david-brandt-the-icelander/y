@@ -75,6 +75,11 @@ fn tic_tac_toe_bare_files_weave_to_the_committed_rust_and_strip_back() {
     weaves_and_strips_back("tic-tac-toe", &["lib", "main", "tic_tac_toe", "tic_tac_toe/tests"]);
 }
 
+#[test]
+fn memory_bare_files_weave_to_the_committed_rust_and_strip_back() {
+    weaves_and_strips_back("memory", &["lib", "main", "memory", "memory/tests"]);
+}
+
 fn weaves_and_strips_back(name: &str, expected: &[&str]) {
     let dir = example(name);
     let mods = modules(&dir);
@@ -125,6 +130,11 @@ fn tic_tac_toe_constraint_files_are_valid() {
     constraint_files_are_valid("tic-tac-toe");
 }
 
+#[test]
+fn memory_constraint_files_are_valid() {
+    constraint_files_are_valid("memory");
+}
+
 fn constraint_files_are_valid(name: &str) {
     let dir = example(name);
     for m in modules(&dir) {
@@ -160,6 +170,11 @@ fn snake_facts_match_the_y_source_and_the_bare_bodies() {
 #[test]
 fn tic_tac_toe_facts_match_the_y_source_and_the_bare_bodies() {
     facts_match_the_y_source_and_the_bare_bodies("tic-tac-toe");
+}
+
+#[test]
+fn memory_facts_match_the_y_source_and_the_bare_bodies() {
+    facts_match_the_y_source_and_the_bare_bodies("memory");
 }
 
 fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
@@ -212,6 +227,19 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
         let point = s["point"].as_str().unwrap();
         assert!(at(s["y"].as_str().unwrap()).contains(point), "suspension at {point}: not at {}", s["y"]);
         assert!(at(s["bare"].as_str().unwrap()).contains(".await"), "suspension at {point}: not awaited at {}", s["bare"]);
+    }
+    // each `within` scope is where the facts say, and the bare body starts its deadline there and passes it to each
+    // wait inside the scope (Y § 3.8); a file without one has no `deadlines` fact
+    for d in facts["deadlines"].as_array().map_or(&[][..], |v| v) {
+        let bound = d["bound"].as_str().unwrap();
+        assert!(at(d["y"].as_str().unwrap()).trim() == format!("within {bound} or fail:"), "deadline {bound}: not at {}", d["y"]);
+        assert!(at(d["bare"].as_str().unwrap()).contains("Deadline::after("), "deadline {bound}: not started at {}", d["bare"]);
+        let (file, line) = d["bare"].as_str().unwrap().rsplit_once(':').unwrap();
+        let rest: Vec<String> = read(&dir.join(file)).lines().skip(line.parse().unwrap()).map(str::to_string).collect();
+        for wait in d["covers"].as_array().unwrap() {
+            let wait = wait.as_str().unwrap();
+            assert!(rest.iter().any(|l| l.contains(wait) && l.contains("&deadline")), "deadline {bound}: {wait} is not given it");
+        }
     }
     // every named decision of the Y source is listed: `if name = …:`, `while name = …:`, `condition label.name = …:` and `else name:`
     let mut in_source = BTreeSet::new();

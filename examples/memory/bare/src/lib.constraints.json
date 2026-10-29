@@ -1,0 +1,10 @@
+{
+  "format": "y-constraints/0",
+  "host": "rust",
+  "crate": "memory-example 0.0.0",
+  "module": "src/lib.rs",
+  "status": {
+    "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
+  },
+  "subjects": [{ "kind": "module", "name": "memory_example::memory", "visible": "public" }]
+}

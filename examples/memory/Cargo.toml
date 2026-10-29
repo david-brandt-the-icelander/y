@@ -1,0 +1,12 @@
+[package]
+name = "memory-example"
+version = "0.0.0"
+edition = "2021"
+description = "Memory, the game of matching pairs, written in Y and lowered through bare Rust and its constraint files to Rust."
+
+[dependencies]
+y-http = { path = "../y-http" }
+y-runtime = { path = "../y-runtime" }
+y-window = { path = "../y-window" }
+
+[workspace]
