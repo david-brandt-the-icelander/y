@@ -434,6 +434,10 @@ active_users = users.filter(is_active)
   - Two lines of one block that differ in width are a lint error, which formatting fixes.
 - **A comment directly above a declaration, with no blank line between, is its documentation** (§ 3.2). Every other
   comment is free text.
+- **A blank line comes before every comment line,** unless the line above is a comment too or opens a block (ends with
+  `:`). A comment so starts a paragraph of its own, whether it documents a member, a statement or a `condition`. The
+  lines of a documentation block between its rules are not comments in this sense. A missing blank line is a lint
+  error, which formatting fixes.
 - `//` and `/* */` are not comments in Y. The diagnostic names `--`, and `y fix` rewrites them.
 - Commented-out code is a lint error. Delete it; history keeps it.
 - **Blocks are a colon and indentation, as in Python.** A line that opens a block ends with `:`, and the block is the
@@ -443,7 +447,7 @@ active_users = users.filter(is_active)
 - **Two blank lines separate one declaration from the next,** at module level and inside a facet alike; fewer or more is
   a lint error, which formatting fixes. Inside a body, at most one blank line separates statements. Members of a
   structure, a type, a constant group or an enumeration are not declarations in this sense, and follow one another
-  directly.
+  directly, except that a member with a comment above it has a blank line before the comment.
 - **A blank line comes before every flow-control statement** (`if`, `while`, `for`, `conditional`, `break`, `continue`,
   `retry`, and the blocks `atomic`, `within`, `inject`, `arena`, `uncancellable` and `supervise`), unless it is the first
   statement of its block. Comments about the statement may sit between the blank line and the statement. `fail` and

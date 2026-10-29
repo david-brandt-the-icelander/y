@@ -80,6 +80,11 @@ fn memory_bare_files_weave_to_the_committed_rust_and_strip_back() {
     weaves_and_strips_back("memory", &["lib", "main", "memory", "memory/tests"]);
 }
 
+#[test]
+fn checkers_bare_files_weave_to_the_committed_rust_and_strip_back() {
+    weaves_and_strips_back("checkers", &["checkers", "checkers/tests", "lib", "main"]);
+}
+
 fn weaves_and_strips_back(name: &str, expected: &[&str]) {
     let dir = example(name);
     let mods = modules(&dir);
@@ -135,6 +140,11 @@ fn memory_constraint_files_are_valid() {
     constraint_files_are_valid("memory");
 }
 
+#[test]
+fn checkers_constraint_files_are_valid() {
+    constraint_files_are_valid("checkers");
+}
+
 fn constraint_files_are_valid(name: &str) {
     let dir = example(name);
     for m in modules(&dir) {
@@ -175,6 +185,11 @@ fn tic_tac_toe_facts_match_the_y_source_and_the_bare_bodies() {
 #[test]
 fn memory_facts_match_the_y_source_and_the_bare_bodies() {
     facts_match_the_y_source_and_the_bare_bodies("memory");
+}
+
+#[test]
+fn checkers_facts_match_the_y_source_and_the_bare_bodies() {
+    facts_match_the_y_source_and_the_bare_bodies("checkers");
 }
 
 fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
@@ -308,6 +323,26 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
             }
             let above = lines[k - 1].trim_end();
             assert!(above.is_empty() || above.ends_with(':'), "{y}:{}: no blank line before `{t}`", i + 1);
+        }
+    }
+    // a blank line comes before every comment line, unless the line above is a comment too or opens a block; the
+    // lines of a documentation block are not comments in this sense (a lint rule of Y § 3.1)
+    for y in &all {
+        let lines: Vec<String> = read(&dir.join(y)).lines().map(str::to_string).collect();
+        let is_rule = |t: &str| t.len() >= 3 && t.chars().all(|c| c == '-');
+        let mut inside = false;
+        for (i, l) in lines.iter().enumerate() {
+            let t = l.trim();
+            if is_rule(t) {
+                inside = !inside;
+                continue;
+            }
+            if inside || !t.starts_with("--") || i == 0 {
+                continue;
+            }
+            let above = lines[i - 1].trim();
+            let allowed = above.is_empty() || (above.starts_with("--") && !is_rule(above)) || above.ends_with(':');
+            assert!(allowed, "{y}:{}: no blank line before the comment `{t}`", i + 1);
         }
     }
     // the tests cover every outcome: each named branch, and each failure case its function documents (Y § 3.14)

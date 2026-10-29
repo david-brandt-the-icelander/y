@@ -1,0 +1,1450 @@
+{
+  "format": "y-facts/0",
+  "about": "What the Y source says that neither the bare bodies nor the constraint files can hold. Nothing in bare-rust reads this file; it is for the Y toolchain (y explain, y review, coverage), and tools/bare-rust/tests/y_examples.rs checks it against the Y source and the bare bodies.",
+  "modules": [
+    {
+      "y": "y/src/checkers.y",
+      "module": "checkers",
+      "bare": "bare/src/checkers.brs",
+      "rust": "src/checkers.rs"
+    },
+    {
+      "y": "y/src/checkers.test.y",
+      "module": "checkers",
+      "bare": "bare/src/checkers/tests.brs",
+      "rust": "src/checkers/tests.rs"
+    },
+    {
+      "y": "y/src/main.y",
+      "module": "main",
+      "bare": "bare/src/main.brs",
+      "rust": "src/main.rs"
+    }
+  ],
+  "facets": [
+    {
+      "module": "checkers",
+      "facet": "setup",
+      "path": "checkers.setup",
+      "visible": "public",
+      "y": "y/src/checkers.y:9",
+      "rust": "checkers_example::checkers::setup",
+      "members": [
+        "board",
+        "game_rules",
+        "scoring",
+        "side",
+        "piece",
+        "square",
+        "placed",
+        "direction",
+        "directions",
+        "move",
+        "level",
+        "levels",
+        "outcome",
+        "game",
+        "new_game"
+      ]
+    },
+    {
+      "module": "checkers",
+      "facet": "rules",
+      "path": "checkers.rules",
+      "visible": "public",
+      "y": "y/src/checkers.y:192",
+      "rust": "checkers_example::checkers::rules",
+      "members": [
+        "legal_moves",
+        "apply",
+        "standing",
+        "score",
+        "player_moves",
+        "other"
+      ]
+    },
+    {
+      "module": "checkers",
+      "facet": "computer",
+      "path": "checkers.computer",
+      "visible": "public",
+      "y": "y/src/checkers.y:536",
+      "rust": "checkers_example::checkers::computer",
+      "members": [
+        "search",
+        "played_out",
+        "computer_move"
+      ]
+    },
+    {
+      "module": "checkers",
+      "facet": "drawing",
+      "path": "checkers.drawing",
+      "visible": "public",
+      "y": "y/src/checkers.y:776",
+      "rust": "checkers_example::checkers::drawing",
+      "members": [
+        "layout",
+        "palette",
+        "banner",
+        "draw",
+        "draw_levels",
+        "square_at",
+        "level_at"
+      ]
+    },
+    {
+      "module": "checkers",
+      "facet": "window_play",
+      "path": "checkers.window_play",
+      "visible": "public",
+      "y": "y/src/checkers.y:1075",
+      "rust": "checkers_example::checkers::window_play",
+      "members": [
+        "ending",
+        "play",
+        "choose_level",
+        "play_game",
+        "clicked"
+      ]
+    }
+  ],
+  "units": [],
+  "capabilities": [
+    {
+      "subject": "checkers_example::checkers::computer::computer_move",
+      "injected": [
+        "random as random"
+      ],
+      "lowered": "as the last parameter",
+      "y": "y/src/checkers.y:578"
+    },
+    {
+      "subject": "checkers_example::checkers::best_sampled",
+      "injected": [
+        "random as random"
+      ],
+      "lowered": "as the last parameter",
+      "y": "y/src/checkers.y:653"
+    },
+    {
+      "subject": "checkers_example::checkers::sampled_value",
+      "injected": [
+        "random as random"
+      ],
+      "lowered": "as the last parameter",
+      "y": "y/src/checkers.y:688"
+    },
+    {
+      "subject": "checkers_example::checkers::playout",
+      "injected": [
+        "random as random"
+      ],
+      "lowered": "as the last parameter",
+      "y": "y/src/checkers.y:717"
+    },
+    {
+      "subject": "checkers_example::checkers::drawing::draw",
+      "injected": [
+        "window as window"
+      ],
+      "lowered": "as the last parameter",
+      "y": "y/src/checkers.y:876"
+    },
+    {
+      "subject": "checkers_example::checkers::drawing::draw_levels",
+      "injected": [
+        "window as window"
+      ],
+      "lowered": "as the last parameter",
+      "y": "y/src/checkers.y:905"
+    },
+    {
+      "subject": "checkers_example::checkers::draw_piece",
+      "injected": [
+        "window as window"
+      ],
+      "lowered": "as the last parameter",
+      "y": "y/src/checkers.y:1047"
+    },
+    {
+      "subject": "checkers_example::checkers::window_play::play",
+      "injected": [
+        "window as window",
+        "random as random",
+        "forever as forever"
+      ],
+      "lowered": "as the last three parameters, in order",
+      "y": "y/src/checkers.y:1095"
+    },
+    {
+      "subject": "checkers_example::checkers::window_play::choose_level",
+      "injected": [
+        "window as window",
+        "forever as forever"
+      ],
+      "lowered": "as the last two parameters, in order",
+      "y": "y/src/checkers.y:1121"
+    },
+    {
+      "subject": "checkers_example::checkers::window_play::play_game",
+      "injected": [
+        "window as window",
+        "random as random",
+        "forever as forever"
+      ],
+      "lowered": "as the last three parameters, in order",
+      "y": "y/src/checkers.y:1153"
+    },
+    {
+      "subject": "checkers_example::main",
+      "injected": [
+        "system as system"
+      ],
+      "lowered": "System::root(), made by the entry point",
+      "y": "y/src/main.y:15"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "forever",
+      "because": "a hidden window shows no frames, and the game waits until it is shown",
+      "requires": "Forever",
+      "y": "y/src/checkers.y:1136",
+      "bare": "bare/src/checkers.brs:1009"
+    },
+    {
+      "claim": "forever",
+      "because": "a hidden window shows no frames, and the game waits until it is shown",
+      "requires": "Forever",
+      "y": "y/src/checkers.y:1173",
+      "bare": "bare/src/checkers.brs:1040"
+    }
+  ],
+  "suspensions": [
+    {
+      "subject": "checkers_example::checkers::window_play::play",
+      "point": "choose_level(",
+      "because": "choose_level may suspend",
+      "lowered": ".await at the call",
+      "y": "y/src/checkers.y:1100",
+      "bare": "bare/src/checkers.brs:977"
+    },
+    {
+      "subject": "checkers_example::checkers::window_play::play",
+      "point": "play_game(",
+      "because": "play_game may suspend",
+      "lowered": ".await at the call",
+      "y": "y/src/checkers.y:1104",
+      "bare": "bare/src/checkers.brs:980"
+    },
+    {
+      "subject": "checkers_example::checkers::window_play::choose_level",
+      "point": "window.next_frame()",
+      "because": "the window capability may suspend (Y \u00a7 3.7)",
+      "lowered": "async fn, and .await at the point",
+      "y": "y/src/checkers.y:1136",
+      "bare": "bare/src/checkers.brs:1009"
+    },
+    {
+      "subject": "checkers_example::checkers::window_play::play_game",
+      "point": "window.next_frame()",
+      "because": "the window capability may suspend (Y \u00a7 3.7)",
+      "lowered": "async fn, and .await at the point",
+      "y": "y/src/checkers.y:1173",
+      "bare": "bare/src/checkers.brs:1040"
+    },
+    {
+      "subject": "checkers_example::main",
+      "point": "play()",
+      "because": "play may suspend",
+      "lowered": "async fn entry, run on Macroquad's executor by y_window::run, and .await at the call",
+      "y": "y/src/main.y:22",
+      "bare": "bare/src/main.brs:26"
+    }
+  ],
+  "compiled": [],
+  "copies": [
+    {
+      "what": "path",
+      "why": "the chain goes on from it, and other directions still read it",
+      "y": "y/src/checkers.y:357",
+      "bare": "bare/src/checkers.brs:334"
+    },
+    {
+      "what": "captured",
+      "why": "the chain goes on from it, and other directions still read it",
+      "y": "y/src/checkers.y:359",
+      "bare": "bare/src/checkers.brs:336"
+    },
+    {
+      "what": "game",
+      "why": "apply changes it, and the game is still read",
+      "y": "y/src/checkers.y:591",
+      "bare": "bare/src/checkers.brs:529"
+    },
+    {
+      "what": "candidate",
+      "why": "the game keeps the move, and the options still hold it",
+      "y": "y/src/checkers.y:592",
+      "bare": "bare/src/checkers.brs:530"
+    },
+    {
+      "what": "game",
+      "why": "apply changes it, and the game is still read",
+      "y": "y/src/checkers.y:630",
+      "bare": "bare/src/checkers.brs:565"
+    },
+    {
+      "what": "options",
+      "why": "the chosen move is returned, and the options still hold it",
+      "y": "y/src/checkers.y:664",
+      "bare": "bare/src/checkers.brs:597"
+    },
+    {
+      "what": "game",
+      "why": "apply changes it, and the game is still read",
+      "y": "y/src/checkers.y:670",
+      "bare": "bare/src/checkers.brs:602"
+    },
+    {
+      "what": "options",
+      "why": "the game keeps the move, and the options still hold it",
+      "y": "y/src/checkers.y:671",
+      "bare": "bare/src/checkers.brs:603"
+    },
+    {
+      "what": "options",
+      "why": "the chosen move is returned, and the options still hold it",
+      "y": "y/src/checkers.y:673",
+      "bare": "bare/src/checkers.brs:606"
+    },
+    {
+      "what": "start",
+      "why": "the game played out changes it, and the position is still read",
+      "y": "y/src/checkers.y:718",
+      "bare": "bare/src/checkers.brs:645"
+    },
+    {
+      "what": "reds",
+      "why": "apply keeps the move, and the list still holds it",
+      "y": "y/src/checkers.test.y:81",
+      "bare": "bare/src/checkers/tests.brs:73"
+    },
+    {
+      "what": "moves",
+      "why": "apply keeps the move, and the list still holds it",
+      "y": "y/src/checkers.test.y:100",
+      "bare": "bare/src/checkers/tests.brs:89"
+    },
+    {
+      "what": "moves",
+      "why": "apply keeps the move, and the list still holds it",
+      "y": "y/src/checkers.test.y:129",
+      "bare": "bare/src/checkers/tests.brs:112"
+    },
+    {
+      "what": "moves",
+      "why": "apply keeps the move, and the list still holds it",
+      "y": "y/src/checkers.test.y:153",
+      "bare": "bare/src/checkers/tests.brs:130"
+    },
+    {
+      "what": "legal_moves",
+      "why": "apply keeps the move, and the list still holds it",
+      "y": "y/src/checkers.test.y:261",
+      "bare": "bare/src/checkers/tests.brs:210"
+    },
+    {
+      "what": "legal_moves",
+      "why": "apply keeps the move, and the list still holds it",
+      "y": "y/src/checkers.test.y:311",
+      "bare": "bare/src/checkers/tests.brs:249"
+    },
+    {
+      "what": "legal_moves",
+      "why": "apply keeps the move, and the list still holds it",
+      "y": "y/src/checkers.test.y:362",
+      "bare": "bare/src/checkers/tests.brs:292"
+    }
+  ],
+  "decisions": {
+    "checkers.starting_piece": [
+      {
+        "kind": "conditional",
+        "label": "placed",
+        "branches": [
+          {
+            "name": "placed.light",
+            "y": "y/src/checkers.y:181",
+            "bare": "bare/src/checkers.brs:182"
+          },
+          {
+            "name": "placed.white_men",
+            "y": "y/src/checkers.y:183",
+            "bare": "bare/src/checkers.brs:184"
+          },
+          {
+            "name": "placed.red_men",
+            "y": "y/src/checkers.y:185",
+            "bare": "bare/src/checkers.brs:186"
+          },
+          {
+            "name": "placed.between",
+            "y": "y/src/checkers.y:187",
+            "bare": "bare/src/checkers.brs:188"
+          }
+        ]
+      }
+    ],
+    "checkers.legal_moves": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "must_jump",
+            "y": "y/src/checkers.y:203",
+            "bare": "bare/src/checkers.brs:203"
+          },
+          {
+            "name": "no_jump",
+            "y": "y/src/checkers.y:205",
+            "bare": "bare/src/checkers.brs:205"
+          }
+        ]
+      }
+    ],
+    "checkers.apply": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "capturing",
+            "y": "y/src/checkers.y:226",
+            "bare": "bare/src/checkers.brs:224"
+          },
+          {
+            "name": "quiet",
+            "y": "y/src/checkers.y:228",
+            "bare": "bare/src/checkers.brs:226"
+          }
+        ]
+      }
+    ],
+    "checkers.standing": [
+      {
+        "kind": "conditional",
+        "label": "judged",
+        "branches": [
+          {
+            "name": "judged.won",
+            "y": "y/src/checkers.y:247",
+            "bare": "bare/src/checkers.brs:241"
+          },
+          {
+            "name": "judged.lost",
+            "y": "y/src/checkers.y:249",
+            "bare": "bare/src/checkers.brs:243"
+          },
+          {
+            "name": "judged.drawn",
+            "y": "y/src/checkers.y:251",
+            "bare": "bare/src/checkers.brs:245"
+          },
+          {
+            "name": "judged.playing",
+            "y": "y/src/checkers.y:253",
+            "bare": "bare/src/checkers.brs:247"
+          }
+        ]
+      }
+    ],
+    "checkers.score": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "won",
+            "y": "y/src/checkers.y:266",
+            "bare": "bare/src/checkers.brs:258"
+          },
+          {
+            "name": "unfinished",
+            "y": "y/src/checkers.y:269",
+            "bare": "bare/src/checkers.brs:261"
+          }
+        ]
+      }
+    ],
+    "checkers.other": [
+      {
+        "kind": "conditional",
+        "label": "current",
+        "branches": [
+          {
+            "name": "current.red",
+            "y": "y/src/checkers.y:293",
+            "bare": "bare/src/checkers.brs:280"
+          },
+          {
+            "name": "current.white",
+            "y": "y/src/checkers.y:295",
+            "bare": "bare/src/checkers.brs:281"
+          }
+        ]
+      }
+    ],
+    "checkers.all_steps": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "open",
+            "y": "y/src/checkers.y:313",
+            "bare": "bare/src/checkers.brs:295"
+          },
+          {
+            "name": "blocked",
+            "y": "y/src/checkers.y:315",
+            "bare": "bare/src/checkers.brs:297"
+          }
+        ]
+      }
+    ],
+    "checkers.chains": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "can_jump",
+            "y": "y/src/checkers.y:356",
+            "bare": "bare/src/checkers.brs:333"
+          },
+          {
+            "name": "cannot_jump",
+            "y": "y/src/checkers.y:367",
+            "bare": "bare/src/checkers.brs:344"
+          }
+        ]
+      },
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "ends_here",
+            "y": "y/src/checkers.y:363",
+            "bare": "bare/src/checkers.brs:339"
+          },
+          {
+            "name": "goes_on",
+            "y": "y/src/checkers.y:365",
+            "bare": "bare/src/checkers.brs:341"
+          }
+        ]
+      }
+    ],
+    "checkers.chains_after": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "crowned",
+            "y": "y/src/checkers.y:385",
+            "bare": "bare/src/checkers.brs:356"
+          },
+          {
+            "name": "uncrowned",
+            "y": "y/src/checkers.y:387",
+            "bare": "bare/src/checkers.brs:358"
+          }
+        ]
+      }
+    ],
+    "checkers.jumpable": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "inside",
+            "y": "y/src/checkers.y:404",
+            "bare": "bare/src/checkers.brs:373"
+          },
+          {
+            "name": "outside",
+            "y": "y/src/checkers.y:407",
+            "bare": "bare/src/checkers.brs:376"
+          }
+        ]
+      }
+    ],
+    "checkers.belongs_to": [
+      {
+        "kind": "conditional",
+        "label": "held",
+        "branches": [
+          {
+            "name": "held.empty",
+            "y": "y/src/checkers.y:422",
+            "bare": "bare/src/checkers.brs:389"
+          },
+          {
+            "name": "held.piece",
+            "y": "y/src/checkers.y:424",
+            "bare": "bare/src/checkers.brs:390"
+          }
+        ]
+      }
+    ],
+    "checkers.placed_pieces": [
+      {
+        "kind": "conditional",
+        "label": "held",
+        "branches": [
+          {
+            "name": "held.empty",
+            "y": "y/src/checkers.y:443",
+            "bare": "bare/src/checkers.brs:404"
+          },
+          {
+            "name": "held.piece",
+            "y": "y/src/checkers.y:445",
+            "bare": "bare/src/checkers.brs:405"
+          }
+        ]
+      }
+    ],
+    "checkers.own_pieces": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "mine",
+            "y": "y/src/checkers.y:461",
+            "bare": "bare/src/checkers.brs:419"
+          },
+          {
+            "name": "theirs",
+            "y": "y/src/checkers.y:463",
+            "bare": "bare/src/checkers.brs:421"
+          }
+        ]
+      }
+    ],
+    "checkers.directions_of": [
+      {
+        "kind": "conditional",
+        "label": "moving",
+        "branches": [
+          {
+            "name": "moving.king",
+            "y": "y/src/checkers.y:477",
+            "bare": "bare/src/checkers.brs:433"
+          },
+          {
+            "name": "moving.red",
+            "y": "y/src/checkers.y:479",
+            "bare": "bare/src/checkers.brs:435"
+          },
+          {
+            "name": "moving.white",
+            "y": "y/src/checkers.y:481",
+            "bare": "bare/src/checkers.brs:437"
+          }
+        ]
+      }
+    ],
+    "checkers.far_row": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "heading_up",
+            "y": "y/src/checkers.y:493",
+            "bare": "bare/src/checkers.brs:447"
+          },
+          {
+            "name": "heading_down",
+            "y": "y/src/checkers.y:495",
+            "bare": "bare/src/checkers.brs:449"
+          }
+        ]
+      }
+    ],
+    "checkers.computer_move": [
+      {
+        "kind": "while",
+        "branches": [
+          {
+            "name": "deepening",
+            "y": "y/src/checkers.y:587",
+            "bare": "bare/src/checkers.brs:526"
+          },
+          {
+            "name": "deep_enough",
+            "y": "y/src/checkers.y:600",
+            "bare": "bare/src/checkers.brs:540"
+          }
+        ]
+      },
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "finished",
+            "y": "y/src/checkers.y:595",
+            "bare": "bare/src/checkers.brs:533"
+          },
+          {
+            "name": "ran_out",
+            "y": "y/src/checkers.y:598",
+            "bare": "bare/src/checkers.brs:536"
+          }
+        ]
+      }
+    ],
+    "checkers.searched": [
+      {
+        "kind": "conditional",
+        "label": "judged",
+        "branches": [
+          {
+            "name": "judged.leaf",
+            "y": "y/src/checkers.y:620",
+            "bare": "bare/src/checkers.brs:556"
+          },
+          {
+            "name": "judged.spent",
+            "y": "y/src/checkers.y:622",
+            "bare": "bare/src/checkers.brs:558"
+          },
+          {
+            "name": "judged.inner",
+            "y": "y/src/checkers.y:625",
+            "bare": "bare/src/checkers.brs:561"
+          }
+        ]
+      },
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "owners_turn",
+            "y": "y/src/checkers.y:634",
+            "bare": "bare/src/checkers.brs:569"
+          },
+          {
+            "name": "others_turn",
+            "y": "y/src/checkers.y:636",
+            "bare": "bare/src/checkers.brs:571"
+          }
+        ]
+      }
+    ],
+    "checkers.best_sampled": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "top",
+            "y": "y/src/checkers.y:658",
+            "bare": "bare/src/checkers.brs:590"
+          },
+          {
+            "name": "lower",
+            "y": "y/src/checkers.y:660",
+            "bare": "bare/src/checkers.brs:592"
+          }
+        ]
+      },
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "settled",
+            "y": "y/src/checkers.y:663",
+            "bare": "bare/src/checkers.brs:596"
+          },
+          {
+            "name": "contested",
+            "y": "y/src/checkers.y:665",
+            "bare": "bare/src/checkers.brs:598"
+          }
+        ]
+      }
+    ],
+    "checkers.sampled_value": [
+      {
+        "kind": "while",
+        "branches": [
+          {
+            "name": "sampling",
+            "y": "y/src/checkers.y:693",
+            "bare": "bare/src/checkers.brs:622"
+          },
+          {
+            "name": "sampled",
+            "y": "y/src/checkers.y:699",
+            "bare": "bare/src/checkers.brs:629"
+          }
+        ]
+      },
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "any",
+            "y": "y/src/checkers.y:700",
+            "bare": "bare/src/checkers.brs:630"
+          },
+          {
+            "name": "none",
+            "y": "y/src/checkers.y:702",
+            "bare": "bare/src/checkers.brs:632"
+          }
+        ]
+      }
+    ],
+    "checkers.playout": [
+      {
+        "kind": "while",
+        "branches": [
+          {
+            "name": "going",
+            "y": "y/src/checkers.y:722",
+            "bare": "bare/src/checkers.brs:648"
+          },
+          {
+            "name": "ended",
+            "y": "y/src/checkers.y:726",
+            "bare": "bare/src/checkers.brs:653"
+          }
+        ]
+      }
+    ],
+    "checkers.value_for": [
+      {
+        "kind": "conditional",
+        "label": "judged",
+        "branches": [
+          {
+            "name": "judged.losing",
+            "y": "y/src/checkers.y:743",
+            "bare": "bare/src/checkers.brs:665"
+          },
+          {
+            "name": "judged.winning",
+            "y": "y/src/checkers.y:745",
+            "bare": "bare/src/checkers.brs:667"
+          },
+          {
+            "name": "judged.drawn",
+            "y": "y/src/checkers.y:747",
+            "bare": "bare/src/checkers.brs:669"
+          },
+          {
+            "name": "judged.playing",
+            "y": "y/src/checkers.y:749",
+            "bare": "bare/src/checkers.brs:671"
+          }
+        ]
+      }
+    ],
+    "checkers.material": [
+      {
+        "kind": "conditional",
+        "label": "counted",
+        "branches": [
+          {
+            "name": "counted.other",
+            "y": "y/src/checkers.y:766",
+            "bare": "bare/src/checkers.brs:684"
+          },
+          {
+            "name": "counted.king",
+            "y": "y/src/checkers.y:768",
+            "bare": "bare/src/checkers.brs:686"
+          },
+          {
+            "name": "counted.man",
+            "y": "y/src/checkers.y:770",
+            "bare": "bare/src/checkers.brs:688"
+          }
+        ]
+      }
+    ],
+    "checkers.banner": [
+      {
+        "kind": "conditional",
+        "label": "shown",
+        "branches": [
+          {
+            "name": "shown.your_move",
+            "y": "y/src/checkers.y:840",
+            "bare": "bare/src/checkers.brs:756"
+          },
+          {
+            "name": "shown.thinking",
+            "y": "y/src/checkers.y:845",
+            "bare": "bare/src/checkers.brs:760"
+          },
+          {
+            "name": "shown.won",
+            "y": "y/src/checkers.y:850",
+            "bare": "bare/src/checkers.brs:764"
+          },
+          {
+            "name": "shown.lost",
+            "y": "y/src/checkers.y:855",
+            "bare": "bare/src/checkers.brs:768"
+          },
+          {
+            "name": "shown.drawn",
+            "y": "y/src/checkers.y:860",
+            "bare": "bare/src/checkers.brs:772"
+          }
+        ]
+      }
+    ],
+    "checkers.square_at": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "inside",
+            "y": "y/src/checkers.y:932",
+            "bare": "bare/src/checkers.brs:835"
+          },
+          {
+            "name": "outside",
+            "y": "y/src/checkers.y:936",
+            "bare": "bare/src/checkers.brs:839"
+          }
+        ]
+      }
+    ],
+    "checkers.level_at": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "pressed",
+            "y": "y/src/checkers.y:954",
+            "bare": "bare/src/checkers.brs:853"
+          },
+          {
+            "name": "missed",
+            "y": "y/src/checkers.y:956",
+            "bare": "bare/src/checkers.brs:855"
+          }
+        ]
+      }
+    ],
+    "checkers.shade_of": [
+      {
+        "kind": "conditional",
+        "label": "looks",
+        "branches": [
+          {
+            "name": "looks.light",
+            "y": "y/src/checkers.y:995",
+            "bare": "bare/src/checkers.brs:887"
+          },
+          {
+            "name": "looks.selected",
+            "y": "y/src/checkers.y:997",
+            "bare": "bare/src/checkers.brs:889"
+          },
+          {
+            "name": "looks.last",
+            "y": "y/src/checkers.y:999",
+            "bare": "bare/src/checkers.brs:891"
+          },
+          {
+            "name": "looks.dark",
+            "y": "y/src/checkers.y:1001",
+            "bare": "bare/src/checkers.brs:893"
+          }
+        ]
+      }
+    ],
+    "checkers.in_last_move": [
+      {
+        "kind": "conditional",
+        "label": "made",
+        "branches": [
+          {
+            "name": "made.none",
+            "y": "y/src/checkers.y:1015",
+            "bare": "bare/src/checkers.brs:905"
+          },
+          {
+            "name": "made.some",
+            "y": "y/src/checkers.y:1017",
+            "bare": "bare/src/checkers.brs:906"
+          }
+        ]
+      }
+    ],
+    "checkers.landings": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "from_selected",
+            "y": "y/src/checkers.y:1033",
+            "bare": "bare/src/checkers.brs:918"
+          },
+          {
+            "name": "from_elsewhere",
+            "y": "y/src/checkers.y:1035",
+            "bare": "bare/src/checkers.brs:920"
+          }
+        ]
+      }
+    ],
+    "checkers.colours_of": [
+      {
+        "kind": "conditional",
+        "label": "painted",
+        "branches": [
+          {
+            "name": "painted.red_king",
+            "y": "y/src/checkers.y:1064",
+            "bare": "bare/src/checkers.brs:944"
+          },
+          {
+            "name": "painted.red_man",
+            "y": "y/src/checkers.y:1066",
+            "bare": "bare/src/checkers.brs:946"
+          },
+          {
+            "name": "painted.white_king",
+            "y": "y/src/checkers.y:1068",
+            "bare": "bare/src/checkers.brs:948"
+          },
+          {
+            "name": "painted.white_man",
+            "y": "y/src/checkers.y:1070",
+            "bare": "bare/src/checkers.brs:950"
+          }
+        ]
+      }
+    ],
+    "checkers.play": [
+      {
+        "kind": "while",
+        "branches": [
+          {
+            "name": "open",
+            "y": "y/src/checkers.y:1099",
+            "bare": "bare/src/checkers.brs:976"
+          },
+          {
+            "name": "closed",
+            "y": "y/src/checkers.y:1107",
+            "bare": "bare/src/checkers.brs:986"
+          }
+        ]
+      },
+      {
+        "kind": "conditional",
+        "label": "picked",
+        "branches": [
+          {
+            "name": "picked.none",
+            "y": "y/src/checkers.y:1101",
+            "bare": "bare/src/checkers.brs:978"
+          },
+          {
+            "name": "picked.level",
+            "y": "y/src/checkers.y:1103",
+            "bare": "bare/src/checkers.brs:979"
+          }
+        ]
+      }
+    ],
+    "checkers.choose_level": [
+      {
+        "kind": "while",
+        "branches": [
+          {
+            "name": "choosing",
+            "y": "y/src/checkers.y:1125",
+            "bare": "bare/src/checkers.brs:998"
+          },
+          {
+            "name": "chosen_or_stopped",
+            "y": "y/src/checkers.y:1137",
+            "bare": "bare/src/checkers.brs:1011"
+          }
+        ]
+      },
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "hit",
+            "y": "y/src/checkers.y:1131",
+            "bare": "bare/src/checkers.brs:1002"
+          },
+          {
+            "name": "miss",
+            "y": "y/src/checkers.y:1133",
+            "bare": "bare/src/checkers.brs:1004"
+          }
+        ]
+      }
+    ],
+    "checkers.play_game": [
+      {
+        "kind": "while",
+        "branches": [
+          {
+            "name": "playing",
+            "y": "y/src/checkers.y:1159",
+            "bare": "bare/src/checkers.brs:1026"
+          },
+          {
+            "name": "stopped",
+            "y": "y/src/checkers.y:1174",
+            "bare": "bare/src/checkers.brs:1042"
+          }
+        ]
+      },
+      {
+        "kind": "conditional",
+        "label": "moment",
+        "branches": [
+          {
+            "name": "moment.over",
+            "y": "y/src/checkers.y:1164",
+            "bare": "bare/src/checkers.brs:1029"
+          },
+          {
+            "name": "moment.computers_turn",
+            "y": "y/src/checkers.y:1166",
+            "bare": "bare/src/checkers.brs:1031"
+          },
+          {
+            "name": "moment.players_turn",
+            "y": "y/src/checkers.y:1169",
+            "bare": "bare/src/checkers.brs:1034"
+          }
+        ]
+      }
+    ],
+    "checkers.clicked": [
+      {
+        "kind": "conditional",
+        "label": "judged",
+        "branches": [
+          {
+            "name": "judged.moving",
+            "y": "y/src/checkers.y:1191",
+            "bare": "bare/src/checkers.brs:1055"
+          },
+          {
+            "name": "judged.choosing",
+            "y": "y/src/checkers.y:1194",
+            "bare": "bare/src/checkers.brs:1058"
+          },
+          {
+            "name": "judged.elsewhere",
+            "y": "y/src/checkers.y:1196",
+            "bare": "bare/src/checkers.brs:1060"
+          }
+        ]
+      }
+    ],
+    "checkers.move_to": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "fits",
+            "y": "y/src/checkers.y:1211",
+            "bare": "bare/src/checkers.brs:1074"
+          },
+          {
+            "name": "differs",
+            "y": "y/src/checkers.y:1213",
+            "bare": "bare/src/checkers.brs:1076"
+          }
+        ]
+      }
+    ],
+    "checkers.may_move_from": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "movable",
+            "y": "y/src/checkers.y:1228",
+            "bare": "bare/src/checkers.brs:1090"
+          },
+          {
+            "name": "unmovable",
+            "y": "y/src/checkers.y:1230",
+            "bare": "bare/src/checkers.brs:1092"
+          }
+        ]
+      }
+    ]
+  },
+  "tests": {
+    "a_new_game_has_twelve_men_each": {
+      "y": "y/src/checkers.test.y:56",
+      "rust": "checkers_example::checkers::tests::a_new_game_has_twelve_men_each",
+      "covers": [
+        "starting_piece#placed.light",
+        "starting_piece#placed.white_men",
+        "starting_piece#placed.red_men",
+        "starting_piece#placed.between",
+        "placed_pieces#held.empty",
+        "placed_pieces#held.piece",
+        "standing#judged.playing"
+      ]
+    },
+    "the_first_moves_are_steps": {
+      "y": "y/src/checkers.test.y:73",
+      "rust": "checkers_example::checkers::tests::the_first_moves_are_steps",
+      "covers": [
+        "legal_moves#no_jump",
+        "all_steps#open",
+        "all_steps#blocked",
+        "own_pieces#mine",
+        "own_pieces#theirs",
+        "directions_of#moving.red",
+        "directions_of#moving.white",
+        "chains#cannot_jump",
+        "jumpable#inside",
+        "jumpable#outside",
+        "belongs_to#held.empty",
+        "belongs_to#held.piece",
+        "apply#quiet",
+        "other#current.red"
+      ]
+    },
+    "a_capture_must_be_taken": {
+      "y": "y/src/checkers.test.y:93",
+      "rust": "checkers_example::checkers::tests::a_capture_must_be_taken",
+      "covers": [
+        "legal_moves#must_jump",
+        "chains#can_jump",
+        "chains#ends_here",
+        "chains_after#uncrowned",
+        "apply#capturing"
+      ]
+    },
+    "a_chain_of_jumps_is_one_move": {
+      "y": "y/src/checkers.test.y:110",
+      "rust": "checkers_example::checkers::tests::a_chain_of_jumps_is_one_move",
+      "covers": [
+        "chains#goes_on"
+      ]
+    },
+    "a_man_crowned_by_a_jump_stops": {
+      "y": "y/src/checkers.test.y:123",
+      "rust": "checkers_example::checkers::tests::a_man_crowned_by_a_jump_stops",
+      "covers": [
+        "chains_after#crowned",
+        "far_row#heading_up"
+      ]
+    },
+    "a_king_moves_both_ways": {
+      "y": "y/src/checkers.test.y:136",
+      "rust": "checkers_example::checkers::tests::a_king_moves_both_ways",
+      "covers": [
+        "directions_of#moving.king"
+      ]
+    },
+    "white_is_crowned_on_the_bottom_row": {
+      "y": "y/src/checkers.test.y:147",
+      "rust": "checkers_example::checkers::tests::white_is_crowned_on_the_bottom_row",
+      "covers": [
+        "far_row#heading_down",
+        "other#current.white"
+      ]
+    },
+    "a_win_scores_by_level_and_moves": {
+      "y": "y/src/checkers.test.y:161",
+      "rust": "checkers_example::checkers::tests::a_win_scores_by_level_and_moves",
+      "covers": [
+        "standing#judged.won",
+        "score#won"
+      ]
+    },
+    "a_loss_scores_nothing": {
+      "y": "y/src/checkers.test.y:182",
+      "rust": "checkers_example::checkers::tests::a_loss_scores_nothing",
+      "covers": [
+        "standing#judged.lost",
+        "score#unfinished"
+      ]
+    },
+    "quiet_turns_draw_the_game": {
+      "y": "y/src/checkers.test.y:195",
+      "rust": "checkers_example::checkers::tests::quiet_turns_draw_the_game",
+      "covers": [
+        "standing#judged.drawn"
+      ]
+    },
+    "pieces_are_worth_their_rank": {
+      "y": "y/src/checkers.test.y:207",
+      "rust": "checkers_example::checkers::tests::pieces_are_worth_their_rank",
+      "covers": [
+        "value_for#judged.playing",
+        "material#counted.other",
+        "material#counted.king",
+        "material#counted.man"
+      ]
+    },
+    "an_ended_game_is_worth_its_end": {
+      "y": "y/src/checkers.test.y:221",
+      "rust": "checkers_example::checkers::tests::an_ended_game_is_worth_its_end",
+      "covers": [
+        "value_for#judged.losing",
+        "value_for#judged.winning",
+        "value_for#judged.drawn"
+      ]
+    },
+    "the_computer_keeps_its_man_out_of_reach": {
+      "y": "y/src/checkers.test.y:238",
+      "rust": "checkers_example::checkers::tests::the_computer_keeps_its_man_out_of_reach",
+      "covers": [
+        "computer_move#deepening",
+        "computer_move#finished",
+        "computer_move#ran_out",
+        "computer_move#deep_enough",
+        "searched#judged.leaf",
+        "searched#judged.spent",
+        "searched#judged.inner",
+        "searched#owners_turn",
+        "searched#others_turn",
+        "best_sampled#top",
+        "best_sampled#lower",
+        "best_sampled#settled"
+      ]
+    },
+    "the_computer_plays_out_games_to_choose_an_opening": {
+      "y": "y/src/checkers.test.y:254",
+      "rust": "checkers_example::checkers::tests::the_computer_plays_out_games_to_choose_an_opening",
+      "covers": [
+        "best_sampled#contested",
+        "sampled_value#sampling",
+        "sampled_value#sampled",
+        "sampled_value#any",
+        "playout#going",
+        "playout#ended"
+      ]
+    },
+    "without_checks_the_pieces_decide": {
+      "y": "y/src/checkers.test.y:270",
+      "rust": "checkers_example::checkers::tests::without_checks_the_pieces_decide",
+      "covers": [
+        "sampled_value#none"
+      ]
+    },
+    "a_click_finds_its_square": {
+      "y": "y/src/checkers.test.y:283",
+      "rust": "checkers_example::checkers::tests::a_click_finds_its_square",
+      "covers": [
+        "square_at#inside",
+        "square_at#outside"
+      ]
+    },
+    "a_click_finds_its_level": {
+      "y": "y/src/checkers.test.y:294",
+      "rust": "checkers_example::checkers::tests::a_click_finds_its_level",
+      "covers": [
+        "level_at#pressed",
+        "level_at#missed"
+      ]
+    },
+    "squares_are_shaded": {
+      "y": "y/src/checkers.test.y:305",
+      "rust": "checkers_example::checkers::tests::squares_are_shaded",
+      "covers": [
+        "shade_of#looks.light",
+        "shade_of#looks.selected",
+        "shade_of#looks.last",
+        "shade_of#looks.dark",
+        "in_last_move#made.none",
+        "in_last_move#made.some"
+      ]
+    },
+    "the_selected_piece_shows_where_it_may_go": {
+      "y": "y/src/checkers.test.y:328",
+      "rust": "checkers_example::checkers::tests::the_selected_piece_shows_where_it_may_go",
+      "covers": [
+        "landings#from_selected",
+        "landings#from_elsewhere"
+      ]
+    },
+    "pieces_are_painted_by_player_and_rank": {
+      "y": "y/src/checkers.test.y:341",
+      "rust": "checkers_example::checkers::tests::pieces_are_painted_by_player_and_rank",
+      "covers": [
+        "colours_of#painted.red_king",
+        "colours_of#painted.red_man",
+        "colours_of#painted.white_king",
+        "colours_of#painted.white_man"
+      ]
+    },
+    "the_banner_says_how_the_game_stands": {
+      "y": "y/src/checkers.test.y:357",
+      "rust": "checkers_example::checkers::tests::the_banner_says_how_the_game_stands",
+      "covers": [
+        "banner#shown.your_move",
+        "banner#shown.thinking",
+        "banner#shown.won",
+        "banner#shown.lost",
+        "banner#shown.drawn"
+      ]
+    },
+    "a_click_elsewhere_selects_nothing": {
+      "y": "y/src/checkers.test.y:384",
+      "rust": "checkers_example::checkers::tests::a_click_elsewhere_selects_nothing",
+      "covers": [
+        "clicked#judged.elsewhere"
+      ]
+    },
+    "escape_at_the_levels_ends_play": {
+      "y": "y/src/checkers.test.y:397",
+      "rust": "checkers_example::checkers::tests::escape_at_the_levels_ends_play",
+      "covers": [
+        "play#open",
+        "play#picked.none",
+        "play#closed",
+        "choose_level#choosing",
+        "choose_level#chosen_or_stopped"
+      ]
+    },
+    "a_level_is_chosen_and_a_move_made": {
+      "y": "y/src/checkers.test.y:411",
+      "rust": "checkers_example::checkers::tests::a_level_is_chosen_and_a_move_made",
+      "covers": [
+        "choose_level#miss",
+        "choose_level#hit",
+        "play#picked.level",
+        "play_game#playing",
+        "play_game#stopped",
+        "play_game#moment.players_turn",
+        "play_game#moment.computers_turn",
+        "clicked#judged.choosing",
+        "clicked#judged.moving",
+        "move_to#fits",
+        "move_to#differs",
+        "may_move_from#movable",
+        "may_move_from#unmovable"
+      ]
+    },
+    "space_after_a_game_chooses_another": {
+      "y": "y/src/checkers.test.y:435",
+      "rust": "checkers_example::checkers::tests::space_after_a_game_chooses_another",
+      "covers": [
+        "play_game#moment.over"
+      ]
+    }
+  }
+}

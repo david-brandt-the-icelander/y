@@ -71,7 +71,7 @@
       "visible": "public",
       "params": [],
       "result": { "type": "Game" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:36" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:38" }]
     },
     { "kind": "module", "name": "tic_tac_toe_example::tic_tac_toe::moves", "visible": "public" },
     {
@@ -89,7 +89,7 @@
         { "name": "line", "type": "ref<text>", "access": { "rights": "read", "guarantee": "readers" } }
       ],
       "result": { "type": "u32", "fails": "MoveError" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:61" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:63" }]
     },
     {
       "kind": "function",
@@ -103,13 +103,13 @@
         {
           "kind": "require",
           "text": "require unmarked : game.squares[square - 1] is None",
-          "source": "y/src/tic_tac_toe.y:83",
+          "source": "y/src/tic_tac_toe.y:85",
           "status": { "lifted": "src/tic_tac_toe.rs: y_runtime::require" }
         },
-        { "kind": "effects", "text": "no io", "source": "y/src/tic_tac_toe.y:82" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/tic_tac_toe.y:82" },
-        { "kind": "effects", "text": "no randomness", "source": "y/src/tic_tac_toe.y:82" },
-        { "kind": "access", "text": "mutates only game", "source": "y/src/tic_tac_toe.y:82" }
+        { "kind": "effects", "text": "no io", "source": "y/src/tic_tac_toe.y:84" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/tic_tac_toe.y:84" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/tic_tac_toe.y:84" },
+        { "kind": "access", "text": "mutates only game", "source": "y/src/tic_tac_toe.y:84" }
       ]
     },
     {
@@ -124,10 +124,10 @@
         {
           "kind": "require",
           "text": "require still_playing : not over(game)",
-          "source": "y/src/tic_tac_toe.y:97",
+          "source": "y/src/tic_tac_toe.y:99",
           "status": { "lifted": "src/tic_tac_toe.rs: y_runtime::require" }
         },
-        { "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:96" }
+        { "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:98" }
       ]
     },
     {
@@ -137,7 +137,7 @@
         { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
       ],
       "result": { "type": "bool" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:123" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:126" }]
     },
     {
       "kind": "function",
@@ -146,14 +146,14 @@
         { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
       ],
       "result": { "type": "Mark?" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:134" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:137" }]
     },
     {
       "kind": "function",
       "name": "tic_tac_toe_example::tic_tac_toe::other",
       "params": [{ "name": "player", "type": "Mark" }],
       "result": { "type": "Mark" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:154" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:157" }]
     },
     {
       "kind": "function",
@@ -162,7 +162,7 @@
         { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
       ],
       "result": { "type": "list<u32> as 'Vec'" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:169" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:172" }]
     },
     {
       "kind": "function",
@@ -171,7 +171,7 @@
         { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
       ],
       "result": { "type": "i32" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:188" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:191" }]
     },
     {
       "kind": "function",
@@ -180,7 +180,7 @@
         { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
       ],
       "result": { "type": "text" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:214" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:217" }]
     },
     {
       "kind": "function",
@@ -190,7 +190,7 @@
         { "name": "number", "type": "u32" }
       ],
       "result": { "type": "text" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:235" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:238" }]
     },
     { "kind": "module", "name": "tic_tac_toe_example::tic_tac_toe::console_play", "visible": "public" },
     {
@@ -236,9 +236,9 @@
       ],
       "result": { "type": "()", "fails": "PlayError" },
       "clauses": [
-        { "kind": "effects", "text": "effects only console", "source": "y/src/tic_tac_toe.y:261" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/tic_tac_toe.y:261" },
-        { "kind": "effects", "text": "no randomness", "source": "y/src/tic_tac_toe.y:261" }
+        { "kind": "effects", "text": "effects only console", "source": "y/src/tic_tac_toe.y:264" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/tic_tac_toe.y:264" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/tic_tac_toe.y:264" }
       ]
     }
   ],

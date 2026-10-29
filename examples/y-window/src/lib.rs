@@ -191,6 +191,13 @@ impl Window {
         }
     }
 
+    /// Fills a circle around its centre, in pixels from the top left.
+    pub fn circle(&mut self, x: i32, y: i32, radius: i32, colour: Colour) {
+        if self.fake.is_none() {
+            macroquad::shapes::draw_circle(x as f32, y as f32, radius as f32, colour.drawn());
+        }
+    }
+
     /// Writes a line of text whose baseline starts at `x`, `y`, in pixels from the top left, `size` pixels high.
     pub fn write(&mut self, text: &str, x: i32, y: i32, size: u32, colour: Colour) {
         match &mut self.fake {

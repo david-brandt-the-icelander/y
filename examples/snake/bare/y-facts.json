@@ -44,7 +44,7 @@
       "facet": "rules",
       "path": "snake.rules",
       "visible": "public",
-      "y": "y/src/snake.y:86",
+      "y": "y/src/snake.y:92",
       "rust": "snake_example::snake::rules",
       "members": [
         "turned",
@@ -56,7 +56,7 @@
       "facet": "drawing",
       "path": "snake.drawing",
       "visible": "public",
-      "y": "y/src/snake.y:243",
+      "y": "y/src/snake.y:250",
       "rust": "snake_example::snake::drawing",
       "members": [
         "layout",
@@ -70,7 +70,7 @@
       "facet": "window_play",
       "path": "snake.window_play",
       "visible": "public",
-      "y": "y/src/snake.y:320",
+      "y": "y/src/snake.y:328",
       "rust": "snake_example::snake::window_play",
       "members": [
         "play"
@@ -93,7 +93,7 @@
         "random as random"
       ],
       "lowered": "as the last parameter",
-      "y": "y/src/snake.y:70"
+      "y": "y/src/snake.y:75"
     },
     {
       "subject": "snake_example::snake::rules::advance",
@@ -101,7 +101,7 @@
         "random as random"
       ],
       "lowered": "as the last parameter",
-      "y": "y/src/snake.y:118"
+      "y": "y/src/snake.y:124"
     },
     {
       "subject": "snake_example::snake::place_food",
@@ -109,7 +109,7 @@
         "random as random"
       ],
       "lowered": "as the last parameter",
-      "y": "y/src/snake.y:233"
+      "y": "y/src/snake.y:240"
     },
     {
       "subject": "snake_example::snake::drawing::draw",
@@ -117,7 +117,7 @@
         "window as window"
       ],
       "lowered": "as the last parameter",
-      "y": "y/src/snake.y:292"
+      "y": "y/src/snake.y:300"
     },
     {
       "subject": "snake_example::snake::fill_cell",
@@ -125,7 +125,7 @@
         "window as window"
       ],
       "lowered": "as the last parameter",
-      "y": "y/src/snake.y:313"
+      "y": "y/src/snake.y:321"
     },
     {
       "subject": "snake_example::snake::window_play::play",
@@ -136,7 +136,7 @@
         "forever as forever"
       ],
       "lowered": "as the last four parameters, in order",
-      "y": "y/src/snake.y:332"
+      "y": "y/src/snake.y:340"
     },
     {
       "subject": "snake_example::main",
@@ -152,7 +152,7 @@
       "claim": "forever",
       "because": "a hidden window shows no frames, and the game waits until it is shown",
       "requires": "Forever",
-      "y": "y/src/snake.y:357",
+      "y": "y/src/snake.y:365",
       "bare": "bare/src/snake.brs:327"
     }
   ],
@@ -162,7 +162,7 @@
       "point": "window.next_frame()",
       "because": "the window capability may suspend (Y \u00a7 3.7)",
       "lowered": "async fn, and .await at the point",
-      "y": "y/src/snake.y:357",
+      "y": "y/src/snake.y:365",
       "bare": "bare/src/snake.brs:327"
     },
     {
@@ -184,27 +184,27 @@
         "branches": [
           {
             "name": "arrow.up",
-            "y": "y/src/snake.y:98",
+            "y": "y/src/snake.y:104",
             "bare": "bare/src/snake.brs:108"
           },
           {
             "name": "arrow.down",
-            "y": "y/src/snake.y:100",
+            "y": "y/src/snake.y:106",
             "bare": "bare/src/snake.brs:109"
           },
           {
             "name": "arrow.left",
-            "y": "y/src/snake.y:102",
+            "y": "y/src/snake.y:108",
             "bare": "bare/src/snake.brs:110"
           },
           {
             "name": "arrow.right",
-            "y": "y/src/snake.y:104",
+            "y": "y/src/snake.y:110",
             "bare": "bare/src/snake.brs:111"
           },
           {
             "name": "arrow.other",
-            "y": "y/src/snake.y:106",
+            "y": "y/src/snake.y:112",
             "bare": "bare/src/snake.brs:112"
           }
         ]
@@ -217,22 +217,22 @@
         "branches": [
           {
             "name": "moved.into_wall",
-            "y": "y/src/snake.y:124",
+            "y": "y/src/snake.y:130",
             "bare": "bare/src/snake.brs:125"
           },
           {
             "name": "moved.into_itself",
-            "y": "y/src/snake.y:127",
+            "y": "y/src/snake.y:134",
             "bare": "bare/src/snake.brs:127"
           },
           {
             "name": "moved.onto_food",
-            "y": "y/src/snake.y:129",
+            "y": "y/src/snake.y:136",
             "bare": "bare/src/snake.brs:129"
           },
           {
             "name": "moved.on",
-            "y": "y/src/snake.y:134",
+            "y": "y/src/snake.y:141",
             "bare": "bare/src/snake.brs:134"
           }
         ]
@@ -244,12 +244,12 @@
         "branches": [
           {
             "name": "reversing",
-            "y": "y/src/snake.y:149",
+            "y": "y/src/snake.y:156",
             "bare": "bare/src/snake.brs:148"
           },
           {
             "name": "turning",
-            "y": "y/src/snake.y:151",
+            "y": "y/src/snake.y:158",
             "bare": "bare/src/snake.brs:150"
           }
         ]
@@ -262,22 +262,22 @@
         "branches": [
           {
             "name": "going.up",
-            "y": "y/src/snake.y:164",
+            "y": "y/src/snake.y:171",
             "bare": "bare/src/snake.brs:161"
           },
           {
             "name": "going.down",
-            "y": "y/src/snake.y:166",
+            "y": "y/src/snake.y:173",
             "bare": "bare/src/snake.brs:162"
           },
           {
             "name": "going.left",
-            "y": "y/src/snake.y:168",
+            "y": "y/src/snake.y:175",
             "bare": "bare/src/snake.brs:163"
           },
           {
             "name": "going.right",
-            "y": "y/src/snake.y:170",
+            "y": "y/src/snake.y:177",
             "bare": "bare/src/snake.brs:164"
           }
         ]
@@ -290,22 +290,22 @@
         "branches": [
           {
             "name": "going.up",
-            "y": "y/src/snake.y:184",
+            "y": "y/src/snake.y:191",
             "bare": "bare/src/snake.brs:175"
           },
           {
             "name": "going.down",
-            "y": "y/src/snake.y:186",
+            "y": "y/src/snake.y:193",
             "bare": "bare/src/snake.brs:176"
           },
           {
             "name": "going.left",
-            "y": "y/src/snake.y:188",
+            "y": "y/src/snake.y:195",
             "bare": "bare/src/snake.brs:177"
           },
           {
             "name": "going.right",
-            "y": "y/src/snake.y:190",
+            "y": "y/src/snake.y:197",
             "bare": "bare/src/snake.brs:178"
           }
         ]
@@ -317,12 +317,12 @@
         "branches": [
           {
             "name": "taken",
-            "y": "y/src/snake.y:219",
+            "y": "y/src/snake.y:226",
             "bare": "bare/src/snake.brs:199"
           },
           {
             "name": "vacant",
-            "y": "y/src/snake.y:221",
+            "y": "y/src/snake.y:228",
             "bare": "bare/src/snake.brs:201"
           }
         ]
@@ -334,12 +334,12 @@
         "branches": [
           {
             "name": "full",
-            "y": "y/src/snake.y:236",
+            "y": "y/src/snake.y:243",
             "bare": "bare/src/snake.brs:215"
           },
           {
             "name": "room",
-            "y": "y/src/snake.y:238",
+            "y": "y/src/snake.y:245",
             "bare": "bare/src/snake.brs:217"
           }
         ]
@@ -352,22 +352,22 @@
         "branches": [
           {
             "name": "shown.playing",
-            "y": "y/src/snake.y:274",
+            "y": "y/src/snake.y:282",
             "bare": "bare/src/snake.brs:257"
           },
           {
             "name": "shown.crashed",
-            "y": "y/src/snake.y:276",
+            "y": "y/src/snake.y:284",
             "bare": "bare/src/snake.brs:258"
           },
           {
             "name": "shown.bitten",
-            "y": "y/src/snake.y:278",
+            "y": "y/src/snake.y:286",
             "bare": "bare/src/snake.brs:259"
           },
           {
             "name": "shown.filled",
-            "y": "y/src/snake.y:280",
+            "y": "y/src/snake.y:288",
             "bare": "bare/src/snake.brs:260"
           }
         ]
@@ -379,12 +379,12 @@
         "branches": [
           {
             "name": "open",
-            "y": "y/src/snake.y:338",
+            "y": "y/src/snake.y:346",
             "bare": "bare/src/snake.brs:308"
           },
           {
             "name": "closed",
-            "y": "y/src/snake.y:358",
+            "y": "y/src/snake.y:366",
             "bare": "bare/src/snake.brs:329"
           }
         ]
@@ -394,12 +394,12 @@
         "branches": [
           {
             "name": "again",
-            "y": "y/src/snake.y:346",
+            "y": "y/src/snake.y:354",
             "bare": "bare/src/snake.brs:315"
           },
           {
             "name": "going_on",
-            "y": "y/src/snake.y:349",
+            "y": "y/src/snake.y:357",
             "bare": "bare/src/snake.brs:318"
           }
         ]
@@ -409,12 +409,12 @@
         "branches": [
           {
             "name": "due",
-            "y": "y/src/snake.y:351",
+            "y": "y/src/snake.y:359",
             "bare": "bare/src/snake.brs:319"
           },
           {
             "name": "caught_up",
-            "y": "y/src/snake.y:354",
+            "y": "y/src/snake.y:362",
             "bare": "bare/src/snake.brs:323"
           }
         ]
@@ -512,7 +512,7 @@
       ]
     },
     "the_game_plays_until_the_window_closes": {
-      "y": "y/src/snake.test.y:196",
+      "y": "y/src/snake.test.y:197",
       "rust": "snake_example::snake::tests::the_game_plays_until_the_window_closes",
       "covers": [
         "play#open",
@@ -523,14 +523,14 @@
       ]
     },
     "space_starts_the_next_game": {
-      "y": "y/src/snake.test.y:212",
+      "y": "y/src/snake.test.y:213",
       "rust": "snake_example::snake::tests::space_starts_the_next_game",
       "covers": [
         "play#again"
       ]
     },
     "escape_quits": {
-      "y": "y/src/snake.test.y:229",
+      "y": "y/src/snake.test.y:230",
       "rust": "snake_example::snake::tests::escape_quits",
       "covers": [
         "play#open",

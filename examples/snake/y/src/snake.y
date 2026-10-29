@@ -46,14 +46,19 @@ public facet setup:
     structure game:
         -- The cell the snake's head is in.
         head is cell
+
         -- The cells of the rest of the snake, the one nearest the head first.
         tail is list<cell>
+
         -- The way the snake moved last.
         heading is direction
+
         -- The way it will move next, as the player last steered it.
         wanted is direction
+
         -- The cell the food is in.
         food is cell
+
         -- How much food the snake has eaten: the score.
         eaten is uint32
         standing is outcome
@@ -73,6 +78,7 @@ public facet setup:
             tail: [cell(column: 5, row: 7), cell(column: 4, row: 7)],
             heading: direction.right,
             wanted: direction.right,
+
             -- Until `place_food` chooses a free cell.
             food: cell(column: 6, row: 7),
             eaten: 0,
@@ -123,6 +129,7 @@ public facet rules:
         conditional moved:
             condition moved.into_wall = (not on_board(ahead)):
                 game.standing := outcome.crashed
+
             -- The last cell of the tail moves on as the head moves in, so only the cells before it are in the way.
             condition moved.into_itself = game.tail.without_last().contains(ahead):
                 game.standing := outcome.bitten
@@ -245,6 +252,7 @@ public facet drawing:
     constants layout:
         -- The side of one cell.
         cell_size is int32 = 32
+
         -- The height of the bar beneath the board, where the score is written.
         bar_height is int32 = 40
         width is int32 = board.columns * layout.cell_size

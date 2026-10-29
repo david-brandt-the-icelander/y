@@ -2,6 +2,7 @@
 constants stand_in:
     -- A drawing that a fake site gives for every picture: a red circle.
     drawing = "<svg viewBox='0 0 72 72' xmlns='http://www.w3.org/2000/svg'><circle cx='36' cy='36' r='30' fill='red'/></svg>"
+
     -- The order of the cards for the rules: each picture's two cards side by side.
     side_by_side is list<uint32> = [1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10]
 
@@ -360,6 +361,7 @@ test a_pair_that_does_not_match_is_shown_then_turned_back
         no_score = (best == 0)
         a_life_lost = window.written().contains("Pairs 0 of 10   Lives 9   Time 0s   Best 0")
         credited = (window.written().last() == optional.some("Pictures: OpenMoji, CC BY-SA 4.0"))
+
         -- Expected one picture, then two in each frame for a second, then none.
         turned_back = (window.pictures_drawn() == 21)
 

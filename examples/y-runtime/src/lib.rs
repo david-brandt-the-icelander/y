@@ -143,6 +143,22 @@ pub mod list {
         }
     }
 
+    /// The last element: Y's `list.last()` on a list that cannot be empty. An empty list is a fault.
+    pub fn last<T: Clone>(items: &[T]) -> T {
+        match items.last() {
+            Some(found) => found.clone(),
+            None => fault("y_runtime::list::last", "the list is empty"),
+        }
+    }
+
+    /// The smallest element. An empty list is a fault.
+    pub fn smallest<T: Copy + Ord>(items: &[T]) -> T {
+        match items.iter().copied().min() {
+            Some(least) => least,
+            None => fault("y_runtime::list::smallest", "the list is empty"),
+        }
+    }
+
     /// The list without its last element; empty when the list is.
     pub fn without_last<T>(items: &[T]) -> &[T] {
         &items[..items.len().saturating_sub(1)]
@@ -151,6 +167,21 @@ pub mod list {
     fn position(length: usize, number: u32) -> Option<usize> {
         let at = usize::try_from(number).ok()?.checked_sub(1)?;
         (at < length).then_some(at)
+    }
+}
+
+/// Y's conversions between whole numbers, which fault where Rust's `as` would wrap.
+pub mod number {
+    use super::fault;
+
+    /// An `int32` as a `uint32`: Y's `int32.to_uint32()`. A number below zero is a fault.
+    pub fn to_uint32(value: i32) -> u32 {
+        u32::try_from(value).unwrap_or_else(|_| fault("y_runtime::number::to_uint32", "a number below zero"))
+    }
+
+    /// A `uint32` as an `int32`: Y's `uint32.to_int32()`. A number too large for an `int32` is a fault.
+    pub fn to_int32(value: u32) -> i32 {
+        i32::try_from(value).unwrap_or_else(|_| fault("y_runtime::number::to_int32", "a number too large for an int32"))
     }
 }
 
@@ -302,6 +333,12 @@ impl Random {
             out.swap(last, other);
         }
         out
+    }
+
+    /// One element of the list, drawn at random: Y's `random.one_of(items)`. An empty list is a fault.
+    pub fn one_of<T: Clone>(&mut self, items: &[T]) -> T {
+        require(!items.is_empty(), "y_runtime::Random::one_of#not_empty");
+        items[self.index_below(items.len())].clone()
     }
 
     /// `count` elements of the list, each drawn at most once, in the order drawn: Y's `random.chosen(from:, count:)`.

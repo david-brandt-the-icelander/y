@@ -14,8 +14,10 @@ public facet setup:
         -- How many cards are laid out across the board, and how many down it.
         columns is int32 = 5
         rows is int32 = 4
+
         -- How many cards there are, numbered from 1 row by row from the top left.
         cards is uint32 = 20
+
         -- How many pairs of cards there are: one for each picture.
         pairs is uint32 = 10
 
@@ -24,16 +26,22 @@ public facet setup:
     constants game_rules:
         -- How many times the player may turn over two cards that do not match before the game is lost.
         lives is uint32 = 10
+
         -- How long two cards that do not match stay face up.
         show_time is duration = 1s
+
         -- How long the pictures may take to fetch.
         fetch_time is duration = 20s
+
         -- What each pair found scores.
         points_per_pair is uint32 = 100
+
         -- What each life left scores, when every pair is found.
         points_per_life is uint32 = 50
+
         -- What each whole second under the par time scores, when every pair is found.
         points_per_second is uint32 = 10
+
         -- The time to beat.
         par_time is duration = 120s
 
@@ -71,20 +79,28 @@ public facet setup:
     structure game:
         -- For each card, in the order they are numbered, the number of the picture it shows.
         pairs is list<uint32>
+
         -- For each card, in the same order, which side is up.
         sides is list<side>
+
         -- The pictures, numbered from 1.
         pictures is list<picture>
+
         -- The cards turned face up this turn, and not yet matched: none, one or two.
         turned is list<uint32>
+
         -- When the second card of the turn was turned, or when the game started.
         turned_at is instant
+
         -- How many pairs have been found.
         matches is uint32
+
         -- How many lives are left.
         lives is uint32
+
         -- When the game started.
         started is instant
+
         -- How long the game has been played, which stops when it ends.
         elapsed is duration
 
@@ -291,16 +307,22 @@ public facet drawing:
     constants layout:
         -- The side of a card.
         card_size is int32 = 112
+
         -- The space between two cards, and around them.
         gap is int32 = 12
+
         -- From one card to the next.
         step is int32 = layout.card_size + layout.gap
+
         -- How far a picture is drawn in from its card's edge.
         picture_inset is int32 = 8
+
         -- The side of a picture: the card's, less the inset on both sides.
         picture_size is uint16 = 96
+
         -- The height of the bar beneath the board, where the score is written.
         bar_height is int32 = 84
+
         -- The height of the text.
         text_size is uint32 = 20
         width is int32 = layout.gap + board.columns * layout.step

@@ -41,7 +41,7 @@
       "facet": "moves",
       "path": "tic_tac_toe.moves",
       "visible": "public",
-      "y": "y/src/tic_tac_toe.y:41",
+      "y": "y/src/tic_tac_toe.y:43",
       "rust": "tic_tac_toe_example::tic_tac_toe::moves",
       "members": [
         "move_error",
@@ -55,7 +55,7 @@
       "facet": "console_play",
       "path": "tic_tac_toe.console_play",
       "visible": "public",
-      "y": "y/src/tic_tac_toe.y:244",
+      "y": "y/src/tic_tac_toe.y:247",
       "rust": "tic_tac_toe_example::tic_tac_toe::console_play",
       "members": [
         "play_error",
@@ -72,7 +72,7 @@
         "forever as forever"
       ],
       "lowered": "as the last two parameters, in order",
-      "y": "y/src/tic_tac_toe.y:261"
+      "y": "y/src/tic_tac_toe.y:264"
     },
     {
       "subject": "tic_tac_toe_example::main",
@@ -88,7 +88,7 @@
       "claim": "forever",
       "because": "a player may think for as long as they like",
       "requires": "Forever",
-      "y": "y/src/tic_tac_toe.y:270",
+      "y": "y/src/tic_tac_toe.y:273",
       "bare": "bare/src/tic_tac_toe.brs:267"
     }
   ],
@@ -98,13 +98,13 @@
     {
       "what": "game",
       "why": "place changes it, and game is still read",
-      "y": "y/src/tic_tac_toe.y:104",
+      "y": "y/src/tic_tac_toe.y:107",
       "bare": "bare/src/tic_tac_toe.brs:115"
     },
     {
       "what": "game",
       "why": "place changes it, and game is still read",
-      "y": "y/src/tic_tac_toe.y:201",
+      "y": "y/src/tic_tac_toe.y:204",
       "bare": "bare/src/tic_tac_toe.brs:197"
     }
   ],
@@ -115,12 +115,12 @@
         "branches": [
           {
             "name": "not_a_number",
-            "y": "y/src/tic_tac_toe.y:64",
+            "y": "y/src/tic_tac_toe.y:66",
             "bare": "bare/src/tic_tac_toe.brs:82"
           },
           {
             "name": "a_number",
-            "y": "y/src/tic_tac_toe.y:66",
+            "y": "y/src/tic_tac_toe.y:68",
             "bare": "bare/src/tic_tac_toe.brs:82"
           }
         ]
@@ -131,17 +131,17 @@
         "branches": [
           {
             "name": "judged.off_board",
-            "y": "y/src/tic_tac_toe.y:68",
+            "y": "y/src/tic_tac_toe.y:70",
             "bare": "bare/src/tic_tac_toe.brs:85"
           },
           {
             "name": "judged.taken",
-            "y": "y/src/tic_tac_toe.y:70",
+            "y": "y/src/tic_tac_toe.y:72",
             "bare": "bare/src/tic_tac_toe.brs:87"
           },
           {
             "name": "judged.empty",
-            "y": "y/src/tic_tac_toe.y:72",
+            "y": "y/src/tic_tac_toe.y:74",
             "bare": "bare/src/tic_tac_toe.brs:89"
           }
         ]
@@ -153,12 +153,12 @@
         "branches": [
           {
             "name": "better",
-            "y": "y/src/tic_tac_toe.y:108",
+            "y": "y/src/tic_tac_toe.y:111",
             "bare": "bare/src/tic_tac_toe.brs:118"
           },
           {
             "name": "no_better",
-            "y": "y/src/tic_tac_toe.y:111",
+            "y": "y/src/tic_tac_toe.y:114",
             "bare": "bare/src/tic_tac_toe.brs:121"
           }
         ]
@@ -170,12 +170,12 @@
         "branches": [
           {
             "name": "three",
-            "y": "y/src/tic_tac_toe.y:140",
+            "y": "y/src/tic_tac_toe.y:143",
             "bare": "bare/src/tic_tac_toe.brs:146"
           },
           {
             "name": "not_three",
-            "y": "y/src/tic_tac_toe.y:142",
+            "y": "y/src/tic_tac_toe.y:145",
             "bare": "bare/src/tic_tac_toe.brs:148"
           }
         ]
@@ -188,12 +188,12 @@
         "branches": [
           {
             "name": "current.cross",
-            "y": "y/src/tic_tac_toe.y:156",
+            "y": "y/src/tic_tac_toe.y:159",
             "bare": "bare/src/tic_tac_toe.brs:161"
           },
           {
             "name": "current.nought",
-            "y": "y/src/tic_tac_toe.y:158",
+            "y": "y/src/tic_tac_toe.y:161",
             "bare": "bare/src/tic_tac_toe.brs:162"
           }
         ]
@@ -205,12 +205,12 @@
         "branches": [
           {
             "name": "marked",
-            "y": "y/src/tic_tac_toe.y:173",
+            "y": "y/src/tic_tac_toe.y:176",
             "bare": "bare/src/tic_tac_toe.brs:173"
           },
           {
             "name": "empty",
-            "y": "y/src/tic_tac_toe.y:175",
+            "y": "y/src/tic_tac_toe.y:178",
             "bare": "bare/src/tic_tac_toe.brs:175"
           }
         ]
@@ -223,17 +223,17 @@
         "branches": [
           {
             "name": "now.lost",
-            "y": "y/src/tic_tac_toe.y:193",
+            "y": "y/src/tic_tac_toe.y:196",
             "bare": "bare/src/tic_tac_toe.brs:190"
           },
           {
             "name": "now.drawn",
-            "y": "y/src/tic_tac_toe.y:195",
+            "y": "y/src/tic_tac_toe.y:198",
             "bare": "bare/src/tic_tac_toe.brs:192"
           },
           {
             "name": "now.open",
-            "y": "y/src/tic_tac_toe.y:197",
+            "y": "y/src/tic_tac_toe.y:200",
             "bare": "bare/src/tic_tac_toe.brs:194"
           }
         ]
@@ -246,12 +246,12 @@
         "branches": [
           {
             "name": "held.empty",
-            "y": "y/src/tic_tac_toe.y:237",
+            "y": "y/src/tic_tac_toe.y:240",
             "bare": "bare/src/tic_tac_toe.brs:229"
           },
           {
             "name": "held.marked",
-            "y": "y/src/tic_tac_toe.y:239",
+            "y": "y/src/tic_tac_toe.y:242",
             "bare": "bare/src/tic_tac_toe.brs:230"
           }
         ]
@@ -263,12 +263,12 @@
         "branches": [
           {
             "name": "playing",
-            "y": "y/src/tic_tac_toe.y:265",
+            "y": "y/src/tic_tac_toe.y:268",
             "bare": "bare/src/tic_tac_toe.brs:262"
           },
           {
             "name": "game_over",
-            "y": "y/src/tic_tac_toe.y:288",
+            "y": "y/src/tic_tac_toe.y:291",
             "bare": "bare/src/tic_tac_toe.brs:283"
           }
         ]
@@ -278,12 +278,12 @@
         "branches": [
           {
             "name": "persons_turn",
-            "y": "y/src/tic_tac_toe.y:266",
+            "y": "y/src/tic_tac_toe.y:269",
             "bare": "bare/src/tic_tac_toe.brs:263"
           },
           {
             "name": "computers_turn",
-            "y": "y/src/tic_tac_toe.y:284",
+            "y": "y/src/tic_tac_toe.y:287",
             "bare": "bare/src/tic_tac_toe.brs:277"
           }
         ]
@@ -293,12 +293,12 @@
         "branches": [
           {
             "name": "closed",
-            "y": "y/src/tic_tac_toe.y:272",
+            "y": "y/src/tic_tac_toe.y:275",
             "bare": "bare/src/tic_tac_toe.brs:268"
           },
           {
             "name": "line_read",
-            "y": "y/src/tic_tac_toe.y:274",
+            "y": "y/src/tic_tac_toe.y:277",
             "bare": "bare/src/tic_tac_toe.brs:268"
           }
         ]
@@ -309,22 +309,22 @@
         "branches": [
           {
             "name": "attempted.valid",
-            "y": "y/src/tic_tac_toe.y:276",
+            "y": "y/src/tic_tac_toe.y:279",
             "bare": "bare/src/tic_tac_toe.brs:272"
           },
           {
             "name": "attempted.not_a_move",
-            "y": "y/src/tic_tac_toe.y:278",
+            "y": "y/src/tic_tac_toe.y:281",
             "bare": "bare/src/tic_tac_toe.brs:273"
           },
           {
             "name": "attempted.no_square",
-            "y": "y/src/tic_tac_toe.y:280",
+            "y": "y/src/tic_tac_toe.y:283",
             "bare": "bare/src/tic_tac_toe.brs:274"
           },
           {
             "name": "attempted.taken",
-            "y": "y/src/tic_tac_toe.y:282",
+            "y": "y/src/tic_tac_toe.y:285",
             "bare": "bare/src/tic_tac_toe.brs:275"
           }
         ]
@@ -334,12 +334,12 @@
         "branches": [
           {
             "name": "drawn",
-            "y": "y/src/tic_tac_toe.y:293",
+            "y": "y/src/tic_tac_toe.y:296",
             "bare": "bare/src/tic_tac_toe.brs:288"
           },
           {
             "name": "won",
-            "y": "y/src/tic_tac_toe.y:295",
+            "y": "y/src/tic_tac_toe.y:298",
             "bare": "bare/src/tic_tac_toe.brs:289"
           }
         ]

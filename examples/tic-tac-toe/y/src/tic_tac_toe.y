@@ -10,6 +10,7 @@ public facet setup:
     constants board:
         -- How many squares the board has, numbered from 1 row by row from the top left.
         squares is uint32 = 9
+
         -- The board's eight lines of three squares: three rows, three columns and two diagonals.
         lines is list<list<uint32>> = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [1, 4, 7], [2, 5, 8], [3, 6, 9], [1, 5, 9], [3, 5, 7]]
 
@@ -24,6 +25,7 @@ public facet setup:
     structure game:
         -- The squares, in the order they are numbered: the mark in each, or none.
         squares is list<optional<mark>>
+
         -- Whose turn it is.
         to_move is mark
 
@@ -96,6 +98,7 @@ public facet moves:
     function computer_move(game) returns chosen
             where still_playing = (not over(game)):
         open = open_squares(game)
+
         -- Lower than any square's value, so the first square looked at is taken.
         mutable best = -100
         mutable found = open[0]
