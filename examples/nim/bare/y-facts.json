@@ -1,0 +1,407 @@
+{
+  "format": "y-facts/0",
+  "about": "What the Y source says that neither the bare bodies nor the constraint files can hold. Nothing in bare-rust reads this file; it is for the Y toolchain (y explain, y review, coverage), and tools/bare-rust/tests/y_examples.rs checks it against the Y source and the bare bodies.",
+  "modules": [
+    {
+      "y": "y/src/nim.y",
+      "module": "nim",
+      "bare": "bare/src/nim.brs",
+      "rust": "src/nim.rs"
+    },
+    {
+      "y": "y/src/nim.test.y",
+      "module": "nim",
+      "bare": "bare/src/nim/tests.brs",
+      "rust": "src/nim/tests.rs"
+    },
+    {
+      "y": "y/src/main.y",
+      "module": "main",
+      "bare": "bare/src/main.brs",
+      "rust": "src/main.rs"
+    }
+  ],
+  "facets": [
+    {
+      "module": "nim",
+      "facet": "setup",
+      "path": "nim.setup",
+      "visible": "public",
+      "y": "y/src/nim.y:8",
+      "rust": "nim_example::nim::setup",
+      "members": [
+        "game_rules",
+        "game",
+        "player",
+        "new_game"
+      ]
+    },
+    {
+      "module": "nim",
+      "facet": "moves",
+      "path": "nim.moves",
+      "visible": "public",
+      "y": "y/src/nim.y:36",
+      "rust": "nim_example::nim::moves",
+      "members": [
+        "move",
+        "move_error",
+        "parse_move",
+        "check",
+        "read_move",
+        "remove",
+        "computer_move"
+      ]
+    },
+    {
+      "module": "nim",
+      "facet": "console_play",
+      "path": "nim.console_play",
+      "visible": "public",
+      "y": "y/src/nim.y:208",
+      "rust": "nim_example::nim::console_play",
+      "members": [
+        "play_error",
+        "play"
+      ]
+    }
+  ],
+  "units": [],
+  "capabilities": [
+    {
+      "subject": "nim_example::nim::console_play::play",
+      "injected": [
+        "console as console",
+        "forever as forever"
+      ],
+      "lowered": "as the last two parameters, in order",
+      "y": "y/src/nim.y:225"
+    },
+    {
+      "subject": "nim_example::main",
+      "injected": [
+        "system as system"
+      ],
+      "lowered": "System::root(), made by the entry point",
+      "y": "y/src/main.y:14"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "forever",
+      "because": "a player may think for as long as they like",
+      "requires": "Forever",
+      "y": "y/src/nim.y:236",
+      "bare": "bare/src/nim.brs:218"
+    }
+  ],
+  "compiled": [],
+  "copies": [],
+  "decisions": {
+    "nim.parse_move": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "not_two",
+            "y": "y/src/nim.y:63",
+            "bare": "bare/src/nim.brs:68"
+          },
+          {
+            "name": "two",
+            "y": "y/src/nim.y:65",
+            "bare": "bare/src/nim.brs:68"
+          }
+        ]
+      },
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "not_numbers",
+            "y": "y/src/nim.y:69",
+            "bare": "bare/src/nim.brs:73"
+          },
+          {
+            "name": "numbers",
+            "y": "y/src/nim.y:71",
+            "bare": "bare/src/nim.brs:73"
+          }
+        ]
+      }
+    ],
+    "nim.check": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "no_such_heap",
+            "y": "y/src/nim.y:88",
+            "bare": "bare/src/nim.brs:88"
+          },
+          {
+            "name": "heap_exists",
+            "y": "y/src/nim.y:90",
+            "bare": "bare/src/nim.brs:88"
+          }
+        ]
+      },
+      {
+        "kind": "conditional",
+        "label": "judged",
+        "branches": [
+          {
+            "name": "judged.nothing_taken",
+            "y": "y/src/nim.y:94",
+            "bare": "bare/src/nim.brs:92"
+          },
+          {
+            "name": "judged.too_many",
+            "y": "y/src/nim.y:96",
+            "bare": "bare/src/nim.brs:94"
+          },
+          {
+            "name": "judged.fits",
+            "y": "y/src/nim.y:98",
+            "bare": "bare/src/nim.brs:96"
+          }
+        ]
+      }
+    ],
+    "nim.computer_move": [
+      {
+        "kind": "while",
+        "branches": [
+          {
+            "name": "searching",
+            "y": "y/src/nim.y:145",
+            "bare": "bare/src/nim.brs:130"
+          },
+          {
+            "name": "losing",
+            "y": "y/src/nim.y:153",
+            "bare": "bare/src/nim.brs:139"
+          }
+        ]
+      },
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "winning",
+            "y": "y/src/nim.y:149",
+            "bare": "bare/src/nim.brs:133"
+          },
+          {
+            "name": "not_this_heap",
+            "y": "y/src/nim.y:151",
+            "bare": "bare/src/nim.brs:135"
+          }
+        ]
+      }
+    ],
+    "nim.play": [
+      {
+        "kind": "while",
+        "branches": [
+          {
+            "name": "playing",
+            "y": "y/src/nim.y:230",
+            "bare": "bare/src/nim.brs:213"
+          },
+          {
+            "name": "game_over",
+            "y": "y/src/nim.y:258",
+            "bare": "bare/src/nim.brs:239"
+          }
+        ]
+      },
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "persons_turn",
+            "y": "y/src/nim.y:234",
+            "bare": "bare/src/nim.brs:216"
+          },
+          {
+            "name": "computers_turn",
+            "y": "y/src/nim.y:253",
+            "bare": "bare/src/nim.brs:232"
+          }
+        ]
+      },
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "closed",
+            "y": "y/src/nim.y:238",
+            "bare": "bare/src/nim.brs:219"
+          },
+          {
+            "name": "line_read",
+            "y": "y/src/nim.y:240",
+            "bare": "bare/src/nim.brs:219"
+          }
+        ]
+      },
+      {
+        "kind": "conditional",
+        "label": "attempted",
+        "branches": [
+          {
+            "name": "attempted.valid",
+            "y": "y/src/nim.y:242",
+            "bare": "bare/src/nim.brs:223"
+          },
+          {
+            "name": "attempted.not_a_move",
+            "y": "y/src/nim.y:245",
+            "bare": "bare/src/nim.brs:227"
+          },
+          {
+            "name": "attempted.no_heap",
+            "y": "y/src/nim.y:247",
+            "bare": "bare/src/nim.brs:228"
+          },
+          {
+            "name": "attempted.none_taken",
+            "y": "y/src/nim.y:249",
+            "bare": "bare/src/nim.brs:229"
+          },
+          {
+            "name": "attempted.too_many",
+            "y": "y/src/nim.y:251",
+            "bare": "bare/src/nim.brs:230"
+          }
+        ]
+      },
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "computer_won",
+            "y": "y/src/nim.y:260",
+            "bare": "bare/src/nim.brs:240"
+          },
+          {
+            "name": "person_won",
+            "y": "y/src/nim.y:262",
+            "bare": "bare/src/nim.brs:242"
+          }
+        ]
+      }
+    ]
+  },
+  "tests": {
+    "a_move_is_read": {
+      "y": "y/src/nim.test.y:2",
+      "rust": "nim_example::nim::tests::a_move_is_read",
+      "covers": [
+        "parse_move#two",
+        "parse_move#numbers",
+        "check#heap_exists",
+        "check#judged.fits"
+      ]
+    },
+    "one_number_is_not_a_move": {
+      "y": "y/src/nim.test.y:14",
+      "rust": "nim_example::nim::tests::one_number_is_not_a_move",
+      "covers": [
+        "parse_move#not_two",
+        "parse_move!move_error.not_two_numbers",
+        "read_move!move_error.not_two_numbers"
+      ]
+    },
+    "two_words_are_not_a_move": {
+      "y": "y/src/nim.test.y:25",
+      "rust": "nim_example::nim::tests::two_words_are_not_a_move",
+      "covers": [
+        "parse_move#not_numbers"
+      ]
+    },
+    "there_is_no_fourth_heap": {
+      "y": "y/src/nim.test.y:36",
+      "rust": "nim_example::nim::tests::there_is_no_fourth_heap",
+      "covers": [
+        "check#no_such_heap",
+        "check!move_error.no_such_heap",
+        "read_move!move_error.no_such_heap"
+      ]
+    },
+    "taking_nothing_is_not_a_move": {
+      "y": "y/src/nim.test.y:47",
+      "rust": "nim_example::nim::tests::taking_nothing_is_not_a_move",
+      "covers": [
+        "check#judged.nothing_taken",
+        "check!move_error.nothing_taken",
+        "read_move!move_error.nothing_taken"
+      ]
+    },
+    "taking_too_many_is_not_a_move": {
+      "y": "y/src/nim.test.y:58",
+      "rust": "nim_example::nim::tests::taking_too_many_is_not_a_move",
+      "covers": [
+        "check#judged.too_many",
+        "check!move_error.too_many",
+        "read_move!move_error.too_many"
+      ]
+    },
+    "the_computer_finds_the_winning_move": {
+      "y": "y/src/nim.test.y:69",
+      "rust": "nim_example::nim::tests::the_computer_finds_the_winning_move",
+      "covers": [
+        "computer_move#searching",
+        "computer_move#not_this_heap",
+        "computer_move#winning"
+      ]
+    },
+    "a_losing_computer_takes_one_from_the_largest_heap": {
+      "y": "y/src/nim.test.y:82",
+      "rust": "nim_example::nim::tests::a_losing_computer_takes_one_from_the_largest_heap",
+      "covers": [
+        "computer_move#losing"
+      ]
+    },
+    "a_player_who_plays_perfectly_wins": {
+      "y": "y/src/nim.test.y:94",
+      "rust": "nim_example::nim::tests::a_player_who_plays_perfectly_wins",
+      "covers": [
+        "play#playing",
+        "play#persons_turn",
+        "play#line_read",
+        "play#attempted.valid",
+        "play#computers_turn",
+        "play#game_over",
+        "play#person_won"
+      ]
+    },
+    "a_player_who_plays_carelessly_loses": {
+      "y": "y/src/nim.test.y:107",
+      "rust": "nim_example::nim::tests::a_player_who_plays_carelessly_loses",
+      "covers": [
+        "play#computer_won"
+      ]
+    },
+    "a_player_is_told_what_was_wrong": {
+      "y": "y/src/nim.test.y:119",
+      "rust": "nim_example::nim::tests::a_player_is_told_what_was_wrong",
+      "covers": [
+        "play#attempted.not_a_move",
+        "play#attempted.no_heap",
+        "play#attempted.none_taken",
+        "play#attempted.too_many",
+        "play#closed",
+        "play!play_error.input_closed"
+      ]
+    },
+    "a_failing_console_ends_the_game": {
+      "y": "y/src/nim.test.y:137",
+      "rust": "nim_example::nim::tests::a_failing_console_ends_the_game",
+      "covers": [
+        "play!play_error.console"
+      ]
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "format": "y-constraints/0",
+  "host": "rust",
+  "crate": "nim-example 0.0.0",
+  "module": "src/nim/tests.rs",
+  "status": {
+    "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
+  },
+  "subjects": [
+    { "kind": "function", "name": "nim_example::nim::tests::a_move_is_read", "params": [] },
+    { "kind": "function", "name": "nim_example::nim::tests::one_number_is_not_a_move", "params": [] },
+    { "kind": "function", "name": "nim_example::nim::tests::two_words_are_not_a_move", "params": [] },
+    { "kind": "function", "name": "nim_example::nim::tests::there_is_no_fourth_heap", "params": [] },
+    { "kind": "function", "name": "nim_example::nim::tests::taking_nothing_is_not_a_move", "params": [] },
+    { "kind": "function", "name": "nim_example::nim::tests::taking_too_many_is_not_a_move", "params": [] },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::the_computer_finds_the_winning_move",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::a_losing_computer_takes_one_from_the_largest_heap",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::a_player_who_plays_perfectly_wins",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::a_player_who_plays_carelessly_loses",
+      "params": []
+    },
+    { "kind": "function", "name": "nim_example::nim::tests::a_player_is_told_what_was_wrong", "params": [] },
+    { "kind": "function", "name": "nim_example::nim::tests::a_failing_console_ends_the_game", "params": [] }
+  ]
+}

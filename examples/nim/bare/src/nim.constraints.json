@@ -1,0 +1,233 @@
+{
+  "format": "y-constraints/0",
+  "host": "rust",
+  "crate": "nim-example 0.0.0",
+  "module": "src/nim.rs",
+  "status": {
+    "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
+  },
+  "subjects": [
+    { "kind": "module", "name": "nim_example::nim::setup", "visible": "public" },
+    { "kind": "module", "name": "nim_example::nim::setup::game_rules", "visible": "public" },
+    {
+      "kind": "const",
+      "name": "nim_example::nim::setup::game_rules::STARTING_HEAPS",
+      "visible": "public",
+      "type": "list<u32> where size(value) == 3 as 'std::primitive::array'"
+    },
+    {
+      "kind": "type",
+      "name": "nim_example::nim::setup::Game",
+      "visible": "public",
+      "fields": [
+        {
+          "name": "heaps",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "list<u32> as 'Vec'",
+          "hold": { "kind": "owns" }
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "nim_example::nim::setup::Player",
+      "visible": "public",
+      "variants": [{ "name": "Person" }, { "name": "Computer" }]
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::setup::new_game",
+      "visible": "public",
+      "params": [],
+      "result": { "type": "Game" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/nim.y:31" }]
+    },
+    { "kind": "module", "name": "nim_example::nim::moves", "visible": "public" },
+    {
+      "kind": "type",
+      "name": "nim_example::nim::moves::Move",
+      "visible": "public",
+      "fields": [
+        {
+          "name": "heap",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "u32",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "take",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "u32",
+          "hold": { "kind": "owns" }
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "nim_example::nim::moves::MoveError",
+      "visible": "public",
+      "variants": [
+        { "name": "NotTwoNumbers" },
+        { "name": "NoSuchHeap" },
+        { "name": "NothingTaken" },
+        { "name": "TooMany" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::moves::parse_move",
+      "visible": "public",
+      "params": [
+        { "name": "line", "type": "ref<text>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "Move", "fails": "MoveError" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/nim.y:60" }]
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::moves::check",
+      "visible": "public",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
+        { "name": "chosen", "type": "ref<Move>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "Move", "fails": "MoveError" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/nim.y:87" }]
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::moves::read_move",
+      "visible": "public",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
+        { "name": "line", "type": "ref<text>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "Move", "fails": "MoveError" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/nim.y:115" }]
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::moves::remove",
+      "visible": "public",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        { "name": "chosen", "type": "ref<Move>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "clauses": [
+        {
+          "kind": "require",
+          "text": "require allowed : check(game, chosen) is Ok(_)",
+          "source": "y/src/nim.y:127",
+          "status": { "lifted": "src/nim.rs: y_runtime::require" }
+        },
+        { "kind": "effects", "text": "no io", "source": "y/src/nim.y:126" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/nim.y:126" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/nim.y:126" },
+        { "kind": "access", "text": "mutates only game.heaps", "source": "y/src/nim.y:126" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::moves::computer_move",
+      "visible": "public",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "Move" },
+      "clauses": [
+        {
+          "kind": "require",
+          "text": "require still_playing : counters_left(game) > 0",
+          "source": "y/src/nim.y:140",
+          "status": { "lifted": "src/nim.rs: y_runtime::require" }
+        },
+        { "kind": "effects", "text": "pure", "source": "y/src/nim.y:139" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::counters_left",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "u32" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/nim.y:166" }]
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::nim_sum",
+      "params": [
+        {
+          "name": "heaps",
+          "type": "ref<list<u32> as 'std::primitive::slice'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "u32" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/nim.y:181" }]
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::shown",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "text" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/nim.y:196" }]
+    },
+    { "kind": "module", "name": "nim_example::nim::console_play", "visible": "public" },
+    {
+      "kind": "type",
+      "name": "nim_example::nim::console_play::PlayError",
+      "visible": "public",
+      "variants": [
+        { "name": "InputClosed" },
+        {
+          "name": "Console",
+          "fields": [{ "name": "error", "type": "ConsoleError", "hold": { "kind": "owns" } }]
+        }
+      ],
+      "implements": [
+        { "trait": "From<ConsoleError>", "impl": "nim_example::nim::console_play::PlayError as From" }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "nim_example::nim::console_play::PlayError as From",
+      "trait": "From<ConsoleError>"
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::console_play::PlayError as From::from",
+      "params": [{ "name": "error", "type": "ConsoleError" }],
+      "result": { "type": "PlayError" }
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::console_play::play",
+      "visible": "public",
+      "params": [
+        {
+          "name": "console",
+          "type": "ref<Console>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        { "name": "forever", "type": "ref<Forever>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "()", "fails": "PlayError" },
+      "clauses": [
+        { "kind": "effects", "text": "effects only console", "source": "y/src/nim.y:225" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/nim.y:225" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/nim.y:225" }
+      ]
+    }
+  ],
+  "holes": {
+    "nim_example::nim::moves::parse_move": {
+      "locals": { "pieces": "list<ref<text>> as 'Vec'", "heap": "u32?", "take": "u32?" }
+    }
+  }
+}

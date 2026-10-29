@@ -227,7 +227,7 @@ pub fn validate_with(file: &Value, text: Option<&str>, builds: &BTreeSet<String>
         }
     }
     let subject_by_name: BTreeMap<&str, &Value> = file["subjects"].as_array().into_iter().flatten().filter_map(|s| Some((s["name"].as_str()?, s))).collect();
-    let variants: BTreeSet<String> = file["subjects"]
+    let mut variants: BTreeSet<String> = file["subjects"]
         .as_array()
         .into_iter()
         .flatten()
@@ -237,6 +237,10 @@ pub fn validate_with(file: &Value, text: Option<&str>, builds: &BTreeSet<String>
     // module that is bound `pure` or `effects none` (§ 6.3), by its own name. A library file names other subjects by
     // quoted host path, so its subjects' last segments, which repeat across modules, are not names here.
     let module_file = file["module"].as_str().is_some_and(|m| m.ends_with(".rs"));
+    // a module's file is Rust source, where the prelude's variants are always in scope: `x is Ok(_)`, `y is None`
+    if module_file {
+        variants.extend(["Some", "None", "Ok", "Err"].map(String::from));
+    }
     let last = |s: &Value| s["name"].as_str().and_then(|n| n.rsplit("::").next()).map(str::to_string);
     let module_subjects = || file["subjects"].as_array().into_iter().flatten().filter(|_| module_file);
     let file_consts: BTreeSet<String> = module_subjects().filter(|s| s["kind"] == "const").filter_map(last).collect();

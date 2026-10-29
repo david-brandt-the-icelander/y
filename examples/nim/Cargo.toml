@@ -1,0 +1,10 @@
+[package]
+name = "nim-example"
+version = "0.0.0"
+edition = "2021"
+description = "Nim, written in Y and lowered through bare Rust and its constraint files to Rust."
+
+[dependencies]
+y-runtime = { path = "../y-runtime" }
+
+[workspace]

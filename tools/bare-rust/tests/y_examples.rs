@@ -57,9 +57,18 @@ fn without_lowering(js: &Value) -> Value {
 
 #[test]
 fn hangman_bare_files_weave_to_the_committed_rust_and_strip_back() {
-    let dir = example("hangman");
+    weaves_and_strips_back("hangman", &["hangman", "hangman/tests", "lib", "main"]);
+}
+
+#[test]
+fn nim_bare_files_weave_to_the_committed_rust_and_strip_back() {
+    weaves_and_strips_back("nim", &["lib", "main", "nim", "nim/tests"]);
+}
+
+fn weaves_and_strips_back(name: &str, expected: &[&str]) {
+    let dir = example(name);
     let mods = modules(&dir);
-    assert_eq!(mods, ["hangman", "hangman/tests", "lib", "main"]);
+    assert_eq!(mods, expected);
     for m in mods {
         let brs = read(&dir.join(format!("bare/src/{m}.brs")));
         let cjs = read(&dir.join(format!("bare/src/{m}.constraints.json")));
@@ -78,7 +87,26 @@ fn hangman_bare_files_weave_to_the_committed_rust_and_strip_back() {
 
 #[test]
 fn hangman_constraint_files_are_valid() {
+    constraint_files_are_valid("hangman");
     let dir = example("hangman");
+    // the clauses are really read: a name the module does not have is refused, and so is a function that is not pure
+    let js: Value = serde_json::from_str(&read(&dir.join("bare/src/hangman.constraints.json"))).unwrap();
+    for (text, want) in [("require has_words : size(wordz) > 0", "unknown name `wordz`"), ("require has_words : guess(words, words) is Hit", "unknown name `guess`")] {
+        let mut bad = js.clone();
+        let play = bad["subjects"].as_array_mut().unwrap().iter_mut().find(|s| s["name"] == "hangman_example::hangman::console_play::play").unwrap();
+        play["clauses"][0]["text"] = Value::from(text);
+        let errors = bare_rust::libcheck::validate(&bad, None);
+        assert!(errors.iter().any(|e| e.contains(": clause 0:") && e.contains(want)), "{text}: {errors:#?}");
+    }
+}
+
+#[test]
+fn nim_constraint_files_are_valid() {
+    constraint_files_are_valid("nim");
+}
+
+fn constraint_files_are_valid(name: &str) {
+    let dir = example(name);
     for m in modules(&dir) {
         let js: Value = serde_json::from_str(&read(&dir.join(format!("bare/src/{m}.constraints.json")))).unwrap();
         // `validate` is written for library files, whose subjects are named by canonical paths under the module and whose
@@ -92,21 +120,24 @@ fn hangman_constraint_files_are_valid() {
         let errors: Vec<String> = bare_rust::libcheck::validate(&js, None).into_iter().filter(|e| !library_only(e)).collect();
         assert!(errors.is_empty(), "{m}: {errors:#?}");
     }
-    // the clauses are really read: a name the module does not have is refused, and so is a function that is not pure
-    let js: Value = serde_json::from_str(&read(&dir.join("bare/src/hangman.constraints.json"))).unwrap();
-    for (text, want) in [("require has_words : size(wordz) > 0", "unknown name `wordz`"), ("require has_words : guess(words, words) is Hit", "unknown name `guess`")] {
-        let mut bad = js.clone();
-        let play = bad["subjects"].as_array_mut().unwrap().iter_mut().find(|s| s["name"] == "hangman_example::hangman::console_play::play").unwrap();
-        play["clauses"][0]["text"] = Value::from(text);
-        let errors = bare_rust::libcheck::validate(&bad, None);
-        assert!(errors.iter().any(|e| e.contains(": clause 0:") && e.contains(want)), "{text}: {errors:#?}");
-    }
 }
 
 #[test]
 fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
-    let dir = example("hangman");
+    facts_match_the_y_source_and_the_bare_bodies("hangman");
+}
+
+#[test]
+fn nim_facts_match_the_y_source_and_the_bare_bodies() {
+    facts_match_the_y_source_and_the_bare_bodies("nim");
+}
+
+fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
+    let dir = example(name);
     let facts: Value = serde_json::from_str(&read(&dir.join("bare/y-facts.json"))).unwrap();
+    // the example's Y files, from the facts: the source, then the source without its tests
+    let all: Vec<String> = facts["modules"].as_array().unwrap().iter().map(|m| m["y"].as_str().unwrap().to_string()).collect();
+    let code: Vec<String> = all.iter().filter(|y| !y.ends_with(".test.y")).cloned().collect();
     // `file:line` to the text of that line
     let at = |place: &str| -> String {
         let (file, line) = place.rsplit_once(':').unwrap();
@@ -148,7 +179,7 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
     }
     // every named decision of the Y source is listed: `if name = …:`, `while name = …:`, `condition label.name = …:` and `else name:`
     let mut in_source = BTreeSet::new();
-    for y in ["y/src/hangman.y", "y/src/main.y"] {
+    for y in &code {
         let mut function = String::new();
         for line in read(&dir.join(y)).lines() {
             let words: Vec<&str> = line.split_whitespace().collect();
@@ -172,7 +203,7 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
     assert_eq!(listed, in_source, "y-facts.json and the Y source name different decisions");
     // two blank lines before every declaration after the imports, at module level and in a facet, never more (a lint
     // rule of Y § 3.1)
-    for y in ["y/src/hangman.y", "y/src/main.y", "y/src/hangman.test.y"] {
+    for y in &all {
         let lines: Vec<String> = read(&dir.join(y)).lines().map(str::to_string).collect();
         let mut inside = false;
         let mut in_facet = false;
@@ -195,7 +226,7 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
     // a blank line before every flow-control statement that is not the first of its block; comments about the
     // statement may come between (a lint rule of Y § 3.1)
     let flow = ["if ", "while ", "for ", "conditional ", "break", "continue", "retry", "atomic ", "within ", "arena ", "uncancellable", "supervise"];
-    for y in ["y/src/hangman.y", "y/src/main.y", "y/src/hangman.test.y"] {
+    for y in &all {
         let lines: Vec<String> = read(&dir.join(y)).lines().map(str::to_string).collect();
         let mut inside = false;
         for (i, l) in lines.iter().enumerate() {
@@ -218,7 +249,10 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
     // the tests cover every outcome: each named branch, and each failure case its function documents (Y § 3.14)
     let mut outcomes = listed.clone();
     let mut failures = Vec::new();
-    for line in read(&dir.join("y/src/hangman.y")).lines() {
+    // the module the tests belong to: its outcomes are the ones they must cover
+    let tested = facts["modules"].as_array().unwrap().iter().find(|m| m["y"].as_str().unwrap().ends_with(".test.y")).unwrap()["module"].as_str().unwrap().to_string();
+    let tested_code: Vec<String> = facts["modules"].as_array().unwrap().iter().filter(|m| m["module"] == tested.as_str() && !m["y"].as_str().unwrap().ends_with(".test.y")).map(|m| m["y"].as_str().unwrap().to_string()).collect();
+    for line in tested_code.iter().flat_map(|y| read(&dir.join(y)).lines().map(str::to_string).collect::<Vec<_>>()) {
         let t = line.trim();
         if let Some(case) = t.strip_prefix("fails ").and_then(|r| r.split(':').next()).filter(|c| c.contains('.') && !c.contains(' ')) {
             failures.push(case.to_string());
@@ -231,7 +265,7 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
     let covered: BTreeSet<String> = facts["tests"].as_object().unwrap().values().flat_map(|t| t["covers"].as_array().unwrap().iter().map(|c| c.as_str().unwrap().to_string())).collect();
     assert_eq!(covered, outcomes, "the tests and the outcomes of the module differ");
     // documentation roles of one kind sit together, and one blank line separates the kinds (a lint rule of Y § 3.2)
-    for y in ["y/src/hangman.y", "y/src/main.y"] {
+    for y in &code {
         let source = read(&dir.join(y));
         let lines: Vec<&str> = source.lines().collect();
         let is_rule = |l: &str| l.trim().len() >= 3 && l.trim().chars().all(|c| c == '-');
@@ -285,7 +319,7 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
         }
     }
     // no parentheses around a single element: a name, a literal, a field path, an index or a call (a lint rule of Y § 3.1)
-    for y in ["y/src/hangman.y", "y/src/main.y", "y/src/hangman.test.y"] {
+    for y in &all {
         for (n, line) in read(&dir.join(y)).lines().enumerate() {
             if line.trim_start().starts_with("--") {
                 continue;
@@ -316,7 +350,7 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
         }
     }
     // a name is changed, by `:=` or as a `mutable` argument, only when it was declared `mutable` (Y § 3.1, § 3.6)
-    for y in ["y/src/hangman.y", "y/src/main.y", "y/src/hangman.test.y"] {
+    for y in &all {
         let mut declared: BTreeSet<String> = BTreeSet::new();
         for (n, line) in read(&dir.join(y)).lines().enumerate() {
             let t = line.trim();
@@ -348,17 +382,18 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
         }
     }
     // `if` chooses between two ways; a ladder of `else if`s is a lint error, written as a `conditional` (Y § 3.5)
-    for y in ["y/src/hangman.y", "y/src/main.y", "y/src/hangman.test.y"] {
+    for y in &all {
         for (n, line) in read(&dir.join(y)).lines().enumerate() {
             assert!(!line.trim_start().starts_with("else if "), "{y}:{}: an `else if` ladder, not a `conditional`", n + 1);
         }
     }
     // no `else` goes without a name
-    for y in ["y/src/hangman.y", "y/src/main.y", "y/src/hangman.test.y"] {
+    for y in &all {
         assert!(!read(&dir.join(y)).lines().any(|l| l.trim() == "else:"), "{y}: an `else` without a name");
     }
     // each test covers what its Y source declares and its Rust comment repeats
-    let rust_tests = read(&dir.join("src/hangman/tests.rs"));
+    let test_module = facts["modules"].as_array().unwrap().iter().find(|m| m["y"].as_str().unwrap().ends_with(".test.y")).unwrap();
+    let rust_tests = read(&dir.join(test_module["rust"].as_str().unwrap()));
     for (test, t) in facts["tests"].as_object().unwrap() {
         let covers: Vec<&str> = t["covers"].as_array().unwrap().iter().map(|c| c.as_str().unwrap()).collect();
         let y = at(t["y"].as_str().unwrap());

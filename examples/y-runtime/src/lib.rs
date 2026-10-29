@@ -1,7 +1,7 @@
 //! A small stand-in for the Y runtime, written by hand.
 //!
 //! Rust lowered from Y calls this crate for what Y has and Rust does not: capabilities (`System`, `Console`, `Random`,
-//! `Forever`), the standard library's text operations on runes, refined types' constraint violations, and faults.
+//! `Forever`), the standard library's text operations on runes and list operations by number, refined types' constraint violations, and faults.
 //! It is only as large as the examples need. Where it is simpler than Y's semantics, the item says so.
 use std::collections::VecDeque;
 use std::fmt;
@@ -69,10 +69,63 @@ pub mod text {
         }
     }
 
+    /// The text repeated `times` times: Y's `string.repeated(times)`.
+    pub fn repeated(text: &str, times: u32) -> String {
+        (0..times).map(|_| text).collect()
+    }
+
     /// Runes joined into a text with a separator between each two.
     pub fn join_runes(runes: &[Rune], separator: &str) -> String {
         let parts: Vec<String> = runes.iter().map(|rune| rune.to_string()).collect();
         parts.join(separator)
+    }
+}
+
+/// The standard library's operations on lists that number their elements from 1, as a player sees them, and count
+/// them as a `uint32`.
+pub mod list {
+    use super::fault;
+
+    /// How many elements a list has, as a `uint32`: Y's `list.count().to_uint32()`.
+    pub fn count<T>(items: &[T]) -> u32 {
+        u32::try_from(items.len()).unwrap_or_else(|_| fault("y_runtime::list::count", "more elements than a uint32 holds"))
+    }
+
+    /// The element numbered `number`, counting from 1. A number outside the list is a fault.
+    pub fn at_number<T: Copy>(items: &[T], number: u32) -> T {
+        match position(items.len(), number) {
+            Some(at) => items[at],
+            None => fault("y_runtime::list::at_number", "no element with that number"),
+        }
+    }
+
+    /// Replaces the element numbered `number`, counting from 1. A number outside the list is a fault.
+    pub fn set_number<T>(items: &mut [T], number: u32, value: T) {
+        match position(items.len(), number) {
+            Some(at) => items[at] = value,
+            None => fault("y_runtime::list::set_number", "no element with that number"),
+        }
+    }
+
+    /// The number, counting from 1, of the first element equal to `value`. A value not in the list is a fault.
+    pub fn number_of<T: PartialEq>(items: &[T], value: &T) -> u32 {
+        match items.iter().position(|item| item == value) {
+            Some(at) => count(&items[..=at]),
+            None => fault("y_runtime::list::number_of", "the value is not in the list"),
+        }
+    }
+
+    /// The largest element. An empty list is a fault.
+    pub fn largest<T: Copy + Ord>(items: &[T]) -> T {
+        match items.iter().copied().max() {
+            Some(most) => most,
+            None => fault("y_runtime::list::largest", "the list is empty"),
+        }
+    }
+
+    fn position(length: usize, number: u32) -> Option<usize> {
+        let at = usize::try_from(number).ok()?.checked_sub(1)?;
+        (at < length).then_some(at)
     }
 }
 
