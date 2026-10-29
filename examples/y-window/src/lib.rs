@@ -1,5 +1,5 @@
-//! A small stand-in for Y's `standard.window`, written by hand: the `window` capability, its `key` and `colour`
-//! types, and the entry point that opens the window, drawn with Macroquad.
+//! A small stand-in for Y's `standard.window`, written by hand: the `window` capability, its `key`, `colour`, `point`
+//! and `picture` types, and the entry point that opens the window, drawn with Macroquad.
 //!
 //! It is a crate of its own, apart from `y-runtime`, so that the console examples do not build Macroquad. It is only
 //! as large as the examples need.
@@ -8,8 +8,10 @@
 //! does. Rust colours such a function, so the lowering makes it an `async fn` and awaits it, and the entry point runs
 //! on Macroquad's executor. A fake window never suspends, and `block_on` runs a function that holds one in a test.
 
+use std::cell::OnceCell;
 use std::future::Future;
 use std::pin::pin;
+use std::rc::Rc;
 use std::task::{Context, Poll, Waker};
 use y_runtime::{Forever, System};
 
@@ -64,14 +66,84 @@ impl Colour {
     }
 }
 
+/// A point in the window, in pixels from the top left, as Y's `point(x: …, y: …)`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Point {
+    pub x: i32,
+    pub y: i32,
+}
+
+/// Why a text is not a picture.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PictureError {
+    /// What is wrong with it, for a person to read.
+    pub message: String,
+}
+
+/// A square picture, as Y's `picture`: its pixels, drawn from an SVG drawing at a size. It is plain data, so a test
+/// can make one; the window turns it into a texture the first time it is drawn.
+#[derive(Clone)]
+pub struct Picture {
+    size: u16,
+    /// Red, green, blue and alpha for each pixel, row by row.
+    pixels: Rc<[u8]>,
+    texture: Rc<OnceCell<macroquad::texture::Texture2D>>,
+}
+
+impl std::fmt::Debug for Picture {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Picture({}x{})", self.size, self.size)
+    }
+}
+
+impl PartialEq for Picture {
+    fn eq(&self, other: &Picture) -> bool {
+        self.size == other.size && self.pixels == other.pixels
+    }
+}
+
+impl Picture {
+    /// The picture an SVG drawing makes when it is drawn `size` pixels square, its longer side filling the square:
+    /// Y's `picture.from_svg(drawing, size: …)`.
+    pub fn from_svg(drawing: &str, size: u16) -> Result<Picture, PictureError> {
+        use resvg::{tiny_skia, usvg};
+        let tree = usvg::Tree::from_str(drawing, &usvg::Options::default()).map_err(|e| PictureError { message: e.to_string() })?;
+        let mut pixmap = tiny_skia::Pixmap::new(size.into(), size.into()).ok_or(PictureError { message: "a picture of no pixels".to_string() })?;
+        let scale = f32::from(size) / tree.size().width().max(tree.size().height());
+        resvg::render(&tree, tiny_skia::Transform::from_scale(scale, scale), &mut pixmap.as_mut());
+        // tiny-skia keeps colours multiplied by alpha; a texture wants them apart
+        let pixels: Vec<u8> = pixmap.pixels().iter().flat_map(|p| {
+            let c = p.demultiply();
+            [c.red(), c.green(), c.blue(), c.alpha()]
+        }).collect();
+        Ok(Picture { size, pixels: pixels.into(), texture: Rc::new(OnceCell::new()) })
+    }
+
+    /// The side of the picture, in pixels.
+    pub fn size(&self) -> u16 {
+        self.size
+    }
+}
+
+/// What the player does in one frame of a fake window.
+#[derive(Clone, Debug, Default)]
+pub struct Frame {
+    /// The keys pressed.
+    pub keys: Vec<Key>,
+    /// The points clicked, in order.
+    pub clicks: Vec<Point>,
+}
+
 /// A fake window's script and what it has been given to draw.
 struct Fake {
-    /// The keys pressed in each frame, in order. Once they run out, the player has asked to close the window.
-    frames: Vec<Vec<Key>>,
+    /// What the player does in each frame, in order. Once the frames run out, the player has asked to close the window.
+    frames: Vec<Frame>,
     /// How many frames have been shown.
     shown: usize,
     /// The text written, one entry per call.
     written: Vec<String>,
+    /// How many pictures have been drawn.
+    pictures: u32,
 }
 
 /// A window on the screen, or a fake of it for tests: it draws, and reads the keys pressed.
@@ -96,8 +168,13 @@ impl Window {
     /// A fake window for a test: in each frame, the player presses the keys given for it; after the last frame, the
     /// player asks to close the window. It records the text written.
     pub fn fake(frames: &[&[Key]]) -> Window {
-        let frames = frames.iter().map(|keys| keys.to_vec()).collect();
-        Window { fake: Some(Fake { frames, shown: 0, written: Vec::new() }) }
+        Window::fake_frames(frames.iter().map(|keys| Frame { keys: keys.to_vec(), clicks: Vec::new() }).collect())
+    }
+
+    /// A fake window for a test, in whose frames the player presses keys and clicks: Y's `fake window(frames: …)` with
+    /// `frame(keys: …, clicks: …)`. After the last frame, the player asks to close the window.
+    pub fn fake_frames(frames: Vec<Frame>) -> Window {
+        Window { fake: Some(Fake { frames, shown: 0, written: Vec::new(), pictures: 0 }) }
     }
 
     /// Fills the whole window with a colour.
@@ -124,6 +201,31 @@ impl Window {
         }
     }
 
+    /// Draws a picture with its top left corner at `x`, `y`, in pixels from the top left, at its own size.
+    pub fn picture(&mut self, picture: &Picture, x: i32, y: i32) {
+        match &mut self.fake {
+            None => {
+                let texture = picture.texture.get_or_init(|| {
+                    macroquad::texture::Texture2D::from_rgba8(picture.size, picture.size, &picture.pixels)
+                });
+                macroquad::texture::draw_texture(texture, x as f32, y as f32, macroquad::color::WHITE);
+            }
+            Some(fake) => fake.pictures += 1,
+        }
+    }
+
+    /// The points clicked with the mouse since the last frame: at most one in a window on the screen.
+    pub fn clicks(&self) -> Vec<Point> {
+        match &self.fake {
+            None => {
+                let clicked = macroquad::input::is_mouse_button_pressed(macroquad::input::MouseButton::Left);
+                let (x, y) = macroquad::input::mouse_position();
+                if clicked { vec![Point { x: x as i32, y: y as i32 }] } else { Vec::new() }
+            }
+            Some(fake) => fake.frames.get(fake.shown).map(|frame| frame.clicks.clone()).unwrap_or_default(),
+        }
+    }
+
     /// The keys pressed since the last frame.
     pub fn keys_pressed(&self) -> Vec<Key> {
         match &self.fake {
@@ -131,7 +233,7 @@ impl Window {
                 let pressed = macroquad::input::get_keys_pressed();
                 Key::ALL.iter().filter(|(_, code)| pressed.contains(code)).map(|(key, _)| *key).collect()
             }
-            Some(fake) => fake.frames.get(fake.shown).cloned().unwrap_or_default(),
+            Some(fake) => fake.frames.get(fake.shown).map(|frame| frame.keys.clone()).unwrap_or_default(),
         }
     }
 
@@ -155,6 +257,11 @@ impl Window {
     /// How many frames a fake window has shown.
     pub fn frames_shown(&self) -> u32 {
         self.fake.as_ref().map_or(0, |fake| fake.shown as u32)
+    }
+
+    /// How many pictures a fake window has been given to draw.
+    pub fn pictures_drawn(&self) -> u32 {
+        self.fake.as_ref().map_or(0, |fake| fake.pictures)
     }
 
     /// The text a fake window has been given to write, one entry per call. Empty for a window on the screen.

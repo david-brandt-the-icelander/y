@@ -1,0 +1,137 @@
+{
+  "format": "y-constraints/0",
+  "host": "rust",
+  "crate": "memory-example 0.0.0",
+  "module": "src/memory/tests.rs",
+  "status": {
+    "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
+  },
+  "subjects": [
+    {
+      "kind": "const",
+      "name": "memory_example::memory::tests::stand_in::DRAWING",
+      "visible": "public",
+      "type": "ref<text>",
+      "access": { "rights": "read", "guarantee": "readers" }
+    },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::tests::stand_in::SIDE_BY_SIDE",
+      "visible": "public",
+      "type": "list<u32> where size(value) == 20 as 'std::primitive::array'"
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::dealt",
+      "params": [
+        {
+          "name": "pairs",
+          "type": "ref<list<u32> as 'std::primitive::slice'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "at", "type": "Instant" }
+      ],
+      "result": { "type": "Game" }
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::clicking",
+      "params": [{ "name": "row", "type": "i32" }, { "name": "column", "type": "i32" }],
+      "result": { "type": "Frame" }
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_click_between_the_cards_chooses_nothing",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_click_on_a_card_chooses_it",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_face_up_card_cannot_be_chosen_again",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_matching_pair_stays_face_up",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_pair_that_does_not_match_costs_a_life",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::two_cards_that_do_not_match_turn_back",
+      "params": []
+    },
+    { "kind": "function", "name": "memory_example::memory::tests::a_new_game_is_being_played", "params": [] },
+    { "kind": "function", "name": "memory_example::memory::tests::finding_every_pair_wins", "params": [] },
+    { "kind": "function", "name": "memory_example::memory::tests::losing_every_life_loses", "params": [] },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::an_unfinished_game_scores_its_pairs",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_quick_win_scores_lives_and_seconds",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_slow_win_scores_no_seconds",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::the_banner_says_how_the_game_stands",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_new_game_deals_two_cards_of_each_picture",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_site_that_fails_fails_the_setup",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_site_too_slow_fails_the_setup",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::what_is_not_a_drawing_fails_the_setup",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_whole_game_is_won_and_another_begun",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_pair_that_does_not_match_is_shown_then_turned_back",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_site_that_fails_ends_play",
+      "params": []
+    },
+    { "kind": "function", "name": "memory_example::memory::tests::a_site_too_slow_ends_play", "params": [] },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::what_is_not_a_drawing_ends_play",
+      "params": []
+    }
+  ]
+}
