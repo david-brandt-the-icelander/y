@@ -155,7 +155,10 @@ fn weave_all(files: &[(PathBuf, String, Value)]) -> R<Vec<Woven>> {
     files.iter().map(|(p, b, j)| weave_in_crate(b, j, Some(&reals)).map_err(|e| format!("{}: {}", p.display(), e.msg))).collect()
 }
 
-fn rename_files(files: &[File], map: &Value, lenient: bool) -> R<(Vec<(String, Value)>, Vec<Renamed>, Vec<String>)> {
+/// What renaming a crate's files gives: each file's new text by path, what was renamed, and what was skipped.
+type Renaming = (Vec<(String, Value)>, Vec<Renamed>, Vec<String>);
+
+fn rename_files(files: &[File], map: &Value, lenient: bool) -> R<Renaming> {
     let usage = "the map is a JSON object: {\"<function>\": {\"<old>\": \"<new>\"}, \"realizations\": {\"<old>\": \"<new>\"}}";
     let obj = map.as_object().ok_or(usage)?;
     let triples: Vec<(PathBuf, String, Value)> = files.iter().map(|f| (f.brs.clone(), f.bare.clone(), f.json.clone())).collect();

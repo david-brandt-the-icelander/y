@@ -9,7 +9,8 @@ fn read(p: &str) -> String {
 
 /// The fenced blocks of a Markdown text: (language, text).
 fn blocks(md: &str) -> Vec<(String, String)> {
-    let (mut out, mut cur): (Vec<(String, String)>, Option<(String, String)>) = (vec![], None);
+    let mut out: Vec<(String, String)> = vec![];
+    let mut cur: Option<(String, String)> = None;
     for line in md.lines() {
         match (&mut cur, line.strip_prefix("```")) {
             (None, Some(lang)) => cur = Some((lang.trim().to_string(), String::new())),

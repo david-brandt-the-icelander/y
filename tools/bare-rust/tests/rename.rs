@@ -3,7 +3,7 @@ use bare_rust::corpus::{strip_crate, weave_crate};
 use bare_rust::rename::rename_dir;
 use serde_json::json;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 const LIB: &str = r#"pub mod util;
 
@@ -42,7 +42,7 @@ fn stripped(name: &str) -> PathBuf {
     d.join("bare")
 }
 
-fn woven(bare: &PathBuf, to: &str) -> (String, String) {
+fn woven(bare: &Path, to: &str) -> (String, String) {
     let out = bare.parent().unwrap().join(to);
     for r in weave_crate(bare, &out).unwrap() {
         assert!(r.outcome.is_ok(), "{:?}", r.outcome);
