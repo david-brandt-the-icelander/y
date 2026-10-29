@@ -334,17 +334,19 @@ fn step(body: Node, src: &str, rel: &Release) -> Step {
         }
         if n.kind() == "type_arguments" && src[..n.start_byte()].trim_end().ends_with("::") {
             let typed = named_children(n).into_iter().any(|a| !is_comment(a) && text(a, src) != "_");
-            let mut cur = n;
-            while typed {
-                if crate::macros::macro_arg(cur, src) {
-                    if !out.iter().any(|o| o.id() == cur.id()) {
-                        out.push(cur);
+            if typed {
+                let mut cur = n;
+                loop {
+                    if crate::macros::macro_arg(cur, src) {
+                        if !out.iter().any(|o| o.id() == cur.id()) {
+                            out.push(cur);
+                        }
+                        break;
                     }
-                    break;
-                }
-                match cur.parent() {
-                    Some(p) if !matches!(p.kind(), "block" | "function_item") => cur = p,
-                    _ => break,
+                    match cur.parent() {
+                        Some(p) if !matches!(p.kind(), "block" | "function_item") => cur = p,
+                        _ => break,
+                    }
                 }
             }
         }
@@ -743,7 +745,7 @@ fn plan(e: Node, what: &'static str, ty: &str, src: &str, used: &mut HashSet<Str
         }
         let pat = p.child_by_field_name("pattern").or_else(|| p.child_by_field_name("name")).ok_or("let without a pattern")?;
         let declared = p.child_by_field_name("type");
-        let fits = declared.map_or(true, |t| text(t, src) == ty);
+        let fits = declared.is_none_or(|t| text(t, src) == ty);
         if fits && (declared.is_some() || pat.kind() == "identifier") {
             let mut edits = vec![];
             if declared.is_none() {
@@ -1162,8 +1164,7 @@ fn releasing<'a>(e: Node<'a>, src: &str, rel: &Release) -> Vec<Node<'a>> {
             continue;
         }
         let mut g = c;
-        loop {
-            let Some(p) = g.parent() else { break };
+        while let Some(p) = g.parent() {
             if p.kind() == "try_expression" {
                 g = p;
                 continue;

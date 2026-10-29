@@ -70,6 +70,11 @@ fn snake_bare_files_weave_to_the_committed_rust_and_strip_back() {
     weaves_and_strips_back("snake", &["lib", "main", "snake", "snake/tests"]);
 }
 
+#[test]
+fn tic_tac_toe_bare_files_weave_to_the_committed_rust_and_strip_back() {
+    weaves_and_strips_back("tic-tac-toe", &["lib", "main", "tic_tac_toe", "tic_tac_toe/tests"]);
+}
+
 fn weaves_and_strips_back(name: &str, expected: &[&str]) {
     let dir = example(name);
     let mods = modules(&dir);
@@ -115,6 +120,11 @@ fn snake_constraint_files_are_valid() {
     constraint_files_are_valid("snake");
 }
 
+#[test]
+fn tic_tac_toe_constraint_files_are_valid() {
+    constraint_files_are_valid("tic-tac-toe");
+}
+
 fn constraint_files_are_valid(name: &str) {
     let dir = example(name);
     for m in modules(&dir) {
@@ -145,6 +155,11 @@ fn nim_facts_match_the_y_source_and_the_bare_bodies() {
 #[test]
 fn snake_facts_match_the_y_source_and_the_bare_bodies() {
     facts_match_the_y_source_and_the_bare_bodies("snake");
+}
+
+#[test]
+fn tic_tac_toe_facts_match_the_y_source_and_the_bare_bodies() {
+    facts_match_the_y_source_and_the_bare_bodies("tic-tac-toe");
 }
 
 fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {

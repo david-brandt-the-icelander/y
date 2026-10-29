@@ -1,0 +1,471 @@
+{
+  "format": "y-facts/0",
+  "about": "What the Y source says that neither the bare bodies nor the constraint files can hold. Nothing in bare-rust reads this file; it is for the Y toolchain (y explain, y review, coverage), and tools/bare-rust/tests/y_examples.rs checks it against the Y source and the bare bodies.",
+  "modules": [
+    {
+      "y": "y/src/tic_tac_toe.y",
+      "module": "tic_tac_toe",
+      "bare": "bare/src/tic_tac_toe.brs",
+      "rust": "src/tic_tac_toe.rs"
+    },
+    {
+      "y": "y/src/tic_tac_toe.test.y",
+      "module": "tic_tac_toe",
+      "bare": "bare/src/tic_tac_toe/tests.brs",
+      "rust": "src/tic_tac_toe/tests.rs"
+    },
+    {
+      "y": "y/src/main.y",
+      "module": "main",
+      "bare": "bare/src/main.brs",
+      "rust": "src/main.rs"
+    }
+  ],
+  "facets": [
+    {
+      "module": "tic_tac_toe",
+      "facet": "setup",
+      "path": "tic_tac_toe.setup",
+      "visible": "public",
+      "y": "y/src/tic_tac_toe.y:8",
+      "rust": "tic_tac_toe_example::tic_tac_toe::setup",
+      "members": [
+        "board",
+        "mark",
+        "game",
+        "new_game"
+      ]
+    },
+    {
+      "module": "tic_tac_toe",
+      "facet": "moves",
+      "path": "tic_tac_toe.moves",
+      "visible": "public",
+      "y": "y/src/tic_tac_toe.y:41",
+      "rust": "tic_tac_toe_example::tic_tac_toe::moves",
+      "members": [
+        "move_error",
+        "read_move",
+        "place",
+        "computer_move"
+      ]
+    },
+    {
+      "module": "tic_tac_toe",
+      "facet": "console_play",
+      "path": "tic_tac_toe.console_play",
+      "visible": "public",
+      "y": "y/src/tic_tac_toe.y:244",
+      "rust": "tic_tac_toe_example::tic_tac_toe::console_play",
+      "members": [
+        "play_error",
+        "play"
+      ]
+    }
+  ],
+  "units": [],
+  "capabilities": [
+    {
+      "subject": "tic_tac_toe_example::tic_tac_toe::console_play::play",
+      "injected": [
+        "console as console",
+        "forever as forever"
+      ],
+      "lowered": "as the last two parameters, in order",
+      "y": "y/src/tic_tac_toe.y:261"
+    },
+    {
+      "subject": "tic_tac_toe_example::main",
+      "injected": [
+        "system as system"
+      ],
+      "lowered": "System::root(), made by the entry point",
+      "y": "y/src/main.y:14"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "forever",
+      "because": "a player may think for as long as they like",
+      "requires": "Forever",
+      "y": "y/src/tic_tac_toe.y:270",
+      "bare": "bare/src/tic_tac_toe.brs:267"
+    }
+  ],
+  "suspensions": [],
+  "compiled": [],
+  "copies": [
+    {
+      "what": "game",
+      "why": "place changes it, and game is still read",
+      "y": "y/src/tic_tac_toe.y:104",
+      "bare": "bare/src/tic_tac_toe.brs:115"
+    },
+    {
+      "what": "game",
+      "why": "place changes it, and game is still read",
+      "y": "y/src/tic_tac_toe.y:201",
+      "bare": "bare/src/tic_tac_toe.brs:197"
+    }
+  ],
+  "decisions": {
+    "tic_tac_toe.read_move": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "not_a_number",
+            "y": "y/src/tic_tac_toe.y:64",
+            "bare": "bare/src/tic_tac_toe.brs:82"
+          },
+          {
+            "name": "a_number",
+            "y": "y/src/tic_tac_toe.y:66",
+            "bare": "bare/src/tic_tac_toe.brs:82"
+          }
+        ]
+      },
+      {
+        "kind": "conditional",
+        "label": "judged",
+        "branches": [
+          {
+            "name": "judged.off_board",
+            "y": "y/src/tic_tac_toe.y:68",
+            "bare": "bare/src/tic_tac_toe.brs:85"
+          },
+          {
+            "name": "judged.taken",
+            "y": "y/src/tic_tac_toe.y:70",
+            "bare": "bare/src/tic_tac_toe.brs:87"
+          },
+          {
+            "name": "judged.empty",
+            "y": "y/src/tic_tac_toe.y:72",
+            "bare": "bare/src/tic_tac_toe.brs:89"
+          }
+        ]
+      }
+    ],
+    "tic_tac_toe.computer_move": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "better",
+            "y": "y/src/tic_tac_toe.y:108",
+            "bare": "bare/src/tic_tac_toe.brs:118"
+          },
+          {
+            "name": "no_better",
+            "y": "y/src/tic_tac_toe.y:111",
+            "bare": "bare/src/tic_tac_toe.brs:121"
+          }
+        ]
+      }
+    ],
+    "tic_tac_toe.winner": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "three",
+            "y": "y/src/tic_tac_toe.y:140",
+            "bare": "bare/src/tic_tac_toe.brs:146"
+          },
+          {
+            "name": "not_three",
+            "y": "y/src/tic_tac_toe.y:142",
+            "bare": "bare/src/tic_tac_toe.brs:148"
+          }
+        ]
+      }
+    ],
+    "tic_tac_toe.other": [
+      {
+        "kind": "conditional",
+        "label": "current",
+        "branches": [
+          {
+            "name": "current.cross",
+            "y": "y/src/tic_tac_toe.y:156",
+            "bare": "bare/src/tic_tac_toe.brs:161"
+          },
+          {
+            "name": "current.nought",
+            "y": "y/src/tic_tac_toe.y:158",
+            "bare": "bare/src/tic_tac_toe.brs:162"
+          }
+        ]
+      }
+    ],
+    "tic_tac_toe.open_squares": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "marked",
+            "y": "y/src/tic_tac_toe.y:173",
+            "bare": "bare/src/tic_tac_toe.brs:173"
+          },
+          {
+            "name": "empty",
+            "y": "y/src/tic_tac_toe.y:175",
+            "bare": "bare/src/tic_tac_toe.brs:175"
+          }
+        ]
+      }
+    ],
+    "tic_tac_toe.value_of": [
+      {
+        "kind": "conditional",
+        "label": "now",
+        "branches": [
+          {
+            "name": "now.lost",
+            "y": "y/src/tic_tac_toe.y:193",
+            "bare": "bare/src/tic_tac_toe.brs:190"
+          },
+          {
+            "name": "now.drawn",
+            "y": "y/src/tic_tac_toe.y:195",
+            "bare": "bare/src/tic_tac_toe.brs:192"
+          },
+          {
+            "name": "now.open",
+            "y": "y/src/tic_tac_toe.y:197",
+            "bare": "bare/src/tic_tac_toe.brs:194"
+          }
+        ]
+      }
+    ],
+    "tic_tac_toe.square_shown": [
+      {
+        "kind": "conditional",
+        "label": "held",
+        "branches": [
+          {
+            "name": "held.empty",
+            "y": "y/src/tic_tac_toe.y:237",
+            "bare": "bare/src/tic_tac_toe.brs:229"
+          },
+          {
+            "name": "held.marked",
+            "y": "y/src/tic_tac_toe.y:239",
+            "bare": "bare/src/tic_tac_toe.brs:230"
+          }
+        ]
+      }
+    ],
+    "tic_tac_toe.play": [
+      {
+        "kind": "while",
+        "branches": [
+          {
+            "name": "playing",
+            "y": "y/src/tic_tac_toe.y:265",
+            "bare": "bare/src/tic_tac_toe.brs:262"
+          },
+          {
+            "name": "game_over",
+            "y": "y/src/tic_tac_toe.y:288",
+            "bare": "bare/src/tic_tac_toe.brs:283"
+          }
+        ]
+      },
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "persons_turn",
+            "y": "y/src/tic_tac_toe.y:266",
+            "bare": "bare/src/tic_tac_toe.brs:263"
+          },
+          {
+            "name": "computers_turn",
+            "y": "y/src/tic_tac_toe.y:284",
+            "bare": "bare/src/tic_tac_toe.brs:277"
+          }
+        ]
+      },
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "closed",
+            "y": "y/src/tic_tac_toe.y:272",
+            "bare": "bare/src/tic_tac_toe.brs:268"
+          },
+          {
+            "name": "line_read",
+            "y": "y/src/tic_tac_toe.y:274",
+            "bare": "bare/src/tic_tac_toe.brs:268"
+          }
+        ]
+      },
+      {
+        "kind": "conditional",
+        "label": "attempted",
+        "branches": [
+          {
+            "name": "attempted.valid",
+            "y": "y/src/tic_tac_toe.y:276",
+            "bare": "bare/src/tic_tac_toe.brs:272"
+          },
+          {
+            "name": "attempted.not_a_move",
+            "y": "y/src/tic_tac_toe.y:278",
+            "bare": "bare/src/tic_tac_toe.brs:273"
+          },
+          {
+            "name": "attempted.no_square",
+            "y": "y/src/tic_tac_toe.y:280",
+            "bare": "bare/src/tic_tac_toe.brs:274"
+          },
+          {
+            "name": "attempted.taken",
+            "y": "y/src/tic_tac_toe.y:282",
+            "bare": "bare/src/tic_tac_toe.brs:275"
+          }
+        ]
+      },
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "drawn",
+            "y": "y/src/tic_tac_toe.y:293",
+            "bare": "bare/src/tic_tac_toe.brs:288"
+          },
+          {
+            "name": "won",
+            "y": "y/src/tic_tac_toe.y:295",
+            "bare": "bare/src/tic_tac_toe.brs:289"
+          }
+        ]
+      }
+    ]
+  },
+  "tests": {
+    "a_move_is_read": {
+      "y": "y/src/tic_tac_toe.test.y:22",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_move_is_read",
+      "covers": [
+        "read_move#a_number",
+        "read_move#judged.empty"
+      ]
+    },
+    "a_word_is_not_a_move": {
+      "y": "y/src/tic_tac_toe.test.y:33",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_word_is_not_a_move",
+      "covers": [
+        "read_move#not_a_number",
+        "read_move!move_error.not_a_number"
+      ]
+    },
+    "there_is_no_tenth_square": {
+      "y": "y/src/tic_tac_toe.test.y:44",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::there_is_no_tenth_square",
+      "covers": [
+        "read_move#judged.off_board",
+        "read_move!move_error.no_such_square"
+      ]
+    },
+    "a_marked_square_is_taken": {
+      "y": "y/src/tic_tac_toe.test.y:55",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_marked_square_is_taken",
+      "covers": [
+        "read_move#judged.taken",
+        "read_move!move_error.taken"
+      ]
+    },
+    "the_players_take_turns": {
+      "y": "y/src/tic_tac_toe.test.y:66",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::the_players_take_turns",
+      "covers": [
+        "other#current.cross",
+        "other#current.nought"
+      ]
+    },
+    "three_in_a_row_wins": {
+      "y": "y/src/tic_tac_toe.test.y:80",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::three_in_a_row_wins",
+      "covers": [
+        "winner#not_three",
+        "winner#three"
+      ]
+    },
+    "a_full_board_with_no_line_is_a_draw": {
+      "y": "y/src/tic_tac_toe.test.y:93",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_full_board_with_no_line_is_a_draw",
+      "covers": [
+        "value_of#now.drawn"
+      ]
+    },
+    "the_computer_wins_rather_than_blocks": {
+      "y": "y/src/tic_tac_toe.test.y:105",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::the_computer_wins_rather_than_blocks",
+      "covers": [
+        "computer_move#better",
+        "computer_move#no_better",
+        "value_of#now.lost",
+        "value_of#now.open",
+        "open_squares#marked",
+        "open_squares#empty"
+      ]
+    },
+    "the_computer_blocks_a_line": {
+      "y": "y/src/tic_tac_toe.test.y:117",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::the_computer_blocks_a_line",
+      "covers": [
+        "computer_move#better"
+      ]
+    },
+    "the_board_shows_marks_and_numbers": {
+      "y": "y/src/tic_tac_toe.test.y:128",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::the_board_shows_marks_and_numbers",
+      "covers": [
+        "square_shown#held.empty",
+        "square_shown#held.marked"
+      ]
+    },
+    "a_player_who_plays_perfectly_draws": {
+      "y": "y/src/tic_tac_toe.test.y:139",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_player_who_plays_perfectly_draws",
+      "covers": [
+        "play#playing",
+        "play#persons_turn",
+        "play#line_read",
+        "play#attempted.valid",
+        "play#computers_turn",
+        "play#game_over",
+        "play#drawn"
+      ]
+    },
+    "a_player_who_plays_carelessly_loses": {
+      "y": "y/src/tic_tac_toe.test.y:152",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_player_who_plays_carelessly_loses",
+      "covers": [
+        "play#won"
+      ]
+    },
+    "a_player_is_told_what_was_wrong": {
+      "y": "y/src/tic_tac_toe.test.y:164",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_player_is_told_what_was_wrong",
+      "covers": [
+        "play#attempted.not_a_move",
+        "play#attempted.no_square",
+        "play#attempted.taken",
+        "play#closed",
+        "play!play_error.input_closed"
+      ]
+    },
+    "a_failing_console_ends_the_game": {
+      "y": "y/src/tic_tac_toe.test.y:180",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_failing_console_ends_the_game",
+      "covers": [
+        "play!play_error.console"
+      ]
+    }
+  }
+}

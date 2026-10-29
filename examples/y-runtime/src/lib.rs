@@ -92,6 +92,16 @@ pub mod list {
         u32::try_from(items.len()).unwrap_or_else(|_| fault("y_runtime::list::count", "more elements than a uint32 holds"))
     }
 
+    /// How many elements a list has, as an `int32`: Y's `list.count().to_int32()`.
+    pub fn count_int32<T>(items: &[T]) -> i32 {
+        i32::try_from(items.len()).unwrap_or_else(|_| fault("y_runtime::list::count_int32", "more elements than an int32 holds"))
+    }
+
+    /// A list of `times` elements, each equal to `value`: Y's `list.repeated(value, times: n)`.
+    pub fn repeated<T: Clone>(value: T, times: u32) -> Vec<T> {
+        (0..times).map(|_| value.clone()).collect()
+    }
+
     /// The element numbered `number`, counting from 1. A number outside the list is a fault.
     pub fn at_number<T: Copy>(items: &[T], number: u32) -> T {
         match position(items.len(), number) {

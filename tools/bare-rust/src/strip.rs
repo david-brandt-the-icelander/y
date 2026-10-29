@@ -724,8 +724,8 @@ impl<'a> Stripper<'a> {
                                     Some(n) => n.clone(),
                                     None => realization_name(&base, is_type, &args.iter().map(|a| text(*a, src)).collect::<Vec<_>>(), &mut self.names_used),
                                 };
-                                if !self.realized.contains_key(&key) {
-                                    self.realized.insert(key, name.clone());
+                                if let std::collections::hash_map::Entry::Vacant(slot) = self.realized.entry(key) {
+                                    slot.insert(name.clone());
                                     self.realizations.insert(name.clone(), json!({"template": template, "args": vals}));
                                 }
                                 self.cuts.push((cut.0, cut.1, name));

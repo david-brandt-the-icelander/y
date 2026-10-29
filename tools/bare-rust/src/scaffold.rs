@@ -210,7 +210,7 @@ pub fn build(spec: &Spec, prefix: &str) -> R<Scaffold> {
                 Some(t) => name_in(&modules, &format!("{t}::{last}")),
                 None => name_in(&modules, last),
             };
-            let e = function(&sname, spec.self_kind.zip(owner).map(|(k, t)| (k, t)), &spec.params, &spec.param_types, spec.result.as_deref(), &spec.generics, vis)?;
+            let e = function(&sname, spec.self_kind.zip(owner), &spec.params, &spec.param_types, spec.result.as_deref(), &spec.generics, vis)?;
             let stub = match owner {
                 Some(t) => format!("impl {t} {{\n{}}}\n", fn_stub(last, spec.self_kind, &spec.params, "    ")),
                 None => fn_stub(last, None, &spec.params, ""),

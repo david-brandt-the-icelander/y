@@ -146,7 +146,7 @@ fn stage(repo: &Path, parent: &str, commit: &str, rel: &Path, krate: &str) -> Re
             rec["weave"] = json!("refused");
             rec["weave_reason"] = json!(reason(&e));
             rec["weave_detail"] = json!(e);
-            return Ok(Staged { rel: rel.to_path_buf(), class, bare_new, json_old, json_new, rec: rec });
+            return Ok(Staged { rel: rel.to_path_buf(), class, bare_new, json_old, json_new, rec });
         }
         Ok(w) => w,
     };
@@ -314,7 +314,7 @@ pub fn render(runs: &[Value]) -> String {
     head.extend(names.iter().cloned());
     head.push("all".into());
     let mut rows: Vec<(String, Vec<u64>)> = vec![];
-    let mut add = |label: &str, f: &dyn Fn(&Value) -> u64| rows.push((label.to_string(), runs.iter().map(|r| f(r)).collect()));
+    let mut add = |label: &str, f: &dyn Fn(&Value) -> u64| rows.push((label.to_string(), runs.iter().map(f).collect()));
     let commits = |r: &Value| r["commits"].as_array().cloned().unwrap_or_default();
     let files = |r: &Value| -> Vec<Value> { commits(r).iter().flat_map(|c| c["files"].as_array().cloned().unwrap_or_default()).collect() };
     let cnt_files = |r: &Value, f: &dyn Fn(&Value) -> bool| files(r).iter().filter(|x| f(x)).count() as u64;

@@ -82,7 +82,9 @@ fn corpora_checks_1_and_2_without_cargo() {
 
     // Check 1 is over a crate: the woven files stripped as `strip` strips a crate (one name per realization across it,
     // and its table in the root's file).
-    let mut again: std::collections::HashMap<(&str, PathBuf), Result<(String, Value), String>> = Default::default();
+    // a file stripped again: its bare body and constraint file, or why strip refused it
+    type Stripped = Result<(String, Value), String>;
+    let mut again: std::collections::HashMap<(&str, PathBuf), Stripped> = Default::default();
     for (corpus, dir, tests) in [("tool", root(), false), ("strsim", root().join("corpora/src/strsim"), true), ("fnv", root().join("corpora/src/fnv"), true)] {
         let info = bare_rust::corpus::crate_info(&dir).unwrap();
         let sources: Vec<(PathBuf, String)> = units

@@ -1,0 +1,95 @@
+{
+  "format": "y-constraints/0",
+  "host": "rust",
+  "crate": "tic-tac-toe-example 0.0.0",
+  "module": "src/tic_tac_toe/tests.rs",
+  "status": {
+    "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
+  },
+  "subjects": [
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::marked",
+      "params": [
+        {
+          "name": "crosses",
+          "type": "ref<list<u32> as 'std::primitive::slice'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        {
+          "name": "noughts",
+          "type": "ref<list<u32> as 'std::primitive::slice'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "to_move", "type": "Mark" }
+      ],
+      "result": { "type": "Game" }
+    },
+    { "kind": "function", "name": "tic_tac_toe_example::tic_tac_toe::tests::a_move_is_read", "params": [] },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::a_word_is_not_a_move",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::there_is_no_tenth_square",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::a_marked_square_is_taken",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::the_players_take_turns",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::three_in_a_row_wins",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::a_full_board_with_no_line_is_a_draw",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::the_computer_wins_rather_than_blocks",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::the_computer_blocks_a_line",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::the_board_shows_marks_and_numbers",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::a_player_who_plays_perfectly_draws",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::a_player_who_plays_carelessly_loses",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::a_player_is_told_what_was_wrong",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::a_failing_console_ends_the_game",
+      "params": []
+    }
+  ]
+}

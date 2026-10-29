@@ -1,0 +1,17 @@
+{
+  "format": "y-constraints/0",
+  "host": "rust",
+  "crate": "tic-tac-toe-example 0.0.0",
+  "module": "src/main.rs",
+  "status": {
+    "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
+  },
+  "subjects": [
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::main",
+      "params": [],
+      "result": { "type": "()", "fails": "PlayError" }
+    }
+  ]
+}

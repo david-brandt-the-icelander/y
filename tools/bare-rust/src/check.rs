@@ -183,8 +183,10 @@ fn check3(cw: &CrateWeave, dir: &Path, o: &CheckOpts) -> R<Check3> {
         .flat_map(|(_, r)| r.diags.iter().filter(|d| d.is_error()))
         .map(|d| (d.file.clone(), d.code.clone().unwrap_or_default(), d.message.clone()))
         .collect();
-    let mut c = Check3::default();
-    c.check_failures = cw.weave_errors.iter().map(|(f, e)| format!("weave refused {}: {e}", f.display())).collect();
+    let mut c = Check3 {
+        check_failures: cw.weave_errors.iter().map(|(f, e)| format!("weave refused {}: {e}", f.display())).collect(),
+        ..Check3::default()
+    };
     c.check_failures.extend(cw.holes.iter().map(|h| h.show()));
     // A crate in a workspace has its paths from the workspace's root (`member/benches/x.rs`), the woven copy from its own.
     let same = |f: &str, w: &str| f == w || f.ends_with(&format!("/{w}"));
