@@ -1,0 +1,380 @@
+{
+  "format": "y-constraints/0",
+  "host": "rust",
+  "crate": "snake-example 0.0.0",
+  "module": "src/snake.rs",
+  "status": {
+    "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
+  },
+  "subjects": [
+    { "kind": "module", "name": "snake_example::snake::setup", "visible": "public" },
+    { "kind": "module", "name": "snake_example::snake::setup::board", "visible": "public" },
+    {
+      "kind": "const",
+      "name": "snake_example::snake::setup::board::COLUMNS",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "const",
+      "name": "snake_example::snake::setup::board::ROWS",
+      "visible": "public",
+      "type": "i32"
+    },
+    { "kind": "module", "name": "snake_example::snake::setup::game_rules", "visible": "public" },
+    {
+      "kind": "const",
+      "name": "snake_example::snake::setup::game_rules::STEP_TIME",
+      "visible": "public",
+      "type": "Duration"
+    },
+    {
+      "kind": "type",
+      "name": "snake_example::snake::setup::Cell",
+      "visible": "public",
+      "fields": [
+        {
+          "name": "column",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "i32",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "row",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "i32",
+          "hold": { "kind": "owns" }
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "snake_example::snake::setup::Direction",
+      "visible": "public",
+      "variants": [{ "name": "Up" }, { "name": "Down" }, { "name": "Left" }, { "name": "Right" }]
+    },
+    {
+      "kind": "type",
+      "name": "snake_example::snake::setup::Outcome",
+      "visible": "public",
+      "variants": [{ "name": "Playing" }, { "name": "Crashed" }, { "name": "Bitten" }, { "name": "Filled" }]
+    },
+    {
+      "kind": "type",
+      "name": "snake_example::snake::setup::Game",
+      "visible": "public",
+      "fields": [
+        {
+          "name": "head",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "Cell",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "tail",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "list<Cell> as 'Vec'",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "heading",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "Direction",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "wanted",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "Direction",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "food",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "Cell",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "eaten",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "u32",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "standing",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "Outcome",
+          "hold": { "kind": "owns" }
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::setup::new_game",
+      "visible": "public",
+      "params": [
+        {
+          "name": "random",
+          "type": "ref<Random>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "result": { "type": "Game" },
+      "clauses": [
+        { "kind": "effects", "text": "effects only random", "source": "y/src/snake.y:70" },
+        { "kind": "effects", "text": "no io", "source": "y/src/snake.y:70" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/snake.y:70" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/snake.y:70" }
+      ]
+    },
+    { "kind": "module", "name": "snake_example::snake::rules", "visible": "public" },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::rules::turned",
+      "visible": "public",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
+        { "name": "pressed", "type": "Key" }
+      ],
+      "result": { "type": "Direction" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/snake.y:96" }]
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::rules::advance",
+      "visible": "public",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        {
+          "name": "random",
+          "type": "ref<Random>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "clauses": [
+        {
+          "kind": "require",
+          "text": "require still_playing : game.standing is Playing",
+          "source": "y/src/snake.y:119",
+          "status": { "lifted": "src/snake.rs: y_runtime::require" }
+        },
+        { "kind": "effects", "text": "effects only random", "source": "y/src/snake.y:118" },
+        { "kind": "effects", "text": "no io", "source": "y/src/snake.y:118" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/snake.y:118" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/snake.y:118" },
+        { "kind": "access", "text": "mutates only game", "source": "y/src/snake.y:118" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::unless_reversing",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
+        { "name": "toward", "type": "Direction" }
+      ],
+      "result": { "type": "Direction" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/snake.y:148" }]
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::opposite",
+      "params": [{ "name": "heading", "type": "Direction" }],
+      "result": { "type": "Direction" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/snake.y:162" }]
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::ahead_of",
+      "params": [
+        { "name": "here", "type": "ref<Cell>", "access": { "rights": "read", "guarantee": "readers" } },
+        { "name": "heading", "type": "Direction" }
+      ],
+      "result": { "type": "Cell" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/snake.y:182" }]
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::on_board",
+      "params": [
+        { "name": "place", "type": "ref<Cell>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "bool" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/snake.y:201" }]
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::free_cells",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "list<Cell> as 'Vec'" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/snake.y:212" }]
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::place_food",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        {
+          "name": "random",
+          "type": "ref<Random>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "clauses": [
+        { "kind": "effects", "text": "effects only random", "source": "y/src/snake.y:233" },
+        { "kind": "effects", "text": "no io", "source": "y/src/snake.y:233" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/snake.y:233" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/snake.y:233" },
+        { "kind": "access", "text": "mutates only game", "source": "y/src/snake.y:233" }
+      ]
+    },
+    { "kind": "module", "name": "snake_example::snake::drawing", "visible": "public" },
+    { "kind": "module", "name": "snake_example::snake::drawing::layout", "visible": "public" },
+    {
+      "kind": "const",
+      "name": "snake_example::snake::drawing::layout::CELL_SIZE",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "const",
+      "name": "snake_example::snake::drawing::layout::BAR_HEIGHT",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "const",
+      "name": "snake_example::snake::drawing::layout::WIDTH",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "const",
+      "name": "snake_example::snake::drawing::layout::HEIGHT",
+      "visible": "public",
+      "type": "i32"
+    },
+    { "kind": "module", "name": "snake_example::snake::drawing::palette", "visible": "public" },
+    {
+      "kind": "const",
+      "name": "snake_example::snake::drawing::palette::BACKGROUND",
+      "visible": "public",
+      "type": "Colour"
+    },
+    {
+      "kind": "const",
+      "name": "snake_example::snake::drawing::palette::BOARD",
+      "visible": "public",
+      "type": "Colour"
+    },
+    {
+      "kind": "const",
+      "name": "snake_example::snake::drawing::palette::HEAD",
+      "visible": "public",
+      "type": "Colour"
+    },
+    {
+      "kind": "const",
+      "name": "snake_example::snake::drawing::palette::BODY",
+      "visible": "public",
+      "type": "Colour"
+    },
+    {
+      "kind": "const",
+      "name": "snake_example::snake::drawing::palette::FOOD",
+      "visible": "public",
+      "type": "Colour"
+    },
+    {
+      "kind": "const",
+      "name": "snake_example::snake::drawing::palette::TEXT",
+      "visible": "public",
+      "type": "Colour"
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::drawing::banner",
+      "visible": "public",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
+        { "name": "highest", "type": "u32" }
+      ],
+      "result": { "type": "text" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/snake.y:272" }]
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::drawing::draw",
+      "visible": "public",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
+        { "name": "highest", "type": "u32" },
+        {
+          "name": "window",
+          "type": "ref<Window>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "clauses": [
+        { "kind": "effects", "text": "effects only window", "source": "y/src/snake.y:292" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/snake.y:292" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/snake.y:292" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/snake.y:292" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::fill_cell",
+      "params": [
+        { "name": "place", "type": "ref<Cell>", "access": { "rights": "read", "guarantee": "readers" } },
+        { "name": "shade", "type": "Colour" },
+        {
+          "name": "window",
+          "type": "ref<Window>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "clauses": [
+        { "kind": "effects", "text": "effects only window", "source": "y/src/snake.y:313" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/snake.y:313" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/snake.y:313" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/snake.y:313" }
+      ]
+    },
+    { "kind": "module", "name": "snake_example::snake::window_play", "visible": "public" },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::window_play::play",
+      "visible": "public",
+      "params": [
+        {
+          "name": "window",
+          "type": "ref<Window>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        { "name": "clock", "type": "ref<Clock>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        {
+          "name": "random",
+          "type": "ref<Random>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        { "name": "forever", "type": "ref<Forever>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "u32" },
+      "clauses": [
+        { "kind": "effects", "text": "effects only window, clock, random", "source": "y/src/snake.y:332" },
+        { "kind": "effects", "text": "no io", "source": "y/src/snake.y:332" }
+      ]
+    }
+  ]
+}

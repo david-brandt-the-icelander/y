@@ -65,6 +65,11 @@ fn nim_bare_files_weave_to_the_committed_rust_and_strip_back() {
     weaves_and_strips_back("nim", &["lib", "main", "nim", "nim/tests"]);
 }
 
+#[test]
+fn snake_bare_files_weave_to_the_committed_rust_and_strip_back() {
+    weaves_and_strips_back("snake", &["lib", "main", "snake", "snake/tests"]);
+}
+
 fn weaves_and_strips_back(name: &str, expected: &[&str]) {
     let dir = example(name);
     let mods = modules(&dir);
@@ -105,6 +110,11 @@ fn nim_constraint_files_are_valid() {
     constraint_files_are_valid("nim");
 }
 
+#[test]
+fn snake_constraint_files_are_valid() {
+    constraint_files_are_valid("snake");
+}
+
 fn constraint_files_are_valid(name: &str) {
     let dir = example(name);
     for m in modules(&dir) {
@@ -130,6 +140,11 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
 #[test]
 fn nim_facts_match_the_y_source_and_the_bare_bodies() {
     facts_match_the_y_source_and_the_bare_bodies("nim");
+}
+
+#[test]
+fn snake_facts_match_the_y_source_and_the_bare_bodies() {
+    facts_match_the_y_source_and_the_bare_bodies("snake");
 }
 
 fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
@@ -176,6 +191,12 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
         let what = c["what"].as_str().unwrap();
         assert!(at(c["y"].as_str().unwrap()).contains(what), "copy of {what}: not at {}", c["y"]);
         assert!(at(c["bare"].as_str().unwrap()).contains("// y: a copy"), "copy of {what}: not marked at {}", c["bare"]);
+    }
+    // each point where the Y source may suspend is where the facts say, and the bare body awaits it there (Y § 3.7)
+    for s in facts["suspensions"].as_array().unwrap() {
+        let point = s["point"].as_str().unwrap();
+        assert!(at(s["y"].as_str().unwrap()).contains(point), "suspension at {point}: not at {}", s["y"]);
+        assert!(at(s["bare"].as_str().unwrap()).contains(".await"), "suspension at {point}: not awaited at {}", s["bare"]);
     }
     // every named decision of the Y source is listed: `if name = …:`, `while name = …:`, `condition label.name = …:` and `else name:`
     let mut in_source = BTreeSet::new();

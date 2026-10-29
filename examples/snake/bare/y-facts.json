@@ -1,0 +1,541 @@
+{
+  "format": "y-facts/0",
+  "about": "What the Y source says that neither the bare bodies nor the constraint files can hold. Nothing in bare-rust reads this file; it is for the Y toolchain (y explain, y review, coverage), and tools/bare-rust/tests/y_examples.rs checks it against the Y source and the bare bodies.",
+  "modules": [
+    {
+      "y": "y/src/snake.y",
+      "module": "snake",
+      "bare": "bare/src/snake.brs",
+      "rust": "src/snake.rs"
+    },
+    {
+      "y": "y/src/snake.test.y",
+      "module": "snake",
+      "bare": "bare/src/snake/tests.brs",
+      "rust": "src/snake/tests.rs"
+    },
+    {
+      "y": "y/src/main.y",
+      "module": "main",
+      "bare": "bare/src/main.brs",
+      "rust": "src/main.rs"
+    }
+  ],
+  "facets": [
+    {
+      "module": "snake",
+      "facet": "setup",
+      "path": "snake.setup",
+      "visible": "public",
+      "y": "y/src/snake.y:10",
+      "rust": "snake_example::snake::setup",
+      "members": [
+        "board",
+        "game_rules",
+        "cell",
+        "direction",
+        "outcome",
+        "game",
+        "new_game"
+      ]
+    },
+    {
+      "module": "snake",
+      "facet": "rules",
+      "path": "snake.rules",
+      "visible": "public",
+      "y": "y/src/snake.y:86",
+      "rust": "snake_example::snake::rules",
+      "members": [
+        "turned",
+        "advance"
+      ]
+    },
+    {
+      "module": "snake",
+      "facet": "drawing",
+      "path": "snake.drawing",
+      "visible": "public",
+      "y": "y/src/snake.y:243",
+      "rust": "snake_example::snake::drawing",
+      "members": [
+        "layout",
+        "palette",
+        "banner",
+        "draw"
+      ]
+    },
+    {
+      "module": "snake",
+      "facet": "window_play",
+      "path": "snake.window_play",
+      "visible": "public",
+      "y": "y/src/snake.y:320",
+      "rust": "snake_example::snake::window_play",
+      "members": [
+        "play"
+      ]
+    }
+  ],
+  "units": [
+    {
+      "subject": "snake_example::snake::setup::game_rules::STEP_TIME",
+      "unit": "duration",
+      "literal": "150ms",
+      "lowered": "std::time::Duration::from_millis(150)",
+      "y": "y/src/snake.y:20"
+    }
+  ],
+  "capabilities": [
+    {
+      "subject": "snake_example::snake::setup::new_game",
+      "injected": [
+        "random as random"
+      ],
+      "lowered": "as the last parameter",
+      "y": "y/src/snake.y:70"
+    },
+    {
+      "subject": "snake_example::snake::rules::advance",
+      "injected": [
+        "random as random"
+      ],
+      "lowered": "as the last parameter",
+      "y": "y/src/snake.y:118"
+    },
+    {
+      "subject": "snake_example::snake::place_food",
+      "injected": [
+        "random as random"
+      ],
+      "lowered": "as the last parameter",
+      "y": "y/src/snake.y:233"
+    },
+    {
+      "subject": "snake_example::snake::drawing::draw",
+      "injected": [
+        "window as window"
+      ],
+      "lowered": "as the last parameter",
+      "y": "y/src/snake.y:292"
+    },
+    {
+      "subject": "snake_example::snake::fill_cell",
+      "injected": [
+        "window as window"
+      ],
+      "lowered": "as the last parameter",
+      "y": "y/src/snake.y:313"
+    },
+    {
+      "subject": "snake_example::snake::window_play::play",
+      "injected": [
+        "window as window",
+        "clock as clock",
+        "random as random",
+        "forever as forever"
+      ],
+      "lowered": "as the last four parameters, in order",
+      "y": "y/src/snake.y:332"
+    },
+    {
+      "subject": "snake_example::main",
+      "injected": [
+        "system as system"
+      ],
+      "lowered": "System::root(), made by the entry point",
+      "y": "y/src/main.y:15"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "forever",
+      "because": "a hidden window shows no frames, and the game waits until it is shown",
+      "requires": "Forever",
+      "y": "y/src/snake.y:357",
+      "bare": "bare/src/snake.brs:327"
+    }
+  ],
+  "suspensions": [
+    {
+      "subject": "snake_example::snake::window_play::play",
+      "point": "window.next_frame()",
+      "because": "the window capability may suspend (Y \u00a7 3.7)",
+      "lowered": "async fn, and .await at the point",
+      "y": "y/src/snake.y:357",
+      "bare": "bare/src/snake.brs:327"
+    },
+    {
+      "subject": "snake_example::main",
+      "point": "play()",
+      "because": "play may suspend",
+      "lowered": "async fn entry, run on Macroquad's executor by y_window::run, and .await at the call",
+      "y": "y/src/main.y:23",
+      "bare": "bare/src/main.brs:27"
+    }
+  ],
+  "compiled": [],
+  "copies": [],
+  "decisions": {
+    "snake.turned": [
+      {
+        "kind": "conditional",
+        "label": "arrow",
+        "branches": [
+          {
+            "name": "arrow.up",
+            "y": "y/src/snake.y:98",
+            "bare": "bare/src/snake.brs:108"
+          },
+          {
+            "name": "arrow.down",
+            "y": "y/src/snake.y:100",
+            "bare": "bare/src/snake.brs:109"
+          },
+          {
+            "name": "arrow.left",
+            "y": "y/src/snake.y:102",
+            "bare": "bare/src/snake.brs:110"
+          },
+          {
+            "name": "arrow.right",
+            "y": "y/src/snake.y:104",
+            "bare": "bare/src/snake.brs:111"
+          },
+          {
+            "name": "arrow.other",
+            "y": "y/src/snake.y:106",
+            "bare": "bare/src/snake.brs:112"
+          }
+        ]
+      }
+    ],
+    "snake.advance": [
+      {
+        "kind": "conditional",
+        "label": "moved",
+        "branches": [
+          {
+            "name": "moved.into_wall",
+            "y": "y/src/snake.y:124",
+            "bare": "bare/src/snake.brs:125"
+          },
+          {
+            "name": "moved.into_itself",
+            "y": "y/src/snake.y:127",
+            "bare": "bare/src/snake.brs:127"
+          },
+          {
+            "name": "moved.onto_food",
+            "y": "y/src/snake.y:129",
+            "bare": "bare/src/snake.brs:129"
+          },
+          {
+            "name": "moved.on",
+            "y": "y/src/snake.y:134",
+            "bare": "bare/src/snake.brs:134"
+          }
+        ]
+      }
+    ],
+    "snake.unless_reversing": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "reversing",
+            "y": "y/src/snake.y:149",
+            "bare": "bare/src/snake.brs:148"
+          },
+          {
+            "name": "turning",
+            "y": "y/src/snake.y:151",
+            "bare": "bare/src/snake.brs:150"
+          }
+        ]
+      }
+    ],
+    "snake.opposite": [
+      {
+        "kind": "conditional",
+        "label": "going",
+        "branches": [
+          {
+            "name": "going.up",
+            "y": "y/src/snake.y:164",
+            "bare": "bare/src/snake.brs:161"
+          },
+          {
+            "name": "going.down",
+            "y": "y/src/snake.y:166",
+            "bare": "bare/src/snake.brs:162"
+          },
+          {
+            "name": "going.left",
+            "y": "y/src/snake.y:168",
+            "bare": "bare/src/snake.brs:163"
+          },
+          {
+            "name": "going.right",
+            "y": "y/src/snake.y:170",
+            "bare": "bare/src/snake.brs:164"
+          }
+        ]
+      }
+    ],
+    "snake.ahead_of": [
+      {
+        "kind": "conditional",
+        "label": "going",
+        "branches": [
+          {
+            "name": "going.up",
+            "y": "y/src/snake.y:184",
+            "bare": "bare/src/snake.brs:175"
+          },
+          {
+            "name": "going.down",
+            "y": "y/src/snake.y:186",
+            "bare": "bare/src/snake.brs:176"
+          },
+          {
+            "name": "going.left",
+            "y": "y/src/snake.y:188",
+            "bare": "bare/src/snake.brs:177"
+          },
+          {
+            "name": "going.right",
+            "y": "y/src/snake.y:190",
+            "bare": "bare/src/snake.brs:178"
+          }
+        ]
+      }
+    ],
+    "snake.free_cells": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "taken",
+            "y": "y/src/snake.y:219",
+            "bare": "bare/src/snake.brs:199"
+          },
+          {
+            "name": "vacant",
+            "y": "y/src/snake.y:221",
+            "bare": "bare/src/snake.brs:201"
+          }
+        ]
+      }
+    ],
+    "snake.place_food": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "full",
+            "y": "y/src/snake.y:236",
+            "bare": "bare/src/snake.brs:215"
+          },
+          {
+            "name": "room",
+            "y": "y/src/snake.y:238",
+            "bare": "bare/src/snake.brs:217"
+          }
+        ]
+      }
+    ],
+    "snake.banner": [
+      {
+        "kind": "conditional",
+        "label": "shown",
+        "branches": [
+          {
+            "name": "shown.playing",
+            "y": "y/src/snake.y:274",
+            "bare": "bare/src/snake.brs:257"
+          },
+          {
+            "name": "shown.crashed",
+            "y": "y/src/snake.y:276",
+            "bare": "bare/src/snake.brs:258"
+          },
+          {
+            "name": "shown.bitten",
+            "y": "y/src/snake.y:278",
+            "bare": "bare/src/snake.brs:259"
+          },
+          {
+            "name": "shown.filled",
+            "y": "y/src/snake.y:280",
+            "bare": "bare/src/snake.brs:260"
+          }
+        ]
+      }
+    ],
+    "snake.play": [
+      {
+        "kind": "while",
+        "branches": [
+          {
+            "name": "open",
+            "y": "y/src/snake.y:338",
+            "bare": "bare/src/snake.brs:308"
+          },
+          {
+            "name": "closed",
+            "y": "y/src/snake.y:358",
+            "bare": "bare/src/snake.brs:329"
+          }
+        ]
+      },
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "again",
+            "y": "y/src/snake.y:346",
+            "bare": "bare/src/snake.brs:315"
+          },
+          {
+            "name": "going_on",
+            "y": "y/src/snake.y:349",
+            "bare": "bare/src/snake.brs:318"
+          }
+        ]
+      },
+      {
+        "kind": "while",
+        "branches": [
+          {
+            "name": "due",
+            "y": "y/src/snake.y:351",
+            "bare": "bare/src/snake.brs:319"
+          },
+          {
+            "name": "caught_up",
+            "y": "y/src/snake.y:354",
+            "bare": "bare/src/snake.brs:323"
+          }
+        ]
+      }
+    ]
+  },
+  "tests": {
+    "a_new_game_puts_the_food_in_a_free_cell": {
+      "y": "y/src/snake.test.y:21",
+      "rust": "snake_example::snake::tests::a_new_game_puts_the_food_in_a_free_cell",
+      "covers": [
+        "place_food#room",
+        "free_cells#taken",
+        "free_cells#vacant"
+      ]
+    },
+    "the_snake_moves_one_cell_the_way_it_heads": {
+      "y": "y/src/snake.test.y:34",
+      "rust": "snake_example::snake::tests::the_snake_moves_one_cell_the_way_it_heads",
+      "covers": [
+        "advance#moved.on",
+        "ahead_of#going.up",
+        "ahead_of#going.down",
+        "ahead_of#going.left",
+        "ahead_of#going.right"
+      ]
+    },
+    "the_tail_follows_the_head": {
+      "y": "y/src/snake.test.y:57",
+      "rust": "snake_example::snake::tests::the_tail_follows_the_head",
+      "covers": [
+        "advance#moved.on"
+      ]
+    },
+    "keys_turn_the_snake": {
+      "y": "y/src/snake.test.y:71",
+      "rust": "snake_example::snake::tests::keys_turn_the_snake",
+      "covers": [
+        "turned#arrow.up",
+        "turned#arrow.down",
+        "turned#arrow.left",
+        "turned#arrow.right",
+        "unless_reversing#turning",
+        "opposite#going.up",
+        "opposite#going.down",
+        "opposite#going.left",
+        "opposite#going.right"
+      ]
+    },
+    "the_snake_does_not_turn_back_on_itself": {
+      "y": "y/src/snake.test.y:92",
+      "rust": "snake_example::snake::tests::the_snake_does_not_turn_back_on_itself",
+      "covers": [
+        "unless_reversing#reversing",
+        "turned#arrow.other"
+      ]
+    },
+    "the_wall_ends_the_game": {
+      "y": "y/src/snake.test.y:107",
+      "rust": "snake_example::snake::tests::the_wall_ends_the_game",
+      "covers": [
+        "advance#moved.into_wall",
+        "banner#shown.crashed"
+      ]
+    },
+    "the_snake_cannot_bite_itself": {
+      "y": "y/src/snake.test.y:123",
+      "rust": "snake_example::snake::tests::the_snake_cannot_bite_itself",
+      "covers": [
+        "advance#moved.into_itself",
+        "banner#shown.bitten"
+      ]
+    },
+    "the_snake_may_follow_its_own_tail": {
+      "y": "y/src/snake.test.y:141",
+      "rust": "snake_example::snake::tests::the_snake_may_follow_its_own_tail",
+      "covers": [
+        "advance#moved.on"
+      ]
+    },
+    "eating_grows_the_snake": {
+      "y": "y/src/snake.test.y:158",
+      "rust": "snake_example::snake::tests::eating_grows_the_snake",
+      "covers": [
+        "advance#moved.onto_food",
+        "banner#shown.playing"
+      ]
+    },
+    "filling_the_board_ends_the_game": {
+      "y": "y/src/snake.test.y:175",
+      "rust": "snake_example::snake::tests::filling_the_board_ends_the_game",
+      "covers": [
+        "place_food#full",
+        "banner#shown.filled"
+      ]
+    },
+    "the_game_plays_until_the_window_closes": {
+      "y": "y/src/snake.test.y:196",
+      "rust": "snake_example::snake::tests::the_game_plays_until_the_window_closes",
+      "covers": [
+        "play#open",
+        "play#going_on",
+        "play#due",
+        "play#caught_up",
+        "play#closed"
+      ]
+    },
+    "space_starts_the_next_game": {
+      "y": "y/src/snake.test.y:212",
+      "rust": "snake_example::snake::tests::space_starts_the_next_game",
+      "covers": [
+        "play#again"
+      ]
+    },
+    "escape_quits": {
+      "y": "y/src/snake.test.y:229",
+      "rust": "snake_example::snake::tests::escape_quits",
+      "covers": [
+        "play#open",
+        "play#closed"
+      ]
+    }
+  }
+}

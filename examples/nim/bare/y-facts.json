@@ -95,6 +95,7 @@
       "bare": "bare/src/nim.brs:218"
     }
   ],
+  "suspensions": [],
   "compiled": [],
   "copies": [],
   "decisions": {

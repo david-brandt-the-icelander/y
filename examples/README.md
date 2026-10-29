@@ -8,6 +8,8 @@ lowering is done by hand; each example's README states its rules and what it had
 |---|---|
 | [`hangman`](hangman/) | The pencil-and-paper word game, at the terminal: refined types, failures, named decisions, capabilities, a claim, `compile`, narrowing and tests with full coverage |
 | [`nim`](nim/) | Taking counters from heaps, at the terminal, against a computer that plays perfectly: arithmetic on `uint32`, a loop with a named `else`, a `conditional` over a failing call, preconditions, and tests with full coverage |
+| [`snake`](snake/) | The arcade game, in a window drawn with Macroquad: a `window` capability, a clock and a duration, a function that may suspend lowered to `async`, `conditional`s over closed cases, and a play loop tested with a fake window |
 | [`y-runtime`](y-runtime/) | A small hand-written stand-in for the Y runtime that lowered code calls: capabilities, runes, list operations by number, faults |
+| [`y-window`](y-window/) | A small hand-written stand-in for a Y standard module `standard.window`: the `window` capability, drawn with Macroquad, and a fake of it for tests |
 
 The examples of stripping existing Rust, which go the other way, are in [`../tools/bare-rust/examples`](../tools/bare-rust/examples/).

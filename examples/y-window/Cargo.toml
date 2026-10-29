@@ -1,0 +1,11 @@
+[package]
+name = "y-window"
+version = "0.0.0"
+edition = "2021"
+description = "A small stand-in for Y's standard.window: the window capability the Y examples lower to, drawn with Macroquad."
+
+[dependencies]
+macroquad = "0.4.16"
+y-runtime = { path = "../y-runtime" }
+
+[workspace]

@@ -1,0 +1,54 @@
+{
+  "format": "y-constraints/0",
+  "host": "rust",
+  "crate": "snake-example 0.0.0",
+  "module": "src/snake/tests.rs",
+  "status": {
+    "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
+  },
+  "subjects": [
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::moving",
+      "params": [{ "name": "heading", "type": "Direction" }],
+      "result": { "type": "Game" }
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::a_new_game_puts_the_food_in_a_free_cell",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::the_snake_moves_one_cell_the_way_it_heads",
+      "params": []
+    },
+    { "kind": "function", "name": "snake_example::snake::tests::the_tail_follows_the_head", "params": [] },
+    { "kind": "function", "name": "snake_example::snake::tests::keys_turn_the_snake", "params": [] },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::the_snake_does_not_turn_back_on_itself",
+      "params": []
+    },
+    { "kind": "function", "name": "snake_example::snake::tests::the_wall_ends_the_game", "params": [] },
+    { "kind": "function", "name": "snake_example::snake::tests::the_snake_cannot_bite_itself", "params": [] },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::the_snake_may_follow_its_own_tail",
+      "params": []
+    },
+    { "kind": "function", "name": "snake_example::snake::tests::eating_grows_the_snake", "params": [] },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::filling_the_board_ends_the_game",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::the_game_plays_until_the_window_closes",
+      "params": []
+    },
+    { "kind": "function", "name": "snake_example::snake::tests::space_starts_the_next_game", "params": [] },
+    { "kind": "function", "name": "snake_example::snake::tests::escape_quits", "params": [] }
+  ]
+}

@@ -126,6 +126,7 @@
       "bare": "bare/src/hangman.brs:287"
     }
   ],
+  "suspensions": [],
   "compiled": [
     {
       "call": "parse_word_list(game_rules.word_list)",

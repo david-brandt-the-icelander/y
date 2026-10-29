@@ -1,11 +1,12 @@
 //! A small stand-in for the Y runtime, written by hand.
 //!
 //! Rust lowered from Y calls this crate for what Y has and Rust does not: capabilities (`System`, `Console`, `Random`,
-//! `Forever`), the standard library's text operations on runes and list operations by number, refined types' constraint violations, and faults.
+//! `Clock`, `Forever`), the standard library's text operations on runes and list operations by number, refined types' constraint violations, and faults.
 //! It is only as large as the examples need. Where it is simpler than Y's semantics, the item says so.
 use std::collections::VecDeque;
 use std::fmt;
 use std::io::{BufRead, Write};
+use std::time::{Duration, Instant};
 
 /// A fault: a bug, which ends the program with the stable identity of the construct that faulted (Y § 3.4).
 pub fn fault(identity: &str, what: &str) -> ! {
@@ -81,8 +82,8 @@ pub mod text {
     }
 }
 
-/// The standard library's operations on lists that number their elements from 1, as a player sees them, and count
-/// them as a `uint32`.
+/// The standard library's operations on lists that Rust's slices do not have in the same form: by number, counting from
+/// 1 as a player sees them, and counted as a `uint32`.
 pub mod list {
     use super::fault;
 
@@ -123,6 +124,11 @@ pub mod list {
         }
     }
 
+    /// The list without its last element; empty when the list is.
+    pub fn without_last<T>(items: &[T]) -> &[T] {
+        &items[..items.len().saturating_sub(1)]
+    }
+
     fn position(length: usize, number: u32) -> Option<usize> {
         let at = usize::try_from(number).ok()?.checked_sub(1)?;
         (at < length).then_some(at)
@@ -154,6 +160,11 @@ impl System {
     pub fn random(&self) -> Random {
         let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
         Random::seeded(nanos as u64 ^ u64::from(std::process::id()))
+    }
+
+    /// The clock of the machine the program runs on.
+    pub fn clock(&self) -> Clock {
+        Clock { fake: None }
     }
 
     pub fn forever(&self) -> Forever {
@@ -262,6 +273,31 @@ impl Random {
         self.state ^= self.state >> 27;
         let drawn = self.state.wrapping_mul(0x2545_F491_4F6C_DD1D);
         (drawn % count as u64) as usize
+    }
+}
+
+/// The capability to read the time (Y § 3.7). Y's `instant` and `duration` lower to `std::time::Instant` and
+/// `std::time::Duration`.
+pub struct Clock {
+    /// For a fake: when it started, how far each reading moves it on, and how many readings it has given.
+    fake: Option<(Instant, Duration, u32)>,
+}
+
+impl Clock {
+    /// A fake clock for a test: each reading is `tick` after the one before.
+    pub fn fake(tick: Duration) -> Clock {
+        Clock { fake: Some((Instant::now(), tick, 0)) }
+    }
+
+    /// The time now.
+    pub fn now(&mut self) -> Instant {
+        match &mut self.fake {
+            None => Instant::now(),
+            Some((start, tick, readings)) => {
+                *readings += 1;
+                *start + *tick * *readings
+            }
+        }
     }
 }
 
