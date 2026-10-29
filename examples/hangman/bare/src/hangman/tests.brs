@@ -99,7 +99,7 @@ fn the_full_gallows() {
 
 #[test]
 fn a_word_list_is_read_in_order() {
-    // y: covers parse_word_list#blank, parse_word_list#has_text, parse_word_list#valid, parse_word_list#has_words
+    // y: covers parse_word_list#blank, parse_word_list#has_text, parse_word_list#checked.valid, parse_word_list#has_words
     let words = parse_word_list("rope  gallows").expect("when");
     let expected = vec![Word::new("rope".to_string()).expect("then"), Word::new("gallows".to_string()).expect("then")];
     assert!(words == expected, "both_in_order");
@@ -114,14 +114,14 @@ fn an_empty_word_list_is_refused() {
 
 #[test]
 fn a_short_word_is_refused() {
-    // y: covers parse_word_list#invalid, parse_word_list!word_list_error.not_a_word
+    // y: covers parse_word_list#checked.invalid, parse_word_list!word_list_error.not_a_word
     let refused = parse_word_list("rope cat");
     assert!(refused == Err(WordListError::NotAWord), "refused_as_not_a_word");
 }
 
 #[test]
 fn a_player_who_finds_every_letter_wins() {
-    // y: covers play#playing, play#game_over, play#line_read, play#hit, play#won
+    // y: covers play#playing, play#game_over, play#line_read, play#guessed.hit, play#won
     let words = vec![Word::new("rope".to_string()).expect("given")];
     let console = Console::fake(&["r", "o", "p", "e"], false);
     let random = Random::seeded(7);
@@ -133,7 +133,7 @@ fn a_player_who_finds_every_letter_wins() {
 
 #[test]
 fn a_player_who_misses_six_times_is_hanged() {
-    // y: covers play#miss, play#hanged
+    // y: covers play#guessed.miss, play#hanged
     let words = vec![Word::new("rope".to_string()).expect("given")];
     let console = Console::fake(&["a", "b", "c", "d", "f", "g"], false);
     let random = Random::seeded(7);
@@ -145,7 +145,7 @@ fn a_player_who_misses_six_times_is_hanged() {
 
 #[test]
 fn a_player_is_told_what_was_wrong() {
-    // y: covers play#typed_nothing, play#typed_other, play#typed_again
+    // y: covers play#guessed.typed_nothing, play#guessed.typed_other, play#guessed.typed_again
     let words = vec![Word::new("rope".to_string()).expect("given")];
     let console = Console::fake(&["", "ab", "r", "r", "o", "p", "e"], false);
     let random = Random::seeded(7);

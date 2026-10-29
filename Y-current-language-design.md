@@ -170,11 +170,11 @@ named, and every identifier is `lower_snake_case`; `proposal/Y-proposal.md` § 3
 
 ```y
 name = "Ada"
-attempts = 0
+mutable attempts = 0
 attempts := attempts + 1
 ```
 
-`=` declares a name, and `:=` changes it. Nothing marks a name that changes at its declaration: each change is written
+`=` declares a name, which is immutable unless declared `mutable`; `:=` changes a mutable name. Each change is written
 `:=` or passed as a `mutable` argument, subject to ownership, borrowing, transaction, and effect rules.
 
 ### 3.3 Optional values
@@ -188,10 +188,10 @@ This represents either a `customer` or absence.
 Pattern matching is preferred where behavior differs materially between cases.
 
 ```y
-switch customer:
-    case present = optional.some(found):
-        use(found)
-    case absent = optional.none:
+conditional looked_up = customer:
+    condition looked_up.present = (looked_up == optional.some):
+        use(looked_up.value)
+    condition looked_up.absent = (looked_up == optional.none):
         not_found()
 ```
 
@@ -235,12 +235,12 @@ type payment_result:
 Pattern matching is a core control-flow mechanism:
 
 ```y
-switch result:
-    case approved = payment_result.approved(authorization):
-        complete(authorization)
-    case declined = payment_result.declined(reason):
-        reject(reason)
-    case unavailable = payment_result.unavailable:
+conditional paid = result:
+    condition paid.approved = (paid == payment_result.approved):
+        complete(paid.authorization)
+    condition paid.declined = (paid == payment_result.declined):
+        reject(paid.reason)
+    condition paid.unavailable = (paid == payment_result.unavailable):
         retry_later()
 ```
 

@@ -48,14 +48,14 @@ told about, because the compiler enumerates the cases.
 - ⚠️ `optional<t>` is a value that is either a `t` or absent. It is a distinct type from `t`, there is no
   null, and no `t` is implicitly an absent `optional<t>` or the reverse.
 - ⚠️ Absence is handled by a named decision, never by an operator: Y has no `??` default and no `?.`
-  reach-through. An `if` with a named `else`, or a `switch` over an `optional<t>`, which is exhaustive in
-  exactly the way it is over any sum type, gives each way through a name for tests and traces.
+  reach-through. An `if` with a named `else`, or a `conditional` over an `optional<t>`, which is exhaustive
+  in exactly the way it is over any sum type, gives each way through a name for tests and traces.
 
   ```y
-  switch customer:
-      case present = optional.some(found):
-          use(found)
-      case absent = optional.none:
+  conditional looked_up = customer:
+      condition looked_up.present = (looked_up == optional.some):
+          use(looked_up.value)
+      condition looked_up.absent = (looked_up == optional.none):
           not_found()
   ```
 
@@ -94,31 +94,33 @@ told about, because the compiler enumerates the cases.
 - ⚠️ A failure is narrowed by matching it, and a function may convert a failure set into a smaller one
   by handling the cases it can.
 - ⚠️ A call that can fail has a two-case sum as its outcome, `result.ok(value)` or `result.err(failure)`, so a
-  single `switch` ranges over a call's successes and failures together, and an optional result composes
+  single `conditional` ranges over a call's successes and failures together, and an optional result composes
   with failure without a special rule
   → [`../../proposal/Y-proposal.md` § 3.4](../../proposal/Y-proposal.md#34-failure).
 
-## Matching
+## Choosing
 
-- ⚠️ `switch` is exhaustive. A switch that does not cover every case of the scrutinised type is a compile
-  error that names the missing cases, and adding a case to a `type` turns every non-exhaustive switch on
-  it into an error at the sites that need updating.
-- ⚠️ Every arm is named, `case known = result.ok(customer):`, and an arm that catches the rest is
-  `else name:`. The names are outcomes, which tests cover and traces report as they do a branch's
+- ⚠️ A choice over one value is a `conditional`: `conditional loaded = load_customer(id):` evaluates the
+  value once and names it, and each branch is `condition loaded.known = (loaded == result.ok):`, a named
+  boolean expression over that label. There is no pattern syntax and no guard clause
   → [`../../proposal/Y-proposal.md` § 3.5](../../proposal/Y-proposal.md#35-every-decision-has-a-name).
-- ⚠️ Patterns nest, binding payloads positionally or by field name, and `_` matches without binding.
-- ⚠️ A `when` clause guards an arm with a boolean condition. A guarded arm never counts toward
-  exhaustiveness, because the compiler does not reason about the guard's truth.
-- ⚠️ Arms are tried in order, and an arm that cannot be reached because an earlier arm subsumes it is a
+- ⚠️ A case written without its payload, `result.ok`, stands for every value of that case, and a condition
+  that compares with it narrows the label in its branch: `loaded.value`, `loaded.failure.id`.
+- ⚠️ When every condition compares the label with a case of a closed type, the conditional must cover
+  every case, and adding a case to a `type` turns every conditional over it into an error at the sites
+  that need updating. Otherwise a named `else` is required.
+- ⚠️ Making the same call more than once in one conditional is a critical lint error, suppressed only by an
+  inline linter directive on that line.
+- ⚠️ Conditions are tried in order, and one that cannot be reached because an earlier one covers it is a
   compile error rather than dead code.
 
 ## What the compiler rejects
 
 | Program | Diagnostic | Status |
 | --- | --- | --- |
-| A `switch` missing a case of a closed sum type | The missing cases, by name | ⚠️ |
-| An arm subsumed by an earlier arm | Which arm shadows it | ⚠️ |
-| Exhaustiveness claimed by a guarded arm alone | That the guard is not evidence, and which case is still uncovered | ⚠️ |
+| A `conditional` over a closed type that misses a case, with no `else` | The missing cases, by name | ⚠️ |
+| A condition covered by an earlier one | Which condition covers it | ⚠️ |
+| The same call made twice in one conditional | Both sites; critical, suppressible only inline | ⚠️ |
 | `or fail` where the enclosing signature names no compatible failure | The failure type produced and the failure type permitted | ⚠️ |
 | `or fail` where two cases of the enclosing failure type could wrap the inner one | Both candidates | ⚠️ |
 | A case written without its type | The type to write before it | ⚠️ |

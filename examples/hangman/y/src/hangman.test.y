@@ -2,7 +2,7 @@
 test a_letter_in_the_word_is_a_hit
         covers guess#in_word, shown_rune#known, shown_rune#unknown:
     given:
-        game = new_game(word.new("gallows") or fail)
+        mutable game = new_game(word.new("gallows") or fail)
     when:
         answer = guess(mutable game, "l") or fail
     then:
@@ -14,7 +14,7 @@ test a_letter_in_the_word_is_a_hit
 test a_letter_not_in_the_word_is_a_miss
         covers guess#not_in_word:
     given:
-        game = new_game(word.new("rope") or fail)
+        mutable game = new_game(word.new("rope") or fail)
     when:
         answer = guess(mutable game, "z") or fail
     then:
@@ -26,7 +26,7 @@ test a_letter_not_in_the_word_is_a_miss
 test a_repeated_letter_is_refused
         covers guess#repeated, guess!guess_error.already_guessed:
     given:
-        game = game(word: word.new("rope") or fail, hits: set.new(), misses: ['z'])
+        mutable game = game(word: word.new("rope") or fail, hits: set.new(), misses: ['z'])
     when:
         refused = guess(mutable game, "Z")
     then:
@@ -38,7 +38,7 @@ test a_repeated_letter_is_refused
 test typing_nothing_is_not_a_guess
         covers guess#nothing_typed, guess!guess_error.empty:
     given:
-        game = new_game(word.new("rope") or fail)
+        mutable game = new_game(word.new("rope") or fail)
     when:
         refused = guess(mutable game, "   ")
     then:
@@ -49,7 +49,7 @@ test typing_nothing_is_not_a_guess
 test two_letters_are_not_a_guess
         covers guess#not_one_rune, guess!guess_error.not_one_letter:
     given:
-        game = new_game(word.new("rope") or fail)
+        mutable game = new_game(word.new("rope") or fail)
     when:
         refused = guess(mutable game, "ab")
     then:
@@ -60,7 +60,7 @@ test two_letters_are_not_a_guess
 test a_digit_is_not_a_guess
         covers guess#not_a_letter:
     given:
-        game = new_game(word.new("rope") or fail)
+        mutable game = new_game(word.new("rope") or fail)
     when:
         refused = guess(mutable game, "7")
     then:
@@ -140,7 +140,7 @@ test the_full_gallows
 
 -- A word list is read word by word, and runs of spaces between words are allowed.
 test a_word_list_is_read_in_order
-        covers parse_word_list#blank, parse_word_list#has_text, parse_word_list#valid, parse_word_list#has_words:
+        covers parse_word_list#blank, parse_word_list#has_text, parse_word_list#checked.valid, parse_word_list#has_words:
     when:
         words = parse_word_list("rope  gallows") or fail
     then:
@@ -158,7 +158,7 @@ test an_empty_word_list_is_refused
 
 -- A list with a short word is refused.
 test a_short_word_is_refused
-        covers parse_word_list#invalid, parse_word_list!word_list_error.not_a_word:
+        covers parse_word_list#checked.invalid, parse_word_list!word_list_error.not_a_word:
     when:
         refused = parse_word_list("rope cat")
     then:
@@ -167,7 +167,7 @@ test a_short_word_is_refused
 
 -- A player who finds every letter wins, and is told the word.
 test a_player_who_finds_every_letter_wins
-        covers play#playing, play#game_over, play#line_read, play#hit, play#won:
+        covers play#playing, play#game_over, play#line_read, play#guessed.hit, play#won:
     given:
         words = [word.new("rope") or fail]
     inject:
@@ -182,7 +182,7 @@ test a_player_who_finds_every_letter_wins
 
 -- A player who misses six times is hanged, and is told the word.
 test a_player_who_misses_six_times_is_hanged
-        covers play#miss, play#hanged:
+        covers play#guessed.miss, play#hanged:
     given:
         words = [word.new("rope") or fail]
     inject:
@@ -197,7 +197,7 @@ test a_player_who_misses_six_times_is_hanged
 
 -- A player who types something other than a new letter is told what was wrong, and the game goes on.
 test a_player_is_told_what_was_wrong
-        covers play#typed_nothing, play#typed_other, play#typed_again:
+        covers play#guessed.typed_nothing, play#guessed.typed_other, play#guessed.typed_again:
     given:
         words = [word.new("rope") or fail]
     inject:

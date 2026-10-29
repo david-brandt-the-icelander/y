@@ -28,7 +28,7 @@ letter. Six misses hang the man.
 | Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 289, 244, 18 | hand |
 | Bare bodies | `bare/src/hangman.brs`, `bare/src/hangman/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 309, 181, 44, 3 | hand, as the Y compiler would lower the source |
 | Constraint files | `bare/src/*.constraints.json` (53 subjects, 20 clauses) | 432 | the same, then `bare-rust libfmt` for the canonical form |
-| Y facts | `bare/y-facts.json` | 518 | the same |
+| Y facts | `bare/y-facts.json` | 520 | the same |
 | Rust | `src/hangman.rs`, `src/hangman/tests.rs`, `src/main.rs`, `src/lib.rs` | 309, 181, 44, 3 | `bare-rust weave` |
 | Y runtime | `../y-runtime/src/lib.rs` | 225 | hand: a small stand-in for the runtime that lowered code calls |
 
@@ -49,11 +49,11 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | A facet: `public facet setup:` makes its members visible to other modules, and its name is part of their paths (`hangman.setup.parse_word_list`); `shown_rune` and `part`, outside every facet, stay private | a module `mod setup { use super::*; … }`, so the Rust path keeps the facet too; the parent imports the facets it uses, `use self::{display::*, rounds::*, setup::*};`, so the members reach one another by their own names, as in Y | a `module` subject per facet, and `visible` on each member; `y-facts.json` `facets`: each facet, its path, its visibility and its members | `pub mod setup`; members `pub`, helpers private to `hangman`, which its facet modules can call |
 | An import by path, `from hangman import setup.parse_word_list, console_play.play` | `use hangman_example::hangman::setup::Word;` and so on | — | the same |
 | `lower_snake_case` type and case names (`guess_error`, `guess_error.not_one_letter`) | `GuessError`, `NotOneLetter`: the lowering's one renaming, to Rust's casing | Rust names | the same |
-| A constant group, `constants game_rules:` with `allowed_misses is count<element> = 6` | a module `game_rules` holding `const ALLOWED_MISSES = 6;`; uses are `game_rules::ALLOWED_MISSES` | a `module` subject and its `const` subjects | the same |
+| A constant group, `constants game_rules:` with `allowed_misses is count<rune> = 6` | a module `game_rules` holding `const ALLOWED_MISSES = 6;`; uses are `game_rules::ALLOWED_MISSES` | a `module` subject and its `const` subjects | the same |
 | `type word is string:` with the block `where letters_only = value.matches(pattern"^[a-z]*$") and long_enough = ...` | `struct Word(_)` and a constructor that checks each constraint in order | two `invariant` clauses, with status `lifted` by the constructor | a newtype with `Word::new(..) -> Result<Word, ConstraintViolation>` |
 | `structure` with fields `word is word`, private to the module: `pub(super)` from the facet's Rust module; a constant group used as a closed type (`outcome`, `verdict` and the failures `word_list_error`, `guess_error`: named values with no order, so not enumerations); a `type` with `case`s that carry data (`play_error`, `case console(error is console_error)`) | `struct`; `enum` with unit variants; `enum` with named fields | `fields`, `variants` | the same, deriving the structural equality Y always derives |
 | Blocks: a colon and indentation | braces, as Rust has | — | the same |
-| `switch` with named arms, `case valid = result.ok(parsed):`, the statements beneath | `match`, each arm marked `// y: #valid` | `y-facts.json` `decisions`, with `kind` `switch`: each arm's name, Y line and bare line | the same, with the comment |
+| `conditional checked = word.new(…):` with named conditions, `condition checked.valid = (checked == result.ok):`, the statements beneath | `match`, each arm marked `// y: #checked.valid` | `y-facts.json` `decisions`, with `kind` `conditional`: the label, and each condition's name, Y line and bare line | the same, with the comment |
 | No inline lambdas: `masked` builds its list with a `for` loop, and `outcome_of` asks `is_subset_of` | the loop; `.all(|letter| …)`, Rust's form of the subset test | — | the same |
 | No `injected` parameter: the function is pure | — | `effects` clause `pure` | — |
 | A `mutable` parameter and no `injected` one | — | `no io`, `no clock`, `no randomness`, `mutates only game.hits, game.misses` | — |
@@ -66,10 +66,10 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | A condition that narrows (`if not_one_rune = (letter == optional.none): fail ...`) | `let Some(letter) = letter else { ... }` | — | let-else, so rustc checks the narrowing |
 | `forever because "..."` | the `&Forever` argument of the call that waits | `y-facts.json` `claims` | `console.read_line(forever)` |
 | `compile parse_word_list(game_rules.word_list)` | the value, as a `const` array, and a `static` built once from it | `y-facts.json` `compiled` | the same, and a generated test that makes the call at run time and compares |
-| `count<element>`, `count<rune>` | — (units are erased) | `y-facts.json` `units` | `usize` |
+| `count<rune>`: the misses, and the letters of a word | — (units are erased) | `y-facts.json` `units` | `usize` |
 | `string` (and a read-only `string` parameter), `rune`, `list<t>`, `set<t>` | — | `text`, `ref<text>`, `Rune`, `list<T> as 'Vec'`, `set<T> as 'BTreeSet'` | `String`, `&str`, `y_runtime::Rune`, `Vec<T>`, `BTreeSet<T>` |
 | Interpolation, `"{name}"` and `"{game.word}"` | `format!("{name}")`, `format!("{}", game.word)` | — | the same |
-| A binding, `picture = gallows(…)`, including one that later changes; a change, `name := value` | `let`; `name = value` | — | `let`; `let mut`, which `weave` derived through rustc (19 of them); `name = value` |
+| A binding, `picture = gallows(…)`; a name that changes, `mutable game = new_game(…)`; a change, `name := value` | `let`; `let` (weave adds `mut`); `name = value` | — | `let`; `let mut`, which `weave` derived through rustc (19 of them); `name = value` |
 | `test name covers a, b:` with the sections `given:`, `inject:`, `when:`, `then:` | `#[test] fn name()`; an `or fail` in `given` or `when` lowers to `expect`; `fake console(input: [...])` to `Console::fake(...)`; each named check of `then`, `name = p`, to `assert!(p, "name")`, with the comment above it, if any, added to the message | `y-facts.json` `tests`: what each covers; repeated in a comment in the test | the same |
 | Documentation: the `--` line, or the block between two rules of dashes, above a declaration, with roles; the types leave it for the signature | `///` with the roles as a list | — | the same |
 
@@ -105,7 +105,7 @@ following:
   `../y-runtime` resolves): 4 files woven, 0 weave errors, 21 `mut` derived, 0 holes undetermined, 0 warnings.
 - **`cargo test`:** the 19 lowered Y tests and the generated check of the `compile` pass.
 - **`cargo clippy --all-targets`:** no warnings, here and in `../y-runtime`.
-- **Coverage:** the tests declare all 37 outcomes of the module. These are the 30 named branches and arms of its 11
+- **Coverage:** the tests declare all 37 outcomes of the module. These are the 30 named branches and conditions of its 11
   decisions, plus the 7 failure cases, which is what a Y release build requires (Y § 3.14).
 - **`tools/bare-rust/tests/y_examples.rs`** keeps the stages in step without cargo:
   - Weaving the committed bare files gives the committed Rust, apart from the derived `mut`.

@@ -34,8 +34,10 @@ them tell a reviewer about memory, not about intent.
   function update(mutable order): ...
   ```
 
-- ⚠️ A name is declared with `=` and changed only with `:=` or a `mutable` call; nothing marks it at its
-  declaration. Method receivers are declared `self` or `mutable self`, and are not marked at the call.
+- ⚠️ A name is immutable unless declared `mutable` (`mutable found = list.new()`), and a mutable name is
+  changed only with `:=` or a `mutable` call. Immutability is binding, transitive and deep at once, and is
+  not atomicity: shared state that changes is a `shared<t>`, changed inside `atomic`. A method's receiver is `me`, injected automatically and immutable unless the method is
+  declared `mutable function`; it is not marked at the call.
 - ⚠️ **The compiler chooses the representation.** A parameter the callee only reads is passed as a
   shared borrow; a value the callee keeps is moved when the caller no longer uses it and copied when it
   does; a value that would be copied often may be counted and copied on write; a `mutable` parameter is

@@ -55,7 +55,7 @@ public facet holds:
     function hold_and_charge(item, buyer, injected inventory, injected charges) returns hold fails hold_error:
         within 5s or fail:
             atomic hold_one_unit:
-                stock = inventory.stock_of(item) or fail
+                mutable stock = inventory.stock_of(item) or fail
 
                 if sold_out = (stock.available == 0):
                     retry
@@ -323,9 +323,9 @@ person can judge: is five seconds right, and is this the behaviour the business 
 - **Every change to a name is written `:=`:** `low := middle.next()`, `account.balance := account.balance - amount`.
   `=` never changes a name, and there are no compound assignments (`-=`, `+=`), so a reader finds every change of a
   value by searching for `:=`. YAPL had `=` to bind and `:=` to rebind (§ 7).
-- **No keyword marks a name that changes.** `found = list.new()` declares `found`, and `found.push(parsed)` or
-  `low := middle.next()` later changes it. Each change is visible where it happens, as `:=` or as a `mutable` argument,
-  so a marker at the declaration would say nothing new. There is no `let`, `var` or `variable`.
+- **A name is immutable unless it is declared `mutable`:** `mutable found = list.new()`, and later
+  `found.push(checked.value)` or `low := middle.next()`. A name declared without it cannot be changed in any way
+  (§ 3.6). There is no `let`, `var` or `variable`: `mutable` is the one word, for a local and a parameter alike.
 - **No shadowing:** a name visible in a scope may not be declared again inside it, including parameter names. Within a
   function, a name means one thing.
 
@@ -352,15 +352,15 @@ person can judge: is five seconds right, and is this the behaviour the business 
   indexing and arithmetic are computed into a named local first.
 - Literals that are small languages are checked at compile time: `pattern"^[a-z]+$"` (a regular expression),
   `url"https://example.com"`, and format strings. Y has no query strings (§ 3.13).
-- **Blocks are statements.** `if`, `switch`, loops, `within`, `atomic`, `orelse`, `inject`, `arena`, `uncancellable` and
+- **Blocks are statements.** `if`, `conditional`, loops, `within`, `atomic`, `orelse`, `inject`, `arena`, `uncancellable` and
   `supervise` produce no value, and Y has no conditional expression and no ternary operator.
   - A value chosen by a condition is assigned in each branch. The decision then has a name and a place, like every
     other: `if has_head = (misses >= 1):` assigns `head = "O"`, and `else no_head:` assigns `head = " "`.
   - A value made inside a transaction or a deadline is returned from inside it, or assigned with `:=` to a name declared
     outside it.
-  - A `switch` arm is `case`, the arm's name, `=` and a pattern, ending in a colon, with its statements indented
-    beneath it, as every block is: `case valid = result.ok(parsed):` then `found.push(parsed)`. There is no `=>`, and
-    every arm is named (§ 3.5).
+  - A `conditional` evaluates one value under a label, and each of its `condition`s is a named predicate with its
+    statements indented beneath it, as every block is: `condition checked.valid = (checked == result.ok):` then
+    `found.push(checked.value)`. There is no `=>`, no pattern syntax, and every outcome is named (§ 3.5).
 
 **Functions and their results.**
 
@@ -444,10 +444,10 @@ active_users = users.filter(is_active)
   a lint error, which formatting fixes. Inside a body, at most one blank line separates statements. Members of a
   structure, a type, a constant group or an enumeration are not declarations in this sense, and follow one another
   directly.
-- **A blank line comes before every flow-control statement** (`if`, `while`, `for`, `switch`, `break`, `continue`,
+- **A blank line comes before every flow-control statement** (`if`, `while`, `for`, `conditional`, `break`, `continue`,
   `retry`, and the blocks `atomic`, `within`, `inject`, `arena`, `uncancellable` and `supervise`), unless it is the first
   statement of its block. Comments about the statement may sit between the blank line and the statement. `fail` and
-  `return` need no blank line, and neither do `else`, `orelse` and a `switch` arm's `case`, which continue the
+  `return` need no blank line, and neither do `else`, `orelse` and a `conditional`'s `condition`, which continue the
   statement above them. The rule holds in every block, not only in functions: a test's sections, a lambda, a handler,
   a workflow. A missing blank line is a lint error, which formatting fixes.
 - Y sets no line length. `y format` has no options and preserves every comment. It produces one layout for any
@@ -477,7 +477,7 @@ seconds_per_minute is constant int64 = 60
 -- The rules every game is played by.
 constants game_rules:
     -- How many wrong guesses a player may make.
-    allowed_misses is count<element> = 6
+    allowed_misses is count<rune> = 6
     constants scoring:
         points_per_hit = 10
 
@@ -501,7 +501,7 @@ enumeration severity is string:
   through its group: `game_rules.allowed_misses`.
 - Every value is computed while the program is built (§ 3.17) and holds nothing mutable.
 - **A constant group whose members share one type is also a closed type:** a value of `outcome` is one of its members.
-  A member is always written with its group, `outcome.won` (§ 3.3), and `switch` over it must cover every member. This
+  A member is always written with its group, `outcome.won` (§ 3.3), and a `conditional` over it must cover every member. This
   is the type for a set of named values with no order: where a game stands, what a guess did, and the cases of a
   failure that carry nothing.
 - **An enumeration is for a set that has an order and is iterated:** `for level in severity`, `severity.warning <
@@ -708,7 +708,7 @@ Referring to a case:
   implicitly.
 - **Absence is handled by a named decision, never by an operator.** There is no default operator (`??`) and no
   operator that reaches through absence (`?.`). A program tests for absence with `if`, `else if` and `else`, or
-  `switch`es over `optional.some(value)` and `optional.none`, so every way through has a name that tests cover and
+  uses a `conditional` over `optional.some` and `optional.none`, so every way through has a name that tests cover and
   traces, logs and debuggers report. Such operators make code quicker to write and slower to read, maintain and
   observe.
 - **A condition narrows.** In the branch of `if found = (user != optional.none):`, and in the `else present:` branch
@@ -752,7 +752,13 @@ type word is string:
 
 The same mechanism gives every length and index its unit:
 
-- `string.count()` gives a `count<rune>`, `bytes.count()` a `count<byte>`, and `list.count()` a `count<element>`.
+- **`count<t>` is a number of `t`s:** the type argument names the thing counted, not the number's representation.
+  `string.count()` gives a `count<rune>`, `bytes.count()` a `count<byte>`, and a `list<t>`'s `count()` a `count<t>`,
+  so the misses of a game, a `list<rune>`, number a `count<rune>`.
+- A count is stored as an unsigned integer, and that is all it is at run time: units are erased. What it adds is
+  checking. A count is never negative, cannot be added to a count of something else or to a plain `uint32` without a
+  stated conversion, and indexes only what it counts. Where none of that is wanted, a plain `uint32` is the right
+  type.
 - `index<rune>` does not index `bytes`.
 - An integer *literal* takes its count or index unit from context, so `list.count() == 1` needs no ceremony. An `int64`
   *value* never converts implicitly. Physical units get no such allowance: `within 5` is an error, because `5` could
@@ -786,7 +792,7 @@ The same mechanism gives every length and index its unit:
 A function that can fail names its failure type in its signature: `returns debit fails withdraw_error`.
 
 - **A call's outcome is a built-in two-case sum,** `result.ok(value)` or `result.err(failure)`. This settles the September open
-  question: one `switch` ranges over success and failure together, and an optional result that can fail (`as
+  question: one `conditional` ranges over success and failure together, and an optional result that can fail (`as
   optional<receipt>` with `fails e`) composes without a special rule. Core IR still records every propagation edge explicitly,
   so *which failures can escape, and from where* is always answerable.
 - Inside the function, success is `return debit = value`, never `result.ok(value)`, and failure is written
@@ -803,13 +809,14 @@ A function that can fail names its failure type in its signature: `returns debit
   rollback-on-failure rule, carried into the language.
 
 ```y
-switch load_customer(id):
-    case known = result.ok(customer):
-        greet(customer)
-    case new_visitor = result.err(customer_error.not_found(id: missing_id)):
-        offer_signup(missing_id)
-    case unreachable = result.err(customer_error.unavailable(retry_after)):
-        try_later(retry_after)
+-- Evaluates load_customer(id) once, as `loaded`.
+conditional loaded = load_customer(id):
+    condition loaded.known = (loaded == result.ok):
+        greet(loaded.value)
+    condition loaded.new_visitor = (loaded == result.err(customer_error.not_found)):
+        offer_signup(loaded.failure.id)
+    condition loaded.unreachable = (loaded == result.err(customer_error.unavailable)):
+        try_later(loaded.failure.retry_after)
 ```
 
 **Faults are not failures.** A violated contract, arithmetic overflow, an exhausted allocator, a reached `todo`, or a
@@ -839,7 +846,7 @@ This proposal restores the rule and extends it to every predicate in the languag
 | Fallback | `else go_left: ...` |
 | Loop | `while searching = (low <= high):`, then `else exhausted:` |
 | Switch arm | `case known = result.ok(customer):`, and `else other:` for the rest |
-| Guard | `case active = optional.some(user) when (user.last_seen > cutoff):` |
+| Choice over one value | `conditional loaded = load_customer(id):`, then `condition loaded.known = (loaded == result.ok):` |
 | Precondition, guarantee | `where positive = (amount > 0isk)`, `ensures debited = (...)` |
 | Invariant, constraint | `invariant departs_after_arrival = (...)`, `where positive = (value > 0)` |
 | Assertion | `assert charged_once = (charges.committed().count() == 1)` |
@@ -858,9 +865,23 @@ This proposal restores the rule and extends it to every predicate in the languag
     ride on the header.
   - Code that follows a decision usually belongs in its `else` block (`else in_stock:` in § 0), so the block is never
     empty. A decision with nothing to do on one side is better written as a function with a named result.
-- **Every `switch` arm is named:** `case known = result.ok(customer):`. An arm that catches what the others leave is
-  `else name:`, as in an `if`. The arm's name covers its guard: `case active = optional.some(user) when (…):` needs no
-  second name. A test covers an arm as it covers a branch, `load#new_visitor` (§ 3.14).
+- **A choice over one value is a `conditional`.** `conditional loaded = load_customer(id):` evaluates the expression
+  once and names the result `loaded`, which is also the decision's label. Each branch beneath it is
+  `condition loaded.name = (predicate):`, named under the label, and a branch that catches the rest is
+  `else loaded.name:`. The predicates are ordinary boolean expressions over the label: there is no pattern syntax and
+  no guard clause, so `(loaded == result.ok) and (loaded.value.active)` is a condition like any other.
+  - **A case written without its payload stands for every value of that case:** `(loaded == result.ok)`. Such a
+    condition narrows the label in its branch, so `loaded.value` is the customer there, and `loaded.failure.id` the
+    missing customer's id under `result.err(customer_error.not_found)`.
+  - When every condition compares the label with a case of a closed type, the compiler checks that every case is
+    covered, and the `else` may be left out. Otherwise the `else` is required.
+  - `conditional guessed:` with no expression is allowed, for conditions that each compute their own value. **Making
+    the same call more than once in one conditional is a critical lint error:** `condition guessed.hit = (verdict.hit
+    == guess(game, line))` followed by `condition guessed.miss = (verdict.miss == guess(game, line))` calls `guess`
+    twice. Evaluating the value once, under the label, is the fix. Where the repeat is intended, the author
+    suppresses the error on that line with an inline linter directive, `-- lint: allow repeated_call because "…"`,
+    which a review shows.
+  - A test covers a condition as it covers a branch, by its full name: `load#loaded.new_visitor` (§ 3.14).
 - A `for` loop is named by its variable. Inside nested loops, `break` and `continue` must name their loop:
   `break line`.
 - There is no `loop` and no `while true`.
@@ -888,8 +909,8 @@ function position_of(target, items) returns position:
     if empty = items.is_empty():
         return position = optional.none
     else has_items:
-        low = items.first_index()
-        high = items.last_index()
+        mutable low = items.first_index()
+        mutable high = items.last_index()
 
         while searching = (low <= high):
             middle = low.midpoint(high)
@@ -919,15 +940,29 @@ a type, Y prefers the type (§ 1.5, rule 2).
 and no moves. A value is passed, stored and returned as freely as in a garbage-collected language. What it never does
 is change under someone who holds it: Y values have value semantics.
 
-- **Parameters are immutable by default.** A parameter `x` is read and never changed, so the caller's value is the
-  same after the call.
+- **Every name is immutable unless declared `mutable`,** a parameter, an injected parameter or a local alike. A
+  parameter `x` is read and never changed, so the caller's value is the same after the call.
+- **Y's immutability is complete.** Of the kinds of constness languages offer, an immutable name in Y has three at
+  once:
+  - *binding* immutability: the name always refers to the value it was given;
+  - *transitive* immutability: nothing reached through it can be changed through it, field or element, however deep;
+  - *deep* immutability: the value itself cannot change while the name holds it, through this name or any other,
+    because Y has value semantics and nothing else shares it.
+
+  The fourth kind, *compile-time* constancy, is `constant` (§ 3.2). A `mutable` name lifts all three at once, for
+  the code that holds it.
+- **Immutability is not atomicity.** Under parallel or concurrent execution, an immutable name guarantees that its
+  value does not change, not that a group of changes elsewhere appears all at once. Shared state that changes is a
+  `shared<t>`, changed only inside `atomic` (§ 3.9).
 - **`mutable` marks the exception, at both ends of the call.** A parameter `mutable x` lets the callee change the
   caller's value, and the call says so: `guess(mutable game, line)`. While the call runs, nothing else can reach that
   value. This is YAPL's two-sided `mutable` (2024): a reviewer sees at the call which arguments the callee may change.
-- **Bindings:** a local name may be changed, with `:=` or by a call that takes it `mutable`, and nothing marks it at its
-  declaration. A parameter may be changed only when it is declared `mutable`.
-- **Method receivers** are declared `self` or `mutable self`. They are not marked at the call (`order.cancel()`),
-  because receiver syntax is where agents' habits are strongest. The elaborated view shows the mode.
+- **Bindings:** a local name may be changed, with `:=` or by a call that takes it `mutable`, only when it is declared
+  `mutable name = value`. A parameter may be changed only when it is declared `mutable`.
+- **A method is a function with an automatically injected `me`:** the value the method was called on. `me` is Y's
+  `this` or `self`. It appears in no parameter list, and a call does not pass it (`order.cancel()`). Like every name,
+  `me` is immutable; a method that changes it is declared `mutable function cancel(reason)`, and the elaborated view
+  shows the mode.
 - **Keeping a value keeps it as it is.** When `new_game(word)` stores `word` in the game, nothing done to the game's
   word changes the caller's, and the reverse.
 
@@ -982,7 +1017,7 @@ Exports one month's invoices as files.
 
 month: The month to export, as month.
 
-exported: How many invoices were written, as count<element>.
+exported: How many invoices were written, as count<invoice>.
 
 invoices: The stored invoices, as store<invoice>.
 uploads: Where the files go, as file_system.
@@ -1012,8 +1047,9 @@ needs no annotation because the missing clause is the annotation. Contract expre
 `inject`, 2020):
 
 - **`injected`, at the receiving site,** marks a parameter that the caller does not pass: the function needs it, and
-  it arrives by injection. It is written as `mutable` is, before the name, and injected parameters come after the
-  others:
+  it arrives by injection. It is written as `mutable` is, before the name (`injected mutable log` when the function
+  changes it). **Injected parameters always come last,** after every parameter the caller passes; one anywhere else
+  is a compile error:
 
   ```y
   function play(words, injected console, injected random, injected forever) fails play_error
@@ -1271,13 +1307,13 @@ fails fulfilment_error.payment_unreachable: The charge could not be delivered.
 workflow fulfil(hold, injected orders, injected charges, injected shipments) returns shipped fails fulfilment_error:
     order = orders.for_hold(hold) or fail
 
-    switch submit charge_card(hold: hold, amount: order.total, method: order.payment_method):
-        case charged = result.ok(receipt):
-            return shipped = submit create_shipment(order: order.id, receipt: receipt.id) or fail
-        case declined = result.err(undelivered.failed(reason)):
-            fail fulfilment_error.payment_declined(reason)
-        case abandoned = result.err(undelivered.abandoned(abandonment)):
-            fail fulfilment_error.payment_unreachable(abandonment)
+    conditional charged = submit charge_card(hold: hold, amount: order.total, method: order.payment_method):
+        condition charged.paid = (charged == result.ok):
+            return shipped = submit create_shipment(order: order.id, receipt: charged.value.id) or fail
+        condition charged.declined = (charged == result.err(undelivered.failed)):
+            fail fulfilment_error.payment_declined(charged.failure.error)
+        condition charged.abandoned = (charged == result.err(undelivered.abandoned)):
+            fail fulfilment_error.payment_unreachable(charged.failure.abandonment)
 ```
 
 - `submit` suspends the workflow durably until the command's outcome is recorded.
@@ -1373,7 +1409,7 @@ transition request_payment(created, charge) returns pending:
 - A value whose state is unknown, because it came from storage, is matched to recover it.
 - Transitions are projected to TLA+ and checked with Apalache for reachability and invariants.
 
-In v1, typestate applies to owned values. Shared or stored state machines are advanced inside `atomic`: switch on the
+In v1, typestate applies to owned values. Shared or stored state machines are advanced inside `atomic`: a `conditional` on the
 current state, call the transition, and let conflicting commits retry. This answers the September open question
 without new machinery.
 
@@ -1452,7 +1488,7 @@ active_names = users.filter(active).map(name_of).sorted()
 rule active(user) = (user.last_seen > 30d.ago())
 
 
-derived active_user_count: count<element> = users.filter(active).count()
+derived active_user_count: count<user> = users.filter(active).count()
 
 
 ----------------------------------------------------------------------------------------------------
@@ -1506,7 +1542,7 @@ No `assert` keyword is needed there, because the section holds nothing else.
 **Coverage is declared, then verified.**
 
 - A function's *outcomes* are the named branches of every decision (`f#sold_out` and `f#in_stock`; in an `if` with an
-  `else` block, the block's own name, `f#go_left`), every named `switch` arm (`f#new_visitor`), and every case of its
+  `else` block, the block's own name, `f#go_left`), every named `condition` (`f#loaded.new_visitor`), and every case of its
   failure type, written with its type (`f!failure_type.case`).
 - A test lists the outcomes it covers. The runner fails the test if it did not actually reach every one of them.
 - A test contributes coverage only for what it declares. This is the April 2026 rule, and it keeps coverage an auditable
@@ -1865,15 +1901,15 @@ premise changed, or because the iteration that tried them showed their cost. The
 | Types in signatures, `->` and `T ! E` | Earlier drafts of this proposal | `function f(a, mutable b) returns result fails e`; each type in the role that documents its name (`a: ..., as string.`) | Few symbols; a signature reads as words, and every name is documented with its type in one place |
 | Unnamed results and an implicit last-expression result | Earlier drafts of this proposal | `returns name`, and `return name = value` | A result has a name, which its documentation explains, and every exit is a visible `return` or `fail` |
 | References in source: `&t`, `&mutable t`, `move`, borrowing results, `copy` types, `reference_counted<t>`, `weak<t>`; "no clone the programmer did not write" | September → earlier drafts of this proposal | Value semantics, `mutable` at both ends of a call; the compiler chooses borrows, moves and copies, and reports each copy | Ownership syntax is about memory, not intent, and is where agents fail most; value semantics keep what borrowing was for |
-| `match` with `pattern => statement` arms | Earlier drafts of this proposal | `switch`, each arm `case name = pattern:` with its block beneath, as in the toolchain's language reference § 7 | One way to write a block; no `=>`; every outcome named |
+| `match` with `pattern => statement` arms; then `switch` with `case name = pattern:` arms, patterns and `when` guards | Earlier drafts of this proposal | `conditional label = value:` with `condition label.name = (predicate):` branches | One way to choose; predicates are ordinary expressions; the value is computed once and every outcome is named under it |
 | `with` for capabilities, at both ends | Earlier drafts of this proposal | `injected` parameters where a function declares what it needs, `inject(…)` where a caller supplies it, after YAPL v0's `dependency` and `inject` | One keyword per side of the injection; a reader sees which side a line is on |
 | `?` to pass a failure on | Earlier drafts of this proposal | `or fail`, and `or fail as <case>` to name the conversion | A symbol a reader has to know; with the words, every failure exit contains `fail` |
-| `??` for a default and `?.` through absence | September → earlier drafts of this proposal | A named decision: `if`, `else if`, `else`, or `switch` | Each hides a branch that tests, traces and debuggers cannot name |
+| `??` for a default and `?.` through absence | September → earlier drafts of this proposal | A named decision: `if`, `else if`, `else`, or `conditional` | Each hides a branch that tests, traces and debuggers cannot name |
 | `t?` for an optional type | September → earlier drafts of this proposal | `optional<t>` | Spelled as the type it is, as `optional.some` and `optional.none` already were |
 | `public` on any declaration | Earlier drafts of this proposal | `public facet`, as in the toolchain; private by default | Visibility is written in one place per group, and a module's surface reads as a list of facets |
 | A case written `.case` where the type is known | September → earlier drafts of this proposal | `type_name.case` everywhere, as YAPL had it (`color.red`) | The reader never infers which type a case belongs to |
 | `let` | Earlier drafts of this proposal | `name = value` declares; `name := value` changes, as in YAPL | Every change to a value is spelled one way and found by one search |
-| `variable` (and `var` before it), marking a name that may change | Earlier drafts of this proposal | Nothing at the declaration; each change is `:=` or a `mutable` argument | The change is already marked where it happens, so the marker repeated it |
+| `variable` (and `var` before it), marking a name that may change | Earlier drafts of this proposal | `mutable name = value`, the word parameters already used | One word for every name that may change, local or parameter |
 | `if` and `switch` as expressions; a ternary operator | Earlier drafts of this proposal | Statements; a value is assigned in each branch | A decision is a statement with a name and a place, never a value hidden inside an expression |
 | Spec block in place of the signature | April 2026 | A signature naming parameters and result; documentation above it with closed roles and the types | The examples abandoned it for helpers; a signature is where a reader looks for names and modes |
 | Two spellings of one keyword, method synonyms | YAPL, toolchain | One spelling | Contradicts "one way to write it" |
@@ -1985,14 +2021,14 @@ The complete list, so that the size of the surface is visible:
 ```text
 declarations   module from import public facet function returns fails structure type case enumeration state transition trait
                implementation constant constants is unit schema migrate to command handler workflow test derived rule
-               transient self
+               transient me
 contracts      where ensures invariant old assert
-control        if else switch when for in while break continue return fail
+control        if else conditional condition for in while break continue return fail
 bindings       mutable lambda nested captures injected inject arena compile
 concurrency    within task supervise detach forever uncancellable
 transactions   atomic retry orelse enqueue submit
 claims, gaps   unsafe assume allow reveal because todo
-tests          covers given faults then fake
+tests          covers given inject faults when then fake
 observability  log metric
 operators      and or not
 values         true false

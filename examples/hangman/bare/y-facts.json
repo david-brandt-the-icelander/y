@@ -81,13 +81,13 @@
   "units": [
     {
       "subject": "hangman_example::hangman::setup::game_rules::ALLOWED_MISSES",
-      "unit": "count<element>",
+      "unit": "count<rune>",
       "y": "y/src/hangman.y:15"
     },
     {
       "subject": "hangman_example::hangman::display::gallows",
       "param": "misses",
-      "unit": "count<element>",
+      "unit": "count<rune>",
       "y": "y/src/hangman.y:181"
     },
     {
@@ -161,15 +161,16 @@
         ]
       },
       {
-        "kind": "switch",
+        "kind": "conditional",
+        "label": "checked",
         "branches": [
           {
-            "name": "valid",
+            "name": "checked.valid",
             "y": "y/src/hangman.y:53",
             "bare": "bare/src/hangman.brs:78"
           },
           {
-            "name": "invalid",
+            "name": "checked.invalid",
             "y": "y/src/hangman.y:55",
             "bare": "bare/src/hangman.brs:79"
           }
@@ -316,30 +317,31 @@
         ]
       },
       {
-        "kind": "switch",
+        "kind": "conditional",
+        "label": "guessed",
         "branches": [
           {
-            "name": "hit",
+            "name": "guessed.hit",
             "y": "y/src/hangman.y:272",
             "bare": "bare/src/hangman.brs:292"
           },
           {
-            "name": "miss",
+            "name": "guessed.miss",
             "y": "y/src/hangman.y:274",
             "bare": "bare/src/hangman.brs:293"
           },
           {
-            "name": "typed_nothing",
+            "name": "guessed.typed_nothing",
             "y": "y/src/hangman.y:276",
             "bare": "bare/src/hangman.brs:294"
           },
           {
-            "name": "typed_other",
+            "name": "guessed.typed_other",
             "y": "y/src/hangman.y:278",
             "bare": "bare/src/hangman.brs:295"
           },
           {
-            "name": "typed_again",
+            "name": "guessed.typed_again",
             "y": "y/src/hangman.y:280",
             "bare": "bare/src/hangman.brs:296"
           }
@@ -451,7 +453,7 @@
       "covers": [
         "parse_word_list#blank",
         "parse_word_list#has_text",
-        "parse_word_list#valid",
+        "parse_word_list#checked.valid",
         "parse_word_list#has_words"
       ]
     },
@@ -467,7 +469,7 @@
       "y": "y/src/hangman.test.y:160",
       "rust": "hangman_example::hangman::tests::a_short_word_is_refused",
       "covers": [
-        "parse_word_list#invalid",
+        "parse_word_list#checked.invalid",
         "parse_word_list!word_list_error.not_a_word"
       ]
     },
@@ -478,7 +480,7 @@
         "play#playing",
         "play#game_over",
         "play#line_read",
-        "play#hit",
+        "play#guessed.hit",
         "play#won"
       ]
     },
@@ -486,7 +488,7 @@
       "y": "y/src/hangman.test.y:184",
       "rust": "hangman_example::hangman::tests::a_player_who_misses_six_times_is_hanged",
       "covers": [
-        "play#miss",
+        "play#guessed.miss",
         "play#hanged"
       ]
     },
@@ -494,9 +496,9 @@
       "y": "y/src/hangman.test.y:199",
       "rust": "hangman_example::hangman::tests::a_player_is_told_what_was_wrong",
       "covers": [
-        "play#typed_nothing",
-        "play#typed_other",
-        "play#typed_again"
+        "play#guessed.typed_nothing",
+        "play#guessed.typed_other",
+        "play#guessed.typed_again"
       ]
     },
     "a_closed_console_ends_the_game": {

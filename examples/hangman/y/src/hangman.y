@@ -12,7 +12,7 @@ public facet setup:
         -- The words a game chooses from, separated by spaces.
         word_list is string = "gallows noose scaffold hangman trapdoor verdict alphabet puzzle riddle lantern"
         -- How many wrong guesses a player may make. The last of them hangs the man.
-        allowed_misses is count<element> = 6
+        allowed_misses is count<rune> = 6
 
 
     ------------------------------------------------------------------------------------------------------------
@@ -43,16 +43,16 @@ public facet setup:
       fewer than four.
     ------------------------------------------------------------------------------------------------------------
     function parse_word_list(text) returns words fails word_list_error:
-        found = list.new()
+        mutable found = list.new()
 
         for piece in text.split(" "):
             if blank = piece.is_empty():
                 continue
             else has_text:
-                switch word.new(piece.to_string()):
-                    case valid = result.ok(parsed):
-                        found.push(parsed)
-                    case invalid = result.err(_):
+                conditional checked = word.new(piece.to_string()):
+                    condition checked.valid = (checked == result.ok):
+                        found.push(checked.value)
+                    condition checked.invalid = (checked == result.err):
                         fail word_list_error.not_a_word
 
         if empty = found.is_empty():
@@ -164,7 +164,7 @@ public facet display:
     shown: Each letter of the word, found or not, separated by spaces (`_ o _ e`), as string.
     ------------------------------------------------------------------------------------------------------------
     function masked(game) returns shown:
-        letters = list.new()
+        mutable letters = list.new()
 
         for letter in game.word.runes():
             letters.push(shown_rune(letter, game.hits))
@@ -174,7 +174,7 @@ public facet display:
     ------------------------------------------------------------------------------------------------------------
     Draws the gallows, with one more part of the man for each miss.
 
-    misses: How many wrong guesses the player has made, as count<element>.
+    misses: How many wrong guesses the player has made, as count<rune>.
 
     picture: The drawing, seven lines high, as string.
     ------------------------------------------------------------------------------------------------------------
@@ -216,8 +216,8 @@ function shown_rune(letter, hits) returns shown:
 ----------------------------------------------------------------------------------------------------------------
 One part of the man, drawn once the player has missed often enough.
 
-misses: How many wrong guesses the player has made, as count<element>.
-needed: How many misses draw this part, as count<element>.
+misses: How many wrong guesses the player has made, as count<rune>.
+needed: How many misses draw this part, as count<rune>.
 mark: The character that draws it, as string.
 
 drawn: The mark, or a space while the part is not drawn yet, as string.
@@ -252,7 +252,7 @@ public facet console_play:
     function play(words, injected console, injected random, injected forever) fails play_error
             where has_words = (not words.is_empty()):
         chosen = random.index_below(words.count())
-        game = new_game(words[chosen])
+        mutable game = new_game(words[chosen])
         console.write_line("Hangman: find the word, one letter at a time.") or fail
 
         while playing = (outcome_of(game) == outcome.playing):
@@ -268,16 +268,16 @@ public facet console_play:
             if closed = (typed == optional.none):
                 fail play_error.input_closed
             else line_read:
-                switch guess(mutable game, typed):
-                    case hit = result.ok(verdict.hit):
+                conditional guessed = guess(mutable game, typed):
+                    condition guessed.hit = (guessed == result.ok(verdict.hit)):
                         console.write_line("Yes.") or fail
-                    case miss = result.ok(verdict.miss):
+                    condition guessed.miss = (guessed == result.ok(verdict.miss)):
                         console.write_line("No.") or fail
-                    case typed_nothing = result.err(guess_error.empty):
+                    condition guessed.typed_nothing = (guessed == result.err(guess_error.empty)):
                         console.write_line("Type a letter.") or fail
-                    case typed_other = result.err(guess_error.not_one_letter):
+                    condition guessed.typed_other = (guessed == result.err(guess_error.not_one_letter)):
                         console.write_line("\"{typed}\" is not one letter.") or fail
-                    case typed_again = result.err(guess_error.already_guessed):
+                    condition guessed.typed_again = (guessed == result.err(guess_error.already_guessed)):
                         console.write_line("You have already guessed {typed}.") or fail
         else game_over:
             final_picture = gallows(game.misses.count())

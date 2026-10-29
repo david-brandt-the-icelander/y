@@ -117,16 +117,16 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
     for (function, decisions) in facts["decisions"].as_object().unwrap() {
         for d in decisions.as_array().unwrap() {
             // every outcome of a decision is a named branch (Y-proposal § 3.5): `if a = (…):`, `else if b = (…):`,
-            // `else c:`, each on a line of its own, and an `if` or a `while` always has its `else`; a `switch` names
-            // each arm, `case a = pattern:`, and may end in `else c:`
-            let switch = d["kind"] == "switch";
+            // `else c:`, each on a line of its own, and an `if` or a `while` always has its `else`; a `conditional`
+            // names each condition after its label, `condition label.a = p:`, and may end in `else label.c:`
+            let switch = d["kind"] == "conditional";
             let branches = d["branches"].as_array().unwrap();
             assert!(branches.len() >= 2, "{function}: a decision with one named outcome: {branches:?}");
             for (k, b) in branches.iter().enumerate() {
                 let name = b["name"].as_str().unwrap();
                 let y = at(b["y"].as_str().unwrap());
                 let opens = if switch {
-                    (y.trim_start().starts_with(&format!("case {name} = ")) && y.ends_with(':')) || (k > 0 && y.trim() == format!("else {name}:"))
+                    (y.trim_start().starts_with(&format!("condition {name} = ")) && y.ends_with(':')) || (k > 0 && y.trim() == format!("else {name}:"))
                 } else if k == 0 {
                     y.contains(&format!(" {name} = ")) && y.trim_end().ends_with(':')
                 } else {
@@ -146,7 +146,7 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
         assert!(at(c["y"].as_str().unwrap()).contains(what), "copy of {what}: not at {}", c["y"]);
         assert!(at(c["bare"].as_str().unwrap()).contains("// y: a copy"), "copy of {what}: not marked at {}", c["bare"]);
     }
-    // every named decision of the Y source is listed: `if name = …:`, `while name = …:`, `case name = …:` and `else name:`
+    // every named decision of the Y source is listed: `if name = …:`, `while name = …:`, `condition label.name = …:` and `else name:`
     let mut in_source = BTreeSet::new();
     for y in ["y/src/hangman.y", "y/src/main.y"] {
         let mut function = String::new();
@@ -159,7 +159,7 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
                 if (*w == "if" || *w == "while") && words.get(i + 2) == Some(&"=") && line.trim_end().ends_with(':') {
                     in_source.insert(format!("{function}#{}", words[i + 1]));
                 }
-                if i == 0 && *w == "case" && words.get(2) == Some(&"=") {
+                if i == 0 && *w == "condition" && words.get(2) == Some(&"=") {
                     in_source.insert(format!("{function}#{}", words[1]));
                 }
                 // `else name:`
@@ -194,7 +194,7 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
     }
     // a blank line before every flow-control statement that is not the first of its block; comments about the
     // statement may come between (a lint rule of Y § 3.1)
-    let flow = ["if ", "while ", "for ", "switch ", "break", "continue", "retry", "atomic ", "within ", "arena ", "uncancellable", "supervise"];
+    let flow = ["if ", "while ", "for ", "conditional ", "break", "continue", "retry", "atomic ", "within ", "arena ", "uncancellable", "supervise"];
     for y in ["y/src/hangman.y", "y/src/main.y", "y/src/hangman.test.y"] {
         let lines: Vec<String> = read(&dir.join(y)).lines().map(str::to_string).collect();
         let mut inside = false;
@@ -312,6 +312,38 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
                     }
                 }
                 assert!(grouped, "{y}:{}: parentheses around a single element: `{}`", n + 1, line.trim());
+            }
+        }
+    }
+    // a name is changed, by `:=` or as a `mutable` argument, only when it was declared `mutable` (Y § 3.1, § 3.6)
+    for y in ["y/src/hangman.y", "y/src/main.y", "y/src/hangman.test.y"] {
+        let mut declared: BTreeSet<String> = BTreeSet::new();
+        for (n, line) in read(&dir.join(y)).lines().enumerate() {
+            let t = line.trim();
+            if t.starts_with("function ") || t.starts_with("test ") {
+                declared.clear();
+                if let Some((_, params)) = t.split_once('(') {
+                    for p in params.split(')').next().unwrap().split(',') {
+                        if let Some(name) = p.trim().trim_start_matches("injected ").strip_prefix("mutable ") {
+                            declared.insert(name.to_string());
+                        }
+                    }
+                }
+            }
+            if let Some((name, _)) = t.strip_prefix("mutable ").and_then(|r| r.split_once(" = ")) {
+                declared.insert(name.to_string());
+            }
+            let mut changed: Vec<String> = Vec::new();
+            if let Some((target, _)) = t.split_once(" := ") {
+                changed.push(target.split('.').next().unwrap().to_string());
+            }
+            for (k, _) in t.match_indices("mutable ") {
+                if k > 0 && (t[..k].ends_with('(') || t[..k].ends_with(", ")) && !t.starts_with("function ") {
+                    changed.push(t[k + 8..].split([',', ')']).next().unwrap().to_string());
+                }
+            }
+            for name in changed {
+                assert!(declared.contains(&name), "{y}:{}: `{name}` changes but is not declared `mutable`", n + 1);
             }
         }
     }
