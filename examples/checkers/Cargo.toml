@@ -1,0 +1,15 @@
+[package]
+name = "checkers-example"
+version = "0.0.0"
+edition = "2021"
+description = "Checkers, written in Y and lowered through bare Rust and its constraint files to Rust, drawn with Macroquad."
+
+[dependencies]
+y-runtime = { path = "../y-runtime" }
+y-window = { path = "../y-window" }
+
+[workspace]
+
+# The computer may look at 250,000 positions a move, which an unoptimised build takes many seconds over.
+[profile.dev]
+opt-level = 3

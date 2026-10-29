@@ -80,6 +80,11 @@ fn memory_bare_files_weave_to_the_committed_rust_and_strip_back() {
     weaves_and_strips_back("memory", &["lib", "main", "memory", "memory/tests"]);
 }
 
+#[test]
+fn checkers_bare_files_weave_to_the_committed_rust_and_strip_back() {
+    weaves_and_strips_back("checkers", &["checkers", "checkers/tests", "lib", "main"]);
+}
+
 fn weaves_and_strips_back(name: &str, expected: &[&str]) {
     let dir = example(name);
     let mods = modules(&dir);
@@ -135,6 +140,11 @@ fn memory_constraint_files_are_valid() {
     constraint_files_are_valid("memory");
 }
 
+#[test]
+fn checkers_constraint_files_are_valid() {
+    constraint_files_are_valid("checkers");
+}
+
 fn constraint_files_are_valid(name: &str) {
     let dir = example(name);
     for m in modules(&dir) {
@@ -175,6 +185,11 @@ fn tic_tac_toe_facts_match_the_y_source_and_the_bare_bodies() {
 #[test]
 fn memory_facts_match_the_y_source_and_the_bare_bodies() {
     facts_match_the_y_source_and_the_bare_bodies("memory");
+}
+
+#[test]
+fn checkers_facts_match_the_y_source_and_the_bare_bodies() {
+    facts_match_the_y_source_and_the_bare_bodies("checkers");
 }
 
 fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {

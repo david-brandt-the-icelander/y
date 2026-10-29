@@ -1,0 +1,163 @@
+{
+  "format": "y-constraints/0",
+  "host": "rust",
+  "crate": "checkers-example 0.0.0",
+  "module": "src/checkers/tests.rs",
+  "status": {
+    "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
+  },
+  "subjects": [
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::arranged",
+      "params": [
+        {
+          "name": "pieces",
+          "type": "ref<list<Placed> as 'std::primitive::slice'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "to_move", "type": "Side" }
+      ],
+      "result": { "type": "Game" }
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::man",
+      "params": [
+        { "name": "owner", "type": "Side" },
+        { "name": "row", "type": "i32" },
+        { "name": "column", "type": "i32" }
+      ],
+      "result": { "type": "Placed" }
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::king",
+      "params": [
+        { "name": "owner", "type": "Side" },
+        { "name": "row", "type": "i32" },
+        { "name": "column", "type": "i32" }
+      ],
+      "result": { "type": "Placed" }
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::clicking",
+      "params": [{ "name": "row", "type": "i32" }, { "name": "column", "type": "i32" }],
+      "result": { "type": "Frame" }
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_new_game_has_twelve_men_each",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_first_moves_are_steps",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_capture_must_be_taken",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_chain_of_jumps_is_one_move",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_man_crowned_by_a_jump_stops",
+      "params": []
+    },
+    { "kind": "function", "name": "checkers_example::checkers::tests::a_king_moves_both_ways", "params": [] },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::white_is_crowned_on_the_bottom_row",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_win_scores_by_level_and_moves",
+      "params": []
+    },
+    { "kind": "function", "name": "checkers_example::checkers::tests::a_loss_scores_nothing", "params": [] },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::quiet_turns_draw_the_game",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::pieces_are_worth_their_rank",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::an_ended_game_is_worth_its_end",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_computer_keeps_its_man_out_of_reach",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_computer_plays_out_games_to_choose_an_opening",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::without_checks_the_pieces_decide",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_click_finds_its_square",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_click_finds_its_level",
+      "params": []
+    },
+    { "kind": "function", "name": "checkers_example::checkers::tests::squares_are_shaded", "params": [] },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_selected_piece_shows_where_it_may_go",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::pieces_are_painted_by_player_and_rank",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_banner_says_how_the_game_stands",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_click_elsewhere_selects_nothing",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::escape_at_the_levels_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_level_is_chosen_and_a_move_made",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::space_after_a_game_chooses_another",
+      "params": []
+    }
+  ]
+}
