@@ -25,10 +25,10 @@ letter. Six misses hang the man.
 
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
-| Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 289, 244, 18 | hand |
+| Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 291, 244, 18 | hand |
 | Bare bodies | `bare/src/hangman.brs`, `bare/src/hangman/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 309, 181, 44, 3 | hand, as the Y compiler would lower the source |
 | Constraint files | `bare/src/*.constraints.json` (53 subjects, 20 clauses) | 432 | the same, then `bare-rust libfmt` for the canonical form |
-| Y facts | `bare/y-facts.json` | 520 | the same |
+| Y facts | `bare/y-facts.json` | 522 | the same |
 | Rust | `src/hangman.rs`, `src/hangman/tests.rs`, `src/main.rs`, `src/lib.rs` | 309, 181, 44, 3 | `bare-rust weave` |
 | Y runtime | `../y-runtime/src/lib.rs` | 225 | hand: a small stand-in for the runtime that lowered code calls |
 
@@ -61,7 +61,7 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | `injected system` on the entry point | `System::root()` | `y-facts.json` `capabilities` | the same |
 | a `where name = p` precondition | `require(p, "hangman::f#name")` | a `require` clause, status `lifted` by that call | a run-time check whose failure is a fault (a panic naming the construct) |
 | `invariant name = p` on a structure | `invariant(p, "hangman::Game#name")` after the one write that can break it | an `invariant` clause on the type | the same |
-| A decision: `if a = p:`, `else if b = q:`, `else c:`, or `while a = p:` with `else c:` after the loop, every branch on its own line and named | `if p { // y: #a`, `} else if q { // y: #b`, `} else { // y: #c`; after a `while`, a `// y: #c` comment | `y-facts.json` `decisions`: each decision's branches, with the Y line and the bare line of each | the same, with the comment |
+| A decision: `if a = p:` and `else c:`, a `conditional` (below), or `while a = p:` with `else c:` after the loop, every branch on its own line and named | `if p { // y: #a`, `} else if q { // y: #b`, `} else { // y: #c`; after a `while`, a `// y: #c` comment | `y-facts.json` `decisions`: each decision's branches, with the Y line and the bare line of each | the same, with the comment |
 | A value chosen by a condition, which Y's blocks cannot give: a small function with a named result, `part(misses: misses, needed: 1, mark: "O")`, whose branches `return drawn = mark` and `return drawn = " "` | the same | — | the same |
 | A condition that narrows (`if not_one_rune = (letter == optional.none): fail ...`) | `let Some(letter) = letter else { ... }` | — | let-else, so rustc checks the narrowing |
 | `forever because "..."` | the `&Forever` argument of the call that waits | `y-facts.json` `claims` | `console.read_line(forever)` |

@@ -135,11 +135,11 @@ pub mod rounds {
     /// - Returns `Lost` once the player has used up the misses allowed, `Won` once every letter of the word is found, and
     ///   `Playing` otherwise.
     pub fn outcome_of(game: &Game) -> Outcome {
-        if game.misses.len() == game_rules::ALLOWED_MISSES { // y: #hanged
+        if game.misses.len() == game_rules::ALLOWED_MISSES { // y: #judged.hanged
             Outcome::Lost
-        } else if runes(game.word.as_text()).all(|letter| game.hits.contains(&letter)) { // y: #solved
+        } else if runes(game.word.as_text()).all(|letter| game.hits.contains(&letter)) { // y: #judged.solved
             Outcome::Won
-        } else { // y: #undecided
+        } else { // y: #judged.undecided
             Outcome::Playing
         }
     }
@@ -156,21 +156,21 @@ pub mod rounds {
         require(outcome_of(game) == Outcome::Playing, "hangman::guess#still_playing");
         let trimmed = line.trim();
         let letter = single_rune(&trimmed.to_lowercase());
-        // y: the Y source's one `if`-chain; its first two branches fail, so the narrowing of `letter` is a let-else here
-        if trimmed.is_empty() { // y: #nothing_typed
+        // y: the Y source's `conditional judged`; its first two conditions fail, so the narrowing of `letter` is a let-else here
+        if trimmed.is_empty() { // y: #judged.nothing_typed
             return Err(GuessError::Empty);
         }
-        let Some(letter) = letter else { // y: #not_one_rune, which narrows `letter` to a `rune`
+        let Some(letter) = letter else { // y: #judged.not_one_rune, which narrows `letter` to a `rune`
             return Err(GuessError::NotOneLetter);
         };
-        if !letter.is_ascii_lowercase() { // y: #not_a_letter
+        if !letter.is_ascii_lowercase() { // y: #judged.not_a_letter
             Err(GuessError::NotOneLetter)
-        } else if game.hits.contains(&letter) || game.misses.contains(&letter) { // y: #repeated
+        } else if game.hits.contains(&letter) || game.misses.contains(&letter) { // y: #judged.repeated
             Err(GuessError::AlreadyGuessed)
-        } else if runes(game.word.as_text()).any(|each| each == letter) { // y: #in_word
+        } else if runes(game.word.as_text()).any(|each| each == letter) { // y: #judged.in_word
             game.hits.insert(letter);
             Ok(Verdict::Hit)
-        } else { // y: #not_in_word
+        } else { // y: #judged.not_in_word
             game.misses.push(letter);
             invariant(game.misses.len() <= game_rules::ALLOWED_MISSES, "hangman::Game#within_allowance");
             Ok(Verdict::Miss)

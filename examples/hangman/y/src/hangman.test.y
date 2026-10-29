@@ -1,6 +1,6 @@
 -- A letter in the word is a hit, and shows wherever it occurs in the word.
 test a_letter_in_the_word_is_a_hit
-        covers guess#in_word, shown_rune#known, shown_rune#unknown:
+        covers guess#judged.in_word, shown_rune#known, shown_rune#unknown:
     given:
         mutable game = new_game(word.new("gallows") or fail)
     when:
@@ -12,7 +12,7 @@ test a_letter_in_the_word_is_a_hit
 
 -- A letter not in the word is a miss, and is kept in the order it was guessed.
 test a_letter_not_in_the_word_is_a_miss
-        covers guess#not_in_word:
+        covers guess#judged.not_in_word:
     given:
         mutable game = new_game(word.new("rope") or fail)
     when:
@@ -24,7 +24,7 @@ test a_letter_not_in_the_word_is_a_miss
 
 -- A letter guessed before is refused in either case, and costs nothing.
 test a_repeated_letter_is_refused
-        covers guess#repeated, guess!guess_error.already_guessed:
+        covers guess#judged.repeated, guess!guess_error.already_guessed:
     given:
         mutable game = game(word: word.new("rope") or fail, hits: set.new(), misses: ['z'])
     when:
@@ -36,7 +36,7 @@ test a_repeated_letter_is_refused
 
 -- A line of spaces is not a guess.
 test typing_nothing_is_not_a_guess
-        covers guess#nothing_typed, guess!guess_error.empty:
+        covers guess#judged.nothing_typed, guess!guess_error.empty:
     given:
         mutable game = new_game(word.new("rope") or fail)
     when:
@@ -47,7 +47,7 @@ test typing_nothing_is_not_a_guess
 
 -- Two letters are not a guess.
 test two_letters_are_not_a_guess
-        covers guess#not_one_rune, guess!guess_error.not_one_letter:
+        covers guess#judged.not_one_rune, guess!guess_error.not_one_letter:
     given:
         mutable game = new_game(word.new("rope") or fail)
     when:
@@ -58,7 +58,7 @@ test two_letters_are_not_a_guess
 
 -- A digit is not a guess.
 test a_digit_is_not_a_guess
-        covers guess#not_a_letter:
+        covers guess#judged.not_a_letter:
     given:
         mutable game = new_game(word.new("rope") or fail)
     when:
@@ -69,7 +69,7 @@ test a_digit_is_not_a_guess
 
 -- The last miss allowed hangs the man.
 test six_misses_hang_the_man
-        covers outcome_of#hanged:
+        covers outcome_of#judged.hanged:
     given:
         game = game(word: word.new("rope") or fail, hits: set.new(), misses: ['a', 'b', 'c', 'd', 'f', 'g'])
     when:
@@ -80,7 +80,7 @@ test six_misses_hang_the_man
 
 -- Finding every letter wins.
 test finding_every_letter_wins
-        covers outcome_of#solved:
+        covers outcome_of#judged.solved:
     given:
         game = game(word: word.new("rope") or fail, hits: set.of(['r', 'o', 'p', 'e']), misses: ['a'])
     when:
@@ -91,7 +91,7 @@ test finding_every_letter_wins
 
 -- A new game is still being played.
 test a_new_game_is_being_played
-        covers outcome_of#undecided:
+        covers outcome_of#judged.undecided:
     given:
         game = new_game(word.new("rope") or fail)
     when:

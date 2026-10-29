@@ -155,12 +155,13 @@ maximum: The largest allowed, as int64.
 clamped: x, moved into the range, as int64.
 --------------------------------------------------------
 function clamp(x, minimum, maximum) returns clamped:
-    if below = (x < minimum):
-        return clamped = minimum
-    else if above = (x > maximum):
-        return clamped = maximum
-    else in_range:
-        return clamped = x
+    conditional placed = x:
+        condition placed.below = (placed < minimum):
+            return clamped = minimum
+        condition placed.above = (placed > maximum):
+            return clamped = maximum
+        else placed.in_range:
+            return clamped = x
 ```
 
 (The October proposal settles the spelling: types are written in the documentation above a function, the result is

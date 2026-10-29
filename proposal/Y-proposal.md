@@ -707,7 +707,7 @@ Referring to a case:
 - A value that may be absent has the type `optional<t>`, which is distinct from `t`. Neither converts to the other
   implicitly.
 - **Absence is handled by a named decision, never by an operator.** There is no default operator (`??`) and no
-  operator that reaches through absence (`?.`). A program tests for absence with `if`, `else if` and `else`, or
+  operator that reaches through absence (`?.`). A program tests for absence with `if` and `else`, or
   uses a `conditional` over `optional.some` and `optional.none`, so every way through has a name that tests cover and
   traces, logs and debuggers report. Such operators make code quicker to write and slower to read, maintain and
   observe.
@@ -841,12 +841,9 @@ This proposal restores the rule and extends it to every predicate in the languag
 
 | Construct | Form |
 | --- | --- |
-| Condition | `if found = (items[middle] == target):` |
-| Alternative | `else if go_right = (items[middle] < target): ...` |
-| Fallback | `else go_left: ...` |
+| Condition, two ways | `if empty = items.is_empty():`, then `else has_items:` |
+| Choice, more than two ways | `conditional compared = items[middle]:`, then `condition compared.found = (compared == target):`, …, `else compared.go_left:` |
 | Loop | `while searching = (low <= high):`, then `else exhausted:` |
-| Switch arm | `case known = result.ok(customer):`, and `else other:` for the rest |
-| Choice over one value | `conditional loaded = load_customer(id):`, then `condition loaded.known = (loaded == result.ok):` |
 | Precondition, guarantee | `where positive = (amount > 0isk)`, `ensures debited = (...)` |
 | Invariant, constraint | `invariant departs_after_arrival = (...)`, `where positive = (value > 0)` |
 | Assertion | `assert charged_once = (charges.committed().count() == 1)` |
@@ -855,7 +852,7 @@ This proposal restores the rule and extends it to every predicate in the languag
 **Exemptions and defaults.**
 
 - A predicate that is already a single boolean name, or `not` of one, needs no second name: `if is_empty: ...`.
-- **`else` always has a name of its own:** `else go_left:`. The name is bound to `true` when the fall-through branch
+- **`else` always has a name of its own:** `else has_items:`. The name is bound to `true` when the fall-through branch
   runs, so tests, traces, debuggers and logs can say which branch ran, as for every other branch. An `else` without a
   name does not compile (the toolchain's rule, language reference § 7).
 - **Every outcome of every decision is a named branch.** An `if` always ends in a named `else` block, and a `while`
@@ -865,6 +862,10 @@ This proposal restores the rule and extends it to every predicate in the languag
     ride on the header.
   - Code that follows a decision usually belongs in its `else` block (`else in_stock:` in § 0), so the block is never
     empty. A decision with nothing to do on one side is better written as a function with a named result.
+- **`if` chooses between two ways; a choice among more is a `conditional`.** An `if` takes one `else` and no
+  `else if`: a ladder of `else if`s is a lint error, which `y fix` rewrites as a `conditional`. A ladder hides that
+  its branches are one decision, and gives the decision no name of its own; a `conditional` names it, and each
+  branch beneath it.
 - **A choice over one value is a `conditional`.** `conditional loaded = load_customer(id):` evaluates the expression
   once and names the result `loaded`, which is also the decision's label. Each branch beneath it is
   `condition loaded.name = (predicate):`, named under the label, and a branch that catches the rest is
@@ -897,14 +898,14 @@ This proposal restores the rule and extends it to every predicate in the languag
   wrong. This is ai.lang's "zoom", as a view rather than a data model.
 
 ```y
-----------------------------------------------------------------
+--------------------------------------------------------------------------------
 Finds where a value sits in a sorted list.
 
 target: The value to look for, as int64.
 items: The list to search, as sorted_list<int64>.
 
 position: The target's position, or nothing when it is absent, as optional<index<element>>.
-----------------------------------------------------------------
+--------------------------------------------------------------------------------
 function position_of(target, items) returns position:
     if empty = items.is_empty():
         return position = optional.none
@@ -915,20 +916,21 @@ function position_of(target, items) returns position:
         while searching = (low <= high):
             middle = low.midpoint(high)
 
-            if found = (items[middle] == target):
-                return position = optional.some(middle)
-            else if go_right = (items[middle] < target):
-                low := middle.next()
-            else if at_start = (middle == items.first_index()):
-                return position = optional.none
-            else go_left:
-                high := middle.previous()
+            conditional compared = items[middle]:
+                condition compared.found = (compared == target):
+                    return position = optional.some(middle)
+                condition compared.go_right = (compared < target):
+                    low := middle.next()
+                condition compared.at_start = (middle == items.first_index()):
+                    return position = optional.none
+                else compared.go_left:
+                    high := middle.previous()
         else exhausted:
             return position = optional.none
 ```
 
 `first_index` and `last_index` require a list that is not empty, and `previous` an index past the first. The
-branches `has_items` and `go_left` already establish both, so the calls need no checks of their own (§ 3.3,
+branches `has_items` and `compared.go_left` already establish both, so the calls need no checks of their own (§ 3.3,
 narrowing). Every way the search can end is a named branch.
 
 The parameter is a `sorted_list`, not a `list` with a `where sorted` precondition. Where a property can be carried by
@@ -1542,7 +1544,7 @@ No `assert` keyword is needed there, because the section holds nothing else.
 **Coverage is declared, then verified.**
 
 - A function's *outcomes* are the named branches of every decision (`f#sold_out` and `f#in_stock`; in an `if` with an
-  `else` block, the block's own name, `f#go_left`), every named `condition` (`f#loaded.new_visitor`), and every case of its
+  `else` block, the block's own name, `f#has_items`), every named `condition` (`f#loaded.new_visitor`), and every case of its
   failure type, written with its type (`f!failure_type.case`).
 - A test lists the outcomes it covers. The runner fails the test if it did not actually reach every one of them.
 - A test contributes coverage only for what it declares. This is the April 2026 rule, and it keeps coverage an auditable
@@ -1904,7 +1906,7 @@ premise changed, or because the iteration that tried them showed their cost. The
 | `match` with `pattern => statement` arms; then `switch` with `case name = pattern:` arms, patterns and `when` guards | Earlier drafts of this proposal | `conditional label = value:` with `condition label.name = (predicate):` branches | One way to choose; predicates are ordinary expressions; the value is computed once and every outcome is named under it |
 | `with` for capabilities, at both ends | Earlier drafts of this proposal | `injected` parameters where a function declares what it needs, `inject(…)` where a caller supplies it, after YAPL v0's `dependency` and `inject` | One keyword per side of the injection; a reader sees which side a line is on |
 | `?` to pass a failure on | Earlier drafts of this proposal | `or fail`, and `or fail as <case>` to name the conversion | A symbol a reader has to know; with the words, every failure exit contains `fail` |
-| `??` for a default and `?.` through absence | September → earlier drafts of this proposal | A named decision: `if`, `else if`, `else`, or `conditional` | Each hides a branch that tests, traces and debuggers cannot name |
+| `??` for a default and `?.` through absence | September → earlier drafts of this proposal | A named decision: `if` and `else`, or `conditional` | Each hides a branch that tests, traces and debuggers cannot name |
 | `t?` for an optional type | September → earlier drafts of this proposal | `optional<t>` | Spelled as the type it is, as `optional.some` and `optional.none` already were |
 | `public` on any declaration | Earlier drafts of this proposal | `public facet`, as in the toolchain; private by default | Visibility is written in one place per group, and a module's surface reads as a list of facets |
 | A case written `.case` where the type is known | September → earlier drafts of this proposal | `type_name.case` everywhere, as YAPL had it (`color.red`) | The reader never infers which type a case belongs to |

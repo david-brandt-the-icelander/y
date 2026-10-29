@@ -112,12 +112,13 @@ public facet rounds:
       playing otherwise, as outcome.
     ------------------------------------------------------------------------------------------------------------
     function outcome_of(game) returns standing:
-        if hanged = (game.misses.count() == game_rules.allowed_misses):
-            return standing = outcome.lost
-        else if solved = game.word.runes().to_set().is_subset_of(game.hits):
-            return standing = outcome.won
-        else undecided:
-            return standing = outcome.playing
+        conditional judged:
+            condition judged.hanged = (game.misses.count() == game_rules.allowed_misses):
+                return standing = outcome.lost
+            condition judged.solved = game.word.runes().to_set().is_subset_of(game.hits):
+                return standing = outcome.won
+            else judged.undecided:
+                return standing = outcome.playing
 
 
     ------------------------------------------------------------------------------------------------------------
@@ -137,21 +138,22 @@ public facet rounds:
         trimmed = line.trim()
         letter = trimmed.to_lowercase().single_rune()
 
-        if nothing_typed = trimmed.is_empty():
-            fail guess_error.empty
-        else if not_one_rune = (letter == optional.none):
-            fail guess_error.not_one_letter
-        -- In the branches below, `letter` is a `rune`: `not_one_rune` narrows it.
-        else if not_a_letter = (not letter.is_ascii_lowercase()):
-            fail guess_error.not_one_letter
-        else if repeated = (game.hits.contains(letter) or game.misses.contains(letter)):
-            fail guess_error.already_guessed
-        else if in_word = game.word.runes().contains(letter):
-            game.hits.insert(letter)
-            return answer = verdict.hit
-        else not_in_word:
-            game.misses.push(letter)
-            return answer = verdict.miss
+        conditional judged:
+            condition judged.nothing_typed = trimmed.is_empty():
+                fail guess_error.empty
+            condition judged.not_one_rune = (letter == optional.none):
+                fail guess_error.not_one_letter
+            -- In the conditions below, `letter` is a `rune`: `judged.not_one_rune` narrows it.
+            condition judged.not_a_letter = (not letter.is_ascii_lowercase()):
+                fail guess_error.not_one_letter
+            condition judged.repeated = (game.hits.contains(letter) or game.misses.contains(letter)):
+                fail guess_error.already_guessed
+            condition judged.in_word = game.word.runes().contains(letter):
+                game.hits.insert(letter)
+                return answer = verdict.hit
+            else judged.not_in_word:
+                game.misses.push(letter)
+                return answer = verdict.miss
 
 
 -- What the player sees of a game.

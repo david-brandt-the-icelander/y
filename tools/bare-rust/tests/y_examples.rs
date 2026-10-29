@@ -347,6 +347,12 @@ fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
             }
         }
     }
+    // `if` chooses between two ways; a ladder of `else if`s is a lint error, written as a `conditional` (Y § 3.5)
+    for y in ["y/src/hangman.y", "y/src/main.y", "y/src/hangman.test.y"] {
+        for (n, line) in read(&dir.join(y)).lines().enumerate() {
+            assert!(!line.trim_start().starts_with("else if "), "{y}:{}: an `else if` ladder, not a `conditional`", n + 1);
+        }
+    }
     // no `else` goes without a name
     for y in ["y/src/hangman.y", "y/src/main.y", "y/src/hangman.test.y"] {
         assert!(!read(&dir.join(y)).lines().any(|l| l.trim() == "else:"), "{y}: an `else` without a name");
