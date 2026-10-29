@@ -310,6 +310,26 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
             assert!(above.is_empty() || above.ends_with(':'), "{y}:{}: no blank line before `{t}`", i + 1);
         }
     }
+    // a blank line comes before every comment line, unless the line above is a comment too or opens a block; the
+    // lines of a documentation block are not comments in this sense (a lint rule of Y § 3.1)
+    for y in &all {
+        let lines: Vec<String> = read(&dir.join(y)).lines().map(str::to_string).collect();
+        let is_rule = |t: &str| t.len() >= 3 && t.chars().all(|c| c == '-');
+        let mut inside = false;
+        for (i, l) in lines.iter().enumerate() {
+            let t = l.trim();
+            if is_rule(t) {
+                inside = !inside;
+                continue;
+            }
+            if inside || !t.starts_with("--") || i == 0 {
+                continue;
+            }
+            let above = lines[i - 1].trim();
+            let allowed = above.is_empty() || (above.starts_with("--") && !is_rule(above)) || above.ends_with(':');
+            assert!(allowed, "{y}:{}: no blank line before the comment `{t}`", i + 1);
+        }
+    }
     // the tests cover every outcome: each named branch, and each failure case its function documents (Y § 3.14)
     let mut outcomes = listed.clone();
     let mut failures = Vec::new();

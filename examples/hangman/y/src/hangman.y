@@ -11,6 +11,7 @@ public facet setup:
     constants game_rules:
         -- The words a game chooses from, separated by spaces.
         word_list is string = "gallows noose scaffold hangman trapdoor verdict alphabet puzzle riddle lantern"
+
         -- How many wrong guesses a player may make. The last of them hangs the man.
         allowed_misses is count<rune> = 6
 
@@ -143,6 +144,7 @@ public facet rounds:
                 fail guess_error.empty
             condition judged.not_one_rune = (letter == optional.none):
                 fail guess_error.not_one_letter
+
             -- In the conditions below, `letter` is a `rune`: `judged.not_one_rune` narrows it.
             condition judged.not_a_letter = (not letter.is_ascii_lowercase()):
                 fail guess_error.not_one_letter

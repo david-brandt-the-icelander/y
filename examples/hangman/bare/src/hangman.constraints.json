@@ -34,13 +34,13 @@
         {
           "kind": "invariant",
           "text": "invariant letters_only : self.0 matches /^[a-z]*$/",
-          "source": "y/src/hangman.y:24",
+          "source": "y/src/hangman.y:25",
           "status": { "lifted": "src/hangman.rs: Word::new" }
         },
         {
           "kind": "invariant",
           "text": "invariant long_enough : length(self.0) >= 4",
-          "source": "y/src/hangman.y:25",
+          "source": "y/src/hangman.y:26",
           "status": { "lifted": "src/hangman.rs: Word::new" }
         }
       ]
@@ -51,7 +51,7 @@
       "visible": "public",
       "params": [{ "name": "value", "type": "text" }],
       "result": { "type": "Word", "fails": "ConstraintViolation" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:23" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:24" }]
     },
     {
       "kind": "function",
@@ -90,7 +90,7 @@
         { "name": "text", "type": "ref<text>", "access": { "rights": "read", "guarantee": "readers" } }
       ],
       "result": { "type": "list<Word> as 'Vec'", "fails": "WordListError" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:45" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:46" }]
     },
     { "kind": "module", "name": "hangman_example::hangman::rounds", "visible": "public" },
     {
@@ -124,7 +124,7 @@
         {
           "kind": "invariant",
           "text": "invariant within_allowance : size(self.misses) <= ALLOWED_MISSES",
-          "source": "y/src/hangman.y:72",
+          "source": "y/src/hangman.y:73",
           "status": { "lifted": "src/hangman.rs: guess, after the one write to misses" }
         }
       ]
@@ -153,7 +153,7 @@
       "visible": "public",
       "params": [{ "name": "word", "type": "Word" }],
       "result": { "type": "Game" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:102" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:103" }]
     },
     {
       "kind": "function",
@@ -163,7 +163,7 @@
         { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
       ],
       "result": { "type": "Outcome" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:114" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:115" }]
     },
     {
       "kind": "function",
@@ -178,13 +178,13 @@
         {
           "kind": "require",
           "text": "require still_playing : outcome_of(game) is Playing",
-          "source": "y/src/hangman.y:137",
+          "source": "y/src/hangman.y:138",
           "status": { "lifted": "src/hangman.rs: y_runtime::require" }
         },
-        { "kind": "effects", "text": "no io", "source": "y/src/hangman.y:136" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/hangman.y:136" },
-        { "kind": "effects", "text": "no randomness", "source": "y/src/hangman.y:136" },
-        { "kind": "access", "text": "mutates only game.hits, game.misses", "source": "y/src/hangman.y:136" }
+        { "kind": "effects", "text": "no io", "source": "y/src/hangman.y:137" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/hangman.y:137" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/hangman.y:137" },
+        { "kind": "access", "text": "mutates only game.hits, game.misses", "source": "y/src/hangman.y:137" }
       ]
     },
     { "kind": "module", "name": "hangman_example::hangman::display", "visible": "public" },
@@ -196,7 +196,7 @@
         { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
       ],
       "result": { "type": "text" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:168" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:170" }]
     },
     {
       "kind": "function",
@@ -208,10 +208,10 @@
         {
           "kind": "require",
           "text": "require within_allowance : misses <= ALLOWED_MISSES",
-          "source": "y/src/hangman.y:184",
+          "source": "y/src/hangman.y:186",
           "status": { "lifted": "src/hangman.rs: y_runtime::require" }
         },
-        { "kind": "effects", "text": "pure", "source": "y/src/hangman.y:183" }
+        { "kind": "effects", "text": "pure", "source": "y/src/hangman.y:185" }
       ]
     },
     {
@@ -226,7 +226,7 @@
         }
       ],
       "result": { "type": "Rune" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:211" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:213" }]
     },
     {
       "kind": "function",
@@ -237,7 +237,7 @@
         { "name": "mark", "type": "ref<text>", "access": { "rights": "read", "guarantee": "readers" } }
       ],
       "result": { "type": "text" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:227" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:229" }]
     },
     { "kind": "module", "name": "hangman_example::hangman::console_play", "visible": "public" },
     {
@@ -296,11 +296,11 @@
         {
           "kind": "require",
           "text": "require has_words : size(words) > 0",
-          "source": "y/src/hangman.y:255",
+          "source": "y/src/hangman.y:257",
           "status": { "lifted": "src/hangman.rs: y_runtime::require" }
         },
-        { "kind": "effects", "text": "effects only console, random", "source": "y/src/hangman.y:254" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/hangman.y:254" }
+        { "kind": "effects", "text": "effects only console, random", "source": "y/src/hangman.y:256" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/hangman.y:256" }
       ]
     }
   ]

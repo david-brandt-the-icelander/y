@@ -179,6 +179,7 @@ test filling_the_board_ends_the_game
         mutable game = moving(direction.left)
         game.head := cell(column: 1, row: 0)
         game.tail := [corner]
+
         -- Every cell but the corner and the one beside it.
         rest = free_cells(game)
         game.tail := rest
