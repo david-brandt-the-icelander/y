@@ -24,11 +24,11 @@ can win, but only by never making a mistake.
 
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
-| Y source | `y/src/nim.y`, `y/src/nim.test.y`, `y/src/main.y` | 314, 375, 16 | hand |
-| Bare bodies | `bare/src/nim.brs`, `bare/src/nim/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 291, 296, 21, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
-| Constraint files | `bare/src/*.constraints.json` (57 subjects, 24 clauses) | 414 | `strip`, plus the clauses and status the Y lowering adds, then `bare-rust libfmt` |
-| Y facts | `bare/y-facts.json` | 889 | the same, from the Y source and the bare bodies |
-| Rust | `src/nim.rs`, `src/nim/tests.rs`, `src/main.rs`, `src/lib.rs` | 291, 296, 21, 3 | `bare-rust weave`, which gives back the hand-written Rust exactly |
+| Y source | `y/src/nim.y`, `y/src/nim.test.y`, `y/src/main.y` | 314, 678, 16 | hand |
+| Bare bodies | `bare/src/nim.brs`, `bare/src/nim/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 291, 517, 21, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
+| Constraint files | `bare/src/*.constraints.json` (87 subjects, 24 clauses) | 492 | `strip`, plus the clauses and status the Y lowering adds, then `bare-rust libfmt` |
+| Y facts | `bare/y-facts.json` | 1067 | the same, from the Y source and the bare bodies |
+| Rust | `src/nim.rs`, `src/nim/tests.rs`, `src/main.rs`, `src/lib.rs` | 291, 517, 21, 3 | `bare-rust weave`, which gives back the hand-written Rust exactly |
 
 Hangman's bare bodies were written first and woven into Rust. Nim went the other way: the Rust was written as the
 lowering of the Y source, `strip` made the bare bodies and the constraint files from it, and `weave` of those gives the
@@ -63,14 +63,17 @@ Beyond what Hangman assumed:
 
 ## Checks
 
-- **`bare-rust weave`** of `bare/`: 4 files woven, 0 weave errors, 26 `mut` derived, 0 holes undetermined, 0 warnings.
+- **`bare-rust weave`** of `bare/`: 4 files woven, 0 weave errors, 41 `mut` derived, 0 holes undetermined, 0 warnings.
   The woven Rust is identical to the hand-written Rust it was stripped from.
-- **`cargo test`:** the 30 lowered Y tests pass, among them a whole game won by perfect play, one lost by careless play,
+- **`cargo test`:** the 60 lowered Y tests pass, among them a whole game won by perfect play, one lost by careless play,
   and every wrong move the player can type.
 - **`cargo clippy --all-targets`:** no warnings, here and in `../y-runtime`.
 - **Coverage:** the tests cover all 57 execution paths of the module that need a test (Y § 3.14). Its 13 functions have
   62 paths through 16 decisions and their `or fail` calls; 5 end in `fail not_reachable`. Each test was also run alone
   with every decision and loop instrumented, to check that it takes each path it declares.
+- **One path per test:** 57 of the 60 tests each cover one path, and their `when` is one call of that path's
+  function (Y § 3.14). The other 3 cover none: they check what the paths do not tell apart, such as which failure
+  comes back.
 - **`tools/bare-rust/tests/y_examples.rs`** runs the same checks on Nim as on Hangman: weave and strip in step, valid
   constraint files, facts that agree with the source, full path coverage, and Y's layout and naming rules (blank lines,
   named decisions, no `else if`, no needless parentheses, documentation roles grouped, only `mutable` names change).

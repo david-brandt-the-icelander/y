@@ -144,6 +144,10 @@ struct Fake {
     written: Vec<String>,
     /// How many pictures have been drawn.
     pictures: u32,
+    /// How many rectangles have been filled.
+    fills: u32,
+    /// How many circles have been filled.
+    circles: u32,
 }
 
 /// A window on the screen, or a fake of it for tests: it draws, and reads the keys pressed.
@@ -174,7 +178,7 @@ impl Window {
     /// A fake window for a test, in whose frames the player presses keys and clicks: Y's `fake window(frames: …)` with
     /// `frame(keys: …, clicks: …)`. After the last frame, the player asks to close the window.
     pub fn fake_frames(frames: Vec<Frame>) -> Window {
-        Window { fake: Some(Fake { frames, shown: 0, written: Vec::new(), pictures: 0 }) }
+        Window { fake: Some(Fake { frames, shown: 0, written: Vec::new(), pictures: 0, fills: 0, circles: 0 }) }
     }
 
     /// Fills the whole window with a colour.
@@ -186,15 +190,17 @@ impl Window {
 
     /// Fills a rectangle, in pixels from the top left.
     pub fn fill(&mut self, x: i32, y: i32, width: i32, height: i32, colour: Colour) {
-        if self.fake.is_none() {
-            macroquad::shapes::draw_rectangle(x as f32, y as f32, width as f32, height as f32, colour.drawn());
+        match &mut self.fake {
+            Some(fake) => fake.fills += 1,
+            None => macroquad::shapes::draw_rectangle(x as f32, y as f32, width as f32, height as f32, colour.drawn()),
         }
     }
 
     /// Fills a circle around its centre, in pixels from the top left.
     pub fn circle(&mut self, x: i32, y: i32, radius: i32, colour: Colour) {
-        if self.fake.is_none() {
-            macroquad::shapes::draw_circle(x as f32, y as f32, radius as f32, colour.drawn());
+        match &mut self.fake {
+            Some(fake) => fake.circles += 1,
+            None => macroquad::shapes::draw_circle(x as f32, y as f32, radius as f32, colour.drawn()),
         }
     }
 
@@ -264,6 +270,16 @@ impl Window {
     /// How many frames a fake window has shown.
     pub fn frames_shown(&self) -> u32 {
         self.fake.as_ref().map_or(0, |fake| fake.shown as u32)
+    }
+
+    /// How many rectangles a fake window has been given to fill.
+    pub fn fills(&self) -> u32 {
+        self.fake.as_ref().map_or(0, |fake| fake.fills)
+    }
+
+    /// How many circles a fake window has been given to fill.
+    pub fn circles(&self) -> u32 {
+        self.fake.as_ref().map_or(0, |fake| fake.circles)
     }
 
     /// How many pictures a fake window has been given to draw.

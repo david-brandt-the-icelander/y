@@ -532,7 +532,34 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
         let rust_covers: Vec<&str> = comment.strip_prefix("y: covers").map_or(vec![], |c| c.split(',').map(str::trim).collect());
         assert_eq!(rust_covers, covers, "{test}: the Rust comment and y-facts.json cover different paths");
         assert!(!covers.iter().any(|c| c.ends_with(".else")), "{test}: an outcome is named, never `.else`");
+        // a test covers at most one path, and its `when` is the one call of that path's function that takes it (Y § 3.14)
+        assert!(covers.len() <= 1, "{test}: covers {} paths, not one", covers.len());
+        if let Some(path) = covers.first() {
+            let function = path.split(" > ").next().unwrap();
+            let when = when_of(&read(&dir.join(test_module["y"].as_str().unwrap())), test);
+            assert_eq!(when.len(), 1, "{test}: `when` holds {} statements, not the one call: {when:?}", when.len());
+            let called = when[0].contains(&format!("{function}(")) && !when[0].contains(&format!(".{function}("));
+            assert!(called, "{test}: covers a path of `{function}`, but `when` does not call it: `{}`", when[0]);
+        }
     }
+}
+
+/// The statements of a test's `when` section, each with the lines it continues onto.
+fn when_of(source: &str, test: &str) -> Vec<String> {
+    let lines: Vec<&str> = source.lines().collect();
+    let start = lines.iter().position(|l| l.starts_with(&format!("test {test}")) && l[5 + test.len()..].trim_start_matches(':').is_empty()).unwrap();
+    let begin = start + lines[start..].iter().position(|l| l.trim() == "when:").unwrap_or_else(|| panic!("{test}: no `when`"));
+    let body: Vec<&str> = lines[begin + 1..].iter().copied().take_while(|l| l.starts_with("        ") || l.trim().is_empty()).filter(|l| !l.trim().is_empty() && !l.trim().starts_with("--")).collect();
+    let indent = body.first().map_or(0, |l| l.len() - l.trim_start().len());
+    let mut out: Vec<String> = vec![];
+    for l in body {
+        if l.len() - l.trim_start().len() == indent {
+            out.push(l.trim().to_string());
+        } else {
+            out.last_mut().unwrap().push_str(&format!(" {}", l.trim()));
+        }
+    }
+    out
 }
 
 /// A function of the path rules' own: a loop that may never run, a comparison of numbers on each side, and a `compare`

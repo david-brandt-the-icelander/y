@@ -1565,8 +1565,8 @@ Tests are part of the language, because the compiler must know what a test claim
   YAPL's tests could. Tests address a function through its paths and its faults, so they survive refactoring
   of its body that keeps its decisions.
 
-**Shape.** A test has a documented purpose, a `covers` list, and fixed sections in a fixed order. Only `when` and
-`then` are mandatory:
+**Shape.** A test has a documented purpose, the one path it covers, if any, and fixed sections in a fixed order. Only
+`when` and `then` are mandatory:
 
 | Section | Holds |
 | --- | --- |
@@ -1605,10 +1605,13 @@ pass of a loop. Y tests paths.
   function's `ensures`, a refined type, an `assert`, a count of a list of constants. A path that this contradicts is not
   a path. That is what the compiler's proof that a loop runs (§ 3.5) is made of.
 - A path that ends in `fail not_reachable` or `fail not_implemented` needs no test.
-- A test lists the paths it covers: `covers own_pieces > placed'many > mine, own_pieces > no_pieces`. The runner fails
-  the test if it did not take every one of them. Every outcome lies on some path, so covering every path covers every
-  outcome too, and a test lists only paths.
-- A test contributes coverage only for what it declares. This is the April 2026 rule, and it keeps coverage an auditable
+- **A test covers at most one path**, and names it: `covers own_pieces > placed'many > mine`. Its `when` calls that
+  path's function, and the runner fails the test if the call did not take the path. A test is then about one way
+  through one function, its name and its checks say what that way does, and a failing test names the path that broke.
+  Every outcome lies on some path, so covering every path covers every outcome too, and a test names only a path.
+- A test may cover no path. It then checks what paths do not tell apart, such as which failure a single `or fail` call
+  passes on, or a whole run through several functions; it counts toward no function's coverage.
+- A test contributes coverage only for the path it declares. This is the April 2026 rule, and it keeps coverage an auditable
   claim rather than an accident.
 - **A release build requires every path of every function to be covered by at least one test that declares it, or to
   end in `fail not_reachable` or `fail not_implemented`.** The toolchain reports paths that nothing takes, and paths

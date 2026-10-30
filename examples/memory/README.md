@@ -45,11 +45,11 @@ beneath the board, and this repository holds none of them.
 
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
-| Y source | `y/src/memory.y`, `y/src/memory.test.y`, `y/src/main.y` | 519, 556, 32 | hand |
-| Bare bodies | `bare/src/memory.brs`, `bare/src/memory/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 490, 446, 56, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
-| Constraint files | `bare/src/*.constraints.json` (106 subjects, 47 clauses) | 841 | `strip`, plus the clauses and status the Y lowering adds, then `bare-rust libfmt` |
-| Y facts | `bare/y-facts.json` | 1054 | the same, from the Y source and the bare bodies |
-| Rust | `src/memory.rs`, `src/memory/tests.rs`, `src/main.rs`, `src/lib.rs` | 490, 446, 56, 3 | `bare-rust weave`, which gives back the hand-written Rust exactly |
+| Y source | `y/src/memory.y`, `y/src/memory.test.y`, `y/src/main.y` | 519, 857, 32 | hand |
+| Bare bodies | `bare/src/memory.brs`, `bare/src/memory/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 490, 671, 56, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
+| Constraint files | `bare/src/*.constraints.json` (131 subjects, 47 clauses) | 943 | `strip`, plus the clauses and status the Y lowering adds, then `bare-rust libfmt` |
+| Y facts | `bare/y-facts.json` | 1198 | the same, from the Y source and the bare bodies |
+| Rust | `src/memory.rs`, `src/memory/tests.rs`, `src/main.rs`, `src/lib.rs` | 490, 671, 56, 3 | `bare-rust weave`, which gives back the hand-written Rust exactly |
 
 The network is a capability. It comes from [`../y-http`](../y-http/), a stand-in for a Y standard module
 `standard.http` that gets text over HTTPS with [ureq](https://github.com/algesten/ureq). It is a crate of its own, so
@@ -97,9 +97,9 @@ Beyond what Hangman, Nim and Snake assumed:
 
 ## Checks
 
-- **`bare-rust weave`** of `bare/`: 4 files woven, 0 weave errors, 95 `mut` derived, 0 holes undetermined, 0 warnings.
+- **`bare-rust weave`** of `bare/`: 4 files woven, 0 weave errors, 132 `mut` derived, 0 holes undetermined, 0 warnings.
   The woven Rust is identical to the hand-written Rust it was stripped from.
-- **`cargo test`:** the 31 lowered Y tests pass. They cover the rules, the scoring, the banner, setting up a board
+- **`cargo test`:** the 55 lowered Y tests pass. They cover the rules, the scoring, the banner, setting up a board
   through a fake site, and each way the setup fails. Two tests run `play` with a fake window: one wins a whole game,
   clicking each pair in turn, and starts another; in the other, a pair that does not match shows for a second and turns
   back.
@@ -107,6 +107,9 @@ Beyond what Hangman, Nim and Snake assumed:
 - **Coverage:** the tests cover all 52 execution paths of the module (Y § 3.14), through the 19 decisions and the
   `or fail` calls of its 17 functions. None ends in `fail not_reachable`. Each test was also run alone with every
   decision and loop instrumented, to check that it takes each path it declares.
+- **One path per test:** 52 of the 55 tests each cover one path, and their `when` is one call of that path's
+  function (Y § 3.14). The other 3 cover none: they check what the paths do not tell apart, such as which failure
+  comes back.
 - **`tools/bare-rust/tests/y_examples.rs`** runs the same checks on Memory as on the other examples, and a new one: each
   `within` in `deadlines` starts its deadline in the bare body, and passes it to each wait inside it.
 - **The window itself:** under a virtual X display, the game fetched its pictures, drew the board, turned over the cards

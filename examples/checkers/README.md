@@ -79,11 +79,11 @@ than 100, and all of it times the level's weight. A win at the Club level in 30 
 
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
-| Y source | `y/src/checkers.y`, `y/src/checkers.test.y`, `y/src/main.y` | 1300, 811, 23 | hand |
-| Bare bodies | `bare/src/checkers.brs`, `bare/src/checkers/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 1146, 653, 30, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
-| Constraint files | `bare/src/*.constraints.json` (170 subjects, 103 clauses) | 1546 | `strip`, plus the clauses and status the Y lowering adds, then `bare-rust libfmt` |
-| Y facts | `bare/y-facts.json` | 2731 | the same, from the Y source and the bare bodies |
-| Rust | `src/checkers.rs`, `src/checkers/tests.rs`, `src/main.rs`, `src/lib.rs` | 1146, 653, 30, 3 | `bare-rust weave`, which gives back the hand-written Rust exactly |
+| Y source | `y/src/checkers.y`, `y/src/checkers.test.y`, `y/src/main.y` | 1300, 2274, 23 | hand |
+| Bare bodies | `bare/src/checkers.brs`, `bare/src/checkers/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 1146, 1703, 30, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
+| Constraint files | `bare/src/*.constraints.json` (311 subjects, 103 clauses) | 2199 | `strip`, plus the clauses and status the Y lowering adds, then `bare-rust libfmt` |
+| Y facts | `bare/y-facts.json` | 3540 | the same, from the Y source and the bare bodies |
+| Rust | `src/checkers.rs`, `src/checkers/tests.rs`, `src/main.rs`, `src/lib.rs` | 1146, 1703, 30, 3 | `bare-rust weave`, which gives back the hand-written Rust exactly |
 
 The window, which now also draws circles, comes from [`../y-window`](../y-window/), and the randomness from
 [`../y-runtime`](../y-runtime/).
@@ -126,18 +126,20 @@ Beyond what the earlier examples assumed:
 
 ## Checks
 
-- **`bare-rust weave`** of `bare/`: 4 files woven, 0 weave errors, 105 `mut` derived, 0 holes undetermined, 0 warnings.
+- **`bare-rust weave`** of `bare/`: 4 files woven, 0 weave errors, 159 `mut` derived, 0 holes undetermined, 0 warnings.
   The woven Rust is identical to the hand-written Rust it was stripped from.
-- **`cargo test`:** the 43 lowered Y tests pass. They cover the rules (steps, forced captures, chains of jumps, crowning,
-  kings, winning, losing, drawing), the scoring, the worth of a position, both parts of the computer's search, the
-  drawing, and play through a fake window: choosing a level, selecting a man, moving him, the computer's reply, and
-  Space after a game.
+- **`cargo test`:** the 184 lowered Y tests pass, each covering one path. They cover the rules (steps, forced captures,
+  chains of jumps, crowning, kings, winning, losing, drawing), the scoring, the worth of a position, both parts of the
+  computer's search, the drawing, and play through a fake window: choosing a level, selecting a man, moving him, the
+  computer's reply, and Space after a game.
 - **`cargo clippy --all-targets`:** no warnings, here and in `../y-window` and `../y-runtime`.
 - **Coverage:** the tests cover all 180 execution paths of the module that need a test (Y § 3.14). Its 51 functions
   have 184 paths through 68 decisions; 4 end in `fail not_reachable`. Each test was also run alone with every decision
-  and loop instrumented, to check that it takes each path it declares. The searches are tested with small budgets of
+  and loop instrumented, to check that it takes the path it declares. The searches are tested with small budgets of
   checks (1 to 2,100), chosen so that each path of the search is taken.
-- **`tools/bare-rust/tests/y_examples.rs`** runs the same checks on Checkers as on the other examples, the 17 copies
+- **One path per test:** each of the 184 tests covers one path, and its `when` is one call of that path's function
+  (Y § 3.14). Where two tests cover the same path, each checks something the other does not.
+- **`tools/bare-rust/tests/y_examples.rs`** runs the same checks on Checkers as on the other examples, the 10 copies
   among them.
 - **The window itself:** under a virtual X display, the game showed the levels, started a game at the Club level, marked
   the squares a clicked man could move to, moved him, showed the computer's reply with its squares marked, and wrote the
@@ -147,7 +149,7 @@ Beyond what the earlier examples assumed:
 
 - **A budget is a parameter that changes.** The checks are a `mutable` parameter of the recursive search, which every
   call spends from; it lowers to a `&mut u32`, and the constraint file says that it is all the search changes.
-- **Value semantics cost copies in Rust.** Most of the 17 copies are moves: a move taken from a list to apply, or to
+- **Value semantics cost copies in Rust.** Most of the 10 copies are moves: a move taken from a list to apply, or to
   return, while the list still holds it. Y passes values; Rust must `clone` where both go on being used.
 - **Path coverage asks for smaller functions.** `draw` had a path for each way its loops over the board, the pieces and
   the marks combine; it is now `draw_board`, `draw_pieces` and `draw_marks`, each with a few. `choose_level` and

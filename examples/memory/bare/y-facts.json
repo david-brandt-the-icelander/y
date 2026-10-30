@@ -816,238 +816,382 @@
   ],
   "tests": {
     "a_click_between_the_cards_chooses_nothing": {
-      "y": "y/src/memory.test.y:47",
+      "y": "y/src/memory.test.y:69",
       "rust": "memory_example::memory::tests::a_click_between_the_cards_chooses_nothing",
       "covers": [
-        "choosable > judged.off_cards",
-        "corner_of"
+        "choosable > judged.off_cards"
       ]
     },
-    "a_click_on_a_card_chooses_it": {
-      "y": "y/src/memory.test.y:60",
-      "rust": "memory_example::memory::tests::a_click_on_a_card_chooses_it",
+    "no_third_card_can_be_chosen_while_two_show": {
+      "y": "y/src/memory.test.y:82",
+      "rust": "memory_example::memory::tests::no_third_card_can_be_chosen_while_two_show",
       "covers": [
-        "choosable > judged.free",
-        "card_at > row > column'many > inside"
+        "choosable > judged.waiting"
       ]
     },
     "a_face_up_card_cannot_be_chosen_again": {
-      "y": "y/src/memory.test.y:73",
+      "y": "y/src/memory.test.y:97",
       "rust": "memory_example::memory::tests::a_face_up_card_cannot_be_chosen_again",
       "covers": [
         "choosable > judged.showing"
       ]
     },
+    "a_click_on_a_card_chooses_it": {
+      "y": "y/src/memory.test.y:111",
+      "rust": "memory_example::memory::tests::a_click_on_a_card_chooses_it",
+      "covers": [
+        "choosable > judged.free"
+      ]
+    },
+    "the_first_card_of_a_turn_turns_face_up": {
+      "y": "y/src/memory.test.y:124",
+      "rust": "memory_example::memory::tests::the_first_card_of_a_turn_turns_face_up",
+      "covers": [
+        "turn_over > turn.first"
+      ]
+    },
     "a_matching_pair_stays_face_up": {
-      "y": "y/src/memory.test.y:88",
+      "y": "y/src/memory.test.y:139",
       "rust": "memory_example::memory::tests::a_matching_pair_stays_face_up",
       "covers": [
-        "turn_over > turn.first",
         "turn_over > turn.matching"
       ]
     },
     "a_pair_that_does_not_match_costs_a_life": {
-      "y": "y/src/memory.test.y:106",
+      "y": "y/src/memory.test.y:157",
       "rust": "memory_example::memory::tests::a_pair_that_does_not_match_costs_a_life",
       "covers": [
-        "choosable > judged.waiting"
+        "turn_over > turn.different"
       ]
     },
     "two_cards_that_do_not_match_turn_back": {
-      "y": "y/src/memory.test.y:123",
+      "y": "y/src/memory.test.y:174",
       "rust": "memory_example::memory::tests::two_cards_that_do_not_match_turn_back",
       "covers": [
-        "turn_over > turn.different",
         "turn_back > number'many"
       ]
     },
-    "a_new_game_is_being_played": {
-      "y": "y/src/memory.test.y:140",
-      "rust": "memory_example::memory::tests::a_new_game_is_being_played",
-      "covers": [
-        "standing > judged.playing"
-      ]
-    },
     "finding_every_pair_wins": {
-      "y": "y/src/memory.test.y:153",
+      "y": "y/src/memory.test.y:191",
       "rust": "memory_example::memory::tests::finding_every_pair_wins",
       "covers": [
         "standing > judged.won"
       ]
     },
     "losing_every_life_loses": {
-      "y": "y/src/memory.test.y:167",
+      "y": "y/src/memory.test.y:205",
       "rust": "memory_example::memory::tests::losing_every_life_loses",
       "covers": [
         "standing > judged.lost"
       ]
     },
+    "a_new_game_is_being_played": {
+      "y": "y/src/memory.test.y:219",
+      "rust": "memory_example::memory::tests::a_new_game_is_being_played",
+      "covers": [
+        "standing > judged.playing"
+      ]
+    },
+    "a_won_game_scores_lives_and_seconds": {
+      "y": "y/src/memory.test.y:232",
+      "rust": "memory_example::memory::tests::a_won_game_scores_lives_and_seconds",
+      "covers": [
+        "score > won"
+      ]
+    },
     "an_unfinished_game_scores_its_pairs": {
-      "y": "y/src/memory.test.y:181",
+      "y": "y/src/memory.test.y:249",
       "rust": "memory_example::memory::tests::an_unfinished_game_scores_its_pairs",
       "covers": [
         "score > unfinished"
       ]
     },
-    "a_quick_win_scores_lives_and_seconds": {
-      "y": "y/src/memory.test.y:196",
-      "rust": "memory_example::memory::tests::a_quick_win_scores_lives_and_seconds",
+    "a_game_under_par_scores_its_seconds": {
+      "y": "y/src/memory.test.y:264",
+      "rust": "memory_example::memory::tests::a_game_under_par_scores_its_seconds",
       "covers": [
-        "score > won",
         "time_bonus > quick"
       ]
     },
-    "a_slow_win_scores_no_seconds": {
-      "y": "y/src/memory.test.y:213",
-      "rust": "memory_example::memory::tests::a_slow_win_scores_no_seconds",
+    "a_game_exactly_on_par_scores_no_seconds": {
+      "y": "y/src/memory.test.y:273",
+      "rust": "memory_example::memory::tests::a_game_exactly_on_par_scores_no_seconds",
+      "covers": [
+        "time_bonus > slow'eq"
+      ]
+    },
+    "a_game_over_par_scores_no_seconds": {
+      "y": "y/src/memory.test.y:282",
+      "rust": "memory_example::memory::tests::a_game_over_par_scores_no_seconds",
       "covers": [
         "time_bonus > slow'gt"
       ]
     },
-    "the_banner_says_how_the_game_stands": {
-      "y": "y/src/memory.test.y:229",
-      "rust": "memory_example::memory::tests::the_banner_says_how_the_game_stands",
+    "the_first_card_is_found": {
+      "y": "y/src/memory.test.y:291",
+      "rust": "memory_example::memory::tests::the_first_card_is_found",
       "covers": [
-        "banner > shown.playing",
-        "banner > shown.won",
+        "card_at > row > column > inside"
+      ]
+    },
+    "a_card_along_the_top_row_is_found": {
+      "y": "y/src/memory.test.y:300",
+      "rust": "memory_example::memory::tests::a_card_along_the_top_row_is_found",
+      "covers": [
+        "card_at > row > column'many > inside"
+      ]
+    },
+    "a_card_down_the_first_column_is_found": {
+      "y": "y/src/memory.test.y:309",
+      "rust": "memory_example::memory::tests::a_card_down_the_first_column_is_found",
+      "covers": [
+        "card_at > row'many > column > inside"
+      ]
+    },
+    "a_card_down_and_along_is_found": {
+      "y": "y/src/memory.test.y:318",
+      "rust": "memory_example::memory::tests::a_card_down_and_along_is_found",
+      "covers": [
+        "card_at > row'many > column'many > inside"
+      ]
+    },
+    "a_click_between_two_columns_finds_nothing": {
+      "y": "y/src/memory.test.y:327",
+      "rust": "memory_example::memory::tests::a_click_between_two_columns_finds_nothing",
+      "covers": [
+        "card_at > row'many > column'many > outside'1"
+      ]
+    },
+    "a_click_between_two_rows_finds_nothing": {
+      "y": "y/src/memory.test.y:336",
+      "rust": "memory_example::memory::tests::a_click_between_two_rows_finds_nothing",
+      "covers": [
+        "card_at > row'many > column'many > outside'2"
+      ]
+    },
+    "a_card_corner_is_a_step_per_row_and_column": {
+      "y": "y/src/memory.test.y:345",
+      "rust": "memory_example::memory::tests::a_card_corner_is_a_step_per_row_and_column",
+      "covers": [
+        "corner_of"
+      ]
+    },
+    "no_clicks_turn_nothing": {
+      "y": "y/src/memory.test.y:355",
+      "rust": "memory_example::memory::tests::no_clicks_turn_nothing",
+      "covers": [
+        "pick > no_clicks"
+      ]
+    },
+    "a_click_on_a_card_turns_it": {
+      "y": "y/src/memory.test.y:368",
+      "rust": "memory_example::memory::tests::a_click_on_a_card_turns_it",
+      "covers": [
+        "pick > place > chosen"
+      ]
+    },
+    "a_click_between_the_cards_is_ignored": {
+      "y": "y/src/memory.test.y:381",
+      "rust": "memory_example::memory::tests::a_click_between_the_cards_is_ignored",
+      "covers": [
+        "pick > place > ignored"
+      ]
+    },
+    "two_clicks_in_a_frame_turn_two_cards": {
+      "y": "y/src/memory.test.y:394",
+      "rust": "memory_example::memory::tests::two_clicks_in_a_frame_turn_two_cards",
+      "covers": [
+        "pick > place'many > chosen"
+      ]
+    },
+    "two_clicks_between_the_cards_are_ignored": {
+      "y": "y/src/memory.test.y:407",
+      "rust": "memory_example::memory::tests::two_clicks_between_the_cards_are_ignored",
+      "covers": [
+        "pick > place'many > ignored"
+      ]
+    },
+    "the_banner_says_how_a_game_is_going": {
+      "y": "y/src/memory.test.y:420",
+      "rust": "memory_example::memory::tests::the_banner_says_how_a_game_is_going",
+      "covers": [
+        "banner > shown.playing"
+      ]
+    },
+    "the_banner_says_a_game_is_won": {
+      "y": "y/src/memory.test.y:434",
+      "rust": "memory_example::memory::tests::the_banner_says_a_game_is_won",
+      "covers": [
+        "banner > shown.won"
+      ]
+    },
+    "the_banner_says_a_game_is_lost": {
+      "y": "y/src/memory.test.y:451",
+      "rust": "memory_example::memory::tests::the_banner_says_a_game_is_lost",
+      "covers": [
         "banner > shown.lost"
       ]
     },
+    "a_game_is_drawn_with_its_banner_and_credit": {
+      "y": "y/src/memory.test.y:467",
+      "rust": "memory_example::memory::tests::a_game_is_drawn_with_its_banner_and_credit",
+      "covers": [
+        "draw > row'many > column'many"
+      ]
+    },
+    "a_face_down_card_shows_no_picture": {
+      "y": "y/src/memory.test.y:483",
+      "rust": "memory_example::memory::tests::a_face_down_card_shows_no_picture",
+      "covers": [
+        "draw_card > shown.face_down"
+      ]
+    },
+    "a_face_up_card_shows_its_picture": {
+      "y": "y/src/memory.test.y:497",
+      "rust": "memory_example::memory::tests::a_face_up_card_shows_its_picture",
+      "covers": [
+        "draw_card > shown.face_up"
+      ]
+    },
+    "a_matched_card_shows_its_picture": {
+      "y": "y/src/memory.test.y:514",
+      "rust": "memory_example::memory::tests::a_matched_card_shows_its_picture",
+      "covers": [
+        "draw_card > shown.matched"
+      ]
+    },
+    "filling_a_card_fills_one_square": {
+      "y": "y/src/memory.test.y:532",
+      "rust": "memory_example::memory::tests::filling_a_card_fills_one_square",
+      "covers": [
+        "fill_card"
+      ]
+    },
+    "a_card_picture_is_drawn": {
+      "y": "y/src/memory.test.y:545",
+      "rust": "memory_example::memory::tests::a_card_picture_is_drawn",
+      "covers": [
+        "draw_picture"
+      ]
+    },
+    "fetching_is_shown_in_a_frame": {
+      "y": "y/src/memory.test.y:561",
+      "rust": "memory_example::memory::tests::fetching_is_shown_in_a_frame",
+      "covers": [
+        "show_fetching"
+      ]
+    },
     "a_new_game_deals_two_cards_of_each_picture": {
-      "y": "y/src/memory.test.y:253",
+      "y": "y/src/memory.test.y:574",
       "rust": "memory_example::memory::tests::a_new_game_deals_two_cards_of_each_picture",
       "covers": [
         "new_game > code'many > number'many"
       ]
     },
     "a_site_that_fails_fails_the_setup": {
-      "y": "y/src/memory.test.y:269",
+      "y": "y/src/memory.test.y:590",
       "rust": "memory_example::memory::tests::a_site_that_fails_fails_the_setup",
       "covers": [
         "new_game > code > drawing'fails"
       ]
     },
     "a_site_too_slow_fails_the_setup": {
-      "y": "y/src/memory.test.y:282",
+      "y": "y/src/memory.test.y:603",
       "rust": "memory_example::memory::tests::a_site_too_slow_fails_the_setup",
       "covers": []
     },
     "what_is_not_a_drawing_fails_the_setup": {
-      "y": "y/src/memory.test.y:294",
+      "y": "y/src/memory.test.y:615",
       "rust": "memory_example::memory::tests::what_is_not_a_drawing_fails_the_setup",
       "covers": [
         "new_game > code > made'fails"
       ]
     },
-    "a_whole_game_is_won_and_another_begun": {
-      "y": "y/src/memory.test.y:310",
-      "rust": "memory_example::memory::tests::a_whole_game_is_won_and_another_begun",
-      "covers": [
-        "play > open'many > moment.again",
-        "play > open'many > moment.over"
-      ]
-    },
-    "a_pair_that_does_not_match_is_shown_then_turned_back": {
-      "y": "y/src/memory.test.y:344",
-      "rust": "memory_example::memory::tests::a_pair_that_does_not_match_is_shown_then_turned_back",
-      "covers": [
-        "play > open'many > moment.hiding'2eq",
-        "pick > place > ignored"
-      ]
-    },
-    "a_site_that_fails_ends_play": {
-      "y": "y/src/memory.test.y:368",
-      "rust": "memory_example::memory::tests::a_site_that_fails_ends_play",
-      "covers": [
-        "show_fetching",
-        "play > game'1'fails"
-      ]
-    },
-    "a_site_too_slow_ends_play": {
-      "y": "y/src/memory.test.y:383",
-      "rust": "memory_example::memory::tests::a_site_too_slow_ends_play",
-      "covers": []
-    },
-    "what_is_not_a_drawing_ends_play": {
-      "y": "y/src/memory.test.y:397",
-      "rust": "memory_example::memory::tests::what_is_not_a_drawing_ends_play",
-      "covers": []
-    },
-    "a_click_between_two_rows_chooses_nothing": {
-      "y": "y/src/memory.test.y:413",
-      "rust": "memory_example::memory::tests::a_click_between_two_rows_chooses_nothing",
-      "covers": [
-        "card_at > row'many > column'many > outside'1",
-        "card_at > row'many > column'many > outside'2"
-      ]
-    },
-    "a_game_exactly_on_par_scores_no_seconds": {
-      "y": "y/src/memory.test.y:422",
-      "rust": "memory_example::memory::tests::a_game_exactly_on_par_scores_no_seconds",
-      "covers": [
-        "time_bonus > slow'eq"
-      ]
-    },
-    "two_clicks_in_a_frame_turn_two_cards": {
-      "y": "y/src/memory.test.y:431",
-      "rust": "memory_example::memory::tests::two_clicks_in_a_frame_turn_two_cards",
-      "covers": [
-        "card_at > row > column > inside",
-        "pick > place'many > chosen",
-        "pick > place'many > ignored"
-      ]
-    },
     "a_site_that_fails_partway_fails_the_setup": {
-      "y": "y/src/memory.test.y:447",
+      "y": "y/src/memory.test.y:630",
       "rust": "memory_example::memory::tests::a_site_that_fails_partway_fails_the_setup",
       "covers": [
         "new_game > code'many > drawing'fails"
       ]
     },
     "a_site_that_gives_a_bad_picture_partway_fails_the_setup": {
-      "y": "y/src/memory.test.y:460",
+      "y": "y/src/memory.test.y:643",
       "rust": "memory_example::memory::tests::a_site_that_gives_a_bad_picture_partway_fails_the_setup",
       "covers": [
         "new_game > code'many > made'fails"
       ]
     },
+    "a_site_that_fails_ends_play": {
+      "y": "y/src/memory.test.y:658",
+      "rust": "memory_example::memory::tests::a_site_that_fails_ends_play",
+      "covers": [
+        "play > game'1'fails"
+      ]
+    },
+    "a_site_too_slow_ends_play": {
+      "y": "y/src/memory.test.y:673",
+      "rust": "memory_example::memory::tests::a_site_too_slow_ends_play",
+      "covers": []
+    },
+    "what_is_not_a_drawing_ends_play": {
+      "y": "y/src/memory.test.y:687",
+      "rust": "memory_example::memory::tests::what_is_not_a_drawing_ends_play",
+      "covers": []
+    },
     "a_window_closed_while_fetching_ends_play": {
-      "y": "y/src/memory.test.y:475",
+      "y": "y/src/memory.test.y:703",
       "rust": "memory_example::memory::tests::a_window_closed_while_fetching_ends_play",
       "covers": [
         "play > closed_at_once'2"
       ]
     },
     "a_window_closed_after_one_frame_ends_play": {
-      "y": "y/src/memory.test.y:490",
+      "y": "y/src/memory.test.y:719",
       "rust": "memory_example::memory::tests::a_window_closed_after_one_frame_ends_play",
       "covers": [
-        "draw > row'many > column'many",
-        "draw_card > shown.face_down",
-        "fill_card",
-        "play > open > moment.picking",
-        "pick > no_clicks"
+        "play > open > moment.picking"
       ]
     },
-    "a_site_that_fails_for_the_next_game_ends_play": {
-      "y": "y/src/memory.test.y:507",
-      "rust": "memory_example::memory::tests::a_site_that_fails_for_the_next_game_ends_play",
+    "a_game_waits_for_clicks": {
+      "y": "y/src/memory.test.y:736",
+      "rust": "memory_example::memory::tests::a_game_waits_for_clicks",
       "covers": [
-        "card_at > row'many > column > inside",
-        "card_at > row'many > column'many > inside",
-        "draw_card > shown.matched",
-        "play > open'many > moment.again > game'2'fails"
+        "play > open'many > moment.picking"
+      ]
+    },
+    "a_pair_that_does_not_match_is_shown_then_turned_back": {
+      "y": "y/src/memory.test.y:753",
+      "rust": "memory_example::memory::tests::a_pair_that_does_not_match_is_shown_then_turned_back",
+      "covers": [
+        "play > open'many > moment.hiding'2eq"
       ]
     },
     "a_pair_shown_past_its_second_turns_back": {
-      "y": "y/src/memory.test.y:538",
+      "y": "y/src/memory.test.y:778",
       "rust": "memory_example::memory::tests::a_pair_shown_past_its_second_turns_back",
       "covers": [
-        "draw_card > shown.face_up",
-        "draw_picture",
-        "play > open'many > moment.hiding'2gt",
-        "play > open'many > moment.picking",
-        "pick > place > chosen"
+        "play > open'many > moment.hiding'2gt"
+      ]
+    },
+    "a_won_game_keeps_its_score": {
+      "y": "y/src/memory.test.y:799",
+      "rust": "memory_example::memory::tests::a_won_game_keeps_its_score",
+      "covers": [
+        "play > open'many > moment.over"
+      ]
+    },
+    "a_whole_game_is_won_and_another_begun": {
+      "y": "y/src/memory.test.y:820",
+      "rust": "memory_example::memory::tests::a_whole_game_is_won_and_another_begun",
+      "covers": [
+        "play > open'many > moment.again"
+      ]
+    },
+    "a_site_that_fails_for_the_next_game_ends_play": {
+      "y": "y/src/memory.test.y:842",
+      "rust": "memory_example::memory::tests::a_site_that_fails_for_the_next_game_ends_play",
+      "covers": [
+        "play > open'many > moment.again > game'2'fails"
       ]
     }
   }

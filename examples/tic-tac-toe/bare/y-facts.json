@@ -692,253 +692,424 @@
     }
   ],
   "tests": {
-    "a_move_is_read": {
+    "a_game_starts_with_an_empty_board_and_crosses_to_move": {
       "y": "y/src/tic_tac_toe.test.y:24",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_game_starts_with_an_empty_board_and_crosses_to_move",
+      "covers": [
+        "new_game"
+      ]
+    },
+    "a_move_is_read": {
+      "y": "y/src/tic_tac_toe.test.y:34",
       "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_move_is_read",
       "covers": [
         "read_move > a_number > judged.empty"
       ]
     },
     "a_word_is_not_a_move": {
-      "y": "y/src/tic_tac_toe.test.y:35",
+      "y": "y/src/tic_tac_toe.test.y:45",
       "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_word_is_not_a_move",
       "covers": [
         "read_move > not_a_number"
       ]
     },
+    "square_zero_is_not_on_the_board": {
+      "y": "y/src/tic_tac_toe.test.y:56",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::square_zero_is_not_on_the_board",
+      "covers": [
+        "read_move > a_number > judged.off_board'1"
+      ]
+    },
     "there_is_no_tenth_square": {
-      "y": "y/src/tic_tac_toe.test.y:46",
+      "y": "y/src/tic_tac_toe.test.y:67",
       "rust": "tic_tac_toe_example::tic_tac_toe::tests::there_is_no_tenth_square",
       "covers": [
         "read_move > a_number > judged.off_board'2"
       ]
     },
     "a_marked_square_is_taken": {
-      "y": "y/src/tic_tac_toe.test.y:57",
+      "y": "y/src/tic_tac_toe.test.y:78",
       "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_marked_square_is_taken",
       "covers": [
         "read_move > a_number > judged.taken"
       ]
     },
-    "the_players_take_turns": {
-      "y": "y/src/tic_tac_toe.test.y:68",
-      "rust": "tic_tac_toe_example::tic_tac_toe::tests::the_players_take_turns",
+    "a_move_puts_a_mark_and_passes_the_turn": {
+      "y": "y/src/tic_tac_toe.test.y:89",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_move_puts_a_mark_and_passes_the_turn",
       "covers": [
-        "place",
-        "other > current.cross",
-        "other > current.nought"
-      ]
-    },
-    "three_in_a_row_wins": {
-      "y": "y/src/tic_tac_toe.test.y:82",
-      "rust": "tic_tac_toe_example::tic_tac_toe::tests::three_in_a_row_wins",
-      "covers": [
-        "over",
-        "winner > line'many > three"
-      ]
-    },
-    "a_full_board_with_no_line_is_a_draw": {
-      "y": "y/src/tic_tac_toe.test.y:95",
-      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_full_board_with_no_line_is_a_draw",
-      "covers": [
-        "winner > line'many > not_three'2",
-        "winner > line'many > not_three'3",
-        "open_squares > number'many > marked",
-        "value_of > now.drawn"
-      ]
-    },
-    "the_computer_wins_rather_than_blocks": {
-      "y": "y/src/tic_tac_toe.test.y:108",
-      "rust": "tic_tac_toe_example::tic_tac_toe::tests::the_computer_wins_rather_than_blocks",
-      "covers": [
-        "computer_move > square'many > better",
-        "computer_move > square'many > no_better'lt",
-        "winner > line > three",
-        "value_of > now.lost",
-        "value_of > now.open > square",
-        "value_of > now.open > square'many"
-      ]
-    },
-    "the_computer_blocks_a_line": {
-      "y": "y/src/tic_tac_toe.test.y:120",
-      "rust": "tic_tac_toe_example::tic_tac_toe::tests::the_computer_blocks_a_line",
-      "covers": []
-    },
-    "the_board_shows_marks_and_numbers": {
-      "y": "y/src/tic_tac_toe.test.y:130",
-      "rust": "tic_tac_toe_example::tic_tac_toe::tests::the_board_shows_marks_and_numbers",
-      "covers": [
-        "shown > first'many > number'many",
-        "square_shown > held.empty",
-        "square_shown > held.marked"
-      ]
-    },
-    "a_player_who_plays_perfectly_draws": {
-      "y": "y/src/tic_tac_toe.test.y:141",
-      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_player_who_plays_perfectly_draws",
-      "covers": [
-        "computer_move > square'many > no_better'eq",
-        "play > playing'many > persons_turn",
-        "play > playing'many > computers_turn"
-      ]
-    },
-    "a_player_who_plays_carelessly_loses": {
-      "y": "y/src/tic_tac_toe.test.y:154",
-      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_player_who_plays_carelessly_loses",
-      "covers": [
-        "announce > won"
-      ]
-    },
-    "a_player_is_told_what_was_wrong": {
-      "y": "y/src/tic_tac_toe.test.y:166",
-      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_player_is_told_what_was_wrong",
-      "covers": [
-        "play > playing'many > persons_turn > persons_move'fails",
-        "persons_move > line_read > attempted.invalid",
-        "persons_move > closed",
-        "complaint > wrong.no_square",
-        "complaint > wrong.taken"
-      ]
-    },
-    "a_failing_console_ends_the_game": {
-      "y": "y/src/tic_tac_toe.test.y:182",
-      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_failing_console_ends_the_game",
-      "covers": [
-        "winner > line'many > not_three'1",
-        "open_squares > number'many > empty",
-        "play > playing > persons_turn > persons_move'fails",
-        "persons_move > typed'fails"
-      ]
-    },
-    "square_zero_is_not_on_the_board": {
-      "y": "y/src/tic_tac_toe.test.y:195",
-      "rust": "tic_tac_toe_example::tic_tac_toe::tests::square_zero_is_not_on_the_board",
-      "covers": [
-        "read_move > a_number > judged.off_board'1"
+        "place"
       ]
     },
     "the_computer_takes_the_last_square": {
-      "y": "y/src/tic_tac_toe.test.y:206",
+      "y": "y/src/tic_tac_toe.test.y:101",
       "rust": "tic_tac_toe_example::tic_tac_toe::tests::the_computer_takes_the_last_square",
       "covers": [
         "computer_move > square > better"
       ]
     },
-    "an_end_cannot_be_shown_without_the_board": {
-      "y": "y/src/tic_tac_toe.test.y:217",
-      "rust": "tic_tac_toe_example::tic_tac_toe::tests::an_end_cannot_be_shown_without_the_board",
+    "the_computer_wins_rather_than_blocks": {
+      "y": "y/src/tic_tac_toe.test.y:112",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::the_computer_wins_rather_than_blocks",
       "covers": [
-        "announce > write_line'1'fails"
+        "computer_move > square'many > better"
       ]
     },
-    "a_draw_cannot_be_announced": {
-      "y": "y/src/tic_tac_toe.test.y:230",
-      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_draw_cannot_be_announced",
+    "the_computer_blocks_a_line": {
+      "y": "y/src/tic_tac_toe.test.y:123",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::the_computer_blocks_a_line",
       "covers": [
-        "announce > drawn > write_line'2'fails"
+        "computer_move > square'many > no_better'lt"
       ]
     },
-    "a_win_cannot_be_announced": {
+    "of_squares_as_good_the_computer_takes_the_first": {
+      "y": "y/src/tic_tac_toe.test.y:134",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::of_squares_as_good_the_computer_takes_the_first",
+      "covers": [
+        "computer_move > square'many > no_better'eq"
+      ]
+    },
+    "a_line_of_three_ends_the_game": {
+      "y": "y/src/tic_tac_toe.test.y:145",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_line_of_three_ends_the_game",
+      "covers": [
+        "over"
+      ]
+    },
+    "a_full_board_ends_the_game": {
+      "y": "y/src/tic_tac_toe.test.y:156",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_full_board_ends_the_game",
+      "covers": [
+        "over"
+      ]
+    },
+    "a_new_game_is_not_over": {
+      "y": "y/src/tic_tac_toe.test.y:167",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_new_game_is_not_over",
+      "covers": [
+        "over"
+      ]
+    },
+    "a_line_along_the_top_row_is_found_first": {
+      "y": "y/src/tic_tac_toe.test.y:178",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_line_along_the_top_row_is_found_first",
+      "covers": [
+        "winner > line > three"
+      ]
+    },
+    "three_in_a_row_wins": {
+      "y": "y/src/tic_tac_toe.test.y:189",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::three_in_a_row_wins",
+      "covers": [
+        "winner > line'many > three"
+      ]
+    },
+    "an_empty_board_has_no_winner": {
+      "y": "y/src/tic_tac_toe.test.y:201",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::an_empty_board_has_no_winner",
+      "covers": [
+        "winner > line'many > not_three'1"
+      ]
+    },
+    "a_line_with_two_marks_that_differ_is_not_three": {
+      "y": "y/src/tic_tac_toe.test.y:212",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_line_with_two_marks_that_differ_is_not_three",
+      "covers": [
+        "winner > line'many > not_three'2"
+      ]
+    },
+    "two_in_a_row_are_not_three": {
+      "y": "y/src/tic_tac_toe.test.y:223",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::two_in_a_row_are_not_three",
+      "covers": [
+        "winner > line'many > not_three'3"
+      ]
+    },
+    "crosses_are_followed_by_noughts": {
+      "y": "y/src/tic_tac_toe.test.y:234",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::crosses_are_followed_by_noughts",
+      "covers": [
+        "other > current.cross"
+      ]
+    },
+    "noughts_are_followed_by_crosses": {
       "y": "y/src/tic_tac_toe.test.y:243",
-      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_win_cannot_be_announced",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::noughts_are_followed_by_crosses",
       "covers": [
-        "announce > won > write_line'3'fails"
+        "other > current.nought"
+      ]
+    },
+    "every_square_of_a_new_game_is_open": {
+      "y": "y/src/tic_tac_toe.test.y:252",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::every_square_of_a_new_game_is_open",
+      "covers": [
+        "open_squares > number'many > empty"
+      ]
+    },
+    "a_full_board_has_no_open_square": {
+      "y": "y/src/tic_tac_toe.test.y:263",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_full_board_has_no_open_square",
+      "covers": [
+        "open_squares > number'many > marked"
+      ]
+    },
+    "a_lost_game_costs_more_the_more_squares_are_left": {
+      "y": "y/src/tic_tac_toe.test.y:274",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_lost_game_costs_more_the_more_squares_are_left",
+      "covers": [
+        "value_of > now.lost"
+      ]
+    },
+    "a_full_board_with_no_line_is_a_draw": {
+      "y": "y/src/tic_tac_toe.test.y:285",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_full_board_with_no_line_is_a_draw",
+      "covers": [
+        "value_of > now.drawn"
+      ]
+    },
+    "a_last_square_that_makes_no_line_is_worth_nothing": {
+      "y": "y/src/tic_tac_toe.test.y:296",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_last_square_that_makes_no_line_is_worth_nothing",
+      "covers": [
+        "value_of > now.open > square"
+      ]
+    },
+    "a_line_that_can_be_made_at_once_is_worth_most": {
+      "y": "y/src/tic_tac_toe.test.y:307",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_line_that_can_be_made_at_once_is_worth_most",
+      "covers": [
+        "value_of > now.open > square'many"
+      ]
+    },
+    "the_board_shows_marks_and_numbers": {
+      "y": "y/src/tic_tac_toe.test.y:318",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::the_board_shows_marks_and_numbers",
+      "covers": [
+        "shown > first'many > number'many"
+      ]
+    },
+    "an_empty_square_shows_its_number": {
+      "y": "y/src/tic_tac_toe.test.y:329",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::an_empty_square_shows_its_number",
+      "covers": [
+        "square_shown > held.empty"
+      ]
+    },
+    "a_marked_square_shows_its_mark": {
+      "y": "y/src/tic_tac_toe.test.y:340",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_marked_square_shows_its_mark",
+      "covers": [
+        "square_shown > held.marked"
+      ]
+    },
+    "a_full_board_is_over_at_once": {
+      "y": "y/src/tic_tac_toe.test.y:351",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_full_board_is_over_at_once",
+      "covers": [
+        "play > over_at_once"
+      ]
+    },
+    "the_player_fills_the_last_square": {
+      "y": "y/src/tic_tac_toe.test.y:363",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::the_player_fills_the_last_square",
+      "covers": [
+        "play > playing > persons_turn"
+      ]
+    },
+    "the_computer_fills_the_last_square": {
+      "y": "y/src/tic_tac_toe.test.y:375",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::the_computer_fills_the_last_square",
+      "covers": [
+        "play > playing > computers_turn"
+      ]
+    },
+    "a_player_who_plays_perfectly_draws": {
+      "y": "y/src/tic_tac_toe.test.y:387",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_player_who_plays_perfectly_draws",
+      "covers": [
+        "play > playing'many > persons_turn"
+      ]
+    },
+    "a_player_who_plays_carelessly_loses": {
+      "y": "y/src/tic_tac_toe.test.y:399",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_player_who_plays_carelessly_loses",
+      "covers": [
+        "play > playing'many > computers_turn"
+      ]
+    },
+    "a_console_that_cannot_greet_ends_play": {
+      "y": "y/src/tic_tac_toe.test.y:411",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_greet_ends_play",
+      "covers": [
+        "play > write_line'1'fails"
+      ]
+    },
+    "a_failing_console_ends_the_game": {
+      "y": "y/src/tic_tac_toe.test.y:423",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_failing_console_ends_the_game",
+      "covers": [
+        "play > playing > persons_turn > persons_move'fails"
+      ]
+    },
+    "input_that_closes_after_a_wrong_move_ends_play": {
+      "y": "y/src/tic_tac_toe.test.y:435",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::input_that_closes_after_a_wrong_move_ends_play",
+      "covers": [
+        "play > playing'many > persons_turn > persons_move'fails"
+      ]
+    },
+    "a_console_that_cannot_tell_the_computers_last_move_ends_play": {
+      "y": "y/src/tic_tac_toe.test.y:447",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_tell_the_computers_last_move_ends_play",
+      "covers": [
+        "play > playing > computers_turn > write_line'2'fails"
+      ]
+    },
+    "a_console_that_cannot_tell_the_computers_move_ends_play": {
+      "y": "y/src/tic_tac_toe.test.y:459",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_tell_the_computers_move_ends_play",
+      "covers": [
+        "play > playing'many > computers_turn > write_line'2'fails"
+      ]
+    },
+    "a_console_that_cannot_announce_at_once_ends_play": {
+      "y": "y/src/tic_tac_toe.test.y:471",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_announce_at_once_ends_play",
+      "covers": [
+        "play > over_at_once > announce'fails"
+      ]
+    },
+    "a_console_that_cannot_announce_the_players_last_move_ends_play": {
+      "y": "y/src/tic_tac_toe.test.y:483",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_announce_the_players_last_move_ends_play",
+      "covers": [
+        "play > playing > persons_turn > announce'fails"
+      ]
+    },
+    "a_console_that_cannot_announce_the_computers_last_move_ends_play": {
+      "y": "y/src/tic_tac_toe.test.y:495",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_announce_the_computers_last_move_ends_play",
+      "covers": [
+        "play > playing > computers_turn > announce'fails"
+      ]
+    },
+    "a_console_that_cannot_announce_after_a_retyped_last_move_ends_play": {
+      "y": "y/src/tic_tac_toe.test.y:507",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_announce_after_a_retyped_last_move_ends_play",
+      "covers": [
+        "play > playing'many > persons_turn > announce'fails"
+      ]
+    },
+    "a_console_that_cannot_announce_after_both_have_moved_ends_play": {
+      "y": "y/src/tic_tac_toe.test.y:519",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_announce_after_both_have_moved_ends_play",
+      "covers": [
+        "play > playing'many > computers_turn > announce'fails"
+      ]
+    },
+    "a_players_move_is_made": {
+      "y": "y/src/tic_tac_toe.test.y:531",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_players_move_is_made",
+      "covers": [
+        "persons_move > line_read > attempted.valid"
+      ]
+    },
+    "a_player_is_told_what_was_wrong": {
+      "y": "y/src/tic_tac_toe.test.y:546",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_player_is_told_what_was_wrong",
+      "covers": [
+        "persons_move > line_read > attempted.invalid"
       ]
     },
     "a_move_cannot_be_asked_for_without_the_board": {
-      "y": "y/src/tic_tac_toe.test.y:256",
+      "y": "y/src/tic_tac_toe.test.y:561",
       "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_move_cannot_be_asked_for_without_the_board",
       "covers": [
         "persons_move > write_line'1'fails"
       ]
     },
     "a_move_cannot_be_asked_for": {
-      "y": "y/src/tic_tac_toe.test.y:270",
+      "y": "y/src/tic_tac_toe.test.y:575",
       "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_move_cannot_be_asked_for",
       "covers": [
         "persons_move > write'fails"
       ]
     },
+    "a_move_cannot_be_read_from_a_failing_console": {
+      "y": "y/src/tic_tac_toe.test.y:589",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_move_cannot_be_read_from_a_failing_console",
+      "covers": [
+        "persons_move > typed'fails"
+      ]
+    },
+    "a_closed_console_gives_no_move": {
+      "y": "y/src/tic_tac_toe.test.y:603",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_closed_console_gives_no_move",
+      "covers": [
+        "persons_move > closed"
+      ]
+    },
     "a_wrong_move_cannot_be_complained_of": {
-      "y": "y/src/tic_tac_toe.test.y:284",
+      "y": "y/src/tic_tac_toe.test.y:617",
       "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_wrong_move_cannot_be_complained_of",
       "covers": [
-        "persons_move > line_read > attempted.invalid > write_line'2'fails",
+        "persons_move > line_read > attempted.invalid > write_line'2'fails"
+      ]
+    },
+    "a_player_who_types_no_number_is_asked_for_one": {
+      "y": "y/src/tic_tac_toe.test.y:631",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_player_who_types_no_number_is_asked_for_one",
+      "covers": [
         "complaint > wrong.not_a_move"
       ]
     },
-    "a_console_that_cannot_greet_ends_play": {
-      "y": "y/src/tic_tac_toe.test.y:298",
-      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_greet_ends_play",
+    "a_player_who_names_no_square_is_told_so": {
+      "y": "y/src/tic_tac_toe.test.y:640",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_player_who_names_no_square_is_told_so",
       "covers": [
-        "new_game",
-        "play > write_line'1'fails"
+        "complaint > wrong.no_square"
       ]
     },
-    "a_full_board_is_over_at_once": {
-      "y": "y/src/tic_tac_toe.test.y:310",
-      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_full_board_is_over_at_once",
+    "a_player_who_names_a_taken_square_is_told_so": {
+      "y": "y/src/tic_tac_toe.test.y:649",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_player_who_names_a_taken_square_is_told_so",
       "covers": [
-        "play > over_at_once",
+        "complaint > wrong.taken"
+      ]
+    },
+    "a_draw_is_announced": {
+      "y": "y/src/tic_tac_toe.test.y:658",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_draw_is_announced",
+      "covers": [
         "announce > drawn"
       ]
     },
-    "a_console_that_cannot_announce_at_once_ends_play": {
-      "y": "y/src/tic_tac_toe.test.y:322",
-      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_announce_at_once_ends_play",
+    "a_win_is_announced": {
+      "y": "y/src/tic_tac_toe.test.y:671",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_win_is_announced",
       "covers": [
-        "play > over_at_once > announce'fails"
+        "announce > won"
       ]
     },
-    "the_player_fills_the_last_square": {
-      "y": "y/src/tic_tac_toe.test.y:334",
-      "rust": "tic_tac_toe_example::tic_tac_toe::tests::the_player_fills_the_last_square",
+    "an_end_cannot_be_shown_without_the_board": {
+      "y": "y/src/tic_tac_toe.test.y:684",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::an_end_cannot_be_shown_without_the_board",
       "covers": [
-        "play > playing > persons_turn",
-        "persons_move > line_read > attempted.valid"
+        "announce > write_line'1'fails"
       ]
     },
-    "a_console_that_cannot_announce_the_players_last_move_ends_play": {
-      "y": "y/src/tic_tac_toe.test.y:346",
-      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_announce_the_players_last_move_ends_play",
+    "a_draw_cannot_be_announced": {
+      "y": "y/src/tic_tac_toe.test.y:697",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_draw_cannot_be_announced",
       "covers": [
-        "play > playing > persons_turn > announce'fails"
+        "announce > drawn > write_line'2'fails"
       ]
     },
-    "the_computer_fills_the_last_square": {
-      "y": "y/src/tic_tac_toe.test.y:358",
-      "rust": "tic_tac_toe_example::tic_tac_toe::tests::the_computer_fills_the_last_square",
+    "a_win_cannot_be_announced": {
+      "y": "y/src/tic_tac_toe.test.y:710",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_win_cannot_be_announced",
       "covers": [
-        "play > playing > computers_turn"
-      ]
-    },
-    "a_console_that_cannot_tell_the_computers_last_move_ends_play": {
-      "y": "y/src/tic_tac_toe.test.y:370",
-      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_tell_the_computers_last_move_ends_play",
-      "covers": [
-        "play > playing > computers_turn > write_line'2'fails"
-      ]
-    },
-    "a_console_that_cannot_announce_the_computers_last_move_ends_play": {
-      "y": "y/src/tic_tac_toe.test.y:382",
-      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_announce_the_computers_last_move_ends_play",
-      "covers": [
-        "play > playing > computers_turn > announce'fails"
-      ]
-    },
-    "a_console_that_cannot_tell_the_computers_move_ends_play": {
-      "y": "y/src/tic_tac_toe.test.y:394",
-      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_tell_the_computers_move_ends_play",
-      "covers": [
-        "play > playing'many > computers_turn > write_line'2'fails"
-      ]
-    },
-    "a_console_that_cannot_announce_after_both_have_moved_ends_play": {
-      "y": "y/src/tic_tac_toe.test.y:406",
-      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_announce_after_both_have_moved_ends_play",
-      "covers": [
-        "play > playing'many > persons_turn > announce'fails",
-        "play > playing'many > computers_turn > announce'fails"
+        "announce > won > write_line'3'fails"
       ]
     }
   }

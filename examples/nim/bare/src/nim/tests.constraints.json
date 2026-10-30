@@ -7,15 +7,54 @@
     "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
   },
   "subjects": [
-    { "kind": "function", "name": "nim_example::nim::tests::a_move_is_read", "params": [] },
+    { "kind": "function", "name": "nim_example::nim::tests::a_new_game_has_every_heap_full", "params": [] },
+    { "kind": "function", "name": "nim_example::nim::tests::a_move_is_parsed", "params": [] },
     { "kind": "function", "name": "nim_example::nim::tests::one_number_is_not_a_move", "params": [] },
-    { "kind": "function", "name": "nim_example::nim::tests::two_words_are_not_a_move", "params": [] },
+    { "kind": "function", "name": "nim_example::nim::tests::three_numbers_are_not_a_move", "params": [] },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::a_word_for_the_heap_is_not_a_move",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::a_word_for_the_count_is_not_a_move",
+      "params": []
+    },
+    { "kind": "function", "name": "nim_example::nim::tests::there_is_no_heap_zero", "params": [] },
     { "kind": "function", "name": "nim_example::nim::tests::there_is_no_fourth_heap", "params": [] },
     { "kind": "function", "name": "nim_example::nim::tests::taking_nothing_is_not_a_move", "params": [] },
     { "kind": "function", "name": "nim_example::nim::tests::taking_too_many_is_not_a_move", "params": [] },
+    { "kind": "function", "name": "nim_example::nim::tests::a_move_that_fits_is_allowed", "params": [] },
     {
       "kind": "function",
-      "name": "nim_example::nim::tests::the_computer_finds_the_winning_move",
+      "name": "nim_example::nim::tests::taking_nothing_from_the_last_heap_is_not_a_move",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::taking_too_many_from_the_last_heap_is_not_a_move",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::taking_the_whole_last_heap_is_allowed",
+      "params": []
+    },
+    { "kind": "function", "name": "nim_example::nim::tests::a_move_is_read", "params": [] },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::a_line_that_is_not_a_move_is_refused",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::a_move_the_game_does_not_allow_is_refused",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::a_move_takes_counters_from_its_heap",
       "params": []
     },
     {
@@ -23,6 +62,29 @@
       "name": "nim_example::nim::tests::a_losing_computer_takes_one_from_the_largest_heap",
       "params": []
     },
+    { "kind": "function", "name": "nim_example::nim::tests::the_computer_takes_a_lone_heap", "params": [] },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::the_computer_finds_the_winning_move",
+      "params": []
+    },
+    { "kind": "function", "name": "nim_example::nim::tests::no_heaps_leave_no_counters", "params": [] },
+    { "kind": "function", "name": "nim_example::nim::tests::a_lone_heap_is_all_that_is_left", "params": [] },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::the_counters_of_every_heap_are_counted",
+      "params": []
+    },
+    { "kind": "function", "name": "nim_example::nim::tests::no_heaps_sum_to_zero", "params": [] },
+    { "kind": "function", "name": "nim_example::nim::tests::a_lone_heap_sums_to_its_size", "params": [] },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::heaps_are_summed_with_exclusive_or",
+      "params": []
+    },
+    { "kind": "function", "name": "nim_example::nim::tests::no_heaps_draw_nothing", "params": [] },
+    { "kind": "function", "name": "nim_example::nim::tests::a_lone_heap_is_drawn_on_one_line", "params": [] },
+    { "kind": "function", "name": "nim_example::nim::tests::heaps_are_drawn_one_line_each", "params": [] },
     {
       "kind": "function",
       "name": "nim_example::nim::tests::a_player_who_plays_perfectly_wins",
@@ -35,10 +97,6 @@
     },
     { "kind": "function", "name": "nim_example::nim::tests::a_player_is_told_what_was_wrong", "params": [] },
     { "kind": "function", "name": "nim_example::nim::tests::a_failing_console_ends_the_game", "params": [] },
-    { "kind": "function", "name": "nim_example::nim::tests::odd_lines_are_not_moves", "params": [] },
-    { "kind": "function", "name": "nim_example::nim::tests::the_last_heap_and_heap_zero", "params": [] },
-    { "kind": "function", "name": "nim_example::nim::tests::one_heap_and_none", "params": [] },
-    { "kind": "function", "name": "nim_example::nim::tests::the_computer_takes_a_lone_heap", "params": [] },
     {
       "kind": "function",
       "name": "nim_example::nim::tests::a_console_that_cannot_greet_ends_play",
@@ -61,7 +119,7 @@
     },
     {
       "kind": "function",
-      "name": "nim_example::nim::tests::a_console_that_cannot_complain_ends_play",
+      "name": "nim_example::nim::tests::a_console_that_fails_on_a_later_turn_ends_play",
       "params": []
     },
     {
@@ -76,12 +134,12 @@
     },
     {
       "kind": "function",
-      "name": "nim_example::nim::tests::a_console_that_cannot_announce_a_quick_win_ends_play",
+      "name": "nim_example::nim::tests::a_console_that_cannot_announce_a_win_ends_play",
       "params": []
     },
     {
       "kind": "function",
-      "name": "nim_example::nim::tests::a_console_that_cannot_announce_a_win_ends_play",
+      "name": "nim_example::nim::tests::a_console_that_cannot_announce_a_quick_win_ends_play",
       "params": []
     },
     {
@@ -95,6 +153,26 @@
       "params": []
     },
     { "kind": "function", "name": "nim_example::nim::tests::one_move_can_win_a_game", "params": [] },
+    { "kind": "function", "name": "nim_example::nim::tests::a_move_cannot_be_asked_for", "params": [] },
+    { "kind": "function", "name": "nim_example::nim::tests::a_move_cannot_be_read", "params": [] },
+    { "kind": "function", "name": "nim_example::nim::tests::a_closed_console_has_no_move", "params": [] },
+    { "kind": "function", "name": "nim_example::nim::tests::a_players_move_is_made", "params": [] },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::a_player_is_told_what_is_wrong_and_asked_again",
+      "params": []
+    },
+    { "kind": "function", "name": "nim_example::nim::tests::a_complaint_cannot_be_written", "params": [] },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::not_a_move_is_answered_with_the_form",
+      "params": []
+    },
+    { "kind": "function", "name": "nim_example::nim::tests::no_such_heap_is_answered", "params": [] },
+    { "kind": "function", "name": "nim_example::nim::tests::nothing_taken_is_answered", "params": [] },
+    { "kind": "function", "name": "nim_example::nim::tests::too_many_is_answered", "params": [] },
+    { "kind": "function", "name": "nim_example::nim::tests::the_computers_win_is_announced", "params": [] },
+    { "kind": "function", "name": "nim_example::nim::tests::the_players_win_is_announced", "params": [] },
     {
       "kind": "function",
       "name": "nim_example::nim::tests::a_computers_win_cannot_be_announced",

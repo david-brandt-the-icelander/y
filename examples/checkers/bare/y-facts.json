@@ -329,7 +329,7 @@
       "what": "game",
       "why": "apply changes it, and the game is still read",
       "y": "y/src/checkers.y:676",
-      "bare": "bare/src/checkers.brs:570"
+      "bare": "bare/src/checkers.brs:610"
     },
     {
       "what": "options",
@@ -348,48 +348,6 @@
       "why": "the game played out changes it, and the position is still read",
       "y": "y/src/checkers.y:725",
       "bare": "bare/src/checkers.brs:654"
-    },
-    {
-      "what": "reds",
-      "why": "apply keeps the move, and the list still holds it",
-      "y": "y/src/checkers.test.y:82",
-      "bare": "bare/src/checkers/tests.brs:81"
-    },
-    {
-      "what": "moves",
-      "why": "apply keeps the move, and the list still holds it",
-      "y": "y/src/checkers.test.y:101",
-      "bare": "bare/src/checkers/tests.brs:97"
-    },
-    {
-      "what": "moves",
-      "why": "apply keeps the move, and the list still holds it",
-      "y": "y/src/checkers.test.y:131",
-      "bare": "bare/src/checkers/tests.brs:121"
-    },
-    {
-      "what": "moves",
-      "why": "apply keeps the move, and the list still holds it",
-      "y": "y/src/checkers.test.y:157",
-      "bare": "bare/src/checkers/tests.brs:121"
-    },
-    {
-      "what": "legal_moves",
-      "why": "apply keeps the move, and the list still holds it",
-      "y": "y/src/checkers.test.y:279",
-      "bare": "bare/src/checkers/tests.brs:233"
-    },
-    {
-      "what": "legal_moves",
-      "why": "apply keeps the move, and the list still holds it",
-      "y": "y/src/checkers.test.y:332",
-      "bare": "bare/src/checkers/tests.brs:275"
-    },
-    {
-      "what": "legal_moves",
-      "why": "apply keeps the move, and the list still holds it",
-      "y": "y/src/checkers.test.y:384",
-      "bare": "bare/src/checkers/tests.brs:319"
     }
   ],
   "decisions": {
@@ -2291,440 +2249,1291 @@
   ],
   "tests": {
     "a_new_game_has_twelve_men_each": {
-      "y": "y/src/checkers.test.y:57",
+      "y": "y/src/checkers.test.y:68",
       "rust": "checkers_example::checkers::tests::a_new_game_has_twelve_men_each",
       "covers": [
-        "new_game > row'many > column'many",
-        "starting_piece > placed.light",
-        "starting_piece > placed.white_men",
-        "starting_piece > placed.red_men'eq",
-        "starting_piece > placed.red_men'gt",
-        "starting_piece > placed.between",
-        "standing > judged.playing",
-        "all_steps > placed'many > direction'many > blocked'1",
-        "all_steps > placed'many > direction'many > blocked'2",
-        "placed_pieces > row'many > column'many > held.piece",
-        "placed_pieces > row'many > column'many > held.empty"
+        "new_game > row'many > column'many"
+      ]
+    },
+    "a_light_square_starts_empty": {
+      "y": "y/src/checkers.test.y:82",
+      "rust": "checkers_example::checkers::tests::a_light_square_starts_empty",
+      "covers": [
+        "starting_piece > placed.light"
+      ]
+    },
+    "the_top_rows_start_with_white_men": {
+      "y": "y/src/checkers.test.y:91",
+      "rust": "checkers_example::checkers::tests::the_top_rows_start_with_white_men",
+      "covers": [
+        "starting_piece > placed.white_men"
+      ]
+    },
+    "the_first_of_the_bottom_rows_starts_with_a_red_man": {
+      "y": "y/src/checkers.test.y:100",
+      "rust": "checkers_example::checkers::tests::the_first_of_the_bottom_rows_starts_with_a_red_man",
+      "covers": [
+        "starting_piece > placed.red_men'eq"
+      ]
+    },
+    "the_bottom_row_starts_with_a_red_man": {
+      "y": "y/src/checkers.test.y:109",
+      "rust": "checkers_example::checkers::tests::the_bottom_row_starts_with_a_red_man",
+      "covers": [
+        "starting_piece > placed.red_men'gt"
+      ]
+    },
+    "the_middle_rows_start_empty": {
+      "y": "y/src/checkers.test.y:118",
+      "rust": "checkers_example::checkers::tests::the_middle_rows_start_empty",
+      "covers": [
+        "starting_piece > placed.between"
+      ]
+    },
+    "a_capture_must_be_taken": {
+      "y": "y/src/checkers.test.y:127",
+      "rust": "checkers_example::checkers::tests::a_capture_must_be_taken",
+      "covers": [
+        "legal_moves > must_jump"
       ]
     },
     "the_first_moves_are_steps": {
-      "y": "y/src/checkers.test.y:77",
+      "y": "y/src/checkers.test.y:139",
       "rust": "checkers_example::checkers::tests::the_first_moves_are_steps",
-      "covers": []
-    },
-    "a_capture_must_be_taken": {
-      "y": "y/src/checkers.test.y:94",
-      "rust": "checkers_example::checkers::tests::a_capture_must_be_taken",
       "covers": [
-        "all_jumps > placed'many",
-        "chains_after > uncrowned'2gt"
+        "legal_moves > no_jump"
+      ]
+    },
+    "a_step_is_a_quiet_turn": {
+      "y": "y/src/checkers.test.y:152",
+      "rust": "checkers_example::checkers::tests::a_step_is_a_quiet_turn",
+      "covers": [
+        "apply > quiet"
+      ]
+    },
+    "a_white_man_stepping_onto_the_bottom_row_is_crowned": {
+      "y": "y/src/checkers.test.y:169",
+      "rust": "checkers_example::checkers::tests::a_white_man_stepping_onto_the_bottom_row_is_crowned",
+      "covers": [
+        "apply > quiet"
+      ]
+    },
+    "a_jump_takes_the_piece_jumped_over": {
+      "y": "y/src/checkers.test.y:182",
+      "rust": "checkers_example::checkers::tests::a_jump_takes_the_piece_jumped_over",
+      "covers": [
+        "apply > captured"
+      ]
+    },
+    "a_man_crowned_by_a_jump": {
+      "y": "y/src/checkers.test.y:197",
+      "rust": "checkers_example::checkers::tests::a_man_crowned_by_a_jump",
+      "covers": [
+        "apply > captured"
+      ]
+    },
+    "a_chain_of_jumps_takes_every_piece_jumped": {
+      "y": "y/src/checkers.test.y:209",
+      "rust": "checkers_example::checkers::tests::a_chain_of_jumps_takes_every_piece_jumped",
+      "covers": [
+        "apply > captured'many"
+      ]
+    },
+    "the_person_wins_when_the_computer_cannot_move": {
+      "y": "y/src/checkers.test.y:224",
+      "rust": "checkers_example::checkers::tests::the_person_wins_when_the_computer_cannot_move",
+      "covers": [
+        "standing > judged.won"
+      ]
+    },
+    "the_person_loses_when_they_cannot_move": {
+      "y": "y/src/checkers.test.y:235",
+      "rust": "checkers_example::checkers::tests::the_person_loses_when_they_cannot_move",
+      "covers": [
+        "standing > judged.lost"
+      ]
+    },
+    "quiet_turns_draw_the_game": {
+      "y": "y/src/checkers.test.y:246",
+      "rust": "checkers_example::checkers::tests::quiet_turns_draw_the_game",
+      "covers": [
+        "standing > judged.drawn'eq"
+      ]
+    },
+    "more_quiet_turns_still_draw_the_game": {
+      "y": "y/src/checkers.test.y:258",
+      "rust": "checkers_example::checkers::tests::more_quiet_turns_still_draw_the_game",
+      "covers": [
+        "standing > judged.drawn'gt"
+      ]
+    },
+    "a_new_game_is_being_played": {
+      "y": "y/src/checkers.test.y:270",
+      "rust": "checkers_example::checkers::tests::a_new_game_is_being_played",
+      "covers": [
+        "standing > judged.playing"
+      ]
+    },
+    "a_win_scores_by_level_and_moves": {
+      "y": "y/src/checkers.test.y:281",
+      "rust": "checkers_example::checkers::tests::a_win_scores_by_level_and_moves",
+      "covers": [
+        "score > won"
+      ]
+    },
+    "a_slow_win_scores_the_least_win": {
+      "y": "y/src/checkers.test.y:294",
+      "rust": "checkers_example::checkers::tests::a_slow_win_scores_the_least_win",
+      "covers": [
+        "score > won"
+      ]
+    },
+    "a_loss_scores_nothing": {
+      "y": "y/src/checkers.test.y:307",
+      "rust": "checkers_example::checkers::tests::a_loss_scores_nothing",
+      "covers": [
+        "score > unfinished"
+      ]
+    },
+    "red_has_made_every_odd_turn": {
+      "y": "y/src/checkers.test.y:318",
+      "rust": "checkers_example::checkers::tests::red_has_made_every_odd_turn",
+      "covers": [
+        "player_moves"
+      ]
+    },
+    "white_moves_after_red": {
+      "y": "y/src/checkers.test.y:330",
+      "rust": "checkers_example::checkers::tests::white_moves_after_red",
+      "covers": [
+        "other > current.red"
+      ]
+    },
+    "red_moves_after_white": {
+      "y": "y/src/checkers.test.y:339",
+      "rust": "checkers_example::checkers::tests::red_moves_after_white",
+      "covers": [
+        "other > current.white"
+      ]
+    },
+    "a_player_with_no_pieces_has_no_steps": {
+      "y": "y/src/checkers.test.y:348",
+      "rust": "checkers_example::checkers::tests::a_player_with_no_pieces_has_no_steps",
+      "covers": [
+        "all_steps > no_pieces"
+      ]
+    },
+    "a_lone_man_steps_both_ways_ahead": {
+      "y": "y/src/checkers.test.y:359",
+      "rust": "checkers_example::checkers::tests::a_lone_man_steps_both_ways_ahead",
+      "covers": [
+        "all_steps > placed > direction'many > open"
+      ]
+    },
+    "a_man_on_the_edge_steps_only_inward": {
+      "y": "y/src/checkers.test.y:372",
+      "rust": "checkers_example::checkers::tests::a_man_on_the_edge_steps_only_inward",
+      "covers": [
+        "all_steps > placed > direction'many > blocked'1"
+      ]
+    },
+    "a_man_with_both_squares_ahead_taken_has_no_step": {
+      "y": "y/src/checkers.test.y:384",
+      "rust": "checkers_example::checkers::tests::a_man_with_both_squares_ahead_taken_has_no_step",
+      "covers": [
+        "all_steps > placed > direction'many > blocked'2"
+      ]
+    },
+    "each_of_several_men_steps": {
+      "y": "y/src/checkers.test.y:395",
+      "rust": "checkers_example::checkers::tests::each_of_several_men_steps",
+      "covers": [
+        "all_steps > placed'many > direction'many > open"
+      ]
+    },
+    "men_on_the_edge_step_only_inward": {
+      "y": "y/src/checkers.test.y:408",
+      "rust": "checkers_example::checkers::tests::men_on_the_edge_step_only_inward",
+      "covers": [
+        "all_steps > placed'many > direction'many > blocked'1"
+      ]
+    },
+    "men_behind_the_front_row_are_blocked_at_the_start": {
+      "y": "y/src/checkers.test.y:421",
+      "rust": "checkers_example::checkers::tests::men_behind_the_front_row_are_blocked_at_the_start",
+      "covers": [
+        "all_steps > placed'many > direction'many > blocked'2"
+      ]
+    },
+    "a_player_with_no_pieces_has_no_jumps": {
+      "y": "y/src/checkers.test.y:433",
+      "rust": "checkers_example::checkers::tests::a_player_with_no_pieces_has_no_jumps",
+      "covers": [
+        "all_jumps > no_pieces"
+      ]
+    },
+    "a_lone_man_jumps_the_piece_ahead": {
+      "y": "y/src/checkers.test.y:444",
+      "rust": "checkers_example::checkers::tests::a_lone_man_jumps_the_piece_ahead",
+      "covers": [
+        "all_jumps > placed"
+      ]
+    },
+    "only_the_men_that_can_jump_have_jumps": {
+      "y": "y/src/checkers.test.y:456",
+      "rust": "checkers_example::checkers::tests::only_the_men_that_can_jump_have_jumps",
+      "covers": [
+        "all_jumps > placed'many"
+      ]
+    },
+    "a_jump_with_none_after_it_ends_the_chain": {
+      "y": "y/src/checkers.test.y:468",
+      "rust": "checkers_example::checkers::tests::a_jump_with_none_after_it_ends_the_chain",
+      "covers": [
+        "chains > direction'many > can_jump > ends_here"
       ]
     },
     "a_chain_of_jumps_is_one_move": {
-      "y": "y/src/checkers.test.y:111",
+      "y": "y/src/checkers.test.y:481",
       "rust": "checkers_example::checkers::tests::a_chain_of_jumps_is_one_move",
       "covers": [
         "chains > direction'many > can_jump > goes_on"
       ]
     },
+    "a_man_with_nothing_to_jump_has_no_chain": {
+      "y": "y/src/checkers.test.y:494",
+      "rust": "checkers_example::checkers::tests::a_man_with_nothing_to_jump_has_no_chain",
+      "covers": [
+        "chains > direction'many > cannot_jump'1"
+      ]
+    },
+    "a_piece_is_not_jumped_twice": {
+      "y": "y/src/checkers.test.y:505",
+      "rust": "checkers_example::checkers::tests::a_piece_is_not_jumped_twice",
+      "covers": [
+        "chains > direction'many > cannot_jump'2"
+      ]
+    },
     "a_man_crowned_by_a_jump_stops": {
-      "y": "y/src/checkers.test.y:124",
+      "y": "y/src/checkers.test.y:516",
       "rust": "checkers_example::checkers::tests::a_man_crowned_by_a_jump_stops",
       "covers": [
-        "legal_moves > must_jump",
-        "apply > captured",
-        "chains > direction'many > can_jump > ends_here",
-        "chains_after > crowned",
-        "belongs_to > held.piece",
-        "far_row > heading_up"
+        "chains_after > crowned"
       ]
     },
-    "a_king_moves_both_ways": {
-      "y": "y/src/checkers.test.y:138",
-      "rust": "checkers_example::checkers::tests::a_king_moves_both_ways",
+    "a_king_on_the_far_row_jumps_on": {
+      "y": "y/src/checkers.test.y:527",
+      "rust": "checkers_example::checkers::tests::a_king_on_the_far_row_jumps_on",
       "covers": [
-        "legal_moves > no_jump",
-        "other > current.red",
-        "all_steps > placed > direction'many > open",
-        "all_jumps > placed",
-        "chains > direction'many > cannot_jump'1",
-        "jumpable > inside",
-        "belongs_to > held.empty",
-        "directions_of > moving.king",
-        "on_board"
+        "chains_after > uncrowned'1"
       ]
     },
-    "white_is_crowned_on_the_bottom_row": {
-      "y": "y/src/checkers.test.y:151",
-      "rust": "checkers_example::checkers::tests::white_is_crowned_on_the_bottom_row",
+    "a_white_man_short_of_the_bottom_row_jumps_on": {
+      "y": "y/src/checkers.test.y:539",
+      "rust": "checkers_example::checkers::tests::a_white_man_short_of_the_bottom_row_jumps_on",
       "covers": [
-        "apply > quiet",
-        "other > current.white",
-        "directions_of > moving.white",
-        "far_row > heading_down"
+        "chains_after > uncrowned'2lt"
       ]
     },
-    "a_win_scores_by_level_and_moves": {
-      "y": "y/src/checkers.test.y:165",
-      "rust": "checkers_example::checkers::tests::a_win_scores_by_level_and_moves",
+    "a_red_man_short_of_the_top_row_jumps_on": {
+      "y": "y/src/checkers.test.y:551",
+      "rust": "checkers_example::checkers::tests::a_red_man_short_of_the_top_row_jumps_on",
       "covers": [
-        "standing > judged.won",
-        "score > won",
-        "player_moves"
+        "chains_after > uncrowned'2gt"
       ]
     },
-    "a_loss_scores_nothing": {
-      "y": "y/src/checkers.test.y:186",
-      "rust": "checkers_example::checkers::tests::a_loss_scores_nothing",
+    "a_piece_may_jump_onto_an_empty_square": {
+      "y": "y/src/checkers.test.y:563",
+      "rust": "checkers_example::checkers::tests::a_piece_may_jump_onto_an_empty_square",
       "covers": [
-        "standing > judged.lost",
-        "score > unfinished",
-        "all_steps > no_pieces",
-        "all_jumps > no_pieces",
+        "jumpable > inside"
+      ]
+    },
+    "a_piece_may_not_jump_off_the_board": {
+      "y": "y/src/checkers.test.y:574",
+      "rust": "checkers_example::checkers::tests::a_piece_may_not_jump_off_the_board",
+      "covers": [
+        "jumpable > outside"
+      ]
+    },
+    "an_empty_square_belongs_to_no_one": {
+      "y": "y/src/checkers.test.y:585",
+      "rust": "checkers_example::checkers::tests::an_empty_square_belongs_to_no_one",
+      "covers": [
+        "belongs_to > held.empty"
+      ]
+    },
+    "a_square_belongs_to_the_owner_of_its_piece": {
+      "y": "y/src/checkers.test.y:596",
+      "rust": "checkers_example::checkers::tests::a_square_belongs_to_the_owner_of_its_piece",
+      "covers": [
+        "belongs_to > held.piece"
+      ]
+    },
+    "every_piece_is_found_with_its_square": {
+      "y": "y/src/checkers.test.y:607",
+      "rust": "checkers_example::checkers::tests::every_piece_is_found_with_its_square",
+      "covers": [
+        "placed_pieces > row'many > column'many > held.piece"
+      ]
+    },
+    "an_empty_board_has_no_pieces": {
+      "y": "y/src/checkers.test.y:620",
+      "rust": "checkers_example::checkers::tests::an_empty_board_has_no_pieces",
+      "covers": [
+        "placed_pieces > row'many > column'many > held.empty"
+      ]
+    },
+    "a_player_on_an_empty_board_has_no_pieces": {
+      "y": "y/src/checkers.test.y:631",
+      "rust": "checkers_example::checkers::tests::a_player_on_an_empty_board_has_no_pieces",
+      "covers": [
+        "own_pieces > no_pieces"
+      ]
+    },
+    "a_lone_piece_is_its_players_own": {
+      "y": "y/src/checkers.test.y:642",
+      "rust": "checkers_example::checkers::tests::a_lone_piece_is_its_players_own",
+      "covers": [
+        "own_pieces > placed > mine"
+      ]
+    },
+    "a_lone_piece_of_the_other_player_is_not_own": {
+      "y": "y/src/checkers.test.y:653",
+      "rust": "checkers_example::checkers::tests::a_lone_piece_of_the_other_player_is_not_own",
+      "covers": [
         "own_pieces > placed > theirs"
       ]
     },
-    "quiet_turns_draw_the_game": {
-      "y": "y/src/checkers.test.y:200",
-      "rust": "checkers_example::checkers::tests::quiet_turns_draw_the_game",
+    "several_pieces_of_the_player_are_own": {
+      "y": "y/src/checkers.test.y:664",
+      "rust": "checkers_example::checkers::tests::several_pieces_of_the_player_are_own",
       "covers": [
-        "standing > judged.drawn'eq",
-        "standing > judged.drawn'gt"
+        "own_pieces > placed'many > mine"
       ]
     },
-    "pieces_are_worth_their_rank": {
-      "y": "y/src/checkers.test.y:216",
-      "rust": "checkers_example::checkers::tests::pieces_are_worth_their_rank",
+    "the_other_players_pieces_are_left_out": {
+      "y": "y/src/checkers.test.y:675",
+      "rust": "checkers_example::checkers::tests::the_other_players_pieces_are_left_out",
       "covers": [
-        "all_steps > placed'many > direction'many > open",
-        "value_for > judged.playing"
+        "own_pieces > placed'many > theirs"
       ]
     },
-    "an_ended_game_is_worth_its_end": {
-      "y": "y/src/checkers.test.y:230",
-      "rust": "checkers_example::checkers::tests::an_ended_game_is_worth_its_end",
+    "a_king_moves_every_way": {
+      "y": "y/src/checkers.test.y:686",
+      "rust": "checkers_example::checkers::tests::a_king_moves_every_way",
       "covers": [
-        "value_for > judged.losing",
-        "value_for > judged.winning",
-        "value_for > judged.drawn'eq",
-        "value_for > judged.drawn'gt"
+        "directions_of > moving.king"
       ]
     },
-    "the_computer_keeps_its_man_out_of_reach": {
-      "y": "y/src/checkers.test.y:252",
-      "rust": "checkers_example::checkers::tests::the_computer_keeps_its_man_out_of_reach",
+    "a_red_man_moves_up": {
+      "y": "y/src/checkers.test.y:695",
+      "rust": "checkers_example::checkers::tests::a_red_man_moves_up",
       "covers": [
-        "computer_move > deepening'many'1lt > candidate'many > finished",
-        "computer_move > deepening'many'1lt > candidate'many > ran_out",
-        "searched > judged.leaf'2",
-        "searched > judged.spent'gt",
-        "searched > judged.inner > candidate > others_turn",
-        "searched > judged.inner > candidate'many > owners_turn",
-        "searched > judged.inner > candidate'many > others_turn",
-        "best_sampled > option'many > ranked.top > ties.settled",
-        "best_sampled > option'many > ranked.lower > ties.settled"
-      ]
-    },
-    "the_computer_plays_out_games_to_choose_an_opening": {
-      "y": "y/src/checkers.test.y:272",
-      "rust": "checkers_example::checkers::tests::the_computer_plays_out_games_to_choose_an_opening",
-      "covers": [
-        "apply > captured'many",
-        "chains > direction'many > cannot_jump'2",
-        "chains_after > uncrowned'1",
-        "best_sampled > option'many > ranked.lower > ties.contested > option'many"
-      ]
-    },
-    "without_checks_the_pieces_decide": {
-      "y": "y/src/checkers.test.y:288",
-      "rust": "checkers_example::checkers::tests::without_checks_the_pieces_decide",
-      "covers": [
-        "sampled_value > no_share",
-        "material > placed'many > counted.king",
-        "material > placed'many > counted.man",
-        "material > placed'many > counted.other"
-      ]
-    },
-    "a_click_finds_its_square": {
-      "y": "y/src/checkers.test.y:302",
-      "rust": "checkers_example::checkers::tests::a_click_finds_its_square",
-      "covers": [
-        "square_at > inside",
-        "square_at > outside'1",
-        "square_at > outside'2"
-      ]
-    },
-    "a_click_finds_its_level": {
-      "y": "y/src/checkers.test.y:315",
-      "rust": "checkers_example::checkers::tests::a_click_finds_its_level",
-      "covers": [
-        "level_at > level'many > pressed",
-        "level_at > level'many > missed'2"
-      ]
-    },
-    "squares_are_shaded": {
-      "y": "y/src/checkers.test.y:326",
-      "rust": "checkers_example::checkers::tests::squares_are_shaded",
-      "covers": [
-        "shade_of > looks.light",
-        "shade_of > looks.selected",
-        "shade_of > looks.last",
-        "shade_of > looks.dark",
-        "in_last_move > made.some"
-      ]
-    },
-    "the_selected_piece_shows_where_it_may_go": {
-      "y": "y/src/checkers.test.y:349",
-      "rust": "checkers_example::checkers::tests::the_selected_piece_shows_where_it_may_go",
-      "covers": [
-        "landings > candidate'many > from_selected",
-        "landings > candidate'many > from_elsewhere"
-      ]
-    },
-    "pieces_are_painted_by_player_and_rank": {
-      "y": "y/src/checkers.test.y:362",
-      "rust": "checkers_example::checkers::tests::pieces_are_painted_by_player_and_rank",
-      "covers": [
-        "colours_of > painted.red_king",
-        "colours_of > painted.red_man",
-        "colours_of > painted.white_king",
-        "colours_of > painted.white_man"
-      ]
-    },
-    "the_banner_says_how_the_game_stands": {
-      "y": "y/src/checkers.test.y:378",
-      "rust": "checkers_example::checkers::tests::the_banner_says_how_the_game_stands",
-      "covers": [
-        "banner > shown.your_move",
-        "banner > shown.thinking",
-        "banner > shown.won",
-        "banner > shown.lost",
-        "banner > shown.drawn"
-      ]
-    },
-    "a_click_elsewhere_selects_nothing": {
-      "y": "y/src/checkers.test.y:406",
-      "rust": "checkers_example::checkers::tests::a_click_elsewhere_selects_nothing",
-      "covers": [
-        "centre_of",
-        "clicked > judged.elsewhere",
-        "move_to > candidate'many > differs'1",
-        "move_to > candidate'many > differs'2",
-        "may_move_from > candidate'many > unmovable"
-      ]
-    },
-    "escape_at_the_levels_ends_play": {
-      "y": "y/src/checkers.test.y:420",
-      "rust": "checkers_example::checkers::tests::escape_at_the_levels_ends_play",
-      "covers": [
-        "draw_levels > level'many",
-        "choose_level > choosing",
-        "level_clicked > no_clicks"
-      ]
-    },
-    "a_level_is_chosen_and_a_move_made": {
-      "y": "y/src/checkers.test.y:434",
-      "rust": "checkers_example::checkers::tests::a_level_is_chosen_and_a_move_made",
-      "covers": [
-        "playout > ended'1",
-        "draw_marks > landing'many",
-        "play > open > picked.level",
-        "choose_level > choosing'many",
-        "play_game > playing'many > moment.computers_turn",
-        "play_game > playing'many > moment.players_turn",
-        "level_clicked > place > miss",
-        "act_on_clicks > place"
-      ]
-    },
-    "space_after_a_game_chooses_another": {
-      "y": "y/src/checkers.test.y:458",
-      "rust": "checkers_example::checkers::tests::space_after_a_game_chooses_another",
-      "covers": [
-        "draw_pieces > placed",
-        "draw_piece",
-        "play_game > playing > moment.over"
-      ]
-    },
-    "a_blocked_man_has_no_step": {
-      "y": "y/src/checkers.test.y:485",
-      "rust": "checkers_example::checkers::tests::a_blocked_man_has_no_step",
-      "covers": [
-        "all_steps > placed > direction'many > blocked'1",
-        "all_steps > placed > direction'many > blocked'2",
-        "jumpable > outside",
         "directions_of > moving.red"
       ]
     },
-    "an_empty_board_has_nothing_on_it": {
-      "y": "y/src/checkers.test.y:498",
-      "rust": "checkers_example::checkers::tests::an_empty_board_has_nothing_on_it",
+    "a_white_man_moves_down": {
+      "y": "y/src/checkers.test.y:704",
+      "rust": "checkers_example::checkers::tests::a_white_man_moves_down",
       "covers": [
-        "own_pieces > no_pieces",
-        "material > no_pieces",
-        "draw",
-        "corner_of",
-        "in_last_move > made.none",
-        "landings > no_moves",
-        "draw_board > row'many > column'many",
-        "draw_pieces > no_pieces",
-        "draw_marks > no_marks",
-        "move_to > no_moves",
-        "may_move_from > no_moves"
+        "directions_of > moving.white"
       ]
     },
-    "the_only_move_is_found": {
-      "y": "y/src/checkers.test.y:523",
-      "rust": "checkers_example::checkers::tests::the_only_move_is_found",
+    "red_is_crowned_on_the_top_row": {
+      "y": "y/src/checkers.test.y:713",
+      "rust": "checkers_example::checkers::tests::red_is_crowned_on_the_top_row",
       "covers": [
-        "own_pieces > placed'many > mine",
-        "own_pieces > placed'many > theirs",
-        "landings > candidate > from_selected",
-        "draw_marks > landing",
-        "move_to > candidate > fits",
-        "move_to > candidate > differs'1",
-        "move_to > candidate > differs'2",
-        "may_move_from > candidate > movable",
-        "may_move_from > candidate > unmovable"
+        "far_row > heading_up"
       ]
     },
-    "a_lone_piece_is_worth_its_rank": {
-      "y": "y/src/checkers.test.y:553",
-      "rust": "checkers_example::checkers::tests::a_lone_piece_is_worth_its_rank",
+    "white_is_crowned_on_the_bottom_row": {
+      "y": "y/src/checkers.test.y:722",
+      "rust": "checkers_example::checkers::tests::white_is_crowned_on_the_bottom_row",
       "covers": [
-        "own_pieces > placed > mine",
-        "piece_at",
-        "number_of",
-        "material > placed > counted.king",
-        "material > placed > counted.man",
-        "material > placed > counted.other"
+        "far_row > heading_down"
+      ]
+    },
+    "the_piece_on_a_square_is_found": {
+      "y": "y/src/checkers.test.y:731",
+      "rust": "checkers_example::checkers::tests::the_piece_on_a_square_is_found",
+      "covers": [
+        "piece_at"
+      ]
+    },
+    "squares_are_numbered_row_by_row": {
+      "y": "y/src/checkers.test.y:742",
+      "rust": "checkers_example::checkers::tests::squares_are_numbered_row_by_row",
+      "covers": [
+        "number_of"
+      ]
+    },
+    "a_corner_is_on_the_board": {
+      "y": "y/src/checkers.test.y:751",
+      "rust": "checkers_example::checkers::tests::a_corner_is_on_the_board",
+      "covers": [
+        "on_board"
+      ]
+    },
+    "with_one_move_and_no_checks_the_search_runs_out_at_once": {
+      "y": "y/src/checkers.test.y:760",
+      "rust": "checkers_example::checkers::tests::with_one_move_and_no_checks_the_search_runs_out_at_once",
+      "covers": [
+        "computer_move > deepening > candidate > ran_out"
+      ]
+    },
+    "with_two_moves_and_no_checks_the_search_runs_out_at_once": {
+      "y": "y/src/checkers.test.y:774",
+      "rust": "checkers_example::checkers::tests::with_two_moves_and_no_checks_the_search_runs_out_at_once",
+      "covers": [
+        "computer_move > deepening > candidate'many > ran_out"
+      ]
+    },
+    "with_one_move_and_two_checks_the_search_finishes_a_depth": {
+      "y": "y/src/checkers.test.y:788",
+      "rust": "checkers_example::checkers::tests::with_one_move_and_two_checks_the_search_finishes_a_depth",
+      "covers": [
+        "computer_move > deepening'many'1lt > candidate > finished"
+      ]
+    },
+    "with_one_move_and_a_few_checks_the_search_runs_out_partway": {
+      "y": "y/src/checkers.test.y:802",
+      "rust": "checkers_example::checkers::tests::with_one_move_and_a_few_checks_the_search_runs_out_partway",
+      "covers": [
+        "computer_move > deepening'many'1lt > candidate > ran_out"
+      ]
+    },
+    "with_two_moves_and_a_few_checks_the_search_finishes_some_depths": {
+      "y": "y/src/checkers.test.y:816",
+      "rust": "checkers_example::checkers::tests::with_two_moves_and_a_few_checks_the_search_finishes_some_depths",
+      "covers": [
+        "computer_move > deepening'many'1lt > candidate'many > finished"
+      ]
+    },
+    "with_one_move_and_enough_checks_the_search_finishes_its_deepest": {
+      "y": "y/src/checkers.test.y:830",
+      "rust": "checkers_example::checkers::tests::with_one_move_and_enough_checks_the_search_finishes_its_deepest",
+      "covers": [
+        "computer_move > deepening'many'1eq > candidate > finished"
+      ]
+    },
+    "with_one_move_the_search_runs_out_at_its_deepest": {
+      "y": "y/src/checkers.test.y:844",
+      "rust": "checkers_example::checkers::tests::with_one_move_the_search_runs_out_at_its_deepest",
+      "covers": [
+        "computer_move > deepening'many'1eq > candidate > ran_out"
+      ]
+    },
+    "with_two_moves_and_enough_checks_the_search_finishes_its_deepest": {
+      "y": "y/src/checkers.test.y:858",
+      "rust": "checkers_example::checkers::tests::with_two_moves_and_enough_checks_the_search_finishes_its_deepest",
+      "covers": [
+        "computer_move > deepening'many'1eq > candidate'many > finished"
+      ]
+    },
+    "with_two_moves_the_search_runs_out_at_its_deepest": {
+      "y": "y/src/checkers.test.y:872",
+      "rust": "checkers_example::checkers::tests::with_two_moves_the_search_runs_out_at_its_deepest",
+      "covers": [
+        "computer_move > deepening'many'1eq > candidate'many > ran_out"
+      ]
+    },
+    "the_computer_keeps_its_man_out_of_reach": {
+      "y": "y/src/checkers.test.y:886",
+      "rust": "checkers_example::checkers::tests::the_computer_keeps_its_man_out_of_reach",
+      "covers": [
+        "computer_move > deepening'many'1lt > candidate'many > ran_out"
+      ]
+    },
+    "looking_no_moves_ahead_a_position_is_worth_its_pieces": {
+      "y": "y/src/checkers.test.y:900",
+      "rust": "checkers_example::checkers::tests::looking_no_moves_ahead_a_position_is_worth_its_pieces",
+      "covers": [
+        "searched > judged.leaf'1"
+      ]
+    },
+    "a_position_with_no_moves_is_worth_its_end": {
+      "y": "y/src/checkers.test.y:913",
+      "rust": "checkers_example::checkers::tests::a_position_with_no_moves_is_worth_its_end",
+      "covers": [
+        "searched > judged.leaf'2"
+      ]
+    },
+    "the_search_stops_at_a_draw": {
+      "y": "y/src/checkers.test.y:926",
+      "rust": "checkers_example::checkers::tests::the_search_stops_at_a_draw",
+      "covers": [
+        "searched > judged.leaf'3eq"
+      ]
+    },
+    "the_search_stops_past_a_draw": {
+      "y": "y/src/checkers.test.y:940",
+      "rust": "checkers_example::checkers::tests::the_search_stops_past_a_draw",
+      "covers": [
+        "searched > judged.leaf'3gt"
+      ]
+    },
+    "the_search_gives_up_with_exactly_the_checks_the_moves_need": {
+      "y": "y/src/checkers.test.y:954",
+      "rust": "checkers_example::checkers::tests::the_search_gives_up_with_exactly_the_checks_the_moves_need",
+      "covers": [
+        "searched > judged.spent'eq"
+      ]
+    },
+    "the_search_gives_up_with_fewer_checks_than_moves": {
+      "y": "y/src/checkers.test.y:967",
+      "rust": "checkers_example::checkers::tests::the_search_gives_up_with_fewer_checks_than_moves",
+      "covers": [
+        "searched > judged.spent'gt"
+      ]
+    },
+    "the_only_move_of_the_owner_is_weighed": {
+      "y": "y/src/checkers.test.y:980",
+      "rust": "checkers_example::checkers::tests::the_only_move_of_the_owner_is_weighed",
+      "covers": [
+        "searched > judged.inner > candidate > owners_turn"
+      ]
+    },
+    "the_only_move_of_the_other_player_is_weighed": {
+      "y": "y/src/checkers.test.y:993",
+      "rust": "checkers_example::checkers::tests::the_only_move_of_the_other_player_is_weighed",
+      "covers": [
+        "searched > judged.inner > candidate > others_turn"
+      ]
+    },
+    "the_owner_takes_the_best_of_its_moves": {
+      "y": "y/src/checkers.test.y:1006",
+      "rust": "checkers_example::checkers::tests::the_owner_takes_the_best_of_its_moves",
+      "covers": [
+        "searched > judged.inner > candidate'many > owners_turn"
+      ]
+    },
+    "the_other_player_takes_the_worst_of_its_moves": {
+      "y": "y/src/checkers.test.y:1020",
+      "rust": "checkers_example::checkers::tests::the_other_player_takes_the_worst_of_its_moves",
+      "covers": [
+        "searched > judged.inner > candidate'many > others_turn"
       ]
     },
     "one_option_is_chosen_unweighed": {
-      "y": "y/src/checkers.test.y:572",
+      "y": "y/src/checkers.test.y:1033",
       "rust": "checkers_example::checkers::tests::one_option_is_chosen_unweighed",
       "covers": [
         "best_sampled > option > ranked.top > ties.settled"
       ]
     },
-    "with_no_checks_the_search_runs_out_at_once": {
-      "y": "y/src/checkers.test.y:586",
-      "rust": "checkers_example::checkers::tests::with_no_checks_the_search_runs_out_at_once",
+    "the_first_of_two_weighed_best_is_chosen": {
+      "y": "y/src/checkers.test.y:1047",
+      "rust": "checkers_example::checkers::tests::the_first_of_two_weighed_best_is_chosen",
       "covers": [
-        "computer_move > deepening > candidate > ran_out",
-        "computer_move > deepening > candidate'many > ran_out",
-        "searched > judged.leaf'1",
+        "best_sampled > option'many > ranked.top > ties.settled"
+      ]
+    },
+    "tied_moves_are_weighed_by_games_played_out": {
+      "y": "y/src/checkers.test.y:1061",
+      "rust": "checkers_example::checkers::tests::tied_moves_are_weighed_by_games_played_out",
+      "covers": [
         "best_sampled > option'many > ranked.top > ties.contested > option'many"
       ]
     },
-    "with_few_checks_the_search_runs_out_partway": {
-      "y": "y/src/checkers.test.y:605",
-      "rust": "checkers_example::checkers::tests::with_few_checks_the_search_runs_out_partway",
+    "the_second_of_two_weighed_best_is_chosen": {
+      "y": "y/src/checkers.test.y:1075",
+      "rust": "checkers_example::checkers::tests::the_second_of_two_weighed_best_is_chosen",
       "covers": [
-        "chains_after > uncrowned'2lt",
-        "computer_move > deepening'many'1lt > candidate > finished",
-        "computer_move > deepening'many'1lt > candidate > ran_out",
-        "sampled_value > some_share > sampling",
-        "playout > going'many"
+        "best_sampled > option'many > ranked.lower > ties.settled"
       ]
     },
-    "the_search_runs_out_at_its_deepest": {
-      "y": "y/src/checkers.test.y:625",
-      "rust": "checkers_example::checkers::tests::the_search_runs_out_at_its_deepest",
+    "moves_weighed_lower_are_left_out_of_the_games": {
+      "y": "y/src/checkers.test.y:1089",
+      "rust": "checkers_example::checkers::tests::moves_weighed_lower_are_left_out_of_the_games",
       "covers": [
-        "computer_move > deepening'many'1eq > candidate > ran_out",
-        "computer_move > deepening'many'1eq > candidate'many > ran_out"
+        "best_sampled > option'many > ranked.lower > ties.contested > option'many"
       ]
     },
-    "the_search_finishes_its_deepest": {
-      "y": "y/src/checkers.test.y:644",
-      "rust": "checkers_example::checkers::tests::the_search_finishes_its_deepest",
+    "without_checks_the_pieces_decide": {
+      "y": "y/src/checkers.test.y:1103",
+      "rust": "checkers_example::checkers::tests::without_checks_the_pieces_decide",
       "covers": [
-        "computer_move > deepening'many'1eq > candidate > finished",
-        "computer_move > deepening'many'1eq > candidate'many > finished",
-        "searched > judged.inner > candidate > owners_turn",
+        "sampled_value > no_share"
+      ]
+    },
+    "one_check_plays_one_game_of_no_moves": {
+      "y": "y/src/checkers.test.y:1116",
+      "rust": "checkers_example::checkers::tests::one_check_plays_one_game_of_no_moves",
+      "covers": [
+        "sampled_value > some_share > sampling"
+      ]
+    },
+    "games_are_played_until_the_checks_run_out": {
+      "y": "y/src/checkers.test.y:1129",
+      "rust": "checkers_example::checkers::tests::games_are_played_until_the_checks_run_out",
+      "covers": [
         "sampled_value > some_share > sampling'many"
       ]
     },
-    "the_search_stops_at_a_draw_and_when_spent": {
-      "y": "y/src/checkers.test.y:664",
-      "rust": "checkers_example::checkers::tests::the_search_stops_at_a_draw_and_when_spent",
+    "a_game_played_out_for_no_moves_ends_at_once": {
+      "y": "y/src/checkers.test.y:1143",
+      "rust": "checkers_example::checkers::tests::a_game_played_out_for_no_moves_ends_at_once",
       "covers": [
-        "searched > judged.leaf'3eq",
-        "searched > judged.leaf'3gt",
-        "searched > judged.spent'eq"
+        "playout > ended'1"
       ]
     },
-    "a_game_played_out_may_end_at_once": {
-      "y": "y/src/checkers.test.y:685",
-      "rust": "checkers_example::checkers::tests::a_game_played_out_may_end_at_once",
+    "a_game_with_no_moves_ends_at_once": {
+      "y": "y/src/checkers.test.y:1156",
+      "rust": "checkers_example::checkers::tests::a_game_with_no_moves_ends_at_once",
       "covers": [
-        "playout > ended'2",
-        "playout > ended'3eq",
-        "playout > ended'3gt",
+        "playout > ended'2"
+      ]
+    },
+    "a_drawn_game_ends_at_once": {
+      "y": "y/src/checkers.test.y:1169",
+      "rust": "checkers_example::checkers::tests::a_drawn_game_ends_at_once",
+      "covers": [
+        "playout > ended'3eq"
+      ]
+    },
+    "a_game_past_the_draw_ends_at_once": {
+      "y": "y/src/checkers.test.y:1183",
+      "rust": "checkers_example::checkers::tests::a_game_past_the_draw_ends_at_once",
+      "covers": [
+        "playout > ended'3gt"
+      ]
+    },
+    "a_game_played_out_for_one_move": {
+      "y": "y/src/checkers.test.y:1197",
+      "rust": "checkers_example::checkers::tests::a_game_played_out_for_one_move",
+      "covers": [
         "playout > going"
       ]
     },
-    "clicks_beside_and_between_the_buttons": {
-      "y": "y/src/checkers.test.y:709",
-      "rust": "checkers_example::checkers::tests::clicks_beside_and_between_the_buttons",
+    "a_game_played_out_for_two_moves": {
+      "y": "y/src/checkers.test.y:1210",
+      "rust": "checkers_example::checkers::tests::a_game_played_out_for_two_moves",
       "covers": [
-        "level_at > level > pressed",
-        "level_at > level'many > missed'1",
-        "level_clicked > place'many > hit",
-        "level_clicked > place'many > miss"
+        "playout > going'many"
       ]
     },
-    "two_clicks_in_a_frame_make_a_move": {
-      "y": "y/src/checkers.test.y:723",
-      "rust": "checkers_example::checkers::tests::two_clicks_in_a_frame_make_a_move",
+    "a_lost_game_is_worth_less_the_win_value": {
+      "y": "y/src/checkers.test.y:1223",
+      "rust": "checkers_example::checkers::tests::a_lost_game_is_worth_less_the_win_value",
       "covers": [
-        "clicked > judged.moving",
-        "clicked > judged.choosing",
-        "act_on_clicks > place'many",
-        "move_to > candidate'many > fits",
-        "may_move_from > candidate'many > movable"
+        "value_for > judged.losing"
       ]
     },
-    "a_window_closed_at_once_ends_play": {
-      "y": "y/src/checkers.test.y:740",
-      "rust": "checkers_example::checkers::tests::a_window_closed_at_once_ends_play",
+    "a_won_game_is_worth_the_win_value": {
+      "y": "y/src/checkers.test.y:1234",
+      "rust": "checkers_example::checkers::tests::a_won_game_is_worth_the_win_value",
       "covers": [
-        "play > open > picked.none",
-        "choose_level > closed_at_once'3"
+        "value_for > judged.winning"
+      ]
+    },
+    "a_drawn_game_is_worth_nothing": {
+      "y": "y/src/checkers.test.y:1245",
+      "rust": "checkers_example::checkers::tests::a_drawn_game_is_worth_nothing",
+      "covers": [
+        "value_for > judged.drawn'eq"
+      ]
+    },
+    "a_game_past_the_draw_is_worth_nothing": {
+      "y": "y/src/checkers.test.y:1257",
+      "rust": "checkers_example::checkers::tests::a_game_past_the_draw_is_worth_nothing",
+      "covers": [
+        "value_for > judged.drawn'gt"
+      ]
+    },
+    "pieces_are_worth_their_rank": {
+      "y": "y/src/checkers.test.y:1269",
+      "rust": "checkers_example::checkers::tests::pieces_are_worth_their_rank",
+      "covers": [
+        "value_for > judged.playing"
+      ]
+    },
+    "an_empty_board_is_worth_nothing": {
+      "y": "y/src/checkers.test.y:1281",
+      "rust": "checkers_example::checkers::tests::an_empty_board_is_worth_nothing",
+      "covers": [
+        "material > no_pieces"
+      ]
+    },
+    "a_lone_king_is_worth_a_kings_value": {
+      "y": "y/src/checkers.test.y:1292",
+      "rust": "checkers_example::checkers::tests::a_lone_king_is_worth_a_kings_value",
+      "covers": [
+        "material > placed > counted.king"
+      ]
+    },
+    "a_lone_man_is_worth_a_mans_value": {
+      "y": "y/src/checkers.test.y:1303",
+      "rust": "checkers_example::checkers::tests::a_lone_man_is_worth_a_mans_value",
+      "covers": [
+        "material > placed > counted.man"
+      ]
+    },
+    "a_lone_piece_is_worth_nothing_to_the_other_player": {
+      "y": "y/src/checkers.test.y:1314",
+      "rust": "checkers_example::checkers::tests::a_lone_piece_is_worth_nothing_to_the_other_player",
+      "covers": [
+        "material > placed > counted.other"
+      ]
+    },
+    "kings_add_up": {
+      "y": "y/src/checkers.test.y:1325",
+      "rust": "checkers_example::checkers::tests::kings_add_up",
+      "covers": [
+        "material > placed'many > counted.king"
+      ]
+    },
+    "men_add_up": {
+      "y": "y/src/checkers.test.y:1336",
+      "rust": "checkers_example::checkers::tests::men_add_up",
+      "covers": [
+        "material > placed'many > counted.man"
+      ]
+    },
+    "the_other_players_pieces_add_nothing": {
+      "y": "y/src/checkers.test.y:1347",
+      "rust": "checkers_example::checkers::tests::the_other_players_pieces_add_nothing",
+      "covers": [
+        "material > placed'many > counted.other"
+      ]
+    },
+    "the_banner_asks_for_the_persons_move": {
+      "y": "y/src/checkers.test.y:1358",
+      "rust": "checkers_example::checkers::tests::the_banner_asks_for_the_persons_move",
+      "covers": [
+        "banner > shown.your_move"
+      ]
+    },
+    "the_banner_says_the_computer_is_thinking": {
+      "y": "y/src/checkers.test.y:1369",
+      "rust": "checkers_example::checkers::tests::the_banner_says_the_computer_is_thinking",
+      "covers": [
+        "banner > shown.thinking"
+      ]
+    },
+    "the_banner_gives_the_score_of_a_win": {
+      "y": "y/src/checkers.test.y:1382",
+      "rust": "checkers_example::checkers::tests::the_banner_gives_the_score_of_a_win",
+      "covers": [
+        "banner > shown.won"
+      ]
+    },
+    "the_banner_says_the_computer_won": {
+      "y": "y/src/checkers.test.y:1394",
+      "rust": "checkers_example::checkers::tests::the_banner_says_the_computer_won",
+      "covers": [
+        "banner > shown.lost"
+      ]
+    },
+    "the_banner_says_the_game_is_drawn": {
+      "y": "y/src/checkers.test.y:1405",
+      "rust": "checkers_example::checkers::tests::the_banner_says_the_game_is_drawn",
+      "covers": [
+        "banner > shown.drawn"
+      ]
+    },
+    "the_banner_is_written_beneath_the_board": {
+      "y": "y/src/checkers.test.y:1417",
+      "rust": "checkers_example::checkers::tests::the_banner_is_written_beneath_the_board",
+      "covers": [
+        "draw"
+      ]
+    },
+    "the_levels_are_drawn_with_the_best_score": {
+      "y": "y/src/checkers.test.y:1431",
+      "rust": "checkers_example::checkers::tests::the_levels_are_drawn_with_the_best_score",
+      "covers": [
+        "draw_levels > level'many"
+      ]
+    },
+    "a_click_on_the_board_finds_its_square": {
+      "y": "y/src/checkers.test.y:1445",
+      "rust": "checkers_example::checkers::tests::a_click_on_the_board_finds_its_square",
+      "covers": [
+        "square_at > inside"
+      ]
+    },
+    "a_click_left_of_the_board_finds_no_square": {
+      "y": "y/src/checkers.test.y:1454",
+      "rust": "checkers_example::checkers::tests::a_click_left_of_the_board_finds_no_square",
+      "covers": [
+        "square_at > outside'1"
+      ]
+    },
+    "a_click_below_the_board_finds_no_square": {
+      "y": "y/src/checkers.test.y:1463",
+      "rust": "checkers_example::checkers::tests::a_click_below_the_board_finds_no_square",
+      "covers": [
+        "square_at > outside'2"
+      ]
+    },
+    "a_click_on_the_first_button_finds_the_easiest_level": {
+      "y": "y/src/checkers.test.y:1472",
+      "rust": "checkers_example::checkers::tests::a_click_on_the_first_button_finds_the_easiest_level",
+      "covers": [
+        "level_at > level > pressed"
+      ]
+    },
+    "a_click_on_the_second_button_finds_its_level": {
+      "y": "y/src/checkers.test.y:1481",
+      "rust": "checkers_example::checkers::tests::a_click_on_the_second_button_finds_its_level",
+      "covers": [
+        "level_at > level'many > pressed"
+      ]
+    },
+    "a_click_beside_the_buttons_finds_no_level": {
+      "y": "y/src/checkers.test.y:1490",
+      "rust": "checkers_example::checkers::tests::a_click_beside_the_buttons_finds_no_level",
+      "covers": [
+        "level_at > level'many > missed'1"
+      ]
+    },
+    "a_click_above_the_buttons_finds_no_level": {
+      "y": "y/src/checkers.test.y:1499",
+      "rust": "checkers_example::checkers::tests::a_click_above_the_buttons_finds_no_level",
+      "covers": [
+        "level_at > level'many > missed'2"
+      ]
+    },
+    "a_square_has_its_corner_inside_the_gap": {
+      "y": "y/src/checkers.test.y:1508",
+      "rust": "checkers_example::checkers::tests::a_square_has_its_corner_inside_the_gap",
+      "covers": [
+        "corner_of"
+      ]
+    },
+    "a_square_has_its_centre_half_a_side_in": {
+      "y": "y/src/checkers.test.y:1517",
+      "rust": "checkers_example::checkers::tests::a_square_has_its_centre_half_a_side_in",
+      "covers": [
+        "centre_of"
+      ]
+    },
+    "a_light_square_is_light": {
+      "y": "y/src/checkers.test.y:1526",
+      "rust": "checkers_example::checkers::tests::a_light_square_is_light",
+      "covers": [
+        "shade_of > looks.light"
+      ]
+    },
+    "the_selected_square_is_marked": {
+      "y": "y/src/checkers.test.y:1537",
+      "rust": "checkers_example::checkers::tests::the_selected_square_is_marked",
+      "covers": [
+        "shade_of > looks.selected"
+      ]
+    },
+    "the_last_move_is_marked": {
+      "y": "y/src/checkers.test.y:1548",
+      "rust": "checkers_example::checkers::tests::the_last_move_is_marked",
+      "covers": [
+        "shade_of > looks.last"
+      ]
+    },
+    "a_dark_square_is_dark": {
+      "y": "y/src/checkers.test.y:1560",
+      "rust": "checkers_example::checkers::tests::a_dark_square_is_dark",
+      "covers": [
+        "shade_of > looks.dark"
+      ]
+    },
+    "before_any_move_no_square_is_part_of_the_last": {
+      "y": "y/src/checkers.test.y:1571",
+      "rust": "checkers_example::checkers::tests::before_any_move_no_square_is_part_of_the_last",
+      "covers": [
+        "in_last_move > made.none"
+      ]
+    },
+    "the_square_landed_on_is_part_of_the_last_move": {
+      "y": "y/src/checkers.test.y:1582",
+      "rust": "checkers_example::checkers::tests::the_square_landed_on_is_part_of_the_last_move",
+      "covers": [
+        "in_last_move > made.some"
+      ]
+    },
+    "a_player_with_no_moves_has_nowhere_to_go": {
+      "y": "y/src/checkers.test.y:1594",
+      "rust": "checkers_example::checkers::tests::a_player_with_no_moves_has_nowhere_to_go",
+      "covers": [
+        "landings > no_moves"
+      ]
+    },
+    "the_only_move_shows_where_it_goes": {
+      "y": "y/src/checkers.test.y:1605",
+      "rust": "checkers_example::checkers::tests::the_only_move_shows_where_it_goes",
+      "covers": [
+        "landings > candidate > from_selected"
+      ]
+    },
+    "another_piece_shows_nowhere_to_go": {
+      "y": "y/src/checkers.test.y:1616",
+      "rust": "checkers_example::checkers::tests::another_piece_shows_nowhere_to_go",
+      "covers": [
+        "landings > candidate > from_elsewhere"
+      ]
+    },
+    "the_selected_piece_shows_where_it_may_go": {
+      "y": "y/src/checkers.test.y:1627",
+      "rust": "checkers_example::checkers::tests::the_selected_piece_shows_where_it_may_go",
+      "covers": [
+        "landings > candidate'many > from_selected"
+      ]
+    },
+    "with_none_selected_nothing_is_shown": {
+      "y": "y/src/checkers.test.y:1638",
+      "rust": "checkers_example::checkers::tests::with_none_selected_nothing_is_shown",
+      "covers": [
+        "landings > candidate'many > from_elsewhere"
+      ]
+    },
+    "the_board_is_drawn_in_squares": {
+      "y": "y/src/checkers.test.y:1649",
+      "rust": "checkers_example::checkers::tests::the_board_is_drawn_in_squares",
+      "covers": [
+        "draw_board > row'many > column'many"
+      ]
+    },
+    "an_empty_board_has_no_pieces_to_draw": {
+      "y": "y/src/checkers.test.y:1663",
+      "rust": "checkers_example::checkers::tests::an_empty_board_has_no_pieces_to_draw",
+      "covers": [
+        "draw_pieces > no_pieces"
+      ]
+    },
+    "a_lone_piece_is_drawn": {
+      "y": "y/src/checkers.test.y:1677",
+      "rust": "checkers_example::checkers::tests::a_lone_piece_is_drawn",
+      "covers": [
+        "draw_pieces > placed"
+      ]
+    },
+    "every_piece_is_drawn": {
+      "y": "y/src/checkers.test.y:1691",
+      "rust": "checkers_example::checkers::tests::every_piece_is_drawn",
+      "covers": [
+        "draw_pieces > placed'many"
+      ]
+    },
+    "with_none_selected_no_square_is_marked": {
+      "y": "y/src/checkers.test.y:1705",
+      "rust": "checkers_example::checkers::tests::with_none_selected_no_square_is_marked",
+      "covers": [
+        "draw_marks > no_marks"
+      ]
+    },
+    "the_one_square_of_the_only_move_is_marked": {
+      "y": "y/src/checkers.test.y:1719",
+      "rust": "checkers_example::checkers::tests::the_one_square_of_the_only_move_is_marked",
+      "covers": [
+        "draw_marks > landing"
+      ]
+    },
+    "each_square_the_selected_piece_may_go_to_is_marked": {
+      "y": "y/src/checkers.test.y:1733",
+      "rust": "checkers_example::checkers::tests::each_square_the_selected_piece_may_go_to_is_marked",
+      "covers": [
+        "draw_marks > landing'many"
+      ]
+    },
+    "a_piece_is_drawn_as_discs": {
+      "y": "y/src/checkers.test.y:1747",
+      "rust": "checkers_example::checkers::tests::a_piece_is_drawn_as_discs",
+      "covers": [
+        "draw_piece"
+      ]
+    },
+    "a_red_king_is_red_with_a_crown": {
+      "y": "y/src/checkers.test.y:1759",
+      "rust": "checkers_example::checkers::tests::a_red_king_is_red_with_a_crown",
+      "covers": [
+        "colours_of > painted.red_king"
+      ]
+    },
+    "a_red_man_is_red": {
+      "y": "y/src/checkers.test.y:1768",
+      "rust": "checkers_example::checkers::tests::a_red_man_is_red",
+      "covers": [
+        "colours_of > painted.red_man"
+      ]
+    },
+    "a_white_king_is_white_with_a_crown": {
+      "y": "y/src/checkers.test.y:1777",
+      "rust": "checkers_example::checkers::tests::a_white_king_is_white_with_a_crown",
+      "covers": [
+        "colours_of > painted.white_king"
+      ]
+    },
+    "a_white_man_is_white": {
+      "y": "y/src/checkers.test.y:1786",
+      "rust": "checkers_example::checkers::tests::a_white_man_is_white",
+      "covers": [
+        "colours_of > painted.white_man"
+      ]
+    },
+    "escape_at_the_levels_ends_play": {
+      "y": "y/src/checkers.test.y:1795",
+      "rust": "checkers_example::checkers::tests::escape_at_the_levels_ends_play",
+      "covers": [
+        "play > open > picked.none"
+      ]
+    },
+    "a_level_is_chosen_and_a_move_made": {
+      "y": "y/src/checkers.test.y:1809",
+      "rust": "checkers_example::checkers::tests::a_level_is_chosen_and_a_move_made",
+      "covers": [
+        "play > open > picked.level"
       ]
     },
     "a_window_closed_as_a_game_starts_ends_play": {
-      "y": "y/src/checkers.test.y:753",
+      "y": "y/src/checkers.test.y:1831",
       "rust": "checkers_example::checkers::tests::a_window_closed_as_a_game_starts_ends_play",
       "covers": [
-        "play > open'many > picked.none",
-        "play > open'many > picked.level",
-        "play_game > closed_at_once'3",
-        "level_clicked > place > hit"
+        "play > open'many > picked.none"
+      ]
+    },
+    "a_game_is_played_at_the_level_chosen": {
+      "y": "y/src/checkers.test.y:1844",
+      "rust": "checkers_example::checkers::tests::a_game_is_played_at_the_level_chosen",
+      "covers": [
+        "play > open'many > picked.level"
+      ]
+    },
+    "a_window_closed_at_once_chooses_no_level": {
+      "y": "y/src/checkers.test.y:1858",
+      "rust": "checkers_example::checkers::tests::a_window_closed_at_once_chooses_no_level",
+      "covers": [
+        "choose_level > closed_at_once'3"
+      ]
+    },
+    "a_click_on_a_button_chooses_its_level": {
+      "y": "y/src/checkers.test.y:1870",
+      "rust": "checkers_example::checkers::tests::a_click_on_a_button_chooses_its_level",
+      "covers": [
+        "choose_level > choosing"
+      ]
+    },
+    "the_levels_are_shown_until_one_is_clicked": {
+      "y": "y/src/checkers.test.y:1883",
+      "rust": "checkers_example::checkers::tests::the_levels_are_shown_until_one_is_clicked",
+      "covers": [
+        "choose_level > choosing'many"
+      ]
+    },
+    "a_window_closed_at_once_still_scores_the_game": {
+      "y": "y/src/checkers.test.y:1896",
+      "rust": "checkers_example::checkers::tests::a_window_closed_at_once_still_scores_the_game",
+      "covers": [
+        "play_game > closed_at_once'3"
+      ]
+    },
+    "space_after_a_game_chooses_another": {
+      "y": "y/src/checkers.test.y:1912",
+      "rust": "checkers_example::checkers::tests::space_after_a_game_chooses_another",
+      "covers": [
+        "play_game > playing > moment.over"
       ]
     },
     "the_computer_moves_in_a_frame": {
-      "y": "y/src/checkers.test.y:767",
+      "y": "y/src/checkers.test.y:1928",
       "rust": "checkers_example::checkers::tests::the_computer_moves_in_a_frame",
       "covers": [
         "play_game > playing > moment.computers_turn"
       ]
     },
-    "the_player_moves_in_a_frame": {
-      "y": "y/src/checkers.test.y:782",
-      "rust": "checkers_example::checkers::tests::the_player_moves_in_a_frame",
+    "the_player_has_a_frame_to_act_in": {
+      "y": "y/src/checkers.test.y:1944",
+      "rust": "checkers_example::checkers::tests::the_player_has_a_frame_to_act_in",
       "covers": [
-        "landings > candidate > from_elsewhere",
-        "draw_pieces > placed'many",
-        "play_game > playing > moment.players_turn",
-        "act_on_clicks > no_clicks"
+        "play_game > playing > moment.players_turn"
+      ]
+    },
+    "escape_ends_a_game": {
+      "y": "y/src/checkers.test.y:1960",
+      "rust": "checkers_example::checkers::tests::escape_ends_a_game",
+      "covers": [
+        "play_game > playing > moment.players_turn"
       ]
     },
     "an_ended_game_waits_for_space": {
-      "y": "y/src/checkers.test.y:798",
+      "y": "y/src/checkers.test.y:1975",
       "rust": "checkers_example::checkers::tests::an_ended_game_waits_for_space",
       "covers": [
         "play_game > playing'many > moment.over"
+      ]
+    },
+    "the_game_goes_on_after_the_computer_moves": {
+      "y": "y/src/checkers.test.y:1991",
+      "rust": "checkers_example::checkers::tests::the_game_goes_on_after_the_computer_moves",
+      "covers": [
+        "play_game > playing'many > moment.computers_turn"
+      ]
+    },
+    "the_player_selects_and_moves_over_two_frames": {
+      "y": "y/src/checkers.test.y:2007",
+      "rust": "checkers_example::checkers::tests::the_player_selects_and_moves_over_two_frames",
+      "covers": [
+        "play_game > playing'many > moment.players_turn"
+      ]
+    },
+    "a_click_where_the_selected_piece_may_go_moves_it": {
+      "y": "y/src/checkers.test.y:2023",
+      "rust": "checkers_example::checkers::tests::a_click_where_the_selected_piece_may_go_moves_it",
+      "covers": [
+        "clicked > judged.moving"
+      ]
+    },
+    "a_click_on_a_piece_that_may_move_selects_it": {
+      "y": "y/src/checkers.test.y:2037",
+      "rust": "checkers_example::checkers::tests::a_click_on_a_piece_that_may_move_selects_it",
+      "covers": [
+        "clicked > judged.choosing"
+      ]
+    },
+    "a_click_elsewhere_selects_nothing": {
+      "y": "y/src/checkers.test.y:2050",
+      "rust": "checkers_example::checkers::tests::a_click_elsewhere_selects_nothing",
+      "covers": [
+        "clicked > judged.elsewhere"
+      ]
+    },
+    "a_click_on_a_button_picks_its_level": {
+      "y": "y/src/checkers.test.y:2063",
+      "rust": "checkers_example::checkers::tests::a_click_on_a_button_picks_its_level",
+      "covers": [
+        "level_clicked > place > hit"
+      ]
+    },
+    "the_first_click_on_a_button_counts": {
+      "y": "y/src/checkers.test.y:2072",
+      "rust": "checkers_example::checkers::tests::the_first_click_on_a_button_counts",
+      "covers": [
+        "level_clicked > place'many > hit"
+      ]
+    },
+    "no_clicks_pick_no_level": {
+      "y": "y/src/checkers.test.y:2081",
+      "rust": "checkers_example::checkers::tests::no_clicks_pick_no_level",
+      "covers": [
+        "level_clicked > no_clicks"
+      ]
+    },
+    "a_click_off_the_buttons_picks_no_level": {
+      "y": "y/src/checkers.test.y:2090",
+      "rust": "checkers_example::checkers::tests::a_click_off_the_buttons_picks_no_level",
+      "covers": [
+        "level_clicked > place > miss"
+      ]
+    },
+    "clicks_that_all_miss_pick_no_level": {
+      "y": "y/src/checkers.test.y:2099",
+      "rust": "checkers_example::checkers::tests::clicks_that_all_miss_pick_no_level",
+      "covers": [
+        "level_clicked > place'many > miss"
+      ]
+    },
+    "no_clicks_change_nothing": {
+      "y": "y/src/checkers.test.y:2108",
+      "rust": "checkers_example::checkers::tests::no_clicks_change_nothing",
+      "covers": [
+        "act_on_clicks > no_clicks"
+      ]
+    },
+    "one_click_selects_a_man": {
+      "y": "y/src/checkers.test.y:2121",
+      "rust": "checkers_example::checkers::tests::one_click_selects_a_man",
+      "covers": [
+        "act_on_clicks > place"
+      ]
+    },
+    "two_clicks_in_a_frame_make_a_move": {
+      "y": "y/src/checkers.test.y:2133",
+      "rust": "checkers_example::checkers::tests::two_clicks_in_a_frame_make_a_move",
+      "covers": [
+        "act_on_clicks > place'many"
+      ]
+    },
+    "the_only_move_is_found": {
+      "y": "y/src/checkers.test.y:2146",
+      "rust": "checkers_example::checkers::tests::the_only_move_is_found",
+      "covers": [
+        "move_to > candidate > fits"
+      ]
+    },
+    "a_move_among_many_is_found": {
+      "y": "y/src/checkers.test.y:2157",
+      "rust": "checkers_example::checkers::tests::a_move_among_many_is_found",
+      "covers": [
+        "move_to > candidate'many > fits"
+      ]
+    },
+    "with_no_moves_none_is_found": {
+      "y": "y/src/checkers.test.y:2168",
+      "rust": "checkers_example::checkers::tests::with_no_moves_none_is_found",
+      "covers": [
+        "move_to > no_moves"
+      ]
+    },
+    "the_only_move_is_not_found_from_another_square": {
+      "y": "y/src/checkers.test.y:2179",
+      "rust": "checkers_example::checkers::tests::the_only_move_is_not_found_from_another_square",
+      "covers": [
+        "move_to > candidate > differs'1"
+      ]
+    },
+    "the_only_move_is_not_found_to_another_square": {
+      "y": "y/src/checkers.test.y:2190",
+      "rust": "checkers_example::checkers::tests::the_only_move_is_not_found_to_another_square",
+      "covers": [
+        "move_to > candidate > differs'2"
+      ]
+    },
+    "no_move_is_found_from_a_blocked_man": {
+      "y": "y/src/checkers.test.y:2201",
+      "rust": "checkers_example::checkers::tests::no_move_is_found_from_a_blocked_man",
+      "covers": [
+        "move_to > candidate'many > differs'1"
+      ]
+    },
+    "no_move_is_found_two_squares_away": {
+      "y": "y/src/checkers.test.y:2212",
+      "rust": "checkers_example::checkers::tests::no_move_is_found_two_squares_away",
+      "covers": [
+        "move_to > candidate'many > differs'2"
+      ]
+    },
+    "the_piece_of_the_only_move_may_move": {
+      "y": "y/src/checkers.test.y:2223",
+      "rust": "checkers_example::checkers::tests::the_piece_of_the_only_move_may_move",
+      "covers": [
+        "may_move_from > candidate > movable"
+      ]
+    },
+    "a_front_man_may_move": {
+      "y": "y/src/checkers.test.y:2234",
+      "rust": "checkers_example::checkers::tests::a_front_man_may_move",
+      "covers": [
+        "may_move_from > candidate'many > movable"
+      ]
+    },
+    "with_no_moves_nothing_may_move": {
+      "y": "y/src/checkers.test.y:2245",
+      "rust": "checkers_example::checkers::tests::with_no_moves_nothing_may_move",
+      "covers": [
+        "may_move_from > no_moves"
+      ]
+    },
+    "another_square_may_not_move": {
+      "y": "y/src/checkers.test.y:2256",
+      "rust": "checkers_example::checkers::tests::another_square_may_not_move",
+      "covers": [
+        "may_move_from > candidate > unmovable"
+      ]
+    },
+    "a_blocked_man_may_not_move": {
+      "y": "y/src/checkers.test.y:2267",
+      "rust": "checkers_example::checkers::tests::a_blocked_man_may_not_move",
+      "covers": [
+        "may_move_from > candidate'many > unmovable"
       ]
     }
   }

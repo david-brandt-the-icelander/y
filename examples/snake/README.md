@@ -25,11 +25,11 @@ On Linux, Macroquad needs the X11 and OpenGL libraries (`libx11-dev`, `libxi-dev
 
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
-| Y source | `y/src/snake.y`, `y/src/snake.test.y`, `y/src/main.y` | 397, 332, 24 | hand |
-| Bare bodies | `bare/src/snake.brs`, `bare/src/snake/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 360, 267, 31, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
-| Constraint files | `bare/src/*.constraints.json` (62 subjects, 43 clauses) | 534 | `strip`, plus the clauses and status the Y lowering adds, then `bare-rust libfmt` |
-| Y facts | `bare/y-facts.json` | 865 | the same, from the Y source and the bare bodies |
-| Rust | `src/snake.rs`, `src/snake/tests.rs`, `src/main.rs`, `src/lib.rs` | 360, 267, 31, 3 | `bare-rust weave`, which gives back the hand-written Rust exactly |
+| Y source | `y/src/snake.y`, `y/src/snake.test.y`, `y/src/main.y` | 397, 730, 24 | hand |
+| Bare bodies | `bare/src/snake.brs`, `bare/src/snake/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 360, 557, 31, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
+| Constraint files | `bare/src/*.constraints.json` (99 subjects, 43 clauses) | 671 | `strip`, plus the clauses and status the Y lowering adds, then `bare-rust libfmt` |
+| Y facts | `bare/y-facts.json` | 1090 | the same, from the Y source and the bare bodies |
+| Rust | `src/snake.rs`, `src/snake/tests.rs`, `src/main.rs`, `src/lib.rs` | 360, 557, 31, 3 | `bare-rust weave`, which gives back the hand-written Rust exactly |
 
 The window is a capability. It comes from [`../y-window`](../y-window/), a stand-in for a Y standard module
 `standard.window` that draws with Macroquad. It is a crate of its own so that the console examples do not build
@@ -83,15 +83,17 @@ Beyond what Hangman and Nim assumed:
 
 ## Checks
 
-- **`bare-rust weave`** of `bare/`: 4 files woven, 0 weave errors, 51 `mut` derived, 0 holes undetermined, 0 warnings.
+- **`bare-rust weave`** of `bare/`: 4 files woven, 0 weave errors, 79 `mut` derived, 0 holes undetermined, 0 warnings.
   The woven Rust is identical to the hand-written Rust it was stripped from.
-- **`cargo test`:** the 18 lowered Y tests pass. Among them are a snake moving each way, turning and refusing to turn
+- **`cargo test`:** the 55 lowered Y tests pass. Among them are a snake moving each way, turning and refusing to turn
   back, crashing, biting itself, following its own tail, eating, and filling the board. Three tests run `play` with a
   fake window: until the window closes, through a crash and a new game, and until Escape.
 - **`cargo clippy --all-targets`:** no warnings, here, in `../y-window` and in `../y-runtime`.
 - **Coverage:** the tests cover all 52 execution paths of the module (Y § 3.14), through the 15 decisions of its 15
   functions. No function of Snake can fail, and none of its paths is ruled out by `fail not_reachable`. Each test was
   also run alone with every decision and loop instrumented, to check that it takes each path it declares.
+- **One path per test:** each of the 55 tests covers one path, and its `when` is one call of that path's function
+  (Y § 3.14). Where two tests cover the same path, each checks something the other does not.
 - **`tools/bare-rust/tests/y_examples.rs`** runs the same checks on Snake as on Hangman and Nim, and a new one: each
   point in `suspensions` is awaited in the bare body.
 - **The window itself:** run under a virtual X display, it draws the board, the snake, the food and the banner. Left

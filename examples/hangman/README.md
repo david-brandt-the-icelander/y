@@ -25,11 +25,11 @@ letter. Six misses hang the man.
 
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
-| Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 333, 516, 18 | hand |
-| Bare bodies | `bare/src/hangman.brs`, `bare/src/hangman/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 343, 383, 44, 3 | hand, as the Y compiler would lower the source |
-| Constraint files | `bare/src/*.constraints.json` (74 subjects, 27 clauses) | 572 | the same, then `bare-rust libfmt` for the canonical form |
-| Y facts | `bare/y-facts.json` | 906 | the same |
-| Rust | `src/hangman.rs`, `src/hangman/tests.rs`, `src/main.rs`, `src/lib.rs` | 343, 383, 44, 3 | `bare-rust weave` |
+| Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 333, 694, 18 | hand |
+| Bare bodies | `bare/src/hangman.brs`, `bare/src/hangman/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 343, 517, 44, 3 | hand, as the Y compiler would lower the source |
+| Constraint files | `bare/src/*.constraints.json` (92 subjects, 27 clauses) | 638 | the same, then `bare-rust libfmt` for the canonical form |
+| Y facts | `bare/y-facts.json` | 1017 | the same |
+| Rust | `src/hangman.rs`, `src/hangman/tests.rs`, `src/main.rs`, `src/lib.rs` | 343, 517, 44, 3 | `bare-rust weave` |
 | Y runtime | `../y-runtime/src/lib.rs` | 503 | hand: a small stand-in for the runtime that lowered code calls |
 
 The Y package has two modules. `hangman` holds the game, and `main` is the entry point. They lower to one Rust package:
@@ -104,13 +104,15 @@ following:
 ## Checks
 
 - **`bare-rust weave`** of `bare/` (with `--crate .` and an output folder beside this one, so that the path to
-  `../y-runtime` resolves): 4 files woven, 0 weave errors, 52 `mut` derived, 0 holes undetermined, 0 warnings.
-- **`cargo test`:** the 37 lowered Y tests and the generated check of the `compile` pass.
+  `../y-runtime` resolves): 4 files woven, 0 weave errors, 56 `mut` derived, 0 holes undetermined, 0 warnings.
+- **`cargo test`:** the 55 lowered Y tests and the generated check of the `compile` pass.
 - **`cargo clippy --all-targets`:** no warnings, here and in `../y-runtime`.
 - **Coverage:** the tests cover all 52 execution paths of the module that need a test, which is what a Y release build
   requires (Y § 3.14). The module's 12 functions have 53 paths through their 13 decisions and their `or fail` calls;
   one ends in `fail not_reachable` and needs none. Each test was also run alone with every decision instrumented, to
   check that it takes each path it declares.
+- **One path per test:** each of the 55 tests covers one path, and its `when` is one call of that path's function
+  (Y § 3.14). Where two tests cover the same path, each checks something the other does not.
 - **`tools/bare-rust/tests/y_examples.rs`** keeps the stages in step without cargo:
   - Weaving the committed bare files gives the committed Rust, apart from the derived `mut`.
   - Stripping the committed Rust gives the committed bare bodies byte for byte, and the same subjects and holes. What

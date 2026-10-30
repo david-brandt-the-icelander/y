@@ -33,11 +33,11 @@ it takes a win at once rather than later. Against it, the best you can do is dra
 
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
-| Y source | `y/src/tic_tac_toe.y`, `y/src/tic_tac_toe.test.y`, `y/src/main.y` | 346, 415, 16 | hand |
-| Bare bodies | `bare/src/tic_tac_toe.brs`, `bare/src/tic_tac_toe/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 332, 320, 21, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
-| Constraint files | `bare/src/*.constraints.json` (64 subjects, 27 clauses) | 511 | `strip`, plus the clauses and status the Y lowering adds, then `bare-rust libfmt` |
-| Y facts | `bare/y-facts.json` | 945 | the same, from the Y source and the bare bodies |
-| Rust | `src/tic_tac_toe.rs`, `src/tic_tac_toe/tests.rs`, `src/main.rs`, `src/lib.rs` | 332, 320, 21, 3 | `bare-rust weave`, which gives back the hand-written Rust exactly |
+| Y source | `y/src/tic_tac_toe.y`, `y/src/tic_tac_toe.test.y`, `y/src/main.y` | 346, 719, 16 | hand |
+| Bare bodies | `bare/src/tic_tac_toe.brs`, `bare/src/tic_tac_toe/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 332, 534, 21, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
+| Constraint files | `bare/src/*.constraints.json` (92 subjects, 27 clauses) | 651 | `strip`, plus the clauses and status the Y lowering adds, then `bare-rust libfmt` |
+| Y facts | `bare/y-facts.json` | 1116 | the same, from the Y source and the bare bodies |
+| Rust | `src/tic_tac_toe.rs`, `src/tic_tac_toe/tests.rs`, `src/main.rs`, `src/lib.rs` | 332, 534, 21, 3 | `bare-rust weave`, which gives back the hand-written Rust exactly |
 
 ## What Tic-tac-toe adds to the earlier lowerings
 
@@ -71,14 +71,16 @@ Beyond what Hangman and Nim assumed:
 
 ## Checks
 
-- **`bare-rust weave`** of `bare/`: 4 files woven, 0 weave errors, 36 `mut` derived, 0 holes undetermined, 0 warnings.
+- **`bare-rust weave`** of `bare/`: 4 files woven, 0 weave errors, 47 `mut` derived, 0 holes undetermined, 0 warnings.
   The woven Rust is identical to the hand-written Rust it was stripped from.
-- **`cargo test`:** the 32 lowered Y tests pass. Among them are a whole game drawn by careful play, one lost by careless
+- **`cargo test`:** the 60 lowered Y tests pass. Among them are a whole game drawn by careful play, one lost by careless
   play, every wrong move the player can type, the computer taking a win over a block, and a line found on a diagonal.
 - **`cargo clippy --all-targets`:** no warnings, here and in `../y-runtime`.
 - **Coverage:** the tests cover all 58 execution paths of the module that need a test (Y § 3.14). Its 15 functions have
   59 paths through 20 decisions and their `or fail` calls; one ends in `fail not_reachable`. Each test was also run
   alone with every decision and loop instrumented, to check that it takes each path it declares.
+- **One path per test:** each of the 60 tests covers one path, and its `when` is one call of that path's function
+  (Y § 3.14). Where two tests cover the same path, each checks something the other does not.
 - **`tools/bare-rust/tests/y_examples.rs`** runs the same checks on Tic-tac-toe as on the other examples, the two copies
   among them.
 
