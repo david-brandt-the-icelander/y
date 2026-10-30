@@ -387,6 +387,14 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
     let found: BTreeMap<String, String> = paths.iter().map(|(p, k)| (p.clone(), ends(k))).collect();
     let in_facts: BTreeMap<String, String> = facts["paths"].as_array().unwrap().iter().map(|p| (p["path"].as_str().unwrap().to_string(), p["ends"].as_str().unwrap().to_string())).collect();
     assert_eq!(in_facts, found, "y-facts.json and the Y source have different paths");
+    // a function has fewer than 100 paths, the lint `too_many_paths` (Y § 3.14); only its own paths count
+    let mut per_function: BTreeMap<&str, usize> = BTreeMap::new();
+    for p in paths.keys() {
+        *per_function.entry(p.split(" > ").next().unwrap()).or_default() += 1;
+    }
+    for (function, n) in &per_function {
+        assert!(*n < 100, "{tested_y}: `{function}` has {n} paths, 100 or more (too_many_paths)");
+    }
     // the tests cover every path but the ones `fail not_reachable` and `fail not_implemented` end (Y § 3.14)
     let required: BTreeSet<String> = paths.iter().filter(|(_, k)| !y_paths::EXEMPT.contains(&k.as_str())).map(|(p, _)| p.clone()).collect();
     let covered: BTreeSet<String> = facts["tests"].as_object().unwrap().values().flat_map(|t| t["covers"].as_array().unwrap().iter().map(|c| c.as_str().unwrap().to_string())).collect();

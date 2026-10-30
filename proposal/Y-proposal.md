@@ -841,8 +841,10 @@ the function does not declare it, and no caller can handle it.
   it checks there, and lists, as it lists unproven contracts (§ 3.11).
 - `assert name = (predicate)` is the same declaration for a fact rather than a branch: it is `fail not_reachable`
   wherever the predicate does not hold.
-- A release build rejects a `fail not_implemented` that an entry point can reach, as it rejects a reachable `todo`
-  (§ 3.16).
+- A `fail not_implemented` may ship, in a release build as in any other: partly written code can be released and its
+  written paths tested, while the path that is not written yet faults, as the build's setting says, if it is ever
+  taken. Its place is listed by `y status` and shown in the review packet (§ 3.16). This is what sets it apart from
+  `todo`, which a release build rejects where an entry point can reach it.
 
 A fault report carries:
 
@@ -1601,6 +1603,18 @@ pass of a loop. Y tests paths.
 - **A loop contributes how often it ran, and the path of one pass:** the pass that left the loop, by `return` or `fail`,
   or else any pass, followed by what comes after the loop. Every way a pass can go is then a path, without a path for
   every sequence of passes.
+- **What paths do not see is the order of passes.** A loop whose second pass goes wrong only after a first pass that
+  went a particular way (a running total that a first pass made negative, an element removed on one pass and read on
+  the next) has a path for each pass, `item'many > negative` and `item'many > positive`, but no path for "positive,
+  then negative". Path coverage does not ask for that sequence, and is not evidence that it was tried. Two things
+  bring it under coverage:
+  - Name the state that one pass leaves for the next as a decision in the body: `if overdrawn = (total < 0):` makes
+    "a pass that starts overdrawn" a path of its own, which a test must then take.
+  - Move the body into a function of its own, whose parameters are the state a pass starts from. Each of its paths is
+    then a pass starting from a state the test chooses, and the loop keeps only the paths of how often it ran.
+
+  A `'many` path is taken only by a test whose loop runs at least twice, so a test of it always crosses one pass into
+  the next; what it checks there is up to the test.
 - **What a path shows is known on the rest of it**: a branch taken, a condition found false, a precondition, a called
   function's `ensures`, a refined type, an `assert`, a count of a list of constants. A path that this contradicts is not
   a path. That is what the compiler's proof that a loop runs (§ 3.5) is made of.
@@ -1617,9 +1631,14 @@ pass of a loop. Y tests paths.
   end in `fail not_reachable` or `fail not_implemented`.** The toolchain reports paths that nothing takes, and paths
   taken only by tests that do not declare them. These are knowledge-driven development's 🙈 and 🙉, computed rather
   than hand-written.
-- **A function's paths are its own**, never multiplied by its callees'. The way to keep paths few is the way to keep
-  functions readable: when a function has many, its parts become functions of their own. `y lint` reports a function
-  with more paths than the project allows.
+- **A function's paths are its own**, never multiplied by its callers' or its callees'. A call is one step of the
+  caller's path, however many paths the callee has; tools may still join them, to show the paths of a call through
+  several functions, but coverage and the limit below count each function alone.
+- **A function has fewer than 100 paths.** Paths grow with the product of a function's decisions: ten independent
+  `if`s in a row are 1,024 paths. `y lint` reports a function with 100 paths or more as `too_many_paths`. The limit is a
+  setting of the project's lint configuration, and one function may go past it as any lint is allowed, `-- lint: allow
+  too_many_paths because "…"`, which a review shows. The way to keep paths few is the way to keep functions readable:
+  when a function has many, its parts become functions of their own.
 
 **Test data.**
 
@@ -1664,7 +1683,8 @@ The number of claims in a module is a number worth watching. It should be small 
 Knowledge-driven development (August 2026) moved the backlog out of trackers and into the documents a reader opens
 anyway. Y moves the part of it that concerns code into the code, where the compiler can see it.
 
-- **`fail not_implemented`** ends a path that is not written yet (§ 3.4). It needs no test, and `y status` lists it.
+- **`fail not_implemented`** ends a path that is not written yet (§ 3.4). It needs no test, `y status` lists it, and,
+  unlike `todo`, it may be released: the rest of the function is written, tested and usable, and that one path faults.
 - **`todo("what is missing")`** is a typed hole, for an expression rather than a path.
   - It type-checks as whatever the context needs.
   - It faults if reached.
