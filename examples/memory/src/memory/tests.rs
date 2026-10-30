@@ -46,7 +46,7 @@ fn clicking(row: i32, column: i32) -> Frame {
 
 #[test]
 fn a_click_between_the_cards_chooses_nothing() {
-    // y: covers choosable#judged.off_cards, card_at#outside
+    // y: covers choosable > judged.off_cards, corner_of
     let mut clock = Clock::fake(Duration::from_secs(1));
     let game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
     let choice = choosable(&game, Point { x: 6, y: 6 });
@@ -55,7 +55,7 @@ fn a_click_between_the_cards_chooses_nothing() {
 
 #[test]
 fn a_click_on_a_card_chooses_it() {
-    // y: covers choosable#judged.free, card_at#inside
+    // y: covers choosable > judged.free, card_at > row > column'many > inside
     let mut clock = Clock::fake(Duration::from_secs(1));
     let game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
     let choice = choosable(&game, Point { x: 192, y: 68 });
@@ -64,7 +64,7 @@ fn a_click_on_a_card_chooses_it() {
 
 #[test]
 fn a_face_up_card_cannot_be_chosen_again() {
-    // y: covers choosable#judged.showing, turn_over#turn.first
+    // y: covers choosable > judged.showing
     let mut clock = Clock::fake(Duration::from_secs(1));
     let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
     turn_over(&mut game, 2, clock.now());
@@ -75,7 +75,7 @@ fn a_face_up_card_cannot_be_chosen_again() {
 
 #[test]
 fn a_matching_pair_stays_face_up() {
-    // y: covers turn_over#turn.matching
+    // y: covers turn_over > turn.first, turn_over > turn.matching
     let mut clock = Clock::fake(Duration::from_secs(1));
     let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
     turn_over(&mut game, 1, clock.now());
@@ -89,7 +89,7 @@ fn a_matching_pair_stays_face_up() {
 
 #[test]
 fn a_pair_that_does_not_match_costs_a_life() {
-    // y: covers turn_over#turn.different, choosable#judged.waiting
+    // y: covers choosable > judged.waiting
     let mut clock = Clock::fake(Duration::from_secs(1));
     let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
     turn_over(&mut game, 1, clock.now());
@@ -102,7 +102,7 @@ fn a_pair_that_does_not_match_costs_a_life() {
 
 #[test]
 fn two_cards_that_do_not_match_turn_back() {
-    // y: covers turn_over#turn.different
+    // y: covers turn_over > turn.different, turn_back > number'many
     let mut clock = Clock::fake(Duration::from_secs(1));
     let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
     turn_over(&mut game, 1, clock.now());
@@ -115,7 +115,7 @@ fn two_cards_that_do_not_match_turn_back() {
 
 #[test]
 fn a_new_game_is_being_played() {
-    // y: covers standing#judged.playing
+    // y: covers standing > judged.playing
     let mut clock = Clock::fake(Duration::from_secs(1));
     let game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
     let reached = standing(&game);
@@ -124,7 +124,7 @@ fn a_new_game_is_being_played() {
 
 #[test]
 fn finding_every_pair_wins() {
-    // y: covers standing#judged.won
+    // y: covers standing > judged.won
     let mut clock = Clock::fake(Duration::from_secs(1));
     let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
     game.matches = board::PAIRS;
@@ -134,7 +134,7 @@ fn finding_every_pair_wins() {
 
 #[test]
 fn losing_every_life_loses() {
-    // y: covers standing#judged.lost
+    // y: covers standing > judged.lost
     let mut clock = Clock::fake(Duration::from_secs(1));
     let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
     game.lives = 0;
@@ -144,7 +144,7 @@ fn losing_every_life_loses() {
 
 #[test]
 fn an_unfinished_game_scores_its_pairs() {
-    // y: covers score#unfinished
+    // y: covers score > unfinished
     let mut clock = Clock::fake(Duration::from_secs(1));
     let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
     game.matches = 3;
@@ -155,7 +155,7 @@ fn an_unfinished_game_scores_its_pairs() {
 
 #[test]
 fn a_quick_win_scores_lives_and_seconds() {
-    // y: covers score#won, time_bonus#quick
+    // y: covers score > won, time_bonus > quick
     let mut clock = Clock::fake(Duration::from_secs(1));
     let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
     game.matches = board::PAIRS;
@@ -167,7 +167,7 @@ fn a_quick_win_scores_lives_and_seconds() {
 
 #[test]
 fn a_slow_win_scores_no_seconds() {
-    // y: covers time_bonus#slow
+    // y: covers time_bonus > slow'gt
     let mut clock = Clock::fake(Duration::from_secs(1));
     let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
     game.matches = board::PAIRS;
@@ -179,7 +179,7 @@ fn a_slow_win_scores_no_seconds() {
 
 #[test]
 fn the_banner_says_how_the_game_stands() {
-    // y: covers banner#shown.playing, banner#shown.won, banner#shown.lost
+    // y: covers banner > shown.playing, banner > shown.won, banner > shown.lost
     let mut clock = Clock::fake(Duration::from_secs(1));
     let playing = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
     let mut won = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
@@ -199,7 +199,7 @@ fn the_banner_says_how_the_game_stands() {
 
 #[test]
 fn a_new_game_deals_two_cards_of_each_picture() {
-    // y: covers standing#judged.playing
+    // y: covers new_game > code'many > number'many
     let mut random = Random::seeded(7);
     let mut clock = Clock::fake(Duration::from_millis(100));
     let mut site = Http::fake(stand_in::DRAWING);
@@ -214,7 +214,7 @@ fn a_new_game_deals_two_cards_of_each_picture() {
 
 #[test]
 fn a_site_that_fails_fails_the_setup() {
-    // y: covers new_game!setup_error.unreachable
+    // y: covers new_game > code > drawing'fails
     let mut random = Random::seeded(7);
     let mut clock = Clock::fake(Duration::from_millis(100));
     let mut site = Http::fake_failing(404);
@@ -224,7 +224,6 @@ fn a_site_that_fails_fails_the_setup() {
 
 #[test]
 fn a_site_too_slow_fails_the_setup() {
-    // y: covers new_game!setup_error.timed_out
     let mut random = Random::seeded(7);
     let mut clock = Clock::fake(Duration::from_millis(100));
     let mut site = Http::fake_expiring();
@@ -234,7 +233,7 @@ fn a_site_too_slow_fails_the_setup() {
 
 #[test]
 fn what_is_not_a_drawing_fails_the_setup() {
-    // y: covers new_game!setup_error.not_a_picture
+    // y: covers new_game > code > made'fails
     let mut random = Random::seeded(7);
     let mut clock = Clock::fake(Duration::from_millis(100));
     let mut site = Http::fake("not a picture");
@@ -245,8 +244,7 @@ fn what_is_not_a_drawing_fails_the_setup() {
 
 #[test]
 fn a_whole_game_is_won_and_another_begun() {
-    // y: covers play#open, play#moment.picking, play#chosen, play#moment.over, play#moment.again, play#closed,
-    // draw_card#shown.face_down, draw_card#shown.face_up, draw_card#shown.matched, banner#shown.won
+    // y: covers play > open'many > moment.again, play > open'many > moment.over
     let mut window = Window::fake_frames(vec![
         Frame::default(),
         clicking(3, 1), clicking(3, 2),
@@ -277,7 +275,7 @@ fn a_whole_game_is_won_and_another_begun() {
 
 #[test]
 fn a_pair_that_does_not_match_is_shown_then_turned_back() {
-    // y: covers play#ignored, play#moment.hiding
+    // y: covers play > open'many > moment.hiding'2eq, pick > place > ignored
     let mut frames = vec![Frame::default(), clicking(0, 0), clicking(0, 1), clicking(0, 2)];
     frames.extend(std::iter::repeat_n(Frame::default(), 9));
     frames.push(Frame { keys: vec![Key::Escape], clicks: Vec::new() });
@@ -296,7 +294,7 @@ fn a_pair_that_does_not_match_is_shown_then_turned_back() {
 
 #[test]
 fn a_site_that_fails_ends_play() {
-    // y: covers play!setup_error.unreachable
+    // y: covers show_fetching, play > game'1'fails
     let mut window = Window::fake_frames(vec![Frame::default()]);
     let mut clock = Clock::fake(Duration::from_millis(100));
     let mut random = Random::seeded(7);
@@ -308,7 +306,6 @@ fn a_site_that_fails_ends_play() {
 
 #[test]
 fn a_site_too_slow_ends_play() {
-    // y: covers play!setup_error.timed_out
     let mut window = Window::fake_frames(vec![Frame::default()]);
     let mut clock = Clock::fake(Duration::from_millis(100));
     let mut random = Random::seeded(7);
@@ -320,7 +317,6 @@ fn a_site_too_slow_ends_play() {
 
 #[test]
 fn what_is_not_a_drawing_ends_play() {
-    // y: covers play!setup_error.not_a_picture
     let expected = Picture::from_svg("not a picture", layout::PICTURE_SIZE);
     let mut window = Window::fake_frames(vec![Frame::default()]);
     let mut clock = Clock::fake(Duration::from_millis(100));
@@ -329,4 +325,122 @@ fn what_is_not_a_drawing_ends_play() {
     let forever = Forever::fake();
     let ended = y_window::block_on(play(&mut window, &mut clock, &mut random, &mut site, &forever));
     assert!(ended == Err(SetupError::NotAPicture { error: expected.expect_err("given") }), "not_a_picture");
+}
+
+#[test]
+fn a_click_between_two_rows_chooses_nothing() {
+    // y: covers card_at > row'many > column'many > outside'1, card_at > row'many > column'many > outside'2
+    let found = card_at(Point { x: 68, y: 130 });
+    assert!(found.is_none(), "nothing");
+}
+
+#[test]
+fn a_game_exactly_on_par_scores_no_seconds() {
+    // y: covers time_bonus > slow'eq
+    let bonus = time_bonus(game_rules::PAR_TIME);
+    assert!(bonus == 0, "nothing");
+}
+
+#[test]
+fn two_clicks_in_a_frame_turn_two_cards() {
+    // y: covers card_at > row > column > inside, pick > place'many > chosen, pick > place'many > ignored
+    let mut clock = Clock::fake(Duration::from_secs(1));
+    let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
+    let mut again = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
+    pick(&mut game, &[Point { x: 68, y: 68 }, Point { x: 192, y: 68 }], clock.now());
+    pick(&mut again, &[Point { x: 68, y: 68 }, Point { x: 68, y: 68 }], clock.now());
+    assert!(game.matches == 1, "a_pair");
+    assert!(again.turned == vec![1], "one_up");
+}
+
+#[test]
+fn a_site_that_fails_partway_fails_the_setup() {
+    // y: covers new_game > code'many > drawing'fails
+    let mut random = Random::seeded(7);
+    let mut clock = Clock::fake(Duration::from_millis(100));
+    let mut site = Http::fake_failing_after(stand_in::DRAWING, 3, 404);
+    let refused = y_window::block_on(new_game(&mut random, &mut clock, &mut site));
+    assert!(refused == Err(SetupError::Unreachable { error: HttpError::fake_status(404) }), "unreachable");
+}
+
+#[test]
+fn a_site_that_gives_a_bad_picture_partway_fails_the_setup() {
+    // y: covers new_game > code'many > made'fails
+    let expected = Picture::from_svg("not a picture", layout::PICTURE_SIZE);
+    let mut random = Random::seeded(7);
+    let mut clock = Clock::fake(Duration::from_millis(100));
+    let mut site = Http::fake_texts(&[stand_in::DRAWING, "not a picture"]);
+    let refused = y_window::block_on(new_game(&mut random, &mut clock, &mut site));
+    assert!(refused == Err(SetupError::NotAPicture { error: expected.expect_err("given") }), "not_a_picture");
+}
+
+#[test]
+fn a_window_closed_while_fetching_ends_play() {
+    // y: covers play > closed_at_once'2
+    let mut window = Window::fake_frames(Vec::new());
+    let mut clock = Clock::fake(Duration::from_millis(100));
+    let mut random = Random::seeded(7);
+    let mut site = Http::fake(stand_in::DRAWING);
+    let forever = Forever::fake();
+    let best = y_window::block_on(play(&mut window, &mut clock, &mut random, &mut site, &forever)).expect("when");
+    assert!(best == 0, "no_score");
+}
+
+#[test]
+fn a_window_closed_after_one_frame_ends_play() {
+    // y: covers draw > row'many > column'many, draw_card > shown.face_down, fill_card, play > open > moment.picking,
+    // pick > no_clicks
+    let mut window = Window::fake_frames(vec![Frame::default(), Frame::default()]);
+    let mut clock = Clock::fake(Duration::from_millis(100));
+    let mut random = Random::seeded(7);
+    let mut site = Http::fake(stand_in::DRAWING);
+    let forever = Forever::fake();
+    let best = y_window::block_on(play(&mut window, &mut clock, &mut random, &mut site, &forever)).expect("when");
+    assert!(best == 0, "no_score");
+}
+
+#[test]
+fn a_site_that_fails_for_the_next_game_ends_play() {
+    // y: covers card_at > row'many > column > inside, card_at > row'many > column'many > inside,
+    // draw_card > shown.matched, play > open'many > moment.again > game'2'fails
+    let mut window = Window::fake_frames(vec![
+        Frame::default(),
+        clicking(3, 1), clicking(3, 2),
+        clicking(0, 0), clicking(2, 3),
+        clicking(1, 1), clicking(3, 3),
+        clicking(0, 3), clicking(3, 4),
+        clicking(1, 0), clicking(2, 1),
+        clicking(2, 0), clicking(2, 2),
+        clicking(1, 3), clicking(2, 4),
+        clicking(0, 4), clicking(3, 0),
+        clicking(1, 2), clicking(1, 4),
+        clicking(0, 1), clicking(0, 2),
+        Frame::default(),
+        Frame { keys: vec![Key::Space], clicks: Vec::new() },
+    ]);
+    let mut clock = Clock::fake(Duration::from_millis(100));
+    let mut random = Random::seeded(7);
+    let mut site = Http::fake_failing_after(stand_in::DRAWING, 10, 404);
+    let forever = Forever::fake();
+    let ended = y_window::block_on(play(&mut window, &mut clock, &mut random, &mut site, &forever));
+    assert!(ended == Err(SetupError::Unreachable { error: HttpError::fake_status(404) }), "unreachable");
+}
+
+#[test]
+fn a_pair_shown_past_its_second_turns_back() {
+    // y: covers draw_card > shown.face_up, draw_picture, play > open'many > moment.hiding'2gt,
+    // play > open'many > moment.picking, pick > place > chosen
+    let mut window = Window::fake_frames(vec![
+        Frame::default(),
+        clicking(0, 0), clicking(0, 1),
+        Frame::default(), Frame::default(), Frame::default(), Frame::default(),
+        Frame { keys: vec![Key::Escape], clicks: Vec::new() },
+    ]);
+    let mut clock = Clock::fake(Duration::from_millis(300));
+    let mut random = Random::seeded(7);
+    let mut site = Http::fake(stand_in::DRAWING);
+    let forever = Forever::fake();
+    let best = y_window::block_on(play(&mut window, &mut clock, &mut random, &mut site, &forever)).expect("when");
+    assert!(best == 0, "no_score");
+    assert!(window.written().iter().any(|line| line == "Pairs 0 of 10   Lives 9   Time 1s   Best 0"), "a_life_lost");
 }

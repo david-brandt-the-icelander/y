@@ -49,6 +49,31 @@
       "params": []
     },
     { "kind": "function", "name": "snake_example::snake::tests::space_starts_the_next_game", "params": [] },
-    { "kind": "function", "name": "snake_example::snake::tests::escape_quits", "params": [] }
+    { "kind": "function", "name": "snake_example::snake::tests::escape_quits", "params": [] },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::the_other_keys_turn_the_snake",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::two_keys_in_a_frame_steer_in_turn",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::the_snake_catches_up_with_the_time",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::a_snake_of_one_or_two_cells_is_drawn",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::a_window_closed_at_once_ends_play",
+      "params": []
+    }
   ]
 }

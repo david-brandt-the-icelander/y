@@ -338,7 +338,7 @@
         { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
       ],
       "result": { "type": "Outcome" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:243" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:241" }]
     },
     {
       "kind": "function",
@@ -348,7 +348,7 @@
         { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
       ],
       "result": { "type": "u32" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:265" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:263" }]
     },
     {
       "kind": "function",
@@ -358,7 +358,7 @@
         { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
       ],
       "result": { "type": "u32" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:280" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:278" }]
     },
     {
       "kind": "function",
@@ -366,7 +366,7 @@
       "visible": "public",
       "params": [{ "name": "player", "type": "Side" }],
       "result": { "type": "Side" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:291" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:289" }]
     },
     {
       "kind": "function",
@@ -375,7 +375,7 @@
         { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
       ],
       "result": { "type": "list<Move> as 'Vec'" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:306" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:304" }]
     },
     {
       "kind": "function",
@@ -384,7 +384,7 @@
         { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
       ],
       "result": { "type": "list<Move> as 'Vec'" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:327" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:326" }]
     },
     {
       "kind": "function",
@@ -480,14 +480,22 @@
         "type": "ref<list<Direction> as 'std::primitive::slice'>",
         "hold": { "kind": "borrows", "lifetime": "'static" }
       },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:475" }]
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure several : size(result) >= 2",
+          "source": "y/src/checkers.y:477",
+          "status": { "lifted": "src/checkers.rs: y_runtime::ensure" }
+        },
+        { "kind": "effects", "text": "pure", "source": "y/src/checkers.y:476" }
+      ]
     },
     {
       "kind": "function",
       "name": "checkers_example::checkers::far_row",
       "params": [{ "name": "owner", "type": "Side" }],
       "result": { "type": "i32" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:492" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:494" }]
     },
     {
       "kind": "function",
@@ -497,21 +505,21 @@
         { "name": "square", "type": "Square" }
       ],
       "result": { "type": "Piece?" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:507" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:509" }]
     },
     {
       "kind": "function",
       "name": "checkers_example::checkers::number_of",
       "params": [{ "name": "square", "type": "Square" }],
       "result": { "type": "u32" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:518" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:520" }]
     },
     {
       "kind": "function",
       "name": "checkers_example::checkers::on_board",
       "params": [{ "name": "square", "type": "Square" }],
       "result": { "type": "bool" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:529" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:531" }]
     },
     { "kind": "module", "name": "checkers_example::checkers::computer", "visible": "public" },
     { "kind": "module", "name": "checkers_example::checkers::computer::search", "visible": "public" },
@@ -584,13 +592,13 @@
         {
           "kind": "require",
           "text": "require has_moves : size(legal_moves(game)) > 0",
-          "source": "y/src/checkers.y:579",
+          "source": "y/src/checkers.y:581",
           "status": { "lifted": "src/checkers.rs: y_runtime::require" }
         },
-        { "kind": "effects", "text": "effects only random", "source": "y/src/checkers.y:578" },
-        { "kind": "effects", "text": "no io", "source": "y/src/checkers.y:578" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:578" },
-        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:578" }
+        { "kind": "effects", "text": "effects only random", "source": "y/src/checkers.y:580" },
+        { "kind": "effects", "text": "no io", "source": "y/src/checkers.y:580" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:580" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:580" }
       ]
     },
     {
@@ -604,11 +612,11 @@
       ],
       "result": { "type": "i32" },
       "clauses": [
-        { "kind": "effects", "text": "no io", "source": "y/src/checkers.y:616" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:616" },
-        { "kind": "effects", "text": "no randomness", "source": "y/src/checkers.y:616" },
-        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:616" },
-        { "kind": "access", "text": "mutates only left", "source": "y/src/checkers.y:616" }
+        { "kind": "effects", "text": "no io", "source": "y/src/checkers.y:617" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:617" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/checkers.y:617" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:617" },
+        { "kind": "access", "text": "mutates only left", "source": "y/src/checkers.y:617" }
       ]
     },
     {
@@ -635,10 +643,16 @@
       ],
       "result": { "type": "Move" },
       "clauses": [
-        { "kind": "effects", "text": "effects only random", "source": "y/src/checkers.y:653" },
-        { "kind": "effects", "text": "no io", "source": "y/src/checkers.y:653" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:653" },
-        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:653" }
+        {
+          "kind": "require",
+          "text": "require has_options : size(options) > 0",
+          "source": "y/src/checkers.y:655",
+          "status": { "lifted": "src/checkers.rs: y_runtime::require" }
+        },
+        { "kind": "effects", "text": "effects only random", "source": "y/src/checkers.y:654" },
+        { "kind": "effects", "text": "no io", "source": "y/src/checkers.y:654" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:654" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:654" }
       ]
     },
     {
@@ -656,10 +670,10 @@
       ],
       "result": { "type": "i32" },
       "clauses": [
-        { "kind": "effects", "text": "effects only random", "source": "y/src/checkers.y:688" },
-        { "kind": "effects", "text": "no io", "source": "y/src/checkers.y:688" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:688" },
-        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:688" }
+        { "kind": "effects", "text": "effects only random", "source": "y/src/checkers.y:696" },
+        { "kind": "effects", "text": "no io", "source": "y/src/checkers.y:696" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:696" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:696" }
       ]
     },
     {
@@ -677,10 +691,10 @@
       ],
       "result": { "type": "PlayedOut" },
       "clauses": [
-        { "kind": "effects", "text": "effects only random", "source": "y/src/checkers.y:717" },
-        { "kind": "effects", "text": "no io", "source": "y/src/checkers.y:717" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:717" },
-        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:717" }
+        { "kind": "effects", "text": "effects only random", "source": "y/src/checkers.y:724" },
+        { "kind": "effects", "text": "no io", "source": "y/src/checkers.y:724" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:724" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:724" }
       ]
     },
     {
@@ -691,7 +705,7 @@
         { "name": "owner", "type": "Side" }
       ],
       "result": { "type": "i32" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:739" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:746" }]
     },
     {
       "kind": "function",
@@ -701,7 +715,7 @@
         { "name": "owner", "type": "Side" }
       ],
       "result": { "type": "i32" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:761" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:768" }]
     },
     { "kind": "module", "name": "checkers_example::checkers::drawing", "visible": "public" },
     { "kind": "module", "name": "checkers_example::checkers::drawing::layout", "visible": "public" },
@@ -889,7 +903,7 @@
         { "name": "highest", "type": "u32" }
       ],
       "result": { "type": "list<text> as 'Vec'" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:835" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:843" }]
     },
     {
       "kind": "function",
@@ -906,10 +920,10 @@
         }
       ],
       "clauses": [
-        { "kind": "effects", "text": "effects only window", "source": "y/src/checkers.y:876" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:876" },
-        { "kind": "effects", "text": "no randomness", "source": "y/src/checkers.y:876" },
-        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:876" }
+        { "kind": "effects", "text": "effects only window", "source": "y/src/checkers.y:884" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:884" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/checkers.y:884" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:884" }
       ]
     },
     {
@@ -925,10 +939,10 @@
         }
       ],
       "clauses": [
-        { "kind": "effects", "text": "effects only window", "source": "y/src/checkers.y:905" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:905" },
-        { "kind": "effects", "text": "no randomness", "source": "y/src/checkers.y:905" },
-        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:905" }
+        { "kind": "effects", "text": "effects only window", "source": "y/src/checkers.y:902" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:902" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/checkers.y:902" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:902" }
       ]
     },
     {
@@ -937,7 +951,7 @@
       "visible": "public",
       "params": [{ "name": "place", "type": "Point" }],
       "result": { "type": "Square?" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:928" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:925" }]
     },
     {
       "kind": "function",
@@ -945,21 +959,21 @@
       "visible": "public",
       "params": [{ "name": "place", "type": "Point" }],
       "result": { "type": "Level?" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:947" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:944" }]
     },
     {
       "kind": "function",
       "name": "checkers_example::checkers::corner_of",
       "params": [{ "name": "square", "type": "Square" }],
       "result": { "type": "Point" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:968" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:965" }]
     },
     {
       "kind": "function",
       "name": "checkers_example::checkers::centre_of",
       "params": [{ "name": "square", "type": "Square" }],
       "result": { "type": "Point" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:979" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:976" }]
     },
     {
       "kind": "function",
@@ -970,7 +984,7 @@
         { "name": "selected", "type": "Square?" }
       ],
       "result": { "type": "Colour" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:993" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:990" }]
     },
     {
       "kind": "function",
@@ -980,7 +994,7 @@
         { "name": "square", "type": "Square" }
       ],
       "result": { "type": "bool" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:1013" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:1010" }]
     },
     {
       "kind": "function",
@@ -990,7 +1004,63 @@
         { "name": "selected", "type": "Square?" }
       ],
       "result": { "type": "list<Square> as 'Vec'" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:1029" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:1026" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::draw_board",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
+        { "name": "selected", "type": "Square?" },
+        {
+          "name": "window",
+          "type": "ref<Window>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "clauses": [
+        { "kind": "effects", "text": "effects only window", "source": "y/src/checkers.y:1046" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:1046" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/checkers.y:1046" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:1046" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::draw_pieces",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
+        {
+          "name": "window",
+          "type": "ref<Window>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "clauses": [
+        { "kind": "effects", "text": "effects only window", "source": "y/src/checkers.y:1062" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:1062" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/checkers.y:1062" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:1062" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::draw_marks",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
+        { "name": "selected", "type": "Square?" },
+        {
+          "name": "window",
+          "type": "ref<Window>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "clauses": [
+        { "kind": "effects", "text": "effects only window", "source": "y/src/checkers.y:1076" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:1076" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/checkers.y:1076" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:1076" }
+      ]
     },
     {
       "kind": "function",
@@ -1004,10 +1074,10 @@
         }
       ],
       "clauses": [
-        { "kind": "effects", "text": "effects only window", "source": "y/src/checkers.y:1047" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:1047" },
-        { "kind": "effects", "text": "no randomness", "source": "y/src/checkers.y:1047" },
-        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:1047" }
+        { "kind": "effects", "text": "effects only window", "source": "y/src/checkers.y:1090" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:1090" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/checkers.y:1090" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:1090" }
       ]
     },
     {
@@ -1015,7 +1085,7 @@
       "name": "checkers_example::checkers::colours_of",
       "params": [{ "name": "piece", "type": "Piece" }],
       "result": { "type": "list<Colour> as 'Vec'" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:1062" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:1105" }]
     },
     { "kind": "module", "name": "checkers_example::checkers::window_play", "visible": "public" },
     {
@@ -1058,7 +1128,7 @@
       ],
       "result": { "type": "u32" },
       "clauses": [
-        { "kind": "effects", "text": "effects only window, random", "source": "y/src/checkers.y:1095" }
+        { "kind": "effects", "text": "effects only window, random", "source": "y/src/checkers.y:1138" }
       ]
     },
     {
@@ -1076,9 +1146,9 @@
       ],
       "result": { "type": "Level?" },
       "clauses": [
-        { "kind": "effects", "text": "effects only window", "source": "y/src/checkers.y:1121" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:1121" },
-        { "kind": "effects", "text": "no randomness", "source": "y/src/checkers.y:1121" }
+        { "kind": "effects", "text": "effects only window", "source": "y/src/checkers.y:1163" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:1163" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/checkers.y:1163" }
       ]
     },
     {
@@ -1102,7 +1172,7 @@
       ],
       "result": { "type": "Ending" },
       "clauses": [
-        { "kind": "effects", "text": "effects only window, random", "source": "y/src/checkers.y:1153" }
+        { "kind": "effects", "text": "effects only window, random", "source": "y/src/checkers.y:1188" }
       ]
     },
     {
@@ -1119,11 +1189,48 @@
         { "name": "place", "type": "Point" }
       ],
       "clauses": [
-        { "kind": "effects", "text": "no io", "source": "y/src/checkers.y:1186" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:1186" },
-        { "kind": "effects", "text": "no randomness", "source": "y/src/checkers.y:1186" },
-        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:1186" },
-        { "kind": "access", "text": "mutates only game, selected", "source": "y/src/checkers.y:1186" }
+        { "kind": "effects", "text": "no io", "source": "y/src/checkers.y:1220" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:1220" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/checkers.y:1220" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:1220" },
+        { "kind": "access", "text": "mutates only game, selected", "source": "y/src/checkers.y:1220" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::level_clicked",
+      "params": [
+        {
+          "name": "clicks",
+          "type": "ref<list<Point> as 'std::primitive::slice'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "Level?" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:1241" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::act_on_clicks",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        {
+          "name": "selected",
+          "type": "ref<Square?>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        {
+          "name": "clicks",
+          "type": "ref<list<Point> as 'std::primitive::slice'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "clauses": [
+        { "kind": "effects", "text": "no io", "source": "y/src/checkers.y:1260" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:1260" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/checkers.y:1260" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:1260" },
+        { "kind": "access", "text": "mutates only game, selected", "source": "y/src/checkers.y:1260" }
       ]
     },
     {
@@ -1135,7 +1242,7 @@
         { "name": "to", "type": "Square?" }
       ],
       "result": { "type": "Move?" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:1209" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:1275" }]
     },
     {
       "kind": "function",
@@ -1145,7 +1252,12 @@
         { "name": "square", "type": "Square?" }
       ],
       "result": { "type": "bool" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:1226" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:1293" }]
     }
-  ]
+  ],
+  "holes": {
+    "checkers_example::checkers::directions_of": {
+      "locals": { "ways": { "host": "&'static [Direction]", "form": "ref_hole" } }
+    }
+  }
 }

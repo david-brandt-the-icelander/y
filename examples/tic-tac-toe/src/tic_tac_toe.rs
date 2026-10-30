@@ -4,8 +4,8 @@
 //! of a `conditional` on its `match` arm.
 
 use std::fmt;
-use y_runtime::{list, require, ConsoleError, Console, Forever};
-use self::{moves::*, setup::*};
+use y_runtime::{ensure, list, not_reachable, require, ConsoleError, Console, Forever};
+use self::{console_play::*, moves::*, setup::*};
 
 #[cfg(test)]
 mod tests;
@@ -111,7 +111,9 @@ pub mod moves {
         let open = open_squares(game);
         let mut best = -100;
         let mut found = open[0];
-        for square in open {
+        let mut ran = false;
+        for square in open { // y: #square
+            ran = true;
             let mut after = game.clone(); // y: a copy, because place changes it and `game` is still read
             place(&mut after, square);
             let value = -value_of(&after);
@@ -121,6 +123,9 @@ pub mod moves {
             } else { // y: #no_better
                 continue;
             }
+        }
+        if !ran { // y: #no_open
+            not_reachable("tic_tac_toe::computer_move#no_open");
         }
         found
     }
@@ -139,7 +144,7 @@ fn over(game: &Game) -> bool {
 /// - `game`: the game.
 /// - Returns that player's mark, or none.
 fn winner(game: &Game) -> Option<Mark> {
-    for line in board::LINES {
+    for line in board::LINES { // y: #line
         let first = list::at_number(&game.squares, line[0]);
         let second = list::at_number(&game.squares, line[1]);
         let third = list::at_number(&game.squares, line[2]);
@@ -169,7 +174,7 @@ fn other(player: Mark) -> Mark {
 /// - Returns their numbers.
 fn open_squares(game: &Game) -> Vec<u32> {
     let mut found = Vec::new();
-    for number in 1..=board::SQUARES {
+    for number in 1..=board::SQUARES { // y: #number
         if list::at_number(&game.squares, number).is_some() { // y: #marked
             continue;
         } else { // y: #empty
@@ -184,22 +189,24 @@ fn open_squares(game: &Game) -> Vec<u32> {
 /// more.
 ///
 /// - `game`: the game.
-/// - Returns the value.
+/// - Returns the value, from -10 to 10.
 fn value_of(game: &Game) -> i32 {
     let open = open_squares(game);
-    if winner(game).is_some() { // y: #now.lost
+    let value = if winner(game).is_some() { // y: #now.lost
         -1 - list::count_int32(&open)
     } else if list::count(&open) == 0 { // y: #now.drawn
         0
     } else { // y: #now.open
         let mut best = -100;
-        for square in open {
+        for square in open { // y: #square
             let mut after = game.clone(); // y: a copy, because place changes it and `game` is still read
             place(&mut after, square);
             best = best.max(-value_of(&after));
         }
         best
-    }
+    };
+    ensure((-10..=10).contains(&value), "tic_tac_toe::value_of#bounded");
+    value
 }
 
 /// Draws the board, three rows of three squares. An empty square shows its number, so the player sees what to type.
@@ -208,9 +215,9 @@ fn value_of(game: &Game) -> i32 {
 /// - Returns the drawing.
 fn shown(game: &Game) -> String {
     let mut rows = Vec::new();
-    for first in [1, 4, 7] {
+    for first in [1, 4, 7] { // y: #first
         let mut row = Vec::new();
-        for number in first..=first + 2 {
+        for number in first..=first + 2 { // y: #number
             row.push(square_shown(game, number));
         }
         let line = row.join(" | ");
@@ -249,45 +256,77 @@ pub mod console_play {
         }
     }
 
-    /// Plays one game at the console, the player's crosses against the computer's noughts, until a player has three in
-    /// a row or the board is full. The player moves first.
+    /// Plays a game at the console, the player's crosses against the computer's noughts, until a player has three in
+    /// a row or the board is full.
     ///
+    /// - `started`: the game as it starts.
     /// - `console`, `forever`: the Y `injected` parameters.
     /// - Returns nothing. The console shows the player how the game ended.
     /// - Fails `InputClosed`: the console closed before the game ended.
     /// - Fails `Console`: the console could not be read or written.
-    pub fn play(console: &mut Console, forever: &Forever) -> Result<(), PlayError> {
-        let mut game = new_game();
+    pub fn play(started: Game, console: &mut Console, forever: &Forever) -> Result<(), PlayError> {
+        let mut game = started;
         console.write_line("Tic-tac-toe: you are X, and move first. Three in a row wins.")?;
-        while !over(&game) { // y: #playing
+        while !over(&game) { // y: #playing, else #over_at_once
             if game.to_move == Mark::Cross { // y: #persons_turn
-                let picture = shown(&game);
-                console.write_line(&picture)?;
-                console.write("Your move (a square's number): ")?;
-                let typed = console.read_line(forever)?; // y: forever because "a player may think for as long as they like"
-                let Some(typed) = typed else { // y: #closed, else #line_read, which narrows `typed` to a `string`
-                    return Err(PlayError::InputClosed);
-                };
-                match read_move(&game, &typed) {
-                    Ok(chosen) => place(&mut game, chosen), // y: #attempted.valid
-                    Err(MoveError::NotANumber) => console.write_line("Type the number of a square, from 1 to 9.")?, // y: #attempted.not_a_move
-                    Err(MoveError::NoSuchSquare) => console.write_line("There is no such square.")?, // y: #attempted.no_square
-                    Err(MoveError::Taken) => console.write_line("That square is taken.")?, // y: #attempted.taken
-                }
+                persons_move(&mut game, console, forever)?;
             } else { // y: #computers_turn
                 let chosen = computer_move(&game);
                 place(&mut game, chosen);
                 console.write_line(&format!("The computer plays {chosen}."))?;
             }
         }
-        // y: #game_over, the `else` of `while playing`: the loop has no `break`, so it runs when the loop ends
-        let picture = shown(&game);
-        console.write_line(&picture)?;
-        let found = winner(&game);
-        match found {
-            None => console.write_line("The board is full. A draw.")?, // y: #drawn
-            Some(found) => console.write_line(&format!("{found} has three in a row, and wins."))?, // y: #won, which narrows `found` to a `mark`
-        }
+        announce(&game, console)?;
         Ok(())
     }
 }
+
+/// Shows the board and reads the player's move, then makes it, or says what is wrong with what they typed.
+///
+/// - `game`: the game, which changes when the move is made.
+/// - `console`, `forever`: the Y `injected` parameters.
+/// - Fails `InputClosed`: the console closed before the player moved.
+/// - Fails `Console`: the console could not be read or written.
+fn persons_move(game: &mut Game, console: &mut Console, forever: &Forever) -> Result<(), PlayError> {
+    let picture = shown(game);
+    console.write_line(&picture)?;
+    console.write("Your move (a square's number): ")?;
+    let typed = console.read_line(forever)?; // y: forever because "a player may think for as long as they like"
+    let Some(typed) = typed else { // y: #closed, else #line_read, which narrows `typed` to a `string`
+        return Err(PlayError::InputClosed);
+    };
+    match read_move(game, &typed) {
+        Ok(chosen) => place(game, chosen), // y: #attempted.valid
+        Err(error) => console.write_line(complaint(error))?, // y: #attempted.invalid
+    }
+    Ok(())
+}
+
+/// What the game says to what is not a move.
+///
+/// - `error`: why it is not.
+/// - Returns the line to write.
+fn complaint(error: MoveError) -> &'static str {
+    match error {
+        MoveError::NotANumber => "Type the number of a square, from 1 to 9.", // y: #wrong.not_a_move
+        MoveError::NoSuchSquare => "There is no such square.", // y: #wrong.no_square
+        MoveError::Taken => "That square is taken.", // y: #wrong.taken
+    }
+}
+
+/// Shows the board as the game ended, and how it ended.
+///
+/// - `game`: the game.
+/// - `console`: the Y `injected` parameter.
+/// - Fails with a `ConsoleError`: the console could not be written.
+fn announce(game: &Game, console: &mut Console) -> Result<(), ConsoleError> {
+    let picture = shown(game);
+    console.write_line(&picture)?;
+    let found = winner(game);
+    match found {
+        None => console.write_line("The board is full. A draw.")?, // y: #drawn
+        Some(found) => console.write_line(&format!("{found} has three in a row, and wins."))?, // y: #won, which narrows `found` to a `mark`
+    }
+    Ok(())
+}
+

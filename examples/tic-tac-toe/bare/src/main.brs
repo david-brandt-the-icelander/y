@@ -1,6 +1,7 @@
 //! Lowered from `y/src/main.y`, the Y module `main`: the entry point.
 
 use tic_tac_toe_example::tic_tac_toe::console_play::{play, PlayError};
+use tic_tac_toe_example::tic_tac_toe::setup::new_game;
 use y_runtime::System;
 
 /// Plays one game of tic-tac-toe at the terminal.
@@ -14,7 +15,7 @@ fn main() {
         // y: inject(console = system.console(), forever = system.forever())
         let console = system.console();
         let forever = system.forever();
-        play(&mut console, &forever)?;
+        play(new_game(), &mut console, &forever)?;
     }
     Ok(())
 }

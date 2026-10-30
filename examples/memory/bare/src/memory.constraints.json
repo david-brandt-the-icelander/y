@@ -234,6 +234,18 @@
       ],
       "result": { "type": "Game", "fails": "SetupError" },
       "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure playing : result is Ok(started) implies standing(started) is Playing",
+          "source": "y/src/memory.y:130",
+          "status": { "lifted": "src/memory.rs: y_runtime::ensure" }
+        },
+        {
+          "kind": "ensure",
+          "text": "ensure nothing_turned : result is Ok(started) implies size(started.turned) == 0",
+          "source": "y/src/memory.y:131",
+          "status": { "lifted": "src/memory.rs: y_runtime::ensure" }
+        },
         { "kind": "effects", "text": "effects only random, clock, site", "source": "y/src/memory.y:129" }
       ]
     },
@@ -247,7 +259,7 @@
         { "name": "place", "type": "Point" }
       ],
       "result": { "type": "u32?" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/memory.y:168" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/memory.y:170" }]
     },
     {
       "kind": "function",
@@ -262,14 +274,14 @@
         {
           "kind": "require",
           "text": "require may_turn : game.sides[number - 1] is FaceDown and size(game.turned) < 2",
-          "source": "y/src/memory.y:191",
+          "source": "y/src/memory.y:193",
           "status": { "lifted": "src/memory.rs: y_runtime::require" }
         },
-        { "kind": "effects", "text": "no io", "source": "y/src/memory.y:190" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/memory.y:190" },
-        { "kind": "effects", "text": "no randomness", "source": "y/src/memory.y:190" },
-        { "kind": "effects", "text": "no suspension", "source": "y/src/memory.y:190" },
-        { "kind": "access", "text": "mutates only game", "source": "y/src/memory.y:190" }
+        { "kind": "effects", "text": "no io", "source": "y/src/memory.y:192" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/memory.y:192" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/memory.y:192" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/memory.y:192" },
+        { "kind": "access", "text": "mutates only game", "source": "y/src/memory.y:192" }
       ]
     },
     {
@@ -283,14 +295,14 @@
         {
           "kind": "require",
           "text": "require two_turned : size(game.turned) == 2",
-          "source": "y/src/memory.y:214",
+          "source": "y/src/memory.y:216",
           "status": { "lifted": "src/memory.rs: y_runtime::require" }
         },
-        { "kind": "effects", "text": "no io", "source": "y/src/memory.y:213" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/memory.y:213" },
-        { "kind": "effects", "text": "no randomness", "source": "y/src/memory.y:213" },
-        { "kind": "effects", "text": "no suspension", "source": "y/src/memory.y:213" },
-        { "kind": "access", "text": "mutates only game", "source": "y/src/memory.y:213" }
+        { "kind": "effects", "text": "no io", "source": "y/src/memory.y:215" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/memory.y:215" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/memory.y:215" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/memory.y:215" },
+        { "kind": "access", "text": "mutates only game", "source": "y/src/memory.y:215" }
       ]
     },
     {
@@ -301,7 +313,7 @@
         { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
       ],
       "result": { "type": "Outcome" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/memory.y:227" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/memory.y:229" }]
     },
     {
       "kind": "function",
@@ -311,28 +323,28 @@
         { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
       ],
       "result": { "type": "u32" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/memory.y:245" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/memory.y:247" }]
     },
     {
       "kind": "function",
       "name": "memory_example::memory::time_bonus",
       "params": [{ "name": "elapsed", "type": "Duration" }],
       "result": { "type": "u32" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/memory.y:261" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/memory.y:263" }]
     },
     {
       "kind": "function",
       "name": "memory_example::memory::card_at",
       "params": [{ "name": "place", "type": "Point" }],
       "result": { "type": "u32?" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/memory.y:275" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/memory.y:277" }]
     },
     {
       "kind": "function",
       "name": "memory_example::memory::corner_of",
       "params": [{ "name": "row", "type": "i32" }, { "name": "column", "type": "i32" }],
       "result": { "type": "Point" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/memory.y:300" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/memory.y:302" }]
     },
     { "kind": "module", "name": "memory_example::memory::drawing", "visible": "public" },
     { "kind": "module", "name": "memory_example::memory::drawing::layout", "visible": "public" },
@@ -436,7 +448,7 @@
         { "name": "highest", "type": "u32" }
       ],
       "result": { "type": "list<text> as 'Vec'" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/memory.y:350" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/memory.y:352" }]
     },
     {
       "kind": "function",
@@ -452,10 +464,10 @@
         }
       ],
       "clauses": [
-        { "kind": "effects", "text": "effects only window", "source": "y/src/memory.y:379" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/memory.y:379" },
-        { "kind": "effects", "text": "no randomness", "source": "y/src/memory.y:379" },
-        { "kind": "effects", "text": "no suspension", "source": "y/src/memory.y:379" }
+        { "kind": "effects", "text": "effects only window", "source": "y/src/memory.y:381" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/memory.y:381" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/memory.y:381" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/memory.y:381" }
       ]
     },
     {
@@ -472,10 +484,10 @@
         }
       ],
       "clauses": [
-        { "kind": "effects", "text": "effects only window", "source": "y/src/memory.y:404" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/memory.y:404" },
-        { "kind": "effects", "text": "no randomness", "source": "y/src/memory.y:404" },
-        { "kind": "effects", "text": "no suspension", "source": "y/src/memory.y:404" }
+        { "kind": "effects", "text": "effects only window", "source": "y/src/memory.y:406" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/memory.y:406" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/memory.y:406" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/memory.y:406" }
       ]
     },
     {
@@ -491,10 +503,10 @@
         }
       ],
       "clauses": [
-        { "kind": "effects", "text": "effects only window", "source": "y/src/memory.y:424" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/memory.y:424" },
-        { "kind": "effects", "text": "no randomness", "source": "y/src/memory.y:424" },
-        { "kind": "effects", "text": "no suspension", "source": "y/src/memory.y:424" }
+        { "kind": "effects", "text": "effects only window", "source": "y/src/memory.y:426" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/memory.y:426" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/memory.y:426" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/memory.y:426" }
       ]
     },
     {
@@ -511,10 +523,10 @@
         }
       ],
       "clauses": [
-        { "kind": "effects", "text": "effects only window", "source": "y/src/memory.y:437" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/memory.y:437" },
-        { "kind": "effects", "text": "no randomness", "source": "y/src/memory.y:437" },
-        { "kind": "effects", "text": "no suspension", "source": "y/src/memory.y:437" }
+        { "kind": "effects", "text": "effects only window", "source": "y/src/memory.y:439" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/memory.y:439" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/memory.y:439" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/memory.y:439" }
       ]
     },
     {
@@ -529,9 +541,9 @@
         { "name": "forever", "type": "ref<Forever>", "access": { "rights": "read", "guarantee": "readers" } }
       ],
       "clauses": [
-        { "kind": "effects", "text": "effects only window", "source": "y/src/memory.y:448" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/memory.y:448" },
-        { "kind": "effects", "text": "no randomness", "source": "y/src/memory.y:448" }
+        { "kind": "effects", "text": "effects only window", "source": "y/src/memory.y:450" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/memory.y:450" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/memory.y:450" }
       ]
     },
     { "kind": "module", "name": "memory_example::memory::window_play", "visible": "public" },
@@ -559,8 +571,28 @@
         {
           "kind": "effects",
           "text": "effects only window, clock, random, site",
-          "source": "y/src/memory.y:473"
+          "source": "y/src/memory.y:475"
         }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::pick",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        {
+          "name": "clicks",
+          "type": "ref<list<Point> as 'std::primitive::slice'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "now", "type": "Instant" }
+      ],
+      "clauses": [
+        { "kind": "effects", "text": "no io", "source": "y/src/memory.y:511" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/memory.y:511" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/memory.y:511" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/memory.y:511" },
+        { "kind": "access", "text": "mutates only game", "source": "y/src/memory.y:511" }
       ]
     }
   ]

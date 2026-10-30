@@ -13,7 +13,7 @@ use y_window::Frame;
 /// - Returns the game.
 fn arranged(pieces: &[Placed], to_move: Side) -> Game {
     let mut squares = list::repeated(None, 64);
-    for placed in pieces {
+    for placed in pieces { // y: #placed, else #no_pieces
         list::set_number(&mut squares, number_of(placed.square), Some(placed.piece));
     }
     Game { squares, to_move, level: levels::ALL[2], turns: 0, quiet: 0, last: None }
@@ -39,6 +39,14 @@ fn king(owner: Side, row: i32, column: i32) -> Placed {
     Placed { square: Square { row, column }, piece: Piece { owner, king: true } }
 }
 
+/// A level that looks at a given number of positions a move, for the tests of the search.
+///
+/// - `checks`: how many positions.
+/// - Returns the level.
+fn trial(checks: u32) -> Level {
+    Level { name: "Trial", checks, weight: 1 }
+}
+
 /// A frame of a fake window in which the player clicks the centre of a square.
 ///
 /// - `row`: the square's row.
@@ -50,8 +58,11 @@ fn clicking(row: i32, column: i32) -> Frame {
 
 #[test]
 fn a_new_game_has_twelve_men_each() {
-    // y: covers starting_piece#placed.light, starting_piece#placed.white_men, starting_piece#placed.red_men,
-    // starting_piece#placed.between, placed_pieces#held.empty, placed_pieces#held.piece, standing#judged.playing
+    // y: covers new_game > row'many > column'many, starting_piece > placed.light, starting_piece > placed.white_men,
+    // starting_piece > placed.red_men'eq, starting_piece > placed.red_men'gt, starting_piece > placed.between,
+    // standing > judged.playing, all_steps > placed'many > direction'many > blocked'1,
+    // all_steps > placed'many > direction'many > blocked'2, placed_pieces > row'many > column'many > held.piece,
+    // placed_pieces > row'many > column'many > held.empty
     let started = new_game(levels::ALL[0]);
     let pieces = placed_pieces(&started);
     assert!(pieces.len() == 24, "twenty_four");
@@ -65,9 +76,6 @@ fn a_new_game_has_twelve_men_each() {
 
 #[test]
 fn the_first_moves_are_steps() {
-    // y: covers legal_moves#no_jump, all_steps#open, all_steps#blocked, own_pieces#mine, own_pieces#theirs,
-    // directions_of#moving.red, directions_of#moving.white, chains#cannot_jump, jumpable#inside, jumpable#outside,
-    // belongs_to#held.empty, belongs_to#held.piece, apply#quiet, other#current.red
     let mut game = new_game(levels::ALL[0]);
     let reds = legal_moves(&game);
     apply(&mut game, reds[0].clone()); // y: a copy
@@ -82,7 +90,7 @@ fn the_first_moves_are_steps() {
 
 #[test]
 fn a_capture_must_be_taken() {
-    // y: covers legal_moves#must_jump, chains#can_jump, chains#ends_here, chains_after#uncrowned, apply#capturing
+    // y: covers all_jumps > placed'many, chains_after > uncrowned'2gt
     let mut game = arranged(&[man(Side::Red, 5, 2), man(Side::White, 4, 3), man(Side::Red, 5, 6)], Side::Red);
     game.quiet = 7;
     let moves = legal_moves(&game);
@@ -96,7 +104,7 @@ fn a_capture_must_be_taken() {
 
 #[test]
 fn a_chain_of_jumps_is_one_move() {
-    // y: covers chains#goes_on
+    // y: covers chains > direction'many > can_jump > goes_on
     let game = arranged(&[man(Side::Red, 6, 1), man(Side::White, 5, 2), man(Side::White, 3, 4)], Side::Red);
     let moves = legal_moves(&game);
     assert!(moves.len() == 1, "one_move");
@@ -106,7 +114,8 @@ fn a_chain_of_jumps_is_one_move() {
 
 #[test]
 fn a_man_crowned_by_a_jump_stops() {
-    // y: covers chains_after#crowned, far_row#heading_up
+    // y: covers legal_moves > must_jump, apply > captured, chains > direction'many > can_jump > ends_here,
+    // chains_after > crowned, belongs_to > held.piece, far_row > heading_up
     let mut game = arranged(&[man(Side::Red, 2, 1), man(Side::White, 1, 2), man(Side::White, 1, 4)], Side::Red);
     let moves = legal_moves(&game);
     apply(&mut game, moves[0].clone()); // y: a copy
@@ -116,7 +125,9 @@ fn a_man_crowned_by_a_jump_stops() {
 
 #[test]
 fn a_king_moves_both_ways() {
-    // y: covers directions_of#moving.king
+    // y: covers legal_moves > no_jump, other > current.red, all_steps > placed > direction'many > open,
+    // all_jumps > placed, chains > direction'many > cannot_jump'1, jumpable > inside, belongs_to > held.empty,
+    // directions_of > moving.king, on_board
     let game = arranged(&[king(Side::Red, 4, 3), man(Side::White, 0, 1)], Side::Red);
     let moves = legal_moves(&game);
     assert!(moves.len() == 4, "four_ways");
@@ -124,7 +135,7 @@ fn a_king_moves_both_ways() {
 
 #[test]
 fn white_is_crowned_on_the_bottom_row() {
-    // y: covers far_row#heading_down, other#current.white
+    // y: covers apply > quiet, other > current.white, directions_of > moving.white, far_row > heading_down
     let mut game = arranged(&[man(Side::White, 6, 1), man(Side::Red, 0, 7)], Side::White);
     let moves = legal_moves(&game);
     apply(&mut game, moves[0].clone()); // y: a copy
@@ -134,7 +145,7 @@ fn white_is_crowned_on_the_bottom_row() {
 
 #[test]
 fn a_win_scores_by_level_and_moves() {
-    // y: covers standing#judged.won, score#won
+    // y: covers standing > judged.won, score > won, player_moves
     let mut quick = arranged(&[man(Side::Red, 4, 3)], Side::White);
     quick.turns = 59;
     let mut slow = arranged(&[man(Side::Red, 4, 3)], Side::White);
@@ -148,7 +159,8 @@ fn a_win_scores_by_level_and_moves() {
 
 #[test]
 fn a_loss_scores_nothing() {
-    // y: covers standing#judged.lost, score#unfinished
+    // y: covers standing > judged.lost, score > unfinished, all_steps > no_pieces, all_jumps > no_pieces,
+    // own_pieces > placed > theirs
     let game = arranged(&[man(Side::White, 3, 2)], Side::Red);
     let reached = standing(&game);
     let points = score(&game);
@@ -158,16 +170,20 @@ fn a_loss_scores_nothing() {
 
 #[test]
 fn quiet_turns_draw_the_game() {
-    // y: covers standing#judged.drawn
+    // y: covers standing > judged.drawn'eq, standing > judged.drawn'gt
     let mut game = arranged(&[man(Side::Red, 5, 0), man(Side::White, 2, 7)], Side::Red);
     game.quiet = game_rules::QUIET_LIMIT;
+    let mut later = arranged(&[man(Side::Red, 5, 0), man(Side::White, 2, 7)], Side::Red);
+    later.quiet = game_rules::QUIET_LIMIT + 1;
     let reached = standing(&game);
+    let reached_later = standing(&later);
     assert!(reached == Outcome::Drawn, "drawn");
+    assert!(reached_later == Outcome::Drawn, "still_drawn");
 }
 
 #[test]
 fn pieces_are_worth_their_rank() {
-    // y: covers value_for#judged.playing, material#counted.other, material#counted.king, material#counted.man
+    // y: covers all_steps > placed'many > direction'many > open, value_for > judged.playing
     let game = arranged(&[king(Side::Red, 4, 3), man(Side::Red, 6, 1), man(Side::White, 1, 2)], Side::Red);
     let for_red = value_for(&game, Side::Red);
     let for_white = value_for(&game, Side::White);
@@ -177,23 +193,30 @@ fn pieces_are_worth_their_rank() {
 
 #[test]
 fn an_ended_game_is_worth_its_end() {
-    // y: covers value_for#judged.losing, value_for#judged.winning, value_for#judged.drawn
+    // y: covers value_for > judged.losing, value_for > judged.winning, value_for > judged.drawn'eq,
+    // value_for > judged.drawn'gt
     let stuck = arranged(&[man(Side::Red, 4, 3)], Side::White);
     let mut drawn = arranged(&[man(Side::Red, 5, 0), man(Side::White, 2, 7)], Side::Red);
     drawn.quiet = game_rules::QUIET_LIMIT;
+    let mut later = arranged(&[man(Side::Red, 5, 0), man(Side::White, 2, 7)], Side::Red);
+    later.quiet = game_rules::QUIET_LIMIT + 1;
     let for_white = value_for(&stuck, Side::White);
     let for_red = value_for(&stuck, Side::Red);
     let for_either = value_for(&drawn, Side::Red);
+    let for_either_later = value_for(&later, Side::Red);
     assert!(for_white == -search::WIN_VALUE, "white_lost");
     assert!(for_red == search::WIN_VALUE, "red_won");
     assert!(for_either == 0, "nothing_for_a_draw");
+    assert!(for_either_later == 0, "nothing_later");
 }
 
 #[test]
 fn the_computer_keeps_its_man_out_of_reach() {
-    // y: covers computer_move#deepening, computer_move#finished, computer_move#ran_out, computer_move#deep_enough,
-    // searched#judged.leaf, searched#judged.spent, searched#judged.inner, searched#owners_turn,
-    // searched#others_turn, best_sampled#top, best_sampled#lower, best_sampled#settled
+    // y: covers computer_move > deepening'many'1lt > candidate'many > finished,
+    // computer_move > deepening'many'1lt > candidate'many > ran_out, searched > judged.leaf'2,
+    // searched > judged.spent'gt, searched > judged.inner > candidate > others_turn,
+    // searched > judged.inner > candidate'many > owners_turn, searched > judged.inner > candidate'many > others_turn,
+    // best_sampled > option'many > ranked.top > ties.settled, best_sampled > option'many > ranked.lower > ties.settled
     let mut random = Random::seeded(7);
     let mut game = arranged(&[man(Side::White, 2, 3), man(Side::Red, 4, 5)], Side::White);
     game.level = levels::ALL[1];
@@ -203,8 +226,8 @@ fn the_computer_keeps_its_man_out_of_reach() {
 
 #[test]
 fn the_computer_plays_out_games_to_choose_an_opening() {
-    // y: covers best_sampled#contested, sampled_value#sampling, sampled_value#sampled, sampled_value#any, playout#going,
-    // playout#ended
+    // y: covers apply > captured'many, chains > direction'many > cannot_jump'2, chains_after > uncrowned'1,
+    // best_sampled > option'many > ranked.lower > ties.contested > option'many
     let mut random = Random::seeded(7);
     let mut game = new_game(levels::ALL[1]);
     let opening = legal_moves(&game)[0].clone(); // y: a copy
@@ -215,7 +238,8 @@ fn the_computer_plays_out_games_to_choose_an_opening() {
 
 #[test]
 fn without_checks_the_pieces_decide() {
-    // y: covers sampled_value#none
+    // y: covers sampled_value > no_share, material > placed'many > counted.king, material > placed'many > counted.man,
+    // material > placed'many > counted.other
     let mut random = Random::seeded(7);
     let game = arranged(&[king(Side::Red, 4, 3), man(Side::White, 1, 2)], Side::Red);
     let worth = sampled_value(&game, Side::Red, 0, &mut random);
@@ -224,16 +248,18 @@ fn without_checks_the_pieces_decide() {
 
 #[test]
 fn a_click_finds_its_square() {
-    // y: covers square_at#inside, square_at#outside
+    // y: covers square_at > inside, square_at > outside'1, square_at > outside'2
     let on = square_at(Point { x: 12 + 72 * 3 + 5, y: 12 + 72 * 5 + 5 });
     let off = square_at(Point { x: 5, y: 5 });
+    let below = square_at(Point { x: 100, y: 700 });
     assert!(on == Some(Square { row: 5, column: 3 }), "found");
     assert!(off.is_none(), "none");
+    assert!(below.is_none(), "none_below");
 }
 
 #[test]
 fn a_click_finds_its_level() {
-    // y: covers level_at#pressed, level_at#missed
+    // y: covers level_at > level'many > pressed, level_at > level'many > missed'2
     let on = level_at(Point { x: 100, y: layout::BUTTON_TOP + layout::BUTTON_STEP + 10 });
     let off = level_at(Point { x: 100, y: 10 });
     assert!(on == Some(levels::ALL[1]), "casual");
@@ -242,8 +268,8 @@ fn a_click_finds_its_level() {
 
 #[test]
 fn squares_are_shaded() {
-    // y: covers shade_of#looks.light, shade_of#looks.selected, shade_of#looks.last, shade_of#looks.dark,
-    // in_last_move#made.none, in_last_move#made.some
+    // y: covers shade_of > looks.light, shade_of > looks.selected, shade_of > looks.last, shade_of > looks.dark,
+    // in_last_move > made.some
     let fresh = new_game(levels::ALL[0]);
     let mut moved = new_game(levels::ALL[0]);
     let opening = legal_moves(&moved)[0].clone(); // y: a copy
@@ -262,7 +288,7 @@ fn squares_are_shaded() {
 
 #[test]
 fn the_selected_piece_shows_where_it_may_go() {
-    // y: covers landings#from_selected, landings#from_elsewhere
+    // y: covers landings > candidate'many > from_selected, landings > candidate'many > from_elsewhere
     let game = new_game(levels::ALL[0]);
     let some = landings(&game, Some(Square { row: 5, column: 2 }));
     let none = landings(&game, None);
@@ -272,8 +298,8 @@ fn the_selected_piece_shows_where_it_may_go() {
 
 #[test]
 fn pieces_are_painted_by_player_and_rank() {
-    // y: covers colours_of#painted.red_king, colours_of#painted.red_man, colours_of#painted.white_king,
-    // colours_of#painted.white_man
+    // y: covers colours_of > painted.red_king, colours_of > painted.red_man, colours_of > painted.white_king,
+    // colours_of > painted.white_man
     let red_king = colours_of(Piece { owner: Side::Red, king: true });
     let red_man = colours_of(Piece { owner: Side::Red, king: false });
     let white_king = colours_of(Piece { owner: Side::White, king: true });
@@ -286,7 +312,8 @@ fn pieces_are_painted_by_player_and_rank() {
 
 #[test]
 fn the_banner_says_how_the_game_stands() {
-    // y: covers banner#shown.your_move, banner#shown.thinking, banner#shown.won, banner#shown.lost, banner#shown.drawn
+    // y: covers banner > shown.your_move, banner > shown.thinking, banner > shown.won, banner > shown.lost,
+    // banner > shown.drawn
     let fresh = new_game(levels::ALL[2]);
     let mut thinking = new_game(levels::ALL[2]);
     let opening = legal_moves(&thinking)[0].clone(); // y: a copy
@@ -310,7 +337,8 @@ fn the_banner_says_how_the_game_stands() {
 
 #[test]
 fn a_click_elsewhere_selects_nothing() {
-    // y: covers clicked#judged.elsewhere
+    // y: covers centre_of, clicked > judged.elsewhere, move_to > candidate'many > differs'1,
+    // move_to > candidate'many > differs'2, may_move_from > candidate'many > unmovable
     let mut game = new_game(levels::ALL[0]);
     let mut selected = Some(Square { row: 5, column: 2 });
     clicked(&mut game, &mut selected, centre_of(Square { row: 0, column: 0 }));
@@ -320,7 +348,7 @@ fn a_click_elsewhere_selects_nothing() {
 
 #[test]
 fn escape_at_the_levels_ends_play() {
-    // y: covers play#open, play#picked.none, play#closed, choose_level#choosing, choose_level#chosen_or_stopped
+    // y: covers draw_levels > level'many, choose_level > choosing, level_clicked > no_clicks
     let mut window = Window::fake(&[&[Key::Escape]]);
     let mut random = Random::seeded(7);
     let forever = Forever::fake();
@@ -331,9 +359,9 @@ fn escape_at_the_levels_ends_play() {
 
 #[test]
 fn a_level_is_chosen_and_a_move_made() {
-    // y: covers choose_level#miss, choose_level#hit, play#picked.level, play_game#playing, play_game#stopped,
-    // play_game#moment.players_turn, play_game#moment.computers_turn, clicked#judged.choosing,
-    // clicked#judged.moving, move_to#fits, move_to#differs, may_move_from#movable, may_move_from#unmovable
+    // y: covers playout > ended'1, draw_marks > landing'many, play > open > picked.level, choose_level > choosing'many,
+    // play_game > playing'many > moment.computers_turn, play_game > playing'many > moment.players_turn,
+    // level_clicked > place > miss, act_on_clicks > place
     let mut window = Window::fake_frames(vec![
         Frame { keys: Vec::new(), clicks: vec![Point { x: 100, y: 10 }] },
         Frame { keys: Vec::new(), clicks: vec![Point { x: 100, y: layout::BUTTON_TOP + 10 }] },
@@ -353,10 +381,271 @@ fn a_level_is_chosen_and_a_move_made() {
 
 #[test]
 fn space_after_a_game_chooses_another() {
-    // y: covers play_game#moment.over
+    // y: covers draw_pieces > placed, draw_piece, play_game > playing > moment.over
     let mut won = arranged(&[man(Side::Red, 4, 3)], Side::White);
     won.turns = 59;
     let mut window = Window::fake(&[&[Key::Space]]);
+    let mut random = Random::seeded(7);
+    let forever = Forever::fake();
+    let ended = y_window::block_on(play_game(won, 0, &mut window, &mut random, &forever));
+    assert!(ended == Ending { points: 2100, quitting: false }, "scored");
+}
+
+#[test]
+fn a_blocked_man_has_no_step() {
+    // y: covers all_steps > placed > direction'many > blocked'1, all_steps > placed > direction'many > blocked'2,
+    // jumpable > outside, directions_of > moving.red
+    let game = arranged(&[man(Side::Red, 1, 0), man(Side::White, 0, 1)], Side::Red);
+    let moves = legal_moves(&game);
+    assert!(moves.is_empty(), "none");
+    assert!(standing(&game) == Outcome::Lost, "lost");
+}
+
+#[test]
+fn an_empty_board_has_nothing_on_it() {
+    // y: covers own_pieces > no_pieces, material > no_pieces, draw, corner_of, in_last_move > made.none,
+    // landings > no_moves, draw_board > row'many > column'many, draw_pieces > no_pieces, draw_marks > no_marks,
+    // move_to > no_moves, may_move_from > no_moves
+    let mut window = Window::fake(&[]);
+    let game = arranged(&[], Side::Red);
+    let pieces = own_pieces(&game);
+    let worth = material(&game, Side::Red);
+    let found = move_to(&game, Some(Square { row: 5, column: 0 }), Some(Square { row: 4, column: 1 }));
+    let movable = may_move_from(&game, Some(Square { row: 5, column: 0 }));
+    let marks = landings(&game, Some(Square { row: 5, column: 0 }));
+    draw(&game, None, 0, &mut window);
+    assert!(pieces.is_empty(), "no_pieces");
+    assert!(worth == 0, "no_worth");
+    assert!(found.is_none(), "no_move");
+    assert!(!movable, "not_movable");
+    assert!(marks.is_empty(), "no_marks");
+    assert!(window.written().iter().any(|line| line == "The computer won. Score 0   Best 0"), "banner_written");
+}
+
+#[test]
+fn the_only_move_is_found() {
+    // y: covers own_pieces > placed'many > mine, own_pieces > placed'many > theirs,
+    // landings > candidate > from_selected, draw_marks > landing, move_to > candidate > fits,
+    // move_to > candidate > differs'1, move_to > candidate > differs'2, may_move_from > candidate > movable,
+    // may_move_from > candidate > unmovable
+    let mut window = Window::fake(&[]);
+    let game = arranged(&[man(Side::Red, 5, 0), man(Side::White, 0, 7)], Side::Red);
+    let from = Some(Square { row: 5, column: 0 });
+    let fits = move_to(&game, from, Some(Square { row: 4, column: 1 }));
+    let elsewhere = move_to(&game, Some(Square { row: 0, column: 0 }), Some(Square { row: 4, column: 1 }));
+    let too_far = move_to(&game, from, Some(Square { row: 3, column: 2 }));
+    let movable = may_move_from(&game, from);
+    let unmovable = may_move_from(&game, Some(Square { row: 6, column: 1 }));
+    let marks = landings(&game, from);
+    let pieces = own_pieces(&game);
+    draw(&game, from, 0, &mut window);
+    assert!(fits.is_some(), "found");
+    assert!(elsewhere.is_none(), "not_from_there");
+    assert!(too_far.is_none(), "not_to_there");
+    assert!(movable, "from_its_square");
+    assert!(!unmovable, "not_from_another");
+    assert!(marks == vec![Square { row: 4, column: 1 }], "one_mark");
+    assert!(pieces.len() == 1, "one_of_red");
+}
+
+#[test]
+fn a_lone_piece_is_worth_its_rank() {
+    // y: covers own_pieces > placed > mine, piece_at, number_of, material > placed > counted.king,
+    // material > placed > counted.man, material > placed > counted.other
+    let lone_king = arranged(&[king(Side::Red, 4, 3)], Side::Red);
+    let lone_man = arranged(&[man(Side::Red, 4, 3)], Side::Red);
+    let king_for_red = material(&lone_king, Side::Red);
+    let king_for_white = material(&lone_king, Side::White);
+    let man_for_red = material(&lone_man, Side::Red);
+    let pieces = own_pieces(&lone_man);
+    assert!(king_for_red == search::KING_VALUE, "a_king");
+    assert!(king_for_white == 0, "nothing");
+    assert!(man_for_red == search::MAN_VALUE, "a_man");
+    assert!(pieces.len() == 1, "one_piece");
+}
+
+#[test]
+fn one_option_is_chosen_unweighed() {
+    // y: covers best_sampled > option > ranked.top > ties.settled
+    let mut random = Random::seeded(7);
+    let game = arranged(&[man(Side::Red, 5, 0), man(Side::White, 0, 7)], Side::Red);
+    let options = legal_moves(&game);
+    let chosen = best_sampled(&game, &options, &[0], 10, &mut random);
+    assert!(chosen == options[0], "the_only_one");
+}
+
+#[test]
+fn with_no_checks_the_search_runs_out_at_once() {
+    // y: covers computer_move > deepening > candidate > ran_out, computer_move > deepening > candidate'many > ran_out,
+    // searched > judged.leaf'1, best_sampled > option'many > ranked.top > ties.contested > option'many
+    let mut random = Random::seeded(7);
+    let mut one = arranged(&[man(Side::White, 2, 7), man(Side::Red, 7, 0)], Side::White);
+    one.level = trial(1);
+    let mut two = arranged(&[man(Side::White, 2, 5), man(Side::Red, 7, 0)], Side::White);
+    two.level = trial(1);
+    let only = computer_move(&one, &mut random);
+    let either = computer_move(&two, &mut random);
+    assert!(only.path == vec![Square { row: 3, column: 6 }], "the_only_move");
+    assert!(legal_moves(&two).contains(&either), "a_white_move");
+}
+
+#[test]
+fn with_few_checks_the_search_runs_out_partway() {
+    // y: covers chains_after > uncrowned'2lt, computer_move > deepening'many'1lt > candidate > finished,
+    // computer_move > deepening'many'1lt > candidate > ran_out, sampled_value > some_share > sampling,
+    // playout > going'many
+    let mut random = Random::seeded(7);
+    let mut one = arranged(&[man(Side::White, 2, 7), man(Side::Red, 7, 0)], Side::White);
+    one.level = trial(24);
+    let mut two = arranged(&[man(Side::White, 2, 5), man(Side::Red, 7, 0)], Side::White);
+    two.level = trial(46);
+    let only = computer_move(&one, &mut random);
+    let either = computer_move(&two, &mut random);
+    assert!(only.path == vec![Square { row: 3, column: 6 }], "the_only_move");
+    assert!(legal_moves(&two).contains(&either), "a_white_move");
+}
+
+#[test]
+fn the_search_runs_out_at_its_deepest() {
+    // y: covers computer_move > deepening'many'1eq > candidate > ran_out,
+    // computer_move > deepening'many'1eq > candidate'many > ran_out
+    let mut random = Random::seeded(7);
+    let mut one = arranged(&[man(Side::White, 2, 7), man(Side::Red, 7, 0)], Side::White);
+    one.level = trial(800);
+    let mut two = arranged(&[man(Side::White, 2, 5), man(Side::Red, 7, 0)], Side::White);
+    two.level = trial(1500);
+    let only = computer_move(&one, &mut random);
+    let either = computer_move(&two, &mut random);
+    assert!(only.path == vec![Square { row: 3, column: 6 }], "the_only_move");
+    assert!(legal_moves(&two).contains(&either), "a_white_move");
+}
+
+#[test]
+fn the_search_finishes_its_deepest() {
+    // y: covers computer_move > deepening'many'1eq > candidate > finished,
+    // computer_move > deepening'many'1eq > candidate'many > finished,
+    // searched > judged.inner > candidate > owners_turn, sampled_value > some_share > sampling'many
+    let mut random = Random::seeded(7);
+    let mut one = arranged(&[man(Side::White, 2, 7), man(Side::Red, 7, 0)], Side::White);
+    one.level = trial(1100);
+    let mut two = arranged(&[man(Side::White, 2, 5), man(Side::Red, 7, 0)], Side::White);
+    two.level = trial(2100);
+    let only = computer_move(&one, &mut random);
+    let either = computer_move(&two, &mut random);
+    assert!(only.path == vec![Square { row: 3, column: 6 }], "the_only_move");
+    assert!(legal_moves(&two).contains(&either), "a_white_move");
+}
+
+#[test]
+fn the_search_stops_at_a_draw_and_when_spent() {
+    // y: covers searched > judged.leaf'3eq, searched > judged.leaf'3gt, searched > judged.spent'eq
+    let mut drawn = arranged(&[man(Side::Red, 5, 0), man(Side::White, 2, 7)], Side::Red);
+    drawn.quiet = game_rules::QUIET_LIMIT;
+    let mut later = arranged(&[man(Side::Red, 5, 0), man(Side::White, 2, 7)], Side::Red);
+    later.quiet = game_rules::QUIET_LIMIT + 1;
+    let open = arranged(&[man(Side::Red, 5, 2), man(Side::White, 2, 7)], Side::Red);
+    let mut plenty = 100;
+    let mut exact = 2;
+    let at_draw = searched(&drawn, Side::Red, 3, &mut plenty);
+    let after_draw = searched(&later, Side::Red, 3, &mut plenty);
+    let spent = searched(&open, Side::Red, 3, &mut exact);
+    assert!(at_draw == 0 && after_draw == 0, "nothing_for_a_draw");
+    assert!(exact == 0, "none_left");
+    assert!(spent == 0, "given_up");
+}
+
+#[test]
+fn a_game_played_out_may_end_at_once() {
+    // y: covers playout > ended'2, playout > ended'3eq, playout > ended'3gt, playout > going
+    let mut random = Random::seeded(7);
+    let stuck = arranged(&[man(Side::Red, 1, 0), man(Side::White, 0, 1)], Side::Red);
+    let mut drawn = arranged(&[man(Side::Red, 5, 0), man(Side::White, 2, 7)], Side::Red);
+    drawn.quiet = game_rules::QUIET_LIMIT;
+    let mut later = arranged(&[man(Side::Red, 5, 0), man(Side::White, 2, 7)], Side::Red);
+    later.quiet = game_rules::QUIET_LIMIT + 1;
+    let open = arranged(&[man(Side::Red, 5, 0), man(Side::White, 2, 7)], Side::Red);
+    let no_moves = playout(&stuck, Side::Red, 5, &mut random);
+    let at_draw = playout(&drawn, Side::Red, 5, &mut random);
+    let after_draw = playout(&later, Side::Red, 5, &mut random);
+    let one_move = playout(&open, Side::Red, 1, &mut random);
+    assert!(no_moves == PlayedOut { value: -search::WIN_VALUE, spent: 1 }, "lost_at_once");
+    assert!(at_draw.spent == 1 && after_draw.spent == 1, "drawn_at_once");
+    assert!(one_move.spent == 2, "two_positions");
+}
+
+#[test]
+fn clicks_beside_and_between_the_buttons() {
+    // y: covers level_at > level > pressed, level_at > level'many > missed'1, level_clicked > place'many > hit,
+    // level_clicked > place'many > miss
+    let beside = level_at(Point { x: 595, y: layout::BUTTON_TOP + 10 });
+    let second = level_clicked(&[Point { x: 100, y: 10 }, Point { x: 100, y: layout::BUTTON_TOP + 10 }]);
+    let neither = level_clicked(&[Point { x: 100, y: 10 }, Point { x: 595, y: 10 }]);
+    assert!(beside.is_none(), "none_beside");
+    assert!(second == Some(levels::ALL[0]), "the_second");
+    assert!(neither.is_none(), "none");
+}
+
+#[test]
+fn two_clicks_in_a_frame_make_a_move() {
+    // y: covers clicked > judged.moving, clicked > judged.choosing, act_on_clicks > place'many,
+    // move_to > candidate'many > fits, may_move_from > candidate'many > movable
+    let mut game = new_game(levels::ALL[0]);
+    let mut selected = None;
+    act_on_clicks(&mut game, &mut selected, &[centre_of(Square { row: 5, column: 2 }), centre_of(Square { row: 4, column: 3 })]);
+    assert!(piece_at(&game, Square { row: 4, column: 3 }) == Some(Piece { owner: Side::Red, king: false }), "moved");
+    assert!(game.to_move == Side::White, "white_to_move");
+}
+
+#[test]
+fn a_window_closed_at_once_ends_play() {
+    // y: covers play > open > picked.none, choose_level > closed_at_once'3
+    let mut window = Window::fake(&[]);
+    let mut random = Random::seeded(7);
+    let forever = Forever::fake();
+    let best = y_window::block_on(play(&mut window, &mut random, &forever));
+    assert!(best == 0, "no_score");
+}
+
+#[test]
+fn a_window_closed_as_a_game_starts_ends_play() {
+    // y: covers play > open'many > picked.none, play > open'many > picked.level, play_game > closed_at_once'3,
+    // level_clicked > place > hit
+    let mut window = Window::fake_frames(vec![Frame { keys: Vec::new(), clicks: vec![Point { x: 100, y: layout::BUTTON_TOP + 10 }] }]);
+    let mut random = Random::seeded(7);
+    let forever = Forever::fake();
+    let best = y_window::block_on(play(&mut window, &mut random, &forever));
+    assert!(best == 0, "no_score");
+}
+
+#[test]
+fn the_computer_moves_in_a_frame() {
+    // y: covers play_game > playing > moment.computers_turn
+    let mut window = Window::fake_frames(vec![Frame::default()]);
+    let mut random = Random::seeded(7);
+    let forever = Forever::fake();
+    let computers = arranged(&[man(Side::White, 2, 7), man(Side::Red, 7, 0)], Side::White);
+    let after_computer = y_window::block_on(play_game(computers, 0, &mut window, &mut random, &forever));
+    assert!(after_computer == Ending { points: 0, quitting: false }, "not_quitting");
+}
+
+#[test]
+fn the_player_moves_in_a_frame() {
+    // y: covers landings > candidate > from_elsewhere, draw_pieces > placed'many,
+    // play_game > playing > moment.players_turn, act_on_clicks > no_clicks
+    let mut window = Window::fake_frames(vec![Frame::default()]);
+    let mut random = Random::seeded(7);
+    let forever = Forever::fake();
+    let players = arranged(&[man(Side::White, 2, 7), man(Side::Red, 7, 0)], Side::Red);
+    let ended = y_window::block_on(play_game(players, 0, &mut window, &mut random, &forever));
+    assert!(ended == Ending { points: 0, quitting: false }, "not_quitting");
+}
+
+#[test]
+fn an_ended_game_waits_for_space() {
+    // y: covers play_game > playing'many > moment.over
+    let mut won = arranged(&[man(Side::Red, 4, 3)], Side::White);
+    won.turns = 59;
+    let mut window = Window::fake(&[&[], &[Key::Space]]);
     let mut random = Random::seeded(7);
     let forever = Forever::fake();
     let ended = y_window::block_on(play_game(won, 0, &mut window, &mut random, &forever));

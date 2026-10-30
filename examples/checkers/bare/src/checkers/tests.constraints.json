@@ -42,6 +42,12 @@
     },
     {
       "kind": "function",
+      "name": "checkers_example::checkers::tests::trial",
+      "params": [{ "name": "checks", "type": "u32" }],
+      "result": { "type": "Level" }
+    },
+    {
+      "kind": "function",
       "name": "checkers_example::checkers::tests::clicking",
       "params": [{ "name": "row", "type": "i32" }, { "name": "column", "type": "i32" }],
       "result": { "type": "Frame" }
@@ -157,6 +163,92 @@
     {
       "kind": "function",
       "name": "checkers_example::checkers::tests::space_after_a_game_chooses_another",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_blocked_man_has_no_step",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::an_empty_board_has_nothing_on_it",
+      "params": []
+    },
+    { "kind": "function", "name": "checkers_example::checkers::tests::the_only_move_is_found", "params": [] },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_lone_piece_is_worth_its_rank",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::one_option_is_chosen_unweighed",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::with_no_checks_the_search_runs_out_at_once",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::with_few_checks_the_search_runs_out_partway",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_search_runs_out_at_its_deepest",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_search_finishes_its_deepest",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_search_stops_at_a_draw_and_when_spent",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_game_played_out_may_end_at_once",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::clicks_beside_and_between_the_buttons",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::two_clicks_in_a_frame_make_a_move",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_window_closed_at_once_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_window_closed_as_a_game_starts_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_computer_moves_in_a_frame",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_player_moves_in_a_frame",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::an_ended_game_waits_for_space",
       "params": []
     }
   ]

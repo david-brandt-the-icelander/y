@@ -44,7 +44,7 @@
       "facet": "rules",
       "path": "snake.rules",
       "visible": "public",
-      "y": "y/src/snake.y:92",
+      "y": "y/src/snake.y:93",
       "rust": "snake_example::snake::rules",
       "members": [
         "turned",
@@ -56,7 +56,7 @@
       "facet": "drawing",
       "path": "snake.drawing",
       "visible": "public",
-      "y": "y/src/snake.y:250",
+      "y": "y/src/snake.y:251",
       "rust": "snake_example::snake::drawing",
       "members": [
         "layout",
@@ -70,7 +70,7 @@
       "facet": "window_play",
       "path": "snake.window_play",
       "visible": "public",
-      "y": "y/src/snake.y:328",
+      "y": "y/src/snake.y:330",
       "rust": "snake_example::snake::window_play",
       "members": [
         "play"
@@ -101,7 +101,7 @@
         "random as random"
       ],
       "lowered": "as the last parameter",
-      "y": "y/src/snake.y:124"
+      "y": "y/src/snake.y:125"
     },
     {
       "subject": "snake_example::snake::place_food",
@@ -109,7 +109,7 @@
         "random as random"
       ],
       "lowered": "as the last parameter",
-      "y": "y/src/snake.y:240"
+      "y": "y/src/snake.y:241"
     },
     {
       "subject": "snake_example::snake::drawing::draw",
@@ -117,7 +117,7 @@
         "window as window"
       ],
       "lowered": "as the last parameter",
-      "y": "y/src/snake.y:300"
+      "y": "y/src/snake.y:301"
     },
     {
       "subject": "snake_example::snake::fill_cell",
@@ -125,7 +125,7 @@
         "window as window"
       ],
       "lowered": "as the last parameter",
-      "y": "y/src/snake.y:321"
+      "y": "y/src/snake.y:323"
     },
     {
       "subject": "snake_example::snake::window_play::play",
@@ -136,7 +136,15 @@
         "forever as forever"
       ],
       "lowered": "as the last four parameters, in order",
-      "y": "y/src/snake.y:340"
+      "y": "y/src/snake.y:342"
+    },
+    {
+      "subject": "snake_example::snake::catch_up",
+      "injected": [
+        "random as random"
+      ],
+      "lowered": "as the last parameter",
+      "y": "y/src/snake.y:390"
     },
     {
       "subject": "snake_example::main",
@@ -152,8 +160,8 @@
       "claim": "forever",
       "because": "a hidden window shows no frames, and the game waits until it is shown",
       "requires": "Forever",
-      "y": "y/src/snake.y:365",
-      "bare": "bare/src/snake.brs:327"
+      "y": "y/src/snake.y:361",
+      "bare": "bare/src/snake.brs:328"
     }
   ],
   "suspensions": [
@@ -162,8 +170,8 @@
       "point": "window.next_frame()",
       "because": "the window capability may suspend (Y \u00a7 3.7)",
       "lowered": "async fn, and .await at the point",
-      "y": "y/src/snake.y:365",
-      "bare": "bare/src/snake.brs:327"
+      "y": "y/src/snake.y:361",
+      "bare": "bare/src/snake.brs:328"
     },
     {
       "subject": "snake_example::main",
@@ -181,31 +189,32 @@
       {
         "kind": "conditional",
         "label": "arrow",
+        "y": "y/src/snake.y:104",
         "branches": [
           {
             "name": "arrow.up",
-            "y": "y/src/snake.y:104",
-            "bare": "bare/src/snake.brs:108"
-          },
-          {
-            "name": "arrow.down",
-            "y": "y/src/snake.y:106",
-            "bare": "bare/src/snake.brs:109"
-          },
-          {
-            "name": "arrow.left",
-            "y": "y/src/snake.y:108",
-            "bare": "bare/src/snake.brs:110"
-          },
-          {
-            "name": "arrow.right",
-            "y": "y/src/snake.y:110",
+            "y": "y/src/snake.y:105",
             "bare": "bare/src/snake.brs:111"
           },
           {
+            "name": "arrow.down",
+            "y": "y/src/snake.y:107",
+            "bare": "bare/src/snake.brs:113"
+          },
+          {
+            "name": "arrow.left",
+            "y": "y/src/snake.y:109",
+            "bare": "bare/src/snake.brs:115"
+          },
+          {
+            "name": "arrow.right",
+            "y": "y/src/snake.y:111",
+            "bare": "bare/src/snake.brs:117"
+          },
+          {
             "name": "arrow.other",
-            "y": "y/src/snake.y:112",
-            "bare": "bare/src/snake.brs:112"
+            "y": "y/src/snake.y:113",
+            "bare": "bare/src/snake.brs:119"
           }
         ]
       }
@@ -214,26 +223,27 @@
       {
         "kind": "conditional",
         "label": "moved",
+        "y": "y/src/snake.y:130",
         "branches": [
           {
             "name": "moved.into_wall",
-            "y": "y/src/snake.y:130",
-            "bare": "bare/src/snake.brs:125"
+            "y": "y/src/snake.y:131",
+            "bare": "bare/src/snake.brs:132"
           },
           {
             "name": "moved.into_itself",
-            "y": "y/src/snake.y:134",
-            "bare": "bare/src/snake.brs:127"
+            "y": "y/src/snake.y:135",
+            "bare": "bare/src/snake.brs:134"
           },
           {
             "name": "moved.onto_food",
-            "y": "y/src/snake.y:136",
-            "bare": "bare/src/snake.brs:129"
+            "y": "y/src/snake.y:137",
+            "bare": "bare/src/snake.brs:136"
           },
           {
             "name": "moved.on",
-            "y": "y/src/snake.y:141",
-            "bare": "bare/src/snake.brs:134"
+            "y": "y/src/snake.y:142",
+            "bare": "bare/src/snake.brs:141"
           }
         ]
       }
@@ -244,13 +254,13 @@
         "branches": [
           {
             "name": "reversing",
-            "y": "y/src/snake.y:156",
-            "bare": "bare/src/snake.brs:148"
+            "y": "y/src/snake.y:157",
+            "bare": "bare/src/snake.brs:155"
           },
           {
             "name": "turning",
-            "y": "y/src/snake.y:158",
-            "bare": "bare/src/snake.brs:150"
+            "y": "y/src/snake.y:159",
+            "bare": "bare/src/snake.brs:157"
           }
         ]
       }
@@ -259,26 +269,27 @@
       {
         "kind": "conditional",
         "label": "going",
+        "y": "y/src/snake.y:171",
         "branches": [
           {
             "name": "going.up",
-            "y": "y/src/snake.y:171",
-            "bare": "bare/src/snake.brs:161"
+            "y": "y/src/snake.y:172",
+            "bare": "bare/src/snake.brs:168"
           },
           {
             "name": "going.down",
-            "y": "y/src/snake.y:173",
-            "bare": "bare/src/snake.brs:162"
+            "y": "y/src/snake.y:174",
+            "bare": "bare/src/snake.brs:169"
           },
           {
             "name": "going.left",
-            "y": "y/src/snake.y:175",
-            "bare": "bare/src/snake.brs:163"
+            "y": "y/src/snake.y:176",
+            "bare": "bare/src/snake.brs:170"
           },
           {
             "name": "going.right",
-            "y": "y/src/snake.y:177",
-            "bare": "bare/src/snake.brs:164"
+            "y": "y/src/snake.y:178",
+            "bare": "bare/src/snake.brs:171"
           }
         ]
       }
@@ -287,43 +298,64 @@
       {
         "kind": "conditional",
         "label": "going",
+        "y": "y/src/snake.y:191",
         "branches": [
           {
             "name": "going.up",
-            "y": "y/src/snake.y:191",
-            "bare": "bare/src/snake.brs:175"
+            "y": "y/src/snake.y:192",
+            "bare": "bare/src/snake.brs:182"
           },
           {
             "name": "going.down",
-            "y": "y/src/snake.y:193",
-            "bare": "bare/src/snake.brs:176"
+            "y": "y/src/snake.y:194",
+            "bare": "bare/src/snake.brs:183"
           },
           {
             "name": "going.left",
-            "y": "y/src/snake.y:195",
-            "bare": "bare/src/snake.brs:177"
+            "y": "y/src/snake.y:196",
+            "bare": "bare/src/snake.brs:184"
           },
           {
             "name": "going.right",
-            "y": "y/src/snake.y:197",
-            "bare": "bare/src/snake.brs:178"
+            "y": "y/src/snake.y:198",
+            "bare": "bare/src/snake.brs:185"
           }
         ]
       }
     ],
     "snake.free_cells": [
       {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "row",
+            "y": "y/src/snake.y:223",
+            "bare": "bare/src/snake.brs:203"
+          }
+        ]
+      },
+      {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "column",
+            "y": "y/src/snake.y:224",
+            "bare": "bare/src/snake.brs:204"
+          }
+        ]
+      },
+      {
         "kind": "if",
         "branches": [
           {
             "name": "taken",
-            "y": "y/src/snake.y:226",
-            "bare": "bare/src/snake.brs:199"
+            "y": "y/src/snake.y:227",
+            "bare": "bare/src/snake.brs:206"
           },
           {
             "name": "vacant",
-            "y": "y/src/snake.y:228",
-            "bare": "bare/src/snake.brs:201"
+            "y": "y/src/snake.y:229",
+            "bare": "bare/src/snake.brs:208"
           }
         ]
       }
@@ -334,13 +366,13 @@
         "branches": [
           {
             "name": "full",
-            "y": "y/src/snake.y:243",
-            "bare": "bare/src/snake.brs:215"
+            "y": "y/src/snake.y:244",
+            "bare": "bare/src/snake.brs:222"
           },
           {
             "name": "room",
-            "y": "y/src/snake.y:245",
-            "bare": "bare/src/snake.brs:217"
+            "y": "y/src/snake.y:246",
+            "bare": "bare/src/snake.brs:224"
           }
         ]
       }
@@ -349,26 +381,44 @@
       {
         "kind": "conditional",
         "label": "shown",
+        "y": "y/src/snake.y:282",
         "branches": [
           {
             "name": "shown.playing",
-            "y": "y/src/snake.y:282",
-            "bare": "bare/src/snake.brs:257"
+            "y": "y/src/snake.y:283",
+            "bare": "bare/src/snake.brs:264"
           },
           {
             "name": "shown.crashed",
-            "y": "y/src/snake.y:284",
-            "bare": "bare/src/snake.brs:258"
+            "y": "y/src/snake.y:285",
+            "bare": "bare/src/snake.brs:265"
           },
           {
             "name": "shown.bitten",
-            "y": "y/src/snake.y:286",
-            "bare": "bare/src/snake.brs:259"
+            "y": "y/src/snake.y:287",
+            "bare": "bare/src/snake.brs:266"
           },
           {
             "name": "shown.filled",
-            "y": "y/src/snake.y:288",
-            "bare": "bare/src/snake.brs:260"
+            "y": "y/src/snake.y:289",
+            "bare": "bare/src/snake.brs:267"
+          }
+        ]
+      }
+    ],
+    "snake.draw": [
+      {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "part",
+            "y": "y/src/snake.y:307",
+            "bare": "bare/src/snake.brs:281"
+          },
+          {
+            "name": "no_tail",
+            "y": "y/src/snake.y:309",
+            "bare": "bare/src/snake.brs:281"
           }
         ]
       }
@@ -379,13 +429,13 @@
         "branches": [
           {
             "name": "open",
-            "y": "y/src/snake.y:346",
-            "bare": "bare/src/snake.brs:308"
+            "y": "y/src/snake.y:348",
+            "bare": "bare/src/snake.brs:315"
           },
           {
-            "name": "closed",
-            "y": "y/src/snake.y:366",
-            "bare": "bare/src/snake.brs:329"
+            "name": "closed_at_once",
+            "y": "y/src/snake.y:362",
+            "bare": "bare/src/snake.brs:315"
           }
         ]
       },
@@ -394,147 +444,421 @@
         "branches": [
           {
             "name": "again",
-            "y": "y/src/snake.y:354",
-            "bare": "bare/src/snake.brs:315"
+            "y": "y/src/snake.y:353",
+            "bare": "bare/src/snake.brs:319"
           },
           {
             "name": "going_on",
-            "y": "y/src/snake.y:357",
-            "bare": "bare/src/snake.brs:318"
+            "y": "y/src/snake.y:356",
+            "bare": "bare/src/snake.brs:322"
           }
         ]
-      },
+      }
+    ],
+    "snake.steer": [
+      {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "pressed",
+            "y": "y/src/snake.y:373",
+            "bare": "bare/src/snake.brs:339"
+          },
+          {
+            "name": "no_keys",
+            "y": "y/src/snake.y:375",
+            "bare": "bare/src/snake.brs:339"
+          }
+        ]
+      }
+    ],
+    "snake.catch_up": [
       {
         "kind": "while",
         "branches": [
           {
             "name": "due",
-            "y": "y/src/snake.y:359",
-            "bare": "bare/src/snake.brs:319"
+            "y": "y/src/snake.y:393",
+            "bare": "bare/src/snake.brs:354"
           },
           {
-            "name": "caught_up",
-            "y": "y/src/snake.y:362",
-            "bare": "bare/src/snake.brs:323"
+            "name": "not_due",
+            "y": "y/src/snake.y:396",
+            "bare": "bare/src/snake.brs:354"
           }
         ]
       }
     ]
   },
+  "paths": [
+    {
+      "path": "new_game",
+      "ends": "returns"
+    },
+    {
+      "path": "turned > arrow.up'1",
+      "ends": "returns"
+    },
+    {
+      "path": "turned > arrow.up'2",
+      "ends": "returns"
+    },
+    {
+      "path": "turned > arrow.down'1",
+      "ends": "returns"
+    },
+    {
+      "path": "turned > arrow.down'2",
+      "ends": "returns"
+    },
+    {
+      "path": "turned > arrow.left'1",
+      "ends": "returns"
+    },
+    {
+      "path": "turned > arrow.left'2",
+      "ends": "returns"
+    },
+    {
+      "path": "turned > arrow.right'1",
+      "ends": "returns"
+    },
+    {
+      "path": "turned > arrow.right'2",
+      "ends": "returns"
+    },
+    {
+      "path": "turned > arrow.other",
+      "ends": "returns"
+    },
+    {
+      "path": "advance > moved.into_wall",
+      "ends": "returns"
+    },
+    {
+      "path": "advance > moved.into_itself",
+      "ends": "returns"
+    },
+    {
+      "path": "advance > moved.onto_food",
+      "ends": "returns"
+    },
+    {
+      "path": "advance > moved.on",
+      "ends": "returns"
+    },
+    {
+      "path": "unless_reversing > reversing",
+      "ends": "returns"
+    },
+    {
+      "path": "unless_reversing > turning",
+      "ends": "returns"
+    },
+    {
+      "path": "opposite > going.up",
+      "ends": "returns"
+    },
+    {
+      "path": "opposite > going.down",
+      "ends": "returns"
+    },
+    {
+      "path": "opposite > going.left",
+      "ends": "returns"
+    },
+    {
+      "path": "opposite > going.right",
+      "ends": "returns"
+    },
+    {
+      "path": "ahead_of > going.up",
+      "ends": "returns"
+    },
+    {
+      "path": "ahead_of > going.down",
+      "ends": "returns"
+    },
+    {
+      "path": "ahead_of > going.left",
+      "ends": "returns"
+    },
+    {
+      "path": "ahead_of > going.right",
+      "ends": "returns"
+    },
+    {
+      "path": "on_board",
+      "ends": "returns"
+    },
+    {
+      "path": "free_cells > row'many > column'many > vacant",
+      "ends": "returns"
+    },
+    {
+      "path": "free_cells > row'many > column'many > taken'1",
+      "ends": "returns"
+    },
+    {
+      "path": "free_cells > row'many > column'many > taken'2",
+      "ends": "returns"
+    },
+    {
+      "path": "place_food > full",
+      "ends": "returns"
+    },
+    {
+      "path": "place_food > room",
+      "ends": "returns"
+    },
+    {
+      "path": "banner > shown.playing",
+      "ends": "returns"
+    },
+    {
+      "path": "banner > shown.crashed",
+      "ends": "returns"
+    },
+    {
+      "path": "banner > shown.bitten",
+      "ends": "returns"
+    },
+    {
+      "path": "banner > shown.filled",
+      "ends": "returns"
+    },
+    {
+      "path": "draw > no_tail",
+      "ends": "returns"
+    },
+    {
+      "path": "draw > part",
+      "ends": "returns"
+    },
+    {
+      "path": "draw > part'many",
+      "ends": "returns"
+    },
+    {
+      "path": "fill_cell",
+      "ends": "returns"
+    },
+    {
+      "path": "play > closed_at_once'2",
+      "ends": "returns"
+    },
+    {
+      "path": "play > open > going_on'1",
+      "ends": "returns"
+    },
+    {
+      "path": "play > open'many > again",
+      "ends": "returns"
+    },
+    {
+      "path": "play > open'many > going_on'1",
+      "ends": "returns"
+    },
+    {
+      "path": "play > open'many > going_on'2",
+      "ends": "returns"
+    },
+    {
+      "path": "steer > no_keys",
+      "ends": "returns"
+    },
+    {
+      "path": "steer > pressed",
+      "ends": "returns"
+    },
+    {
+      "path": "steer > pressed'many",
+      "ends": "returns"
+    },
+    {
+      "path": "catch_up > not_due'1",
+      "ends": "returns"
+    },
+    {
+      "path": "catch_up > not_due'2",
+      "ends": "returns"
+    },
+    {
+      "path": "catch_up > due'2eq",
+      "ends": "returns"
+    },
+    {
+      "path": "catch_up > due'2gt",
+      "ends": "returns"
+    },
+    {
+      "path": "catch_up > due'many'2eq",
+      "ends": "returns"
+    },
+    {
+      "path": "catch_up > due'many'2gt",
+      "ends": "returns"
+    }
+  ],
   "tests": {
     "a_new_game_puts_the_food_in_a_free_cell": {
       "y": "y/src/snake.test.y:21",
       "rust": "snake_example::snake::tests::a_new_game_puts_the_food_in_a_free_cell",
       "covers": [
-        "place_food#room",
-        "free_cells#taken",
-        "free_cells#vacant"
+        "new_game",
+        "free_cells > row'many > column'many > vacant",
+        "free_cells > row'many > column'many > taken'1",
+        "free_cells > row'many > column'many > taken'2",
+        "place_food > room"
       ]
     },
     "the_snake_moves_one_cell_the_way_it_heads": {
-      "y": "y/src/snake.test.y:34",
+      "y": "y/src/snake.test.y:35",
       "rust": "snake_example::snake::tests::the_snake_moves_one_cell_the_way_it_heads",
       "covers": [
-        "advance#moved.on",
-        "ahead_of#going.up",
-        "ahead_of#going.down",
-        "ahead_of#going.left",
-        "ahead_of#going.right"
+        "ahead_of > going.up",
+        "ahead_of > going.left"
       ]
     },
     "the_tail_follows_the_head": {
-      "y": "y/src/snake.test.y:57",
+      "y": "y/src/snake.test.y:58",
       "rust": "snake_example::snake::tests::the_tail_follows_the_head",
       "covers": [
-        "advance#moved.on"
+        "advance > moved.on",
+        "ahead_of > going.right",
+        "on_board"
       ]
     },
     "keys_turn_the_snake": {
-      "y": "y/src/snake.test.y:71",
+      "y": "y/src/snake.test.y:72",
       "rust": "snake_example::snake::tests::keys_turn_the_snake",
       "covers": [
-        "turned#arrow.up",
-        "turned#arrow.down",
-        "turned#arrow.left",
-        "turned#arrow.right",
-        "unless_reversing#turning",
-        "opposite#going.up",
-        "opposite#going.down",
-        "opposite#going.left",
-        "opposite#going.right"
+        "turned > arrow.up'1",
+        "turned > arrow.down'2",
+        "turned > arrow.right'2",
+        "opposite > going.up",
+        "opposite > going.down",
+        "opposite > going.left"
       ]
     },
     "the_snake_does_not_turn_back_on_itself": {
-      "y": "y/src/snake.test.y:92",
+      "y": "y/src/snake.test.y:93",
       "rust": "snake_example::snake::tests::the_snake_does_not_turn_back_on_itself",
       "covers": [
-        "unless_reversing#reversing",
-        "turned#arrow.other"
+        "turned > arrow.left'1",
+        "turned > arrow.other",
+        "unless_reversing > reversing",
+        "opposite > going.right"
       ]
     },
     "the_wall_ends_the_game": {
-      "y": "y/src/snake.test.y:107",
+      "y": "y/src/snake.test.y:108",
       "rust": "snake_example::snake::tests::the_wall_ends_the_game",
       "covers": [
-        "advance#moved.into_wall",
-        "banner#shown.crashed"
+        "advance > moved.into_wall",
+        "banner > shown.crashed"
       ]
     },
     "the_snake_cannot_bite_itself": {
-      "y": "y/src/snake.test.y:123",
+      "y": "y/src/snake.test.y:124",
       "rust": "snake_example::snake::tests::the_snake_cannot_bite_itself",
       "covers": [
-        "advance#moved.into_itself",
-        "banner#shown.bitten"
+        "advance > moved.into_itself",
+        "banner > shown.bitten"
       ]
     },
     "the_snake_may_follow_its_own_tail": {
-      "y": "y/src/snake.test.y:141",
+      "y": "y/src/snake.test.y:142",
       "rust": "snake_example::snake::tests::the_snake_may_follow_its_own_tail",
       "covers": [
-        "advance#moved.on"
+        "ahead_of > going.down"
       ]
     },
     "eating_grows_the_snake": {
-      "y": "y/src/snake.test.y:158",
+      "y": "y/src/snake.test.y:159",
       "rust": "snake_example::snake::tests::eating_grows_the_snake",
       "covers": [
-        "advance#moved.onto_food",
-        "banner#shown.playing"
+        "advance > moved.onto_food"
       ]
     },
     "filling_the_board_ends_the_game": {
-      "y": "y/src/snake.test.y:175",
+      "y": "y/src/snake.test.y:176",
       "rust": "snake_example::snake::tests::filling_the_board_ends_the_game",
       "covers": [
-        "place_food#full",
-        "banner#shown.filled"
+        "place_food > full",
+        "banner > shown.filled"
       ]
     },
     "the_game_plays_until_the_window_closes": {
-      "y": "y/src/snake.test.y:197",
+      "y": "y/src/snake.test.y:198",
       "rust": "snake_example::snake::tests::the_game_plays_until_the_window_closes",
       "covers": [
-        "play#open",
-        "play#going_on",
-        "play#due",
-        "play#caught_up",
-        "play#closed"
+        "draw > part'many",
+        "play > open'many > going_on'1",
+        "steer > no_keys",
+        "catch_up > due'2eq"
       ]
     },
     "space_starts_the_next_game": {
-      "y": "y/src/snake.test.y:213",
+      "y": "y/src/snake.test.y:214",
       "rust": "snake_example::snake::tests::space_starts_the_next_game",
       "covers": [
-        "play#again"
+        "play > open'many > again",
+        "play > open'many > going_on'2"
       ]
     },
     "escape_quits": {
-      "y": "y/src/snake.test.y:230",
+      "y": "y/src/snake.test.y:232",
       "rust": "snake_example::snake::tests::escape_quits",
       "covers": [
-        "play#open",
-        "play#closed"
+        "play > open > going_on'1",
+        "steer > pressed"
+      ]
+    },
+    "the_other_keys_turn_the_snake": {
+      "y": "y/src/snake.test.y:247",
+      "rust": "snake_example::snake::tests::the_other_keys_turn_the_snake",
+      "covers": [
+        "turned > arrow.up'2",
+        "turned > arrow.down'1",
+        "turned > arrow.left'2",
+        "turned > arrow.right'1"
+      ]
+    },
+    "two_keys_in_a_frame_steer_in_turn": {
+      "y": "y/src/snake.test.y:267",
+      "rust": "snake_example::snake::tests::two_keys_in_a_frame_steer_in_turn",
+      "covers": [
+        "unless_reversing > turning",
+        "steer > pressed'many"
+      ]
+    },
+    "the_snake_catches_up_with_the_time": {
+      "y": "y/src/snake.test.y:280",
+      "rust": "snake_example::snake::tests::the_snake_catches_up_with_the_time",
+      "covers": [
+        "catch_up > not_due'1",
+        "catch_up > not_due'2",
+        "catch_up > due'2gt",
+        "catch_up > due'many'2eq",
+        "catch_up > due'many'2gt"
+      ]
+    },
+    "a_snake_of_one_or_two_cells_is_drawn": {
+      "y": "y/src/snake.test.y:306",
+      "rust": "snake_example::snake::tests::a_snake_of_one_or_two_cells_is_drawn",
+      "covers": [
+        "banner > shown.playing",
+        "draw > no_tail",
+        "draw > part",
+        "fill_cell"
+      ]
+    },
+    "a_window_closed_at_once_ends_play": {
+      "y": "y/src/snake.test.y:322",
+      "rust": "snake_example::snake::tests::a_window_closed_at_once_ends_play",
+      "covers": [
+        "play > closed_at_once'2"
       ]
     }
   }

@@ -90,6 +90,96 @@
       "kind": "function",
       "name": "tic_tac_toe_example::tic_tac_toe::tests::a_failing_console_ends_the_game",
       "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::square_zero_is_not_on_the_board",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::the_computer_takes_the_last_square",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::an_end_cannot_be_shown_without_the_board",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::a_draw_cannot_be_announced",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::a_win_cannot_be_announced",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::a_move_cannot_be_asked_for_without_the_board",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::a_move_cannot_be_asked_for",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::a_wrong_move_cannot_be_complained_of",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_greet_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::a_full_board_is_over_at_once",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_announce_at_once_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::the_player_fills_the_last_square",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_announce_the_players_last_move_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::the_computer_fills_the_last_square",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_tell_the_computers_last_move_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_announce_the_computers_last_move_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_tell_the_computers_move_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_announce_after_both_have_moved_ends_play",
+      "params": []
     }
   ]
 }

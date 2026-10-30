@@ -126,7 +126,9 @@ public facet setup:
     fails setup_error.timed_out: The pictures took longer than the fetch time to come.
     fails setup_error.not_a_picture: What OpenMoji gave is not a picture.
     ------------------------------------------------------------------------------------------------------------------------------------
-    function new_game(injected random, injected clock, injected site) returns started fails setup_error:
+    function new_game(injected random, injected clock, injected site) returns started fails setup_error
+            ensures playing = (standing(started) == outcome.playing)
+            ensures nothing_turned = started.turned.is_empty():
         codes = random.chosen(from: faces.codes, count: board.pairs)
         mutable pictures = list.new()
 
@@ -490,17 +492,28 @@ public facet window_play:
                     turn_back(mutable game)
                 condition moment.picking = (reached == outcome.playing):
                     game.elapsed := now - game.started
-
-                    for place in window.clicks():
-                        choice = choosable(game, place)
-
-                        if chosen = (choice != optional.none):
-                            turn_over(mutable game, choice, now)
-                        else ignored:
-                            continue
+                    pick(mutable game, window.clicks(), now)
                 else moment.over:
                     highest := highest.max(score(game))
             draw(game, highest)
             window.next_frame() forever because "a hidden window shows no frames, and the game waits until it is shown"
-        else closed:
-            return best = highest
+        else closed_at_once
+        return best = highest
+
+
+----------------------------------------------------------------------------------------------------------------------------------------
+Turns over the cards the player clicked, in the order clicked. A click that turns no card is ignored.
+
+game: The game, which changes, as game.
+clicks: The points clicked, as list<point>.
+now: The time now, as instant.
+----------------------------------------------------------------------------------------------------------------------------------------
+function pick(mutable game, clicks, now):
+    for place in clicks:
+        choice = choosable(game, place)
+
+        if chosen = (choice != optional.none):
+            turn_over(mutable game, choice, now)
+        else ignored:
+            continue
+    else no_clicks

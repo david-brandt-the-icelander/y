@@ -68,7 +68,7 @@
       "facet": "computer",
       "path": "checkers.computer",
       "visible": "public",
-      "y": "y/src/checkers.y:536",
+      "y": "y/src/checkers.y:538",
       "rust": "checkers_example::checkers::computer",
       "members": [
         "search",
@@ -81,7 +81,7 @@
       "facet": "drawing",
       "path": "checkers.drawing",
       "visible": "public",
-      "y": "y/src/checkers.y:776",
+      "y": "y/src/checkers.y:784",
       "rust": "checkers_example::checkers::drawing",
       "members": [
         "layout",
@@ -98,7 +98,7 @@
       "facet": "window_play",
       "path": "checkers.window_play",
       "visible": "public",
-      "y": "y/src/checkers.y:1075",
+      "y": "y/src/checkers.y:1118",
       "rust": "checkers_example::checkers::window_play",
       "members": [
         "ending",
@@ -117,7 +117,7 @@
         "random as random"
       ],
       "lowered": "as the last parameter",
-      "y": "y/src/checkers.y:578"
+      "y": "y/src/checkers.y:580"
     },
     {
       "subject": "checkers_example::checkers::best_sampled",
@@ -125,7 +125,7 @@
         "random as random"
       ],
       "lowered": "as the last parameter",
-      "y": "y/src/checkers.y:653"
+      "y": "y/src/checkers.y:654"
     },
     {
       "subject": "checkers_example::checkers::sampled_value",
@@ -133,7 +133,7 @@
         "random as random"
       ],
       "lowered": "as the last parameter",
-      "y": "y/src/checkers.y:688"
+      "y": "y/src/checkers.y:696"
     },
     {
       "subject": "checkers_example::checkers::playout",
@@ -141,7 +141,7 @@
         "random as random"
       ],
       "lowered": "as the last parameter",
-      "y": "y/src/checkers.y:717"
+      "y": "y/src/checkers.y:724"
     },
     {
       "subject": "checkers_example::checkers::drawing::draw",
@@ -149,7 +149,7 @@
         "window as window"
       ],
       "lowered": "as the last parameter",
-      "y": "y/src/checkers.y:876"
+      "y": "y/src/checkers.y:884"
     },
     {
       "subject": "checkers_example::checkers::drawing::draw_levels",
@@ -157,7 +157,31 @@
         "window as window"
       ],
       "lowered": "as the last parameter",
-      "y": "y/src/checkers.y:905"
+      "y": "y/src/checkers.y:902"
+    },
+    {
+      "subject": "checkers_example::checkers::draw_board",
+      "injected": [
+        "window as window"
+      ],
+      "lowered": "as the last parameter",
+      "y": "y/src/checkers.y:1046"
+    },
+    {
+      "subject": "checkers_example::checkers::draw_pieces",
+      "injected": [
+        "window as window"
+      ],
+      "lowered": "as the last parameter",
+      "y": "y/src/checkers.y:1062"
+    },
+    {
+      "subject": "checkers_example::checkers::draw_marks",
+      "injected": [
+        "window as window"
+      ],
+      "lowered": "as the last parameter",
+      "y": "y/src/checkers.y:1076"
     },
     {
       "subject": "checkers_example::checkers::draw_piece",
@@ -165,7 +189,7 @@
         "window as window"
       ],
       "lowered": "as the last parameter",
-      "y": "y/src/checkers.y:1047"
+      "y": "y/src/checkers.y:1090"
     },
     {
       "subject": "checkers_example::checkers::window_play::play",
@@ -175,7 +199,7 @@
         "forever as forever"
       ],
       "lowered": "as the last three parameters, in order",
-      "y": "y/src/checkers.y:1095"
+      "y": "y/src/checkers.y:1138"
     },
     {
       "subject": "checkers_example::checkers::window_play::choose_level",
@@ -184,7 +208,7 @@
         "forever as forever"
       ],
       "lowered": "as the last two parameters, in order",
-      "y": "y/src/checkers.y:1121"
+      "y": "y/src/checkers.y:1163"
     },
     {
       "subject": "checkers_example::checkers::window_play::play_game",
@@ -194,7 +218,7 @@
         "forever as forever"
       ],
       "lowered": "as the last three parameters, in order",
-      "y": "y/src/checkers.y:1153"
+      "y": "y/src/checkers.y:1188"
     },
     {
       "subject": "checkers_example::main",
@@ -210,15 +234,15 @@
       "claim": "forever",
       "because": "a hidden window shows no frames, and the game waits until it is shown",
       "requires": "Forever",
-      "y": "y/src/checkers.y:1136",
-      "bare": "bare/src/checkers.brs:1009"
+      "y": "y/src/checkers.y:1171",
+      "bare": "bare/src/checkers.brs:1035"
     },
     {
       "claim": "forever",
       "because": "a hidden window shows no frames, and the game waits until it is shown",
       "requires": "Forever",
-      "y": "y/src/checkers.y:1173",
-      "bare": "bare/src/checkers.brs:1040"
+      "y": "y/src/checkers.y:1171",
+      "bare": "bare/src/checkers.brs:1035"
     }
   ],
   "suspensions": [
@@ -227,32 +251,32 @@
       "point": "choose_level(",
       "because": "choose_level may suspend",
       "lowered": ".await at the call",
-      "y": "y/src/checkers.y:1100",
-      "bare": "bare/src/checkers.brs:977"
+      "y": "y/src/checkers.y:1143",
+      "bare": "bare/src/checkers.brs:1011"
     },
     {
       "subject": "checkers_example::checkers::window_play::play",
       "point": "play_game(",
       "because": "play_game may suspend",
       "lowered": ".await at the call",
-      "y": "y/src/checkers.y:1104",
-      "bare": "bare/src/checkers.brs:980"
+      "y": "y/src/checkers.y:1147",
+      "bare": "bare/src/checkers.brs:1014"
     },
     {
       "subject": "checkers_example::checkers::window_play::choose_level",
       "point": "window.next_frame()",
       "because": "the window capability may suspend (Y \u00a7 3.7)",
       "lowered": "async fn, and .await at the point",
-      "y": "y/src/checkers.y:1136",
-      "bare": "bare/src/checkers.brs:1009"
+      "y": "y/src/checkers.y:1171",
+      "bare": "bare/src/checkers.brs:1035"
     },
     {
       "subject": "checkers_example::checkers::window_play::play_game",
       "point": "window.next_frame()",
       "because": "the window capability may suspend (Y \u00a7 3.7)",
       "lowered": "async fn, and .await at the point",
-      "y": "y/src/checkers.y:1173",
-      "bare": "bare/src/checkers.brs:1040"
+      "y": "y/src/checkers.y:1171",
+      "bare": "bare/src/checkers.brs:1035"
     },
     {
       "subject": "checkers_example::main",
@@ -269,130 +293,153 @@
       "what": "path",
       "why": "the chain goes on from it, and other directions still read it",
       "y": "y/src/checkers.y:357",
-      "bare": "bare/src/checkers.brs:334"
+      "bare": "bare/src/checkers.brs:338"
     },
     {
       "what": "captured",
       "why": "the chain goes on from it, and other directions still read it",
       "y": "y/src/checkers.y:359",
-      "bare": "bare/src/checkers.brs:336"
+      "bare": "bare/src/checkers.brs:340"
     },
     {
       "what": "game",
       "why": "apply changes it, and the game is still read",
-      "y": "y/src/checkers.y:591",
-      "bare": "bare/src/checkers.brs:529"
+      "y": "y/src/checkers.y:593",
+      "bare": "bare/src/checkers.brs:535"
     },
     {
       "what": "candidate",
       "why": "the game keeps the move, and the options still hold it",
-      "y": "y/src/checkers.y:592",
-      "bare": "bare/src/checkers.brs:530"
+      "y": "y/src/checkers.y:594",
+      "bare": "bare/src/checkers.brs:536"
     },
     {
       "what": "game",
       "why": "apply changes it, and the game is still read",
-      "y": "y/src/checkers.y:630",
-      "bare": "bare/src/checkers.brs:565"
+      "y": "y/src/checkers.y:631",
+      "bare": "bare/src/checkers.brs:570"
     },
     {
       "what": "options",
       "why": "the chosen move is returned, and the options still hold it",
-      "y": "y/src/checkers.y:664",
-      "bare": "bare/src/checkers.brs:597"
+      "y": "y/src/checkers.y:670",
+      "bare": "bare/src/checkers.brs:604"
     },
     {
       "what": "game",
       "why": "apply changes it, and the game is still read",
-      "y": "y/src/checkers.y:670",
-      "bare": "bare/src/checkers.brs:602"
+      "y": "y/src/checkers.y:676",
+      "bare": "bare/src/checkers.brs:570"
     },
     {
       "what": "options",
       "why": "the game keeps the move, and the options still hold it",
-      "y": "y/src/checkers.y:671",
-      "bare": "bare/src/checkers.brs:603"
+      "y": "y/src/checkers.y:677",
+      "bare": "bare/src/checkers.brs:611"
     },
     {
       "what": "options",
       "why": "the chosen move is returned, and the options still hold it",
-      "y": "y/src/checkers.y:673",
-      "bare": "bare/src/checkers.brs:606"
+      "y": "y/src/checkers.y:679",
+      "bare": "bare/src/checkers.brs:614"
     },
     {
       "what": "start",
       "why": "the game played out changes it, and the position is still read",
-      "y": "y/src/checkers.y:718",
-      "bare": "bare/src/checkers.brs:645"
+      "y": "y/src/checkers.y:725",
+      "bare": "bare/src/checkers.brs:654"
     },
     {
       "what": "reds",
       "why": "apply keeps the move, and the list still holds it",
-      "y": "y/src/checkers.test.y:81",
-      "bare": "bare/src/checkers/tests.brs:73"
+      "y": "y/src/checkers.test.y:82",
+      "bare": "bare/src/checkers/tests.brs:81"
     },
     {
       "what": "moves",
       "why": "apply keeps the move, and the list still holds it",
-      "y": "y/src/checkers.test.y:100",
-      "bare": "bare/src/checkers/tests.brs:89"
+      "y": "y/src/checkers.test.y:101",
+      "bare": "bare/src/checkers/tests.brs:97"
     },
     {
       "what": "moves",
       "why": "apply keeps the move, and the list still holds it",
-      "y": "y/src/checkers.test.y:129",
-      "bare": "bare/src/checkers/tests.brs:112"
+      "y": "y/src/checkers.test.y:131",
+      "bare": "bare/src/checkers/tests.brs:121"
     },
     {
       "what": "moves",
       "why": "apply keeps the move, and the list still holds it",
-      "y": "y/src/checkers.test.y:153",
-      "bare": "bare/src/checkers/tests.brs:130"
+      "y": "y/src/checkers.test.y:157",
+      "bare": "bare/src/checkers/tests.brs:121"
     },
     {
       "what": "legal_moves",
       "why": "apply keeps the move, and the list still holds it",
-      "y": "y/src/checkers.test.y:261",
-      "bare": "bare/src/checkers/tests.brs:210"
+      "y": "y/src/checkers.test.y:279",
+      "bare": "bare/src/checkers/tests.brs:233"
     },
     {
       "what": "legal_moves",
       "why": "apply keeps the move, and the list still holds it",
-      "y": "y/src/checkers.test.y:311",
-      "bare": "bare/src/checkers/tests.brs:249"
+      "y": "y/src/checkers.test.y:332",
+      "bare": "bare/src/checkers/tests.brs:275"
     },
     {
       "what": "legal_moves",
       "why": "apply keeps the move, and the list still holds it",
-      "y": "y/src/checkers.test.y:362",
-      "bare": "bare/src/checkers/tests.brs:292"
+      "y": "y/src/checkers.test.y:384",
+      "bare": "bare/src/checkers/tests.brs:319"
     }
   ],
   "decisions": {
+    "checkers.new_game": [
+      {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "row",
+            "y": "y/src/checkers.y:166",
+            "bare": "bare/src/checkers.brs:171"
+          }
+        ]
+      },
+      {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "column",
+            "y": "y/src/checkers.y:167",
+            "bare": "bare/src/checkers.brs:172"
+          }
+        ]
+      }
+    ],
     "checkers.starting_piece": [
       {
         "kind": "conditional",
         "label": "placed",
+        "y": "y/src/checkers.y:180",
         "branches": [
           {
             "name": "placed.light",
             "y": "y/src/checkers.y:181",
-            "bare": "bare/src/checkers.brs:182"
+            "bare": "bare/src/checkers.brs:185"
           },
           {
             "name": "placed.white_men",
             "y": "y/src/checkers.y:183",
-            "bare": "bare/src/checkers.brs:184"
+            "bare": "bare/src/checkers.brs:187"
           },
           {
             "name": "placed.red_men",
             "y": "y/src/checkers.y:185",
-            "bare": "bare/src/checkers.brs:186"
+            "bare": "bare/src/checkers.brs:189"
           },
           {
             "name": "placed.between",
             "y": "y/src/checkers.y:187",
-            "bare": "bare/src/checkers.brs:188"
+            "bare": "bare/src/checkers.brs:191"
           }
         ]
       }
@@ -404,29 +451,29 @@
           {
             "name": "must_jump",
             "y": "y/src/checkers.y:203",
-            "bare": "bare/src/checkers.brs:203"
+            "bare": "bare/src/checkers.brs:206"
           },
           {
             "name": "no_jump",
             "y": "y/src/checkers.y:205",
-            "bare": "bare/src/checkers.brs:205"
+            "bare": "bare/src/checkers.brs:208"
           }
         ]
       }
     ],
     "checkers.apply": [
       {
-        "kind": "if",
+        "kind": "for",
         "branches": [
           {
-            "name": "capturing",
-            "y": "y/src/checkers.y:226",
+            "name": "captured",
+            "y": "y/src/checkers.y:222",
             "bare": "bare/src/checkers.brs:224"
           },
           {
             "name": "quiet",
-            "y": "y/src/checkers.y:228",
-            "bare": "bare/src/checkers.brs:226"
+            "y": "y/src/checkers.y:225",
+            "bare": "bare/src/checkers.brs:229"
           }
         ]
       }
@@ -435,26 +482,27 @@
       {
         "kind": "conditional",
         "label": "judged",
+        "y": "y/src/checkers.y:244",
         "branches": [
           {
             "name": "judged.won",
-            "y": "y/src/checkers.y:247",
-            "bare": "bare/src/checkers.brs:241"
-          },
-          {
-            "name": "judged.lost",
-            "y": "y/src/checkers.y:249",
-            "bare": "bare/src/checkers.brs:243"
-          },
-          {
-            "name": "judged.drawn",
-            "y": "y/src/checkers.y:251",
+            "y": "y/src/checkers.y:245",
             "bare": "bare/src/checkers.brs:245"
           },
           {
-            "name": "judged.playing",
-            "y": "y/src/checkers.y:253",
+            "name": "judged.lost",
+            "y": "y/src/checkers.y:247",
             "bare": "bare/src/checkers.brs:247"
+          },
+          {
+            "name": "judged.drawn",
+            "y": "y/src/checkers.y:249",
+            "bare": "bare/src/checkers.brs:249"
+          },
+          {
+            "name": "judged.playing",
+            "y": "y/src/checkers.y:251",
+            "bare": "bare/src/checkers.brs:251"
           }
         ]
       }
@@ -465,13 +513,13 @@
         "branches": [
           {
             "name": "won",
-            "y": "y/src/checkers.y:266",
-            "bare": "bare/src/checkers.brs:258"
+            "y": "y/src/checkers.y:264",
+            "bare": "bare/src/checkers.brs:262"
           },
           {
             "name": "unfinished",
-            "y": "y/src/checkers.y:269",
-            "bare": "bare/src/checkers.brs:261"
+            "y": "y/src/checkers.y:267",
+            "bare": "bare/src/checkers.brs:265"
           }
         ]
       }
@@ -480,50 +528,103 @@
       {
         "kind": "conditional",
         "label": "current",
+        "y": "y/src/checkers.y:290",
         "branches": [
           {
             "name": "current.red",
-            "y": "y/src/checkers.y:293",
-            "bare": "bare/src/checkers.brs:280"
+            "y": "y/src/checkers.y:291",
+            "bare": "bare/src/checkers.brs:284"
           },
           {
             "name": "current.white",
-            "y": "y/src/checkers.y:295",
-            "bare": "bare/src/checkers.brs:281"
+            "y": "y/src/checkers.y:293",
+            "bare": "bare/src/checkers.brs:285"
           }
         ]
       }
     ],
     "checkers.all_steps": [
       {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "placed",
+            "y": "y/src/checkers.y:307",
+            "bare": "bare/src/checkers.brs:296"
+          },
+          {
+            "name": "no_pieces",
+            "y": "y/src/checkers.y:315",
+            "bare": "bare/src/checkers.brs:296"
+          }
+        ]
+      },
+      {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "direction",
+            "y": "y/src/checkers.y:308",
+            "bare": "bare/src/checkers.brs:297"
+          }
+        ]
+      },
+      {
         "kind": "if",
         "branches": [
           {
             "name": "open",
-            "y": "y/src/checkers.y:313",
-            "bare": "bare/src/checkers.brs:295"
+            "y": "y/src/checkers.y:311",
+            "bare": "bare/src/checkers.brs:299"
           },
           {
             "name": "blocked",
-            "y": "y/src/checkers.y:315",
-            "bare": "bare/src/checkers.brs:297"
+            "y": "y/src/checkers.y:313",
+            "bare": "bare/src/checkers.brs:301"
+          }
+        ]
+      }
+    ],
+    "checkers.all_jumps": [
+      {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "placed",
+            "y": "y/src/checkers.y:329",
+            "bare": "bare/src/checkers.brs:315"
+          },
+          {
+            "name": "no_pieces",
+            "y": "y/src/checkers.y:331",
+            "bare": "bare/src/checkers.brs:315"
           }
         ]
       }
     ],
     "checkers.chains": [
       {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "direction",
+            "y": "y/src/checkers.y:352",
+            "bare": "bare/src/checkers.brs:334"
+          }
+        ]
+      },
+      {
         "kind": "if",
         "branches": [
           {
             "name": "can_jump",
             "y": "y/src/checkers.y:356",
-            "bare": "bare/src/checkers.brs:333"
+            "bare": "bare/src/checkers.brs:337"
           },
           {
             "name": "cannot_jump",
             "y": "y/src/checkers.y:367",
-            "bare": "bare/src/checkers.brs:344"
+            "bare": "bare/src/checkers.brs:348"
           }
         ]
       },
@@ -533,12 +634,12 @@
           {
             "name": "ends_here",
             "y": "y/src/checkers.y:363",
-            "bare": "bare/src/checkers.brs:339"
+            "bare": "bare/src/checkers.brs:343"
           },
           {
             "name": "goes_on",
             "y": "y/src/checkers.y:365",
-            "bare": "bare/src/checkers.brs:341"
+            "bare": "bare/src/checkers.brs:345"
           }
         ]
       }
@@ -550,12 +651,12 @@
           {
             "name": "crowned",
             "y": "y/src/checkers.y:385",
-            "bare": "bare/src/checkers.brs:356"
+            "bare": "bare/src/checkers.brs:360"
           },
           {
             "name": "uncrowned",
             "y": "y/src/checkers.y:387",
-            "bare": "bare/src/checkers.brs:358"
+            "bare": "bare/src/checkers.brs:362"
           }
         ]
       }
@@ -567,12 +668,12 @@
           {
             "name": "inside",
             "y": "y/src/checkers.y:404",
-            "bare": "bare/src/checkers.brs:373"
+            "bare": "bare/src/checkers.brs:377"
           },
           {
             "name": "outside",
             "y": "y/src/checkers.y:407",
-            "bare": "bare/src/checkers.brs:376"
+            "bare": "bare/src/checkers.brs:380"
           }
         ]
       }
@@ -581,51 +682,88 @@
       {
         "kind": "conditional",
         "label": "held",
+        "y": "y/src/checkers.y:421",
         "branches": [
           {
             "name": "held.empty",
             "y": "y/src/checkers.y:422",
-            "bare": "bare/src/checkers.brs:389"
+            "bare": "bare/src/checkers.brs:393"
           },
           {
             "name": "held.piece",
             "y": "y/src/checkers.y:424",
-            "bare": "bare/src/checkers.brs:390"
+            "bare": "bare/src/checkers.brs:394"
           }
         ]
       }
     ],
     "checkers.placed_pieces": [
       {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "row",
+            "y": "y/src/checkers.y:438",
+            "bare": "bare/src/checkers.brs:404"
+          }
+        ]
+      },
+      {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "column",
+            "y": "y/src/checkers.y:439",
+            "bare": "bare/src/checkers.brs:405"
+          }
+        ]
+      },
+      {
         "kind": "conditional",
         "label": "held",
+        "y": "y/src/checkers.y:442",
         "branches": [
           {
             "name": "held.empty",
             "y": "y/src/checkers.y:443",
-            "bare": "bare/src/checkers.brs:404"
+            "bare": "bare/src/checkers.brs:408"
           },
           {
             "name": "held.piece",
             "y": "y/src/checkers.y:445",
-            "bare": "bare/src/checkers.brs:405"
+            "bare": "bare/src/checkers.brs:409"
           }
         ]
       }
     ],
     "checkers.own_pieces": [
       {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "placed",
+            "y": "y/src/checkers.y:460",
+            "bare": "bare/src/checkers.brs:422"
+          },
+          {
+            "name": "no_pieces",
+            "y": "y/src/checkers.y:465",
+            "bare": "bare/src/checkers.brs:422"
+          }
+        ]
+      },
+      {
         "kind": "if",
         "branches": [
           {
             "name": "mine",
             "y": "y/src/checkers.y:461",
-            "bare": "bare/src/checkers.brs:419"
+            "bare": "bare/src/checkers.brs:423"
           },
           {
             "name": "theirs",
             "y": "y/src/checkers.y:463",
-            "bare": "bare/src/checkers.brs:421"
+            "bare": "bare/src/checkers.brs:425"
           }
         ]
       }
@@ -634,21 +772,22 @@
       {
         "kind": "conditional",
         "label": "moving",
+        "y": "y/src/checkers.y:478",
         "branches": [
           {
             "name": "moving.king",
-            "y": "y/src/checkers.y:477",
-            "bare": "bare/src/checkers.brs:433"
+            "y": "y/src/checkers.y:479",
+            "bare": "bare/src/checkers.brs:437"
           },
           {
             "name": "moving.red",
-            "y": "y/src/checkers.y:479",
-            "bare": "bare/src/checkers.brs:435"
+            "y": "y/src/checkers.y:481",
+            "bare": "bare/src/checkers.brs:439"
           },
           {
             "name": "moving.white",
-            "y": "y/src/checkers.y:481",
-            "bare": "bare/src/checkers.brs:437"
+            "y": "y/src/checkers.y:483",
+            "bare": "bare/src/checkers.brs:441"
           }
         ]
       }
@@ -659,13 +798,13 @@
         "branches": [
           {
             "name": "heading_up",
-            "y": "y/src/checkers.y:493",
-            "bare": "bare/src/checkers.brs:447"
+            "y": "y/src/checkers.y:495",
+            "bare": "bare/src/checkers.brs:453"
           },
           {
             "name": "heading_down",
-            "y": "y/src/checkers.y:495",
-            "bare": "bare/src/checkers.brs:449"
+            "y": "y/src/checkers.y:497",
+            "bare": "bare/src/checkers.brs:455"
           }
         ]
       }
@@ -676,13 +815,18 @@
         "branches": [
           {
             "name": "deepening",
-            "y": "y/src/checkers.y:587",
-            "bare": "bare/src/checkers.brs:526"
-          },
+            "y": "y/src/checkers.y:589",
+            "bare": "bare/src/checkers.brs:532"
+          }
+        ]
+      },
+      {
+        "kind": "for",
+        "branches": [
           {
-            "name": "deep_enough",
-            "y": "y/src/checkers.y:600",
-            "bare": "bare/src/checkers.brs:540"
+            "name": "candidate",
+            "y": "y/src/checkers.y:592",
+            "bare": "bare/src/checkers.brs:534"
           }
         ]
       },
@@ -691,13 +835,13 @@
         "branches": [
           {
             "name": "finished",
-            "y": "y/src/checkers.y:595",
-            "bare": "bare/src/checkers.brs:533"
+            "y": "y/src/checkers.y:597",
+            "bare": "bare/src/checkers.brs:539"
           },
           {
             "name": "ran_out",
-            "y": "y/src/checkers.y:598",
-            "bare": "bare/src/checkers.brs:536"
+            "y": "y/src/checkers.y:600",
+            "bare": "bare/src/checkers.brs:542"
           }
         ]
       }
@@ -706,21 +850,32 @@
       {
         "kind": "conditional",
         "label": "judged",
+        "y": "y/src/checkers.y:620",
         "branches": [
           {
             "name": "judged.leaf",
-            "y": "y/src/checkers.y:620",
-            "bare": "bare/src/checkers.brs:556"
+            "y": "y/src/checkers.y:621",
+            "bare": "bare/src/checkers.brs:561"
           },
           {
             "name": "judged.spent",
-            "y": "y/src/checkers.y:622",
-            "bare": "bare/src/checkers.brs:558"
+            "y": "y/src/checkers.y:623",
+            "bare": "bare/src/checkers.brs:563"
           },
           {
             "name": "judged.inner",
-            "y": "y/src/checkers.y:625",
-            "bare": "bare/src/checkers.brs:561"
+            "y": "y/src/checkers.y:626",
+            "bare": "bare/src/checkers.brs:566"
+          }
+        ]
+      },
+      {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "candidate",
+            "y": "y/src/checkers.y:630",
+            "bare": "bare/src/checkers.brs:569"
           }
         ]
       },
@@ -729,77 +884,106 @@
         "branches": [
           {
             "name": "owners_turn",
-            "y": "y/src/checkers.y:634",
-            "bare": "bare/src/checkers.brs:569"
+            "y": "y/src/checkers.y:635",
+            "bare": "bare/src/checkers.brs:574"
           },
           {
             "name": "others_turn",
-            "y": "y/src/checkers.y:636",
-            "bare": "bare/src/checkers.brs:571"
+            "y": "y/src/checkers.y:637",
+            "bare": "bare/src/checkers.brs:576"
           }
         ]
       }
     ],
     "checkers.best_sampled": [
       {
-        "kind": "if",
+        "kind": "for",
         "branches": [
           {
-            "name": "top",
-            "y": "y/src/checkers.y:658",
-            "bare": "bare/src/checkers.brs:590"
-          },
-          {
-            "name": "lower",
-            "y": "y/src/checkers.y:660",
-            "bare": "bare/src/checkers.brs:592"
+            "name": "option",
+            "y": "y/src/checkers.y:659",
+            "bare": "bare/src/checkers.brs:595"
           }
         ]
       },
       {
-        "kind": "if",
+        "kind": "compare",
+        "label": "ranked",
+        "y": "y/src/checkers.y:660",
         "branches": [
           {
-            "name": "settled",
-            "y": "y/src/checkers.y:663",
-            "bare": "bare/src/checkers.brs:596"
+            "name": "ranked.top",
+            "y": "y/src/checkers.y:661",
+            "bare": "bare/src/checkers.brs:597"
           },
           {
-            "name": "contested",
-            "y": "y/src/checkers.y:665",
+            "name": "ranked.lower",
+            "y": "y/src/checkers.y:663",
             "bare": "bare/src/checkers.brs:598"
+          },
+          {
+            "name": "ranked.above",
+            "y": "y/src/checkers.y:665",
+            "bare": "bare/src/checkers.brs:599"
+          }
+        ]
+      },
+      {
+        "kind": "compare",
+        "label": "ties",
+        "y": "y/src/checkers.y:668",
+        "branches": [
+          {
+            "name": "ties.settled",
+            "y": "y/src/checkers.y:669",
+            "bare": "bare/src/checkers.brs:603"
+          },
+          {
+            "name": "ties.contested",
+            "y": "y/src/checkers.y:671",
+            "bare": "bare/src/checkers.brs:606"
+          },
+          {
+            "name": "ties.none",
+            "y": "y/src/checkers.y:680",
+            "bare": "bare/src/checkers.brs:616"
+          }
+        ]
+      },
+      {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "option",
+            "y": "y/src/checkers.y:675",
+            "bare": "bare/src/checkers.brs:609"
           }
         ]
       }
     ],
     "checkers.sampled_value": [
       {
-        "kind": "while",
+        "kind": "if",
         "branches": [
           {
-            "name": "sampling",
-            "y": "y/src/checkers.y:693",
-            "bare": "bare/src/checkers.brs:622"
+            "name": "no_share",
+            "y": "y/src/checkers.y:697",
+            "bare": "bare/src/checkers.brs:629"
           },
           {
-            "name": "sampled",
+            "name": "some_share",
             "y": "y/src/checkers.y:699",
-            "bare": "bare/src/checkers.brs:629"
+            "bare": "bare/src/checkers.brs:631"
           }
         ]
       },
       {
-        "kind": "if",
+        "kind": "while",
         "branches": [
           {
-            "name": "any",
-            "y": "y/src/checkers.y:700",
-            "bare": "bare/src/checkers.brs:630"
-          },
-          {
-            "name": "none",
-            "y": "y/src/checkers.y:702",
-            "bare": "bare/src/checkers.brs:632"
+            "name": "sampling",
+            "y": "y/src/checkers.y:704",
+            "bare": "bare/src/checkers.brs:635"
           }
         ]
       }
@@ -810,13 +994,13 @@
         "branches": [
           {
             "name": "going",
-            "y": "y/src/checkers.y:722",
-            "bare": "bare/src/checkers.brs:648"
+            "y": "y/src/checkers.y:729",
+            "bare": "bare/src/checkers.brs:657"
           },
           {
             "name": "ended",
-            "y": "y/src/checkers.y:726",
-            "bare": "bare/src/checkers.brs:653"
+            "y": "y/src/checkers.y:733",
+            "bare": "bare/src/checkers.brs:657"
           }
         ]
       }
@@ -825,49 +1009,66 @@
       {
         "kind": "conditional",
         "label": "judged",
+        "y": "y/src/checkers.y:749",
         "branches": [
           {
             "name": "judged.losing",
-            "y": "y/src/checkers.y:743",
-            "bare": "bare/src/checkers.brs:665"
+            "y": "y/src/checkers.y:750",
+            "bare": "bare/src/checkers.brs:673"
           },
           {
             "name": "judged.winning",
-            "y": "y/src/checkers.y:745",
-            "bare": "bare/src/checkers.brs:667"
+            "y": "y/src/checkers.y:752",
+            "bare": "bare/src/checkers.brs:675"
           },
           {
             "name": "judged.drawn",
-            "y": "y/src/checkers.y:747",
-            "bare": "bare/src/checkers.brs:669"
+            "y": "y/src/checkers.y:754",
+            "bare": "bare/src/checkers.brs:677"
           },
           {
             "name": "judged.playing",
-            "y": "y/src/checkers.y:749",
-            "bare": "bare/src/checkers.brs:671"
+            "y": "y/src/checkers.y:756",
+            "bare": "bare/src/checkers.brs:679"
           }
         ]
       }
     ],
     "checkers.material": [
       {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "placed",
+            "y": "y/src/checkers.y:771",
+            "bare": "bare/src/checkers.brs:691"
+          },
+          {
+            "name": "no_pieces",
+            "y": "y/src/checkers.y:779",
+            "bare": "bare/src/checkers.brs:691"
+          }
+        ]
+      },
+      {
         "kind": "conditional",
         "label": "counted",
+        "y": "y/src/checkers.y:772",
         "branches": [
           {
             "name": "counted.other",
-            "y": "y/src/checkers.y:766",
-            "bare": "bare/src/checkers.brs:684"
+            "y": "y/src/checkers.y:773",
+            "bare": "bare/src/checkers.brs:692"
           },
           {
             "name": "counted.king",
-            "y": "y/src/checkers.y:768",
-            "bare": "bare/src/checkers.brs:686"
+            "y": "y/src/checkers.y:775",
+            "bare": "bare/src/checkers.brs:694"
           },
           {
             "name": "counted.man",
-            "y": "y/src/checkers.y:770",
-            "bare": "bare/src/checkers.brs:688"
+            "y": "y/src/checkers.y:777",
+            "bare": "bare/src/checkers.brs:696"
           }
         ]
       }
@@ -876,31 +1077,44 @@
       {
         "kind": "conditional",
         "label": "shown",
+        "y": "y/src/checkers.y:847",
         "branches": [
           {
             "name": "shown.your_move",
-            "y": "y/src/checkers.y:840",
-            "bare": "bare/src/checkers.brs:756"
-          },
-          {
-            "name": "shown.thinking",
-            "y": "y/src/checkers.y:845",
-            "bare": "bare/src/checkers.brs:760"
-          },
-          {
-            "name": "shown.won",
-            "y": "y/src/checkers.y:850",
+            "y": "y/src/checkers.y:848",
             "bare": "bare/src/checkers.brs:764"
           },
           {
-            "name": "shown.lost",
-            "y": "y/src/checkers.y:855",
+            "name": "shown.thinking",
+            "y": "y/src/checkers.y:853",
             "bare": "bare/src/checkers.brs:768"
           },
           {
-            "name": "shown.drawn",
-            "y": "y/src/checkers.y:860",
+            "name": "shown.won",
+            "y": "y/src/checkers.y:858",
             "bare": "bare/src/checkers.brs:772"
+          },
+          {
+            "name": "shown.lost",
+            "y": "y/src/checkers.y:863",
+            "bare": "bare/src/checkers.brs:776"
+          },
+          {
+            "name": "shown.drawn",
+            "y": "y/src/checkers.y:868",
+            "bare": "bare/src/checkers.brs:780"
+          }
+        ]
+      }
+    ],
+    "checkers.draw_levels": [
+      {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "level",
+            "y": "y/src/checkers.y:909",
+            "bare": "bare/src/checkers.brs:814"
           }
         ]
       }
@@ -911,30 +1125,40 @@
         "branches": [
           {
             "name": "inside",
-            "y": "y/src/checkers.y:932",
-            "bare": "bare/src/checkers.brs:835"
+            "y": "y/src/checkers.y:929",
+            "bare": "bare/src/checkers.brs:831"
           },
           {
             "name": "outside",
-            "y": "y/src/checkers.y:936",
-            "bare": "bare/src/checkers.brs:839"
+            "y": "y/src/checkers.y:933",
+            "bare": "bare/src/checkers.brs:835"
           }
         ]
       }
     ],
     "checkers.level_at": [
       {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "level",
+            "y": "y/src/checkers.y:947",
+            "bare": "bare/src/checkers.brs:846"
+          }
+        ]
+      },
+      {
         "kind": "if",
         "branches": [
           {
             "name": "pressed",
-            "y": "y/src/checkers.y:954",
-            "bare": "bare/src/checkers.brs:853"
+            "y": "y/src/checkers.y:951",
+            "bare": "bare/src/checkers.brs:849"
           },
           {
             "name": "missed",
-            "y": "y/src/checkers.y:956",
-            "bare": "bare/src/checkers.brs:855"
+            "y": "y/src/checkers.y:953",
+            "bare": "bare/src/checkers.brs:851"
           }
         ]
       }
@@ -943,26 +1167,27 @@
       {
         "kind": "conditional",
         "label": "looks",
+        "y": "y/src/checkers.y:991",
         "branches": [
           {
             "name": "looks.light",
-            "y": "y/src/checkers.y:995",
-            "bare": "bare/src/checkers.brs:887"
+            "y": "y/src/checkers.y:992",
+            "bare": "bare/src/checkers.brs:883"
           },
           {
             "name": "looks.selected",
-            "y": "y/src/checkers.y:997",
-            "bare": "bare/src/checkers.brs:889"
+            "y": "y/src/checkers.y:994",
+            "bare": "bare/src/checkers.brs:885"
           },
           {
             "name": "looks.last",
-            "y": "y/src/checkers.y:999",
-            "bare": "bare/src/checkers.brs:891"
+            "y": "y/src/checkers.y:996",
+            "bare": "bare/src/checkers.brs:887"
           },
           {
             "name": "looks.dark",
-            "y": "y/src/checkers.y:1001",
-            "bare": "bare/src/checkers.brs:893"
+            "y": "y/src/checkers.y:998",
+            "bare": "bare/src/checkers.brs:889"
           }
         ]
       }
@@ -971,33 +1196,105 @@
       {
         "kind": "conditional",
         "label": "made",
+        "y": "y/src/checkers.y:1011",
         "branches": [
           {
             "name": "made.none",
-            "y": "y/src/checkers.y:1015",
-            "bare": "bare/src/checkers.brs:905"
+            "y": "y/src/checkers.y:1012",
+            "bare": "bare/src/checkers.brs:901"
           },
           {
             "name": "made.some",
-            "y": "y/src/checkers.y:1017",
-            "bare": "bare/src/checkers.brs:906"
+            "y": "y/src/checkers.y:1014",
+            "bare": "bare/src/checkers.brs:902"
           }
         ]
       }
     ],
     "checkers.landings": [
       {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "candidate",
+            "y": "y/src/checkers.y:1029",
+            "bare": "bare/src/checkers.brs:913"
+          },
+          {
+            "name": "no_moves",
+            "y": "y/src/checkers.y:1034",
+            "bare": "bare/src/checkers.brs:913"
+          }
+        ]
+      },
+      {
         "kind": "if",
         "branches": [
           {
             "name": "from_selected",
-            "y": "y/src/checkers.y:1033",
-            "bare": "bare/src/checkers.brs:918"
+            "y": "y/src/checkers.y:1030",
+            "bare": "bare/src/checkers.brs:914"
           },
           {
             "name": "from_elsewhere",
-            "y": "y/src/checkers.y:1035",
-            "bare": "bare/src/checkers.brs:920"
+            "y": "y/src/checkers.y:1032",
+            "bare": "bare/src/checkers.brs:916"
+          }
+        ]
+      }
+    ],
+    "checkers.draw_board": [
+      {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "row",
+            "y": "y/src/checkers.y:1047",
+            "bare": "bare/src/checkers.brs:929"
+          }
+        ]
+      },
+      {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "column",
+            "y": "y/src/checkers.y:1048",
+            "bare": "bare/src/checkers.brs:930"
+          }
+        ]
+      }
+    ],
+    "checkers.draw_pieces": [
+      {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "placed",
+            "y": "y/src/checkers.y:1063",
+            "bare": "bare/src/checkers.brs:944"
+          },
+          {
+            "name": "no_pieces",
+            "y": "y/src/checkers.y:1065",
+            "bare": "bare/src/checkers.brs:944"
+          }
+        ]
+      }
+    ],
+    "checkers.draw_marks": [
+      {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "landing",
+            "y": "y/src/checkers.y:1077",
+            "bare": "bare/src/checkers.brs:955"
+          },
+          {
+            "name": "no_marks",
+            "y": "y/src/checkers.y:1080",
+            "bare": "bare/src/checkers.brs:955"
           }
         ]
       }
@@ -1006,26 +1303,27 @@
       {
         "kind": "conditional",
         "label": "painted",
+        "y": "y/src/checkers.y:1106",
         "branches": [
           {
             "name": "painted.red_king",
-            "y": "y/src/checkers.y:1064",
-            "bare": "bare/src/checkers.brs:944"
+            "y": "y/src/checkers.y:1107",
+            "bare": "bare/src/checkers.brs:978"
           },
           {
             "name": "painted.red_man",
-            "y": "y/src/checkers.y:1066",
-            "bare": "bare/src/checkers.brs:946"
+            "y": "y/src/checkers.y:1109",
+            "bare": "bare/src/checkers.brs:980"
           },
           {
             "name": "painted.white_king",
-            "y": "y/src/checkers.y:1068",
-            "bare": "bare/src/checkers.brs:948"
+            "y": "y/src/checkers.y:1111",
+            "bare": "bare/src/checkers.brs:982"
           },
           {
             "name": "painted.white_man",
-            "y": "y/src/checkers.y:1070",
-            "bare": "bare/src/checkers.brs:950"
+            "y": "y/src/checkers.y:1113",
+            "bare": "bare/src/checkers.brs:984"
           }
         ]
       }
@@ -1036,29 +1334,25 @@
         "branches": [
           {
             "name": "open",
-            "y": "y/src/checkers.y:1099",
-            "bare": "bare/src/checkers.brs:976"
-          },
-          {
-            "name": "closed",
-            "y": "y/src/checkers.y:1107",
-            "bare": "bare/src/checkers.brs:986"
+            "y": "y/src/checkers.y:1142",
+            "bare": "bare/src/checkers.brs:1010"
           }
         ]
       },
       {
         "kind": "conditional",
         "label": "picked",
+        "y": "y/src/checkers.y:1143",
         "branches": [
           {
             "name": "picked.none",
-            "y": "y/src/checkers.y:1101",
-            "bare": "bare/src/checkers.brs:978"
+            "y": "y/src/checkers.y:1144",
+            "bare": "bare/src/checkers.brs:1012"
           },
           {
             "name": "picked.level",
-            "y": "y/src/checkers.y:1103",
-            "bare": "bare/src/checkers.brs:979"
+            "y": "y/src/checkers.y:1146",
+            "bare": "bare/src/checkers.brs:1013"
           }
         ]
       }
@@ -1069,28 +1363,13 @@
         "branches": [
           {
             "name": "choosing",
-            "y": "y/src/checkers.y:1125",
-            "bare": "bare/src/checkers.brs:998"
+            "y": "y/src/checkers.y:1167",
+            "bare": "bare/src/checkers.brs:1031"
           },
           {
-            "name": "chosen_or_stopped",
-            "y": "y/src/checkers.y:1137",
-            "bare": "bare/src/checkers.brs:1011"
-          }
-        ]
-      },
-      {
-        "kind": "if",
-        "branches": [
-          {
-            "name": "hit",
-            "y": "y/src/checkers.y:1131",
-            "bare": "bare/src/checkers.brs:1002"
-          },
-          {
-            "name": "miss",
-            "y": "y/src/checkers.y:1133",
-            "bare": "bare/src/checkers.brs:1004"
+            "name": "closed_at_once",
+            "y": "y/src/checkers.y:1172",
+            "bare": "bare/src/checkers.brs:1031"
           }
         ]
       }
@@ -1101,34 +1380,35 @@
         "branches": [
           {
             "name": "playing",
-            "y": "y/src/checkers.y:1159",
-            "bare": "bare/src/checkers.brs:1026"
+            "y": "y/src/checkers.y:1194",
+            "bare": "bare/src/checkers.brs:1051"
           },
           {
-            "name": "stopped",
-            "y": "y/src/checkers.y:1174",
-            "bare": "bare/src/checkers.brs:1042"
+            "name": "closed_at_once",
+            "y": "y/src/checkers.y:1208",
+            "bare": "bare/src/checkers.brs:1051"
           }
         ]
       },
       {
         "kind": "conditional",
         "label": "moment",
+        "y": "y/src/checkers.y:1198",
         "branches": [
           {
             "name": "moment.over",
-            "y": "y/src/checkers.y:1164",
-            "bare": "bare/src/checkers.brs:1029"
+            "y": "y/src/checkers.y:1199",
+            "bare": "bare/src/checkers.brs:1054"
           },
           {
             "name": "moment.computers_turn",
-            "y": "y/src/checkers.y:1166",
-            "bare": "bare/src/checkers.brs:1031"
+            "y": "y/src/checkers.y:1201",
+            "bare": "bare/src/checkers.brs:1056"
           },
           {
             "name": "moment.players_turn",
-            "y": "y/src/checkers.y:1169",
-            "bare": "bare/src/checkers.brs:1034"
+            "y": "y/src/checkers.y:1204",
+            "bare": "bare/src/checkers.brs:1059"
           }
         ]
       }
@@ -1137,313 +1417,1314 @@
       {
         "kind": "conditional",
         "label": "judged",
+        "y": "y/src/checkers.y:1224",
         "branches": [
           {
             "name": "judged.moving",
-            "y": "y/src/checkers.y:1191",
-            "bare": "bare/src/checkers.brs:1055"
+            "y": "y/src/checkers.y:1225",
+            "bare": "bare/src/checkers.brs:1077"
           },
           {
             "name": "judged.choosing",
-            "y": "y/src/checkers.y:1194",
-            "bare": "bare/src/checkers.brs:1058"
+            "y": "y/src/checkers.y:1228",
+            "bare": "bare/src/checkers.brs:1080"
           },
           {
             "name": "judged.elsewhere",
-            "y": "y/src/checkers.y:1196",
-            "bare": "bare/src/checkers.brs:1060"
+            "y": "y/src/checkers.y:1230",
+            "bare": "bare/src/checkers.brs:1082"
+          }
+        ]
+      }
+    ],
+    "checkers.level_clicked": [
+      {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "place",
+            "y": "y/src/checkers.y:1242",
+            "bare": "bare/src/checkers.brs:1093"
+          },
+          {
+            "name": "no_clicks",
+            "y": "y/src/checkers.y:1249",
+            "bare": "bare/src/checkers.brs:1093"
+          }
+        ]
+      },
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "hit",
+            "y": "y/src/checkers.y:1245",
+            "bare": "bare/src/checkers.brs:1095"
+          },
+          {
+            "name": "miss",
+            "y": "y/src/checkers.y:1247",
+            "bare": "bare/src/checkers.brs:1097"
+          }
+        ]
+      }
+    ],
+    "checkers.act_on_clicks": [
+      {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "place",
+            "y": "y/src/checkers.y:1261",
+            "bare": "bare/src/checkers.brs:1110"
+          },
+          {
+            "name": "no_clicks",
+            "y": "y/src/checkers.y:1263",
+            "bare": "bare/src/checkers.brs:1110"
           }
         ]
       }
     ],
     "checkers.move_to": [
       {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "candidate",
+            "y": "y/src/checkers.y:1276",
+            "bare": "bare/src/checkers.brs:1122"
+          },
+          {
+            "name": "no_moves",
+            "y": "y/src/checkers.y:1281",
+            "bare": "bare/src/checkers.brs:1122"
+          }
+        ]
+      },
+      {
         "kind": "if",
         "branches": [
           {
             "name": "fits",
-            "y": "y/src/checkers.y:1211",
-            "bare": "bare/src/checkers.brs:1074"
+            "y": "y/src/checkers.y:1277",
+            "bare": "bare/src/checkers.brs:1123"
           },
           {
             "name": "differs",
-            "y": "y/src/checkers.y:1213",
-            "bare": "bare/src/checkers.brs:1076"
+            "y": "y/src/checkers.y:1279",
+            "bare": "bare/src/checkers.brs:1125"
           }
         ]
       }
     ],
     "checkers.may_move_from": [
       {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "candidate",
+            "y": "y/src/checkers.y:1294",
+            "bare": "bare/src/checkers.brs:1138"
+          },
+          {
+            "name": "no_moves",
+            "y": "y/src/checkers.y:1299",
+            "bare": "bare/src/checkers.brs:1138"
+          }
+        ]
+      },
+      {
         "kind": "if",
         "branches": [
           {
             "name": "movable",
-            "y": "y/src/checkers.y:1228",
-            "bare": "bare/src/checkers.brs:1090"
+            "y": "y/src/checkers.y:1295",
+            "bare": "bare/src/checkers.brs:1139"
           },
           {
             "name": "unmovable",
-            "y": "y/src/checkers.y:1230",
-            "bare": "bare/src/checkers.brs:1092"
+            "y": "y/src/checkers.y:1297",
+            "bare": "bare/src/checkers.brs:1141"
           }
         ]
       }
     ]
   },
+  "paths": [
+    {
+      "path": "new_game > row'many > column'many",
+      "ends": "returns"
+    },
+    {
+      "path": "starting_piece > placed.light",
+      "ends": "returns"
+    },
+    {
+      "path": "starting_piece > placed.white_men",
+      "ends": "returns"
+    },
+    {
+      "path": "starting_piece > placed.red_men'eq",
+      "ends": "returns"
+    },
+    {
+      "path": "starting_piece > placed.red_men'gt",
+      "ends": "returns"
+    },
+    {
+      "path": "starting_piece > placed.between",
+      "ends": "returns"
+    },
+    {
+      "path": "legal_moves > must_jump",
+      "ends": "returns"
+    },
+    {
+      "path": "legal_moves > no_jump",
+      "ends": "returns"
+    },
+    {
+      "path": "apply > quiet",
+      "ends": "returns"
+    },
+    {
+      "path": "apply > captured",
+      "ends": "returns"
+    },
+    {
+      "path": "apply > captured'many",
+      "ends": "returns"
+    },
+    {
+      "path": "standing > judged.won",
+      "ends": "returns"
+    },
+    {
+      "path": "standing > judged.lost",
+      "ends": "returns"
+    },
+    {
+      "path": "standing > judged.drawn'eq",
+      "ends": "returns"
+    },
+    {
+      "path": "standing > judged.drawn'gt",
+      "ends": "returns"
+    },
+    {
+      "path": "standing > judged.playing",
+      "ends": "returns"
+    },
+    {
+      "path": "score > won",
+      "ends": "returns"
+    },
+    {
+      "path": "score > unfinished",
+      "ends": "returns"
+    },
+    {
+      "path": "player_moves",
+      "ends": "returns"
+    },
+    {
+      "path": "other > current.red",
+      "ends": "returns"
+    },
+    {
+      "path": "other > current.white",
+      "ends": "returns"
+    },
+    {
+      "path": "all_steps > no_pieces",
+      "ends": "returns"
+    },
+    {
+      "path": "all_steps > placed > direction'many > open",
+      "ends": "returns"
+    },
+    {
+      "path": "all_steps > placed > direction'many > blocked'1",
+      "ends": "returns"
+    },
+    {
+      "path": "all_steps > placed > direction'many > blocked'2",
+      "ends": "returns"
+    },
+    {
+      "path": "all_steps > placed'many > direction'many > open",
+      "ends": "returns"
+    },
+    {
+      "path": "all_steps > placed'many > direction'many > blocked'1",
+      "ends": "returns"
+    },
+    {
+      "path": "all_steps > placed'many > direction'many > blocked'2",
+      "ends": "returns"
+    },
+    {
+      "path": "all_jumps > no_pieces",
+      "ends": "returns"
+    },
+    {
+      "path": "all_jumps > placed",
+      "ends": "returns"
+    },
+    {
+      "path": "all_jumps > placed'many",
+      "ends": "returns"
+    },
+    {
+      "path": "chains > direction'many > can_jump > ends_here",
+      "ends": "returns"
+    },
+    {
+      "path": "chains > direction'many > can_jump > goes_on",
+      "ends": "returns"
+    },
+    {
+      "path": "chains > direction'many > cannot_jump'1",
+      "ends": "returns"
+    },
+    {
+      "path": "chains > direction'many > cannot_jump'2",
+      "ends": "returns"
+    },
+    {
+      "path": "chains_after > crowned",
+      "ends": "returns"
+    },
+    {
+      "path": "chains_after > uncrowned'1",
+      "ends": "returns"
+    },
+    {
+      "path": "chains_after > uncrowned'2lt",
+      "ends": "returns"
+    },
+    {
+      "path": "chains_after > uncrowned'2gt",
+      "ends": "returns"
+    },
+    {
+      "path": "jumpable > inside",
+      "ends": "returns"
+    },
+    {
+      "path": "jumpable > outside",
+      "ends": "returns"
+    },
+    {
+      "path": "belongs_to > held.empty",
+      "ends": "returns"
+    },
+    {
+      "path": "belongs_to > held.piece",
+      "ends": "returns"
+    },
+    {
+      "path": "placed_pieces > row'many > column'many > held.piece",
+      "ends": "returns"
+    },
+    {
+      "path": "placed_pieces > row'many > column'many > held.empty",
+      "ends": "returns"
+    },
+    {
+      "path": "own_pieces > no_pieces",
+      "ends": "returns"
+    },
+    {
+      "path": "own_pieces > placed > mine",
+      "ends": "returns"
+    },
+    {
+      "path": "own_pieces > placed > theirs",
+      "ends": "returns"
+    },
+    {
+      "path": "own_pieces > placed'many > mine",
+      "ends": "returns"
+    },
+    {
+      "path": "own_pieces > placed'many > theirs",
+      "ends": "returns"
+    },
+    {
+      "path": "directions_of > moving.king",
+      "ends": "returns"
+    },
+    {
+      "path": "directions_of > moving.red",
+      "ends": "returns"
+    },
+    {
+      "path": "directions_of > moving.white",
+      "ends": "returns"
+    },
+    {
+      "path": "far_row > heading_up",
+      "ends": "returns"
+    },
+    {
+      "path": "far_row > heading_down",
+      "ends": "returns"
+    },
+    {
+      "path": "piece_at",
+      "ends": "returns"
+    },
+    {
+      "path": "number_of",
+      "ends": "returns"
+    },
+    {
+      "path": "on_board",
+      "ends": "returns"
+    },
+    {
+      "path": "computer_move > deepening > candidate > ran_out",
+      "ends": "returns"
+    },
+    {
+      "path": "computer_move > deepening > candidate'many > ran_out",
+      "ends": "returns"
+    },
+    {
+      "path": "computer_move > deepening'many'1lt > candidate > finished",
+      "ends": "returns"
+    },
+    {
+      "path": "computer_move > deepening'many'1lt > candidate > ran_out",
+      "ends": "returns"
+    },
+    {
+      "path": "computer_move > deepening'many'1lt > candidate'many > finished",
+      "ends": "returns"
+    },
+    {
+      "path": "computer_move > deepening'many'1lt > candidate'many > ran_out",
+      "ends": "returns"
+    },
+    {
+      "path": "computer_move > deepening'many'1eq > candidate > finished",
+      "ends": "returns"
+    },
+    {
+      "path": "computer_move > deepening'many'1eq > candidate > ran_out",
+      "ends": "returns"
+    },
+    {
+      "path": "computer_move > deepening'many'1eq > candidate'many > finished",
+      "ends": "returns"
+    },
+    {
+      "path": "computer_move > deepening'many'1eq > candidate'many > ran_out",
+      "ends": "returns"
+    },
+    {
+      "path": "searched > judged.leaf'1",
+      "ends": "returns"
+    },
+    {
+      "path": "searched > judged.leaf'2",
+      "ends": "returns"
+    },
+    {
+      "path": "searched > judged.leaf'3eq",
+      "ends": "returns"
+    },
+    {
+      "path": "searched > judged.leaf'3gt",
+      "ends": "returns"
+    },
+    {
+      "path": "searched > judged.spent'eq",
+      "ends": "returns"
+    },
+    {
+      "path": "searched > judged.spent'gt",
+      "ends": "returns"
+    },
+    {
+      "path": "searched > judged.inner > candidate > owners_turn",
+      "ends": "returns"
+    },
+    {
+      "path": "searched > judged.inner > candidate > others_turn",
+      "ends": "returns"
+    },
+    {
+      "path": "searched > judged.inner > candidate'many > owners_turn",
+      "ends": "returns"
+    },
+    {
+      "path": "searched > judged.inner > candidate'many > others_turn",
+      "ends": "returns"
+    },
+    {
+      "path": "best_sampled > option > ranked.above",
+      "ends": "not_reachable"
+    },
+    {
+      "path": "best_sampled > option'many > ranked.above",
+      "ends": "not_reachable"
+    },
+    {
+      "path": "best_sampled > option > ranked.top > ties.settled",
+      "ends": "returns"
+    },
+    {
+      "path": "best_sampled > option > ranked.lower > ties.none",
+      "ends": "not_reachable"
+    },
+    {
+      "path": "best_sampled > option'many > ranked.top > ties.settled",
+      "ends": "returns"
+    },
+    {
+      "path": "best_sampled > option'many > ranked.top > ties.contested > option'many",
+      "ends": "returns"
+    },
+    {
+      "path": "best_sampled > option'many > ranked.lower > ties.settled",
+      "ends": "returns"
+    },
+    {
+      "path": "best_sampled > option'many > ranked.lower > ties.contested > option'many",
+      "ends": "returns"
+    },
+    {
+      "path": "best_sampled > option'many > ranked.lower > ties.none",
+      "ends": "not_reachable"
+    },
+    {
+      "path": "sampled_value > no_share",
+      "ends": "returns"
+    },
+    {
+      "path": "sampled_value > some_share > sampling",
+      "ends": "returns"
+    },
+    {
+      "path": "sampled_value > some_share > sampling'many",
+      "ends": "returns"
+    },
+    {
+      "path": "playout > ended'1",
+      "ends": "returns"
+    },
+    {
+      "path": "playout > ended'2",
+      "ends": "returns"
+    },
+    {
+      "path": "playout > ended'3eq",
+      "ends": "returns"
+    },
+    {
+      "path": "playout > ended'3gt",
+      "ends": "returns"
+    },
+    {
+      "path": "playout > going",
+      "ends": "returns"
+    },
+    {
+      "path": "playout > going'many",
+      "ends": "returns"
+    },
+    {
+      "path": "value_for > judged.losing",
+      "ends": "returns"
+    },
+    {
+      "path": "value_for > judged.winning",
+      "ends": "returns"
+    },
+    {
+      "path": "value_for > judged.drawn'eq",
+      "ends": "returns"
+    },
+    {
+      "path": "value_for > judged.drawn'gt",
+      "ends": "returns"
+    },
+    {
+      "path": "value_for > judged.playing",
+      "ends": "returns"
+    },
+    {
+      "path": "material > no_pieces",
+      "ends": "returns"
+    },
+    {
+      "path": "material > placed > counted.king",
+      "ends": "returns"
+    },
+    {
+      "path": "material > placed > counted.man",
+      "ends": "returns"
+    },
+    {
+      "path": "material > placed > counted.other",
+      "ends": "returns"
+    },
+    {
+      "path": "material > placed'many > counted.king",
+      "ends": "returns"
+    },
+    {
+      "path": "material > placed'many > counted.man",
+      "ends": "returns"
+    },
+    {
+      "path": "material > placed'many > counted.other",
+      "ends": "returns"
+    },
+    {
+      "path": "banner > shown.your_move",
+      "ends": "returns"
+    },
+    {
+      "path": "banner > shown.thinking",
+      "ends": "returns"
+    },
+    {
+      "path": "banner > shown.won",
+      "ends": "returns"
+    },
+    {
+      "path": "banner > shown.lost",
+      "ends": "returns"
+    },
+    {
+      "path": "banner > shown.drawn",
+      "ends": "returns"
+    },
+    {
+      "path": "draw",
+      "ends": "returns"
+    },
+    {
+      "path": "draw_levels > level'many",
+      "ends": "returns"
+    },
+    {
+      "path": "square_at > inside",
+      "ends": "returns"
+    },
+    {
+      "path": "square_at > outside'1",
+      "ends": "returns"
+    },
+    {
+      "path": "square_at > outside'2",
+      "ends": "returns"
+    },
+    {
+      "path": "level_at > level > pressed",
+      "ends": "returns"
+    },
+    {
+      "path": "level_at > level'many > pressed",
+      "ends": "returns"
+    },
+    {
+      "path": "level_at > level'many > missed'1",
+      "ends": "returns"
+    },
+    {
+      "path": "level_at > level'many > missed'2",
+      "ends": "returns"
+    },
+    {
+      "path": "corner_of",
+      "ends": "returns"
+    },
+    {
+      "path": "centre_of",
+      "ends": "returns"
+    },
+    {
+      "path": "shade_of > looks.light",
+      "ends": "returns"
+    },
+    {
+      "path": "shade_of > looks.selected",
+      "ends": "returns"
+    },
+    {
+      "path": "shade_of > looks.last",
+      "ends": "returns"
+    },
+    {
+      "path": "shade_of > looks.dark",
+      "ends": "returns"
+    },
+    {
+      "path": "in_last_move > made.none",
+      "ends": "returns"
+    },
+    {
+      "path": "in_last_move > made.some",
+      "ends": "returns"
+    },
+    {
+      "path": "landings > no_moves",
+      "ends": "returns"
+    },
+    {
+      "path": "landings > candidate > from_selected",
+      "ends": "returns"
+    },
+    {
+      "path": "landings > candidate > from_elsewhere",
+      "ends": "returns"
+    },
+    {
+      "path": "landings > candidate'many > from_selected",
+      "ends": "returns"
+    },
+    {
+      "path": "landings > candidate'many > from_elsewhere",
+      "ends": "returns"
+    },
+    {
+      "path": "draw_board > row'many > column'many",
+      "ends": "returns"
+    },
+    {
+      "path": "draw_pieces > no_pieces",
+      "ends": "returns"
+    },
+    {
+      "path": "draw_pieces > placed",
+      "ends": "returns"
+    },
+    {
+      "path": "draw_pieces > placed'many",
+      "ends": "returns"
+    },
+    {
+      "path": "draw_marks > no_marks",
+      "ends": "returns"
+    },
+    {
+      "path": "draw_marks > landing",
+      "ends": "returns"
+    },
+    {
+      "path": "draw_marks > landing'many",
+      "ends": "returns"
+    },
+    {
+      "path": "draw_piece",
+      "ends": "returns"
+    },
+    {
+      "path": "colours_of > painted.red_king",
+      "ends": "returns"
+    },
+    {
+      "path": "colours_of > painted.red_man",
+      "ends": "returns"
+    },
+    {
+      "path": "colours_of > painted.white_king",
+      "ends": "returns"
+    },
+    {
+      "path": "colours_of > painted.white_man",
+      "ends": "returns"
+    },
+    {
+      "path": "play > open > picked.none",
+      "ends": "returns"
+    },
+    {
+      "path": "play > open > picked.level",
+      "ends": "returns"
+    },
+    {
+      "path": "play > open'many > picked.none",
+      "ends": "returns"
+    },
+    {
+      "path": "play > open'many > picked.level",
+      "ends": "returns"
+    },
+    {
+      "path": "choose_level > closed_at_once'3",
+      "ends": "returns"
+    },
+    {
+      "path": "choose_level > choosing",
+      "ends": "returns"
+    },
+    {
+      "path": "choose_level > choosing'many",
+      "ends": "returns"
+    },
+    {
+      "path": "play_game > closed_at_once'3",
+      "ends": "returns"
+    },
+    {
+      "path": "play_game > playing > moment.over",
+      "ends": "returns"
+    },
+    {
+      "path": "play_game > playing > moment.computers_turn",
+      "ends": "returns"
+    },
+    {
+      "path": "play_game > playing > moment.players_turn",
+      "ends": "returns"
+    },
+    {
+      "path": "play_game > playing'many > moment.over",
+      "ends": "returns"
+    },
+    {
+      "path": "play_game > playing'many > moment.computers_turn",
+      "ends": "returns"
+    },
+    {
+      "path": "play_game > playing'many > moment.players_turn",
+      "ends": "returns"
+    },
+    {
+      "path": "clicked > judged.moving",
+      "ends": "returns"
+    },
+    {
+      "path": "clicked > judged.choosing",
+      "ends": "returns"
+    },
+    {
+      "path": "clicked > judged.elsewhere",
+      "ends": "returns"
+    },
+    {
+      "path": "level_clicked > place > hit",
+      "ends": "returns"
+    },
+    {
+      "path": "level_clicked > place'many > hit",
+      "ends": "returns"
+    },
+    {
+      "path": "level_clicked > no_clicks",
+      "ends": "returns"
+    },
+    {
+      "path": "level_clicked > place > miss",
+      "ends": "returns"
+    },
+    {
+      "path": "level_clicked > place'many > miss",
+      "ends": "returns"
+    },
+    {
+      "path": "act_on_clicks > no_clicks",
+      "ends": "returns"
+    },
+    {
+      "path": "act_on_clicks > place",
+      "ends": "returns"
+    },
+    {
+      "path": "act_on_clicks > place'many",
+      "ends": "returns"
+    },
+    {
+      "path": "move_to > candidate > fits",
+      "ends": "returns"
+    },
+    {
+      "path": "move_to > candidate'many > fits",
+      "ends": "returns"
+    },
+    {
+      "path": "move_to > no_moves",
+      "ends": "returns"
+    },
+    {
+      "path": "move_to > candidate > differs'1",
+      "ends": "returns"
+    },
+    {
+      "path": "move_to > candidate > differs'2",
+      "ends": "returns"
+    },
+    {
+      "path": "move_to > candidate'many > differs'1",
+      "ends": "returns"
+    },
+    {
+      "path": "move_to > candidate'many > differs'2",
+      "ends": "returns"
+    },
+    {
+      "path": "may_move_from > candidate > movable",
+      "ends": "returns"
+    },
+    {
+      "path": "may_move_from > candidate'many > movable",
+      "ends": "returns"
+    },
+    {
+      "path": "may_move_from > no_moves",
+      "ends": "returns"
+    },
+    {
+      "path": "may_move_from > candidate > unmovable",
+      "ends": "returns"
+    },
+    {
+      "path": "may_move_from > candidate'many > unmovable",
+      "ends": "returns"
+    }
+  ],
   "tests": {
     "a_new_game_has_twelve_men_each": {
-      "y": "y/src/checkers.test.y:56",
+      "y": "y/src/checkers.test.y:57",
       "rust": "checkers_example::checkers::tests::a_new_game_has_twelve_men_each",
       "covers": [
-        "starting_piece#placed.light",
-        "starting_piece#placed.white_men",
-        "starting_piece#placed.red_men",
-        "starting_piece#placed.between",
-        "placed_pieces#held.empty",
-        "placed_pieces#held.piece",
-        "standing#judged.playing"
+        "new_game > row'many > column'many",
+        "starting_piece > placed.light",
+        "starting_piece > placed.white_men",
+        "starting_piece > placed.red_men'eq",
+        "starting_piece > placed.red_men'gt",
+        "starting_piece > placed.between",
+        "standing > judged.playing",
+        "all_steps > placed'many > direction'many > blocked'1",
+        "all_steps > placed'many > direction'many > blocked'2",
+        "placed_pieces > row'many > column'many > held.piece",
+        "placed_pieces > row'many > column'many > held.empty"
       ]
     },
     "the_first_moves_are_steps": {
-      "y": "y/src/checkers.test.y:73",
+      "y": "y/src/checkers.test.y:77",
       "rust": "checkers_example::checkers::tests::the_first_moves_are_steps",
-      "covers": [
-        "legal_moves#no_jump",
-        "all_steps#open",
-        "all_steps#blocked",
-        "own_pieces#mine",
-        "own_pieces#theirs",
-        "directions_of#moving.red",
-        "directions_of#moving.white",
-        "chains#cannot_jump",
-        "jumpable#inside",
-        "jumpable#outside",
-        "belongs_to#held.empty",
-        "belongs_to#held.piece",
-        "apply#quiet",
-        "other#current.red"
-      ]
+      "covers": []
     },
     "a_capture_must_be_taken": {
-      "y": "y/src/checkers.test.y:93",
+      "y": "y/src/checkers.test.y:94",
       "rust": "checkers_example::checkers::tests::a_capture_must_be_taken",
       "covers": [
-        "legal_moves#must_jump",
-        "chains#can_jump",
-        "chains#ends_here",
-        "chains_after#uncrowned",
-        "apply#capturing"
+        "all_jumps > placed'many",
+        "chains_after > uncrowned'2gt"
       ]
     },
     "a_chain_of_jumps_is_one_move": {
-      "y": "y/src/checkers.test.y:110",
+      "y": "y/src/checkers.test.y:111",
       "rust": "checkers_example::checkers::tests::a_chain_of_jumps_is_one_move",
       "covers": [
-        "chains#goes_on"
+        "chains > direction'many > can_jump > goes_on"
       ]
     },
     "a_man_crowned_by_a_jump_stops": {
-      "y": "y/src/checkers.test.y:123",
+      "y": "y/src/checkers.test.y:124",
       "rust": "checkers_example::checkers::tests::a_man_crowned_by_a_jump_stops",
       "covers": [
-        "chains_after#crowned",
-        "far_row#heading_up"
+        "legal_moves > must_jump",
+        "apply > captured",
+        "chains > direction'many > can_jump > ends_here",
+        "chains_after > crowned",
+        "belongs_to > held.piece",
+        "far_row > heading_up"
       ]
     },
     "a_king_moves_both_ways": {
-      "y": "y/src/checkers.test.y:136",
+      "y": "y/src/checkers.test.y:138",
       "rust": "checkers_example::checkers::tests::a_king_moves_both_ways",
       "covers": [
-        "directions_of#moving.king"
+        "legal_moves > no_jump",
+        "other > current.red",
+        "all_steps > placed > direction'many > open",
+        "all_jumps > placed",
+        "chains > direction'many > cannot_jump'1",
+        "jumpable > inside",
+        "belongs_to > held.empty",
+        "directions_of > moving.king",
+        "on_board"
       ]
     },
     "white_is_crowned_on_the_bottom_row": {
-      "y": "y/src/checkers.test.y:147",
+      "y": "y/src/checkers.test.y:151",
       "rust": "checkers_example::checkers::tests::white_is_crowned_on_the_bottom_row",
       "covers": [
-        "far_row#heading_down",
-        "other#current.white"
+        "apply > quiet",
+        "other > current.white",
+        "directions_of > moving.white",
+        "far_row > heading_down"
       ]
     },
     "a_win_scores_by_level_and_moves": {
-      "y": "y/src/checkers.test.y:161",
+      "y": "y/src/checkers.test.y:165",
       "rust": "checkers_example::checkers::tests::a_win_scores_by_level_and_moves",
       "covers": [
-        "standing#judged.won",
-        "score#won"
+        "standing > judged.won",
+        "score > won",
+        "player_moves"
       ]
     },
     "a_loss_scores_nothing": {
-      "y": "y/src/checkers.test.y:182",
+      "y": "y/src/checkers.test.y:186",
       "rust": "checkers_example::checkers::tests::a_loss_scores_nothing",
       "covers": [
-        "standing#judged.lost",
-        "score#unfinished"
+        "standing > judged.lost",
+        "score > unfinished",
+        "all_steps > no_pieces",
+        "all_jumps > no_pieces",
+        "own_pieces > placed > theirs"
       ]
     },
     "quiet_turns_draw_the_game": {
-      "y": "y/src/checkers.test.y:195",
+      "y": "y/src/checkers.test.y:200",
       "rust": "checkers_example::checkers::tests::quiet_turns_draw_the_game",
       "covers": [
-        "standing#judged.drawn"
+        "standing > judged.drawn'eq",
+        "standing > judged.drawn'gt"
       ]
     },
     "pieces_are_worth_their_rank": {
-      "y": "y/src/checkers.test.y:207",
+      "y": "y/src/checkers.test.y:216",
       "rust": "checkers_example::checkers::tests::pieces_are_worth_their_rank",
       "covers": [
-        "value_for#judged.playing",
-        "material#counted.other",
-        "material#counted.king",
-        "material#counted.man"
+        "all_steps > placed'many > direction'many > open",
+        "value_for > judged.playing"
       ]
     },
     "an_ended_game_is_worth_its_end": {
-      "y": "y/src/checkers.test.y:221",
+      "y": "y/src/checkers.test.y:230",
       "rust": "checkers_example::checkers::tests::an_ended_game_is_worth_its_end",
       "covers": [
-        "value_for#judged.losing",
-        "value_for#judged.winning",
-        "value_for#judged.drawn"
+        "value_for > judged.losing",
+        "value_for > judged.winning",
+        "value_for > judged.drawn'eq",
+        "value_for > judged.drawn'gt"
       ]
     },
     "the_computer_keeps_its_man_out_of_reach": {
-      "y": "y/src/checkers.test.y:238",
+      "y": "y/src/checkers.test.y:252",
       "rust": "checkers_example::checkers::tests::the_computer_keeps_its_man_out_of_reach",
       "covers": [
-        "computer_move#deepening",
-        "computer_move#finished",
-        "computer_move#ran_out",
-        "computer_move#deep_enough",
-        "searched#judged.leaf",
-        "searched#judged.spent",
-        "searched#judged.inner",
-        "searched#owners_turn",
-        "searched#others_turn",
-        "best_sampled#top",
-        "best_sampled#lower",
-        "best_sampled#settled"
+        "computer_move > deepening'many'1lt > candidate'many > finished",
+        "computer_move > deepening'many'1lt > candidate'many > ran_out",
+        "searched > judged.leaf'2",
+        "searched > judged.spent'gt",
+        "searched > judged.inner > candidate > others_turn",
+        "searched > judged.inner > candidate'many > owners_turn",
+        "searched > judged.inner > candidate'many > others_turn",
+        "best_sampled > option'many > ranked.top > ties.settled",
+        "best_sampled > option'many > ranked.lower > ties.settled"
       ]
     },
     "the_computer_plays_out_games_to_choose_an_opening": {
-      "y": "y/src/checkers.test.y:254",
+      "y": "y/src/checkers.test.y:272",
       "rust": "checkers_example::checkers::tests::the_computer_plays_out_games_to_choose_an_opening",
       "covers": [
-        "best_sampled#contested",
-        "sampled_value#sampling",
-        "sampled_value#sampled",
-        "sampled_value#any",
-        "playout#going",
-        "playout#ended"
+        "apply > captured'many",
+        "chains > direction'many > cannot_jump'2",
+        "chains_after > uncrowned'1",
+        "best_sampled > option'many > ranked.lower > ties.contested > option'many"
       ]
     },
     "without_checks_the_pieces_decide": {
-      "y": "y/src/checkers.test.y:270",
+      "y": "y/src/checkers.test.y:288",
       "rust": "checkers_example::checkers::tests::without_checks_the_pieces_decide",
       "covers": [
-        "sampled_value#none"
+        "sampled_value > no_share",
+        "material > placed'many > counted.king",
+        "material > placed'many > counted.man",
+        "material > placed'many > counted.other"
       ]
     },
     "a_click_finds_its_square": {
-      "y": "y/src/checkers.test.y:283",
+      "y": "y/src/checkers.test.y:302",
       "rust": "checkers_example::checkers::tests::a_click_finds_its_square",
       "covers": [
-        "square_at#inside",
-        "square_at#outside"
+        "square_at > inside",
+        "square_at > outside'1",
+        "square_at > outside'2"
       ]
     },
     "a_click_finds_its_level": {
-      "y": "y/src/checkers.test.y:294",
+      "y": "y/src/checkers.test.y:315",
       "rust": "checkers_example::checkers::tests::a_click_finds_its_level",
       "covers": [
-        "level_at#pressed",
-        "level_at#missed"
+        "level_at > level'many > pressed",
+        "level_at > level'many > missed'2"
       ]
     },
     "squares_are_shaded": {
-      "y": "y/src/checkers.test.y:305",
+      "y": "y/src/checkers.test.y:326",
       "rust": "checkers_example::checkers::tests::squares_are_shaded",
       "covers": [
-        "shade_of#looks.light",
-        "shade_of#looks.selected",
-        "shade_of#looks.last",
-        "shade_of#looks.dark",
-        "in_last_move#made.none",
-        "in_last_move#made.some"
+        "shade_of > looks.light",
+        "shade_of > looks.selected",
+        "shade_of > looks.last",
+        "shade_of > looks.dark",
+        "in_last_move > made.some"
       ]
     },
     "the_selected_piece_shows_where_it_may_go": {
-      "y": "y/src/checkers.test.y:328",
+      "y": "y/src/checkers.test.y:349",
       "rust": "checkers_example::checkers::tests::the_selected_piece_shows_where_it_may_go",
       "covers": [
-        "landings#from_selected",
-        "landings#from_elsewhere"
+        "landings > candidate'many > from_selected",
+        "landings > candidate'many > from_elsewhere"
       ]
     },
     "pieces_are_painted_by_player_and_rank": {
-      "y": "y/src/checkers.test.y:341",
+      "y": "y/src/checkers.test.y:362",
       "rust": "checkers_example::checkers::tests::pieces_are_painted_by_player_and_rank",
       "covers": [
-        "colours_of#painted.red_king",
-        "colours_of#painted.red_man",
-        "colours_of#painted.white_king",
-        "colours_of#painted.white_man"
+        "colours_of > painted.red_king",
+        "colours_of > painted.red_man",
+        "colours_of > painted.white_king",
+        "colours_of > painted.white_man"
       ]
     },
     "the_banner_says_how_the_game_stands": {
-      "y": "y/src/checkers.test.y:357",
+      "y": "y/src/checkers.test.y:378",
       "rust": "checkers_example::checkers::tests::the_banner_says_how_the_game_stands",
       "covers": [
-        "banner#shown.your_move",
-        "banner#shown.thinking",
-        "banner#shown.won",
-        "banner#shown.lost",
-        "banner#shown.drawn"
+        "banner > shown.your_move",
+        "banner > shown.thinking",
+        "banner > shown.won",
+        "banner > shown.lost",
+        "banner > shown.drawn"
       ]
     },
     "a_click_elsewhere_selects_nothing": {
-      "y": "y/src/checkers.test.y:384",
+      "y": "y/src/checkers.test.y:406",
       "rust": "checkers_example::checkers::tests::a_click_elsewhere_selects_nothing",
       "covers": [
-        "clicked#judged.elsewhere"
+        "centre_of",
+        "clicked > judged.elsewhere",
+        "move_to > candidate'many > differs'1",
+        "move_to > candidate'many > differs'2",
+        "may_move_from > candidate'many > unmovable"
       ]
     },
     "escape_at_the_levels_ends_play": {
-      "y": "y/src/checkers.test.y:397",
+      "y": "y/src/checkers.test.y:420",
       "rust": "checkers_example::checkers::tests::escape_at_the_levels_ends_play",
       "covers": [
-        "play#open",
-        "play#picked.none",
-        "play#closed",
-        "choose_level#choosing",
-        "choose_level#chosen_or_stopped"
+        "draw_levels > level'many",
+        "choose_level > choosing",
+        "level_clicked > no_clicks"
       ]
     },
     "a_level_is_chosen_and_a_move_made": {
-      "y": "y/src/checkers.test.y:411",
+      "y": "y/src/checkers.test.y:434",
       "rust": "checkers_example::checkers::tests::a_level_is_chosen_and_a_move_made",
       "covers": [
-        "choose_level#miss",
-        "choose_level#hit",
-        "play#picked.level",
-        "play_game#playing",
-        "play_game#stopped",
-        "play_game#moment.players_turn",
-        "play_game#moment.computers_turn",
-        "clicked#judged.choosing",
-        "clicked#judged.moving",
-        "move_to#fits",
-        "move_to#differs",
-        "may_move_from#movable",
-        "may_move_from#unmovable"
+        "playout > ended'1",
+        "draw_marks > landing'many",
+        "play > open > picked.level",
+        "choose_level > choosing'many",
+        "play_game > playing'many > moment.computers_turn",
+        "play_game > playing'many > moment.players_turn",
+        "level_clicked > place > miss",
+        "act_on_clicks > place"
       ]
     },
     "space_after_a_game_chooses_another": {
-      "y": "y/src/checkers.test.y:435",
+      "y": "y/src/checkers.test.y:458",
       "rust": "checkers_example::checkers::tests::space_after_a_game_chooses_another",
       "covers": [
-        "play_game#moment.over"
+        "draw_pieces > placed",
+        "draw_piece",
+        "play_game > playing > moment.over"
+      ]
+    },
+    "a_blocked_man_has_no_step": {
+      "y": "y/src/checkers.test.y:485",
+      "rust": "checkers_example::checkers::tests::a_blocked_man_has_no_step",
+      "covers": [
+        "all_steps > placed > direction'many > blocked'1",
+        "all_steps > placed > direction'many > blocked'2",
+        "jumpable > outside",
+        "directions_of > moving.red"
+      ]
+    },
+    "an_empty_board_has_nothing_on_it": {
+      "y": "y/src/checkers.test.y:498",
+      "rust": "checkers_example::checkers::tests::an_empty_board_has_nothing_on_it",
+      "covers": [
+        "own_pieces > no_pieces",
+        "material > no_pieces",
+        "draw",
+        "corner_of",
+        "in_last_move > made.none",
+        "landings > no_moves",
+        "draw_board > row'many > column'many",
+        "draw_pieces > no_pieces",
+        "draw_marks > no_marks",
+        "move_to > no_moves",
+        "may_move_from > no_moves"
+      ]
+    },
+    "the_only_move_is_found": {
+      "y": "y/src/checkers.test.y:523",
+      "rust": "checkers_example::checkers::tests::the_only_move_is_found",
+      "covers": [
+        "own_pieces > placed'many > mine",
+        "own_pieces > placed'many > theirs",
+        "landings > candidate > from_selected",
+        "draw_marks > landing",
+        "move_to > candidate > fits",
+        "move_to > candidate > differs'1",
+        "move_to > candidate > differs'2",
+        "may_move_from > candidate > movable",
+        "may_move_from > candidate > unmovable"
+      ]
+    },
+    "a_lone_piece_is_worth_its_rank": {
+      "y": "y/src/checkers.test.y:553",
+      "rust": "checkers_example::checkers::tests::a_lone_piece_is_worth_its_rank",
+      "covers": [
+        "own_pieces > placed > mine",
+        "piece_at",
+        "number_of",
+        "material > placed > counted.king",
+        "material > placed > counted.man",
+        "material > placed > counted.other"
+      ]
+    },
+    "one_option_is_chosen_unweighed": {
+      "y": "y/src/checkers.test.y:572",
+      "rust": "checkers_example::checkers::tests::one_option_is_chosen_unweighed",
+      "covers": [
+        "best_sampled > option > ranked.top > ties.settled"
+      ]
+    },
+    "with_no_checks_the_search_runs_out_at_once": {
+      "y": "y/src/checkers.test.y:586",
+      "rust": "checkers_example::checkers::tests::with_no_checks_the_search_runs_out_at_once",
+      "covers": [
+        "computer_move > deepening > candidate > ran_out",
+        "computer_move > deepening > candidate'many > ran_out",
+        "searched > judged.leaf'1",
+        "best_sampled > option'many > ranked.top > ties.contested > option'many"
+      ]
+    },
+    "with_few_checks_the_search_runs_out_partway": {
+      "y": "y/src/checkers.test.y:605",
+      "rust": "checkers_example::checkers::tests::with_few_checks_the_search_runs_out_partway",
+      "covers": [
+        "chains_after > uncrowned'2lt",
+        "computer_move > deepening'many'1lt > candidate > finished",
+        "computer_move > deepening'many'1lt > candidate > ran_out",
+        "sampled_value > some_share > sampling",
+        "playout > going'many"
+      ]
+    },
+    "the_search_runs_out_at_its_deepest": {
+      "y": "y/src/checkers.test.y:625",
+      "rust": "checkers_example::checkers::tests::the_search_runs_out_at_its_deepest",
+      "covers": [
+        "computer_move > deepening'many'1eq > candidate > ran_out",
+        "computer_move > deepening'many'1eq > candidate'many > ran_out"
+      ]
+    },
+    "the_search_finishes_its_deepest": {
+      "y": "y/src/checkers.test.y:644",
+      "rust": "checkers_example::checkers::tests::the_search_finishes_its_deepest",
+      "covers": [
+        "computer_move > deepening'many'1eq > candidate > finished",
+        "computer_move > deepening'many'1eq > candidate'many > finished",
+        "searched > judged.inner > candidate > owners_turn",
+        "sampled_value > some_share > sampling'many"
+      ]
+    },
+    "the_search_stops_at_a_draw_and_when_spent": {
+      "y": "y/src/checkers.test.y:664",
+      "rust": "checkers_example::checkers::tests::the_search_stops_at_a_draw_and_when_spent",
+      "covers": [
+        "searched > judged.leaf'3eq",
+        "searched > judged.leaf'3gt",
+        "searched > judged.spent'eq"
+      ]
+    },
+    "a_game_played_out_may_end_at_once": {
+      "y": "y/src/checkers.test.y:685",
+      "rust": "checkers_example::checkers::tests::a_game_played_out_may_end_at_once",
+      "covers": [
+        "playout > ended'2",
+        "playout > ended'3eq",
+        "playout > ended'3gt",
+        "playout > going"
+      ]
+    },
+    "clicks_beside_and_between_the_buttons": {
+      "y": "y/src/checkers.test.y:709",
+      "rust": "checkers_example::checkers::tests::clicks_beside_and_between_the_buttons",
+      "covers": [
+        "level_at > level > pressed",
+        "level_at > level'many > missed'1",
+        "level_clicked > place'many > hit",
+        "level_clicked > place'many > miss"
+      ]
+    },
+    "two_clicks_in_a_frame_make_a_move": {
+      "y": "y/src/checkers.test.y:723",
+      "rust": "checkers_example::checkers::tests::two_clicks_in_a_frame_make_a_move",
+      "covers": [
+        "clicked > judged.moving",
+        "clicked > judged.choosing",
+        "act_on_clicks > place'many",
+        "move_to > candidate'many > fits",
+        "may_move_from > candidate'many > movable"
+      ]
+    },
+    "a_window_closed_at_once_ends_play": {
+      "y": "y/src/checkers.test.y:740",
+      "rust": "checkers_example::checkers::tests::a_window_closed_at_once_ends_play",
+      "covers": [
+        "play > open > picked.none",
+        "choose_level > closed_at_once'3"
+      ]
+    },
+    "a_window_closed_as_a_game_starts_ends_play": {
+      "y": "y/src/checkers.test.y:753",
+      "rust": "checkers_example::checkers::tests::a_window_closed_as_a_game_starts_ends_play",
+      "covers": [
+        "play > open'many > picked.none",
+        "play > open'many > picked.level",
+        "play_game > closed_at_once'3",
+        "level_clicked > place > hit"
+      ]
+    },
+    "the_computer_moves_in_a_frame": {
+      "y": "y/src/checkers.test.y:767",
+      "rust": "checkers_example::checkers::tests::the_computer_moves_in_a_frame",
+      "covers": [
+        "play_game > playing > moment.computers_turn"
+      ]
+    },
+    "the_player_moves_in_a_frame": {
+      "y": "y/src/checkers.test.y:782",
+      "rust": "checkers_example::checkers::tests::the_player_moves_in_a_frame",
+      "covers": [
+        "landings > candidate > from_elsewhere",
+        "draw_pieces > placed'many",
+        "play_game > playing > moment.players_turn",
+        "act_on_clicks > no_clicks"
+      ]
+    },
+    "an_ended_game_waits_for_space": {
+      "y": "y/src/checkers.test.y:798",
+      "rust": "checkers_example::checkers::tests::an_ended_game_waits_for_space",
+      "covers": [
+        "play_game > playing'many > moment.over"
       ]
     }
   }

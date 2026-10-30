@@ -43,6 +43,7 @@ version = "0.0.0"
 dependencies = [
  "cc",
  "jsonschema",
+ "regex",
  "serde",
  "serde_json",
  "tree-sitter",

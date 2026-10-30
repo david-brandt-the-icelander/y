@@ -55,7 +55,7 @@
       "facet": "console_play",
       "path": "tic_tac_toe.console_play",
       "visible": "public",
-      "y": "y/src/tic_tac_toe.y:247",
+      "y": "y/src/tic_tac_toe.y:251",
       "rust": "tic_tac_toe_example::tic_tac_toe::console_play",
       "members": [
         "play_error",
@@ -72,7 +72,24 @@
         "forever as forever"
       ],
       "lowered": "as the last two parameters, in order",
-      "y": "y/src/tic_tac_toe.y:264"
+      "y": "y/src/tic_tac_toe.y:270"
+    },
+    {
+      "subject": "tic_tac_toe_example::tic_tac_toe::persons_move",
+      "injected": [
+        "console as console",
+        "forever as forever"
+      ],
+      "lowered": "as the last two parameters, in order",
+      "y": "y/src/tic_tac_toe.y:296"
+    },
+    {
+      "subject": "tic_tac_toe_example::tic_tac_toe::announce",
+      "injected": [
+        "console as console"
+      ],
+      "lowered": "as the last parameter",
+      "y": "y/src/tic_tac_toe.y:338"
     },
     {
       "subject": "tic_tac_toe_example::main",
@@ -88,8 +105,8 @@
       "claim": "forever",
       "because": "a player may think for as long as they like",
       "requires": "Forever",
-      "y": "y/src/tic_tac_toe.y:273",
-      "bare": "bare/src/tic_tac_toe.brs:267"
+      "y": "y/src/tic_tac_toe.y:300",
+      "bare": "bare/src/tic_tac_toe.brs:294"
     }
   ],
   "suspensions": [],
@@ -99,13 +116,13 @@
       "what": "game",
       "why": "place changes it, and game is still read",
       "y": "y/src/tic_tac_toe.y:107",
-      "bare": "bare/src/tic_tac_toe.brs:115"
+      "bare": "bare/src/tic_tac_toe.brs:117"
     },
     {
       "what": "game",
       "why": "place changes it, and game is still read",
-      "y": "y/src/tic_tac_toe.y:204",
-      "bare": "bare/src/tic_tac_toe.brs:197"
+      "y": "y/src/tic_tac_toe.y:208",
+      "bare": "bare/src/tic_tac_toe.brs:202"
     }
   ],
   "decisions": {
@@ -128,6 +145,7 @@
       {
         "kind": "conditional",
         "label": "judged",
+        "y": "y/src/tic_tac_toe.y:69",
         "branches": [
           {
             "name": "judged.off_board",
@@ -149,34 +167,59 @@
     ],
     "tic_tac_toe.computer_move": [
       {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "square",
+            "y": "y/src/tic_tac_toe.y:106",
+            "bare": "bare/src/tic_tac_toe.brs:115"
+          },
+          {
+            "name": "no_open",
+            "y": "y/src/tic_tac_toe.y:116",
+            "bare": "bare/src/tic_tac_toe.brs:127"
+          }
+        ]
+      },
+      {
         "kind": "if",
         "branches": [
           {
             "name": "better",
             "y": "y/src/tic_tac_toe.y:111",
-            "bare": "bare/src/tic_tac_toe.brs:118"
+            "bare": "bare/src/tic_tac_toe.brs:120"
           },
           {
             "name": "no_better",
             "y": "y/src/tic_tac_toe.y:114",
-            "bare": "bare/src/tic_tac_toe.brs:121"
+            "bare": "bare/src/tic_tac_toe.brs:123"
           }
         ]
       }
     ],
     "tic_tac_toe.winner": [
       {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "line",
+            "y": "y/src/tic_tac_toe.y:141",
+            "bare": "bare/src/tic_tac_toe.brs:147"
+          }
+        ]
+      },
+      {
         "kind": "if",
         "branches": [
           {
             "name": "three",
-            "y": "y/src/tic_tac_toe.y:143",
-            "bare": "bare/src/tic_tac_toe.brs:146"
+            "y": "y/src/tic_tac_toe.y:146",
+            "bare": "bare/src/tic_tac_toe.brs:151"
           },
           {
             "name": "not_three",
-            "y": "y/src/tic_tac_toe.y:145",
-            "bare": "bare/src/tic_tac_toe.brs:148"
+            "y": "y/src/tic_tac_toe.y:148",
+            "bare": "bare/src/tic_tac_toe.brs:153"
           }
         ]
       }
@@ -185,33 +228,44 @@
       {
         "kind": "conditional",
         "label": "current",
+        "y": "y/src/tic_tac_toe.y:161",
         "branches": [
           {
             "name": "current.cross",
-            "y": "y/src/tic_tac_toe.y:159",
-            "bare": "bare/src/tic_tac_toe.brs:161"
+            "y": "y/src/tic_tac_toe.y:162",
+            "bare": "bare/src/tic_tac_toe.brs:166"
           },
           {
             "name": "current.nought",
-            "y": "y/src/tic_tac_toe.y:161",
-            "bare": "bare/src/tic_tac_toe.brs:162"
+            "y": "y/src/tic_tac_toe.y:164",
+            "bare": "bare/src/tic_tac_toe.brs:167"
           }
         ]
       }
     ],
     "tic_tac_toe.open_squares": [
       {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "number",
+            "y": "y/src/tic_tac_toe.y:178",
+            "bare": "bare/src/tic_tac_toe.brs:177"
+          }
+        ]
+      },
+      {
         "kind": "if",
         "branches": [
           {
             "name": "marked",
-            "y": "y/src/tic_tac_toe.y:176",
-            "bare": "bare/src/tic_tac_toe.brs:173"
+            "y": "y/src/tic_tac_toe.y:179",
+            "bare": "bare/src/tic_tac_toe.brs:178"
           },
           {
             "name": "empty",
-            "y": "y/src/tic_tac_toe.y:178",
-            "bare": "bare/src/tic_tac_toe.brs:175"
+            "y": "y/src/tic_tac_toe.y:181",
+            "bare": "bare/src/tic_tac_toe.brs:180"
           }
         ]
       }
@@ -220,21 +274,54 @@
       {
         "kind": "conditional",
         "label": "now",
+        "y": "y/src/tic_tac_toe.y:198",
         "branches": [
           {
             "name": "now.lost",
-            "y": "y/src/tic_tac_toe.y:196",
-            "bare": "bare/src/tic_tac_toe.brs:190"
+            "y": "y/src/tic_tac_toe.y:200",
+            "bare": "bare/src/tic_tac_toe.brs:195"
           },
           {
             "name": "now.drawn",
-            "y": "y/src/tic_tac_toe.y:198",
-            "bare": "bare/src/tic_tac_toe.brs:192"
+            "y": "y/src/tic_tac_toe.y:202",
+            "bare": "bare/src/tic_tac_toe.brs:197"
           },
           {
             "name": "now.open",
-            "y": "y/src/tic_tac_toe.y:200",
-            "bare": "bare/src/tic_tac_toe.brs:194"
+            "y": "y/src/tic_tac_toe.y:204",
+            "bare": "bare/src/tic_tac_toe.brs:199"
+          }
+        ]
+      },
+      {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "square",
+            "y": "y/src/tic_tac_toe.y:207",
+            "bare": "bare/src/tic_tac_toe.brs:201"
+          }
+        ]
+      }
+    ],
+    "tic_tac_toe.shown": [
+      {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "first",
+            "y": "y/src/tic_tac_toe.y:224",
+            "bare": "bare/src/tic_tac_toe.brs:218"
+          }
+        ]
+      },
+      {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "number",
+            "y": "y/src/tic_tac_toe.y:227",
+            "bare": "bare/src/tic_tac_toe.brs:220"
           }
         ]
       }
@@ -243,16 +330,17 @@
       {
         "kind": "conditional",
         "label": "held",
+        "y": "y/src/tic_tac_toe.y:243",
         "branches": [
           {
             "name": "held.empty",
-            "y": "y/src/tic_tac_toe.y:240",
-            "bare": "bare/src/tic_tac_toe.brs:229"
+            "y": "y/src/tic_tac_toe.y:244",
+            "bare": "bare/src/tic_tac_toe.brs:236"
           },
           {
             "name": "held.marked",
-            "y": "y/src/tic_tac_toe.y:242",
-            "bare": "bare/src/tic_tac_toe.brs:230"
+            "y": "y/src/tic_tac_toe.y:246",
+            "bare": "bare/src/tic_tac_toe.brs:237"
           }
         ]
       }
@@ -263,13 +351,13 @@
         "branches": [
           {
             "name": "playing",
-            "y": "y/src/tic_tac_toe.y:268",
-            "bare": "bare/src/tic_tac_toe.brs:262"
+            "y": "y/src/tic_tac_toe.y:274",
+            "bare": "bare/src/tic_tac_toe.brs:270"
           },
           {
-            "name": "game_over",
-            "y": "y/src/tic_tac_toe.y:291",
-            "bare": "bare/src/tic_tac_toe.brs:283"
+            "name": "over_at_once",
+            "y": "y/src/tic_tac_toe.y:281",
+            "bare": "bare/src/tic_tac_toe.brs:270"
           }
         ]
       },
@@ -278,193 +366,579 @@
         "branches": [
           {
             "name": "persons_turn",
-            "y": "y/src/tic_tac_toe.y:269",
-            "bare": "bare/src/tic_tac_toe.brs:263"
+            "y": "y/src/tic_tac_toe.y:275",
+            "bare": "bare/src/tic_tac_toe.brs:271"
           },
           {
             "name": "computers_turn",
-            "y": "y/src/tic_tac_toe.y:287",
-            "bare": "bare/src/tic_tac_toe.brs:277"
+            "y": "y/src/tic_tac_toe.y:277",
+            "bare": "bare/src/tic_tac_toe.brs:273"
           }
         ]
-      },
+      }
+    ],
+    "tic_tac_toe.persons_move": [
       {
         "kind": "if",
         "branches": [
           {
             "name": "closed",
-            "y": "y/src/tic_tac_toe.y:275",
-            "bare": "bare/src/tic_tac_toe.brs:268"
+            "y": "y/src/tic_tac_toe.y:302",
+            "bare": "bare/src/tic_tac_toe.brs:295"
           },
           {
             "name": "line_read",
-            "y": "y/src/tic_tac_toe.y:277",
-            "bare": "bare/src/tic_tac_toe.brs:268"
+            "y": "y/src/tic_tac_toe.y:304",
+            "bare": "bare/src/tic_tac_toe.brs:295"
           }
         ]
       },
       {
         "kind": "conditional",
         "label": "attempted",
+        "y": "y/src/tic_tac_toe.y:305",
         "branches": [
           {
             "name": "attempted.valid",
-            "y": "y/src/tic_tac_toe.y:279",
-            "bare": "bare/src/tic_tac_toe.brs:272"
+            "y": "y/src/tic_tac_toe.y:306",
+            "bare": "bare/src/tic_tac_toe.brs:299"
           },
           {
-            "name": "attempted.not_a_move",
-            "y": "y/src/tic_tac_toe.y:281",
-            "bare": "bare/src/tic_tac_toe.brs:273"
-          },
-          {
-            "name": "attempted.no_square",
-            "y": "y/src/tic_tac_toe.y:283",
-            "bare": "bare/src/tic_tac_toe.brs:274"
-          },
-          {
-            "name": "attempted.taken",
-            "y": "y/src/tic_tac_toe.y:285",
-            "bare": "bare/src/tic_tac_toe.brs:275"
+            "name": "attempted.invalid",
+            "y": "y/src/tic_tac_toe.y:308",
+            "bare": "bare/src/tic_tac_toe.brs:300"
           }
         ]
-      },
+      }
+    ],
+    "tic_tac_toe.complaint": [
+      {
+        "kind": "conditional",
+        "label": "wrong",
+        "y": "y/src/tic_tac_toe.y:320",
+        "branches": [
+          {
+            "name": "wrong.not_a_move",
+            "y": "y/src/tic_tac_toe.y:321",
+            "bare": "bare/src/tic_tac_toe.brs:311"
+          },
+          {
+            "name": "wrong.no_square",
+            "y": "y/src/tic_tac_toe.y:323",
+            "bare": "bare/src/tic_tac_toe.brs:312"
+          },
+          {
+            "name": "wrong.taken",
+            "y": "y/src/tic_tac_toe.y:325",
+            "bare": "bare/src/tic_tac_toe.brs:313"
+          }
+        ]
+      }
+    ],
+    "tic_tac_toe.announce": [
       {
         "kind": "if",
         "branches": [
           {
             "name": "drawn",
-            "y": "y/src/tic_tac_toe.y:296",
-            "bare": "bare/src/tic_tac_toe.brs:288"
+            "y": "y/src/tic_tac_toe.y:343",
+            "bare": "bare/src/tic_tac_toe.brs:327"
           },
           {
             "name": "won",
-            "y": "y/src/tic_tac_toe.y:298",
-            "bare": "bare/src/tic_tac_toe.brs:289"
+            "y": "y/src/tic_tac_toe.y:345",
+            "bare": "bare/src/tic_tac_toe.brs:328"
           }
         ]
       }
     ]
   },
+  "paths": [
+    {
+      "path": "new_game",
+      "ends": "returns"
+    },
+    {
+      "path": "read_move > not_a_number",
+      "ends": "fails"
+    },
+    {
+      "path": "read_move > a_number > judged.off_board'1",
+      "ends": "fails"
+    },
+    {
+      "path": "read_move > a_number > judged.off_board'2",
+      "ends": "fails"
+    },
+    {
+      "path": "read_move > a_number > judged.taken",
+      "ends": "fails"
+    },
+    {
+      "path": "read_move > a_number > judged.empty",
+      "ends": "returns"
+    },
+    {
+      "path": "place",
+      "ends": "returns"
+    },
+    {
+      "path": "computer_move > no_open",
+      "ends": "not_reachable"
+    },
+    {
+      "path": "computer_move > square > better",
+      "ends": "returns"
+    },
+    {
+      "path": "computer_move > square'many > better",
+      "ends": "returns"
+    },
+    {
+      "path": "computer_move > square'many > no_better'lt",
+      "ends": "returns"
+    },
+    {
+      "path": "computer_move > square'many > no_better'eq",
+      "ends": "returns"
+    },
+    {
+      "path": "over",
+      "ends": "returns"
+    },
+    {
+      "path": "winner > line > three",
+      "ends": "returns"
+    },
+    {
+      "path": "winner > line'many > three",
+      "ends": "returns"
+    },
+    {
+      "path": "winner > line'many > not_three'1",
+      "ends": "returns"
+    },
+    {
+      "path": "winner > line'many > not_three'2",
+      "ends": "returns"
+    },
+    {
+      "path": "winner > line'many > not_three'3",
+      "ends": "returns"
+    },
+    {
+      "path": "other > current.cross",
+      "ends": "returns"
+    },
+    {
+      "path": "other > current.nought",
+      "ends": "returns"
+    },
+    {
+      "path": "open_squares > number'many > empty",
+      "ends": "returns"
+    },
+    {
+      "path": "open_squares > number'many > marked",
+      "ends": "returns"
+    },
+    {
+      "path": "value_of > now.lost",
+      "ends": "returns"
+    },
+    {
+      "path": "value_of > now.drawn",
+      "ends": "returns"
+    },
+    {
+      "path": "value_of > now.open > square",
+      "ends": "returns"
+    },
+    {
+      "path": "value_of > now.open > square'many",
+      "ends": "returns"
+    },
+    {
+      "path": "shown > first'many > number'many",
+      "ends": "returns"
+    },
+    {
+      "path": "square_shown > held.empty",
+      "ends": "returns"
+    },
+    {
+      "path": "square_shown > held.marked",
+      "ends": "returns"
+    },
+    {
+      "path": "play > over_at_once",
+      "ends": "returns"
+    },
+    {
+      "path": "play > playing > persons_turn",
+      "ends": "returns"
+    },
+    {
+      "path": "play > playing > computers_turn",
+      "ends": "returns"
+    },
+    {
+      "path": "play > playing'many > persons_turn",
+      "ends": "returns"
+    },
+    {
+      "path": "play > playing'many > computers_turn",
+      "ends": "returns"
+    },
+    {
+      "path": "play > write_line'1'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "play > playing > persons_turn > persons_move'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "play > playing > computers_turn > write_line'2'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "play > playing'many > persons_turn > persons_move'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "play > playing'many > computers_turn > write_line'2'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "play > over_at_once > announce'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "play > playing > persons_turn > announce'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "play > playing > computers_turn > announce'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "play > playing'many > persons_turn > announce'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "play > playing'many > computers_turn > announce'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "persons_move > line_read > attempted.valid",
+      "ends": "returns"
+    },
+    {
+      "path": "persons_move > line_read > attempted.invalid",
+      "ends": "returns"
+    },
+    {
+      "path": "persons_move > write_line'1'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "persons_move > write'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "persons_move > typed'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "persons_move > closed",
+      "ends": "fails"
+    },
+    {
+      "path": "persons_move > line_read > attempted.invalid > write_line'2'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "complaint > wrong.not_a_move",
+      "ends": "returns"
+    },
+    {
+      "path": "complaint > wrong.no_square",
+      "ends": "returns"
+    },
+    {
+      "path": "complaint > wrong.taken",
+      "ends": "returns"
+    },
+    {
+      "path": "announce > drawn",
+      "ends": "returns"
+    },
+    {
+      "path": "announce > won",
+      "ends": "returns"
+    },
+    {
+      "path": "announce > write_line'1'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "announce > drawn > write_line'2'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "announce > won > write_line'3'fails",
+      "ends": "fails"
+    }
+  ],
   "tests": {
     "a_move_is_read": {
-      "y": "y/src/tic_tac_toe.test.y:22",
+      "y": "y/src/tic_tac_toe.test.y:24",
       "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_move_is_read",
       "covers": [
-        "read_move#a_number",
-        "read_move#judged.empty"
+        "read_move > a_number > judged.empty"
       ]
     },
     "a_word_is_not_a_move": {
-      "y": "y/src/tic_tac_toe.test.y:33",
+      "y": "y/src/tic_tac_toe.test.y:35",
       "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_word_is_not_a_move",
       "covers": [
-        "read_move#not_a_number",
-        "read_move!move_error.not_a_number"
+        "read_move > not_a_number"
       ]
     },
     "there_is_no_tenth_square": {
-      "y": "y/src/tic_tac_toe.test.y:44",
+      "y": "y/src/tic_tac_toe.test.y:46",
       "rust": "tic_tac_toe_example::tic_tac_toe::tests::there_is_no_tenth_square",
       "covers": [
-        "read_move#judged.off_board",
-        "read_move!move_error.no_such_square"
+        "read_move > a_number > judged.off_board'2"
       ]
     },
     "a_marked_square_is_taken": {
-      "y": "y/src/tic_tac_toe.test.y:55",
+      "y": "y/src/tic_tac_toe.test.y:57",
       "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_marked_square_is_taken",
       "covers": [
-        "read_move#judged.taken",
-        "read_move!move_error.taken"
+        "read_move > a_number > judged.taken"
       ]
     },
     "the_players_take_turns": {
-      "y": "y/src/tic_tac_toe.test.y:66",
+      "y": "y/src/tic_tac_toe.test.y:68",
       "rust": "tic_tac_toe_example::tic_tac_toe::tests::the_players_take_turns",
       "covers": [
-        "other#current.cross",
-        "other#current.nought"
+        "place",
+        "other > current.cross",
+        "other > current.nought"
       ]
     },
     "three_in_a_row_wins": {
-      "y": "y/src/tic_tac_toe.test.y:80",
+      "y": "y/src/tic_tac_toe.test.y:82",
       "rust": "tic_tac_toe_example::tic_tac_toe::tests::three_in_a_row_wins",
       "covers": [
-        "winner#not_three",
-        "winner#three"
+        "over",
+        "winner > line'many > three"
       ]
     },
     "a_full_board_with_no_line_is_a_draw": {
-      "y": "y/src/tic_tac_toe.test.y:93",
+      "y": "y/src/tic_tac_toe.test.y:95",
       "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_full_board_with_no_line_is_a_draw",
       "covers": [
-        "value_of#now.drawn"
+        "winner > line'many > not_three'2",
+        "winner > line'many > not_three'3",
+        "open_squares > number'many > marked",
+        "value_of > now.drawn"
       ]
     },
     "the_computer_wins_rather_than_blocks": {
-      "y": "y/src/tic_tac_toe.test.y:105",
+      "y": "y/src/tic_tac_toe.test.y:108",
       "rust": "tic_tac_toe_example::tic_tac_toe::tests::the_computer_wins_rather_than_blocks",
       "covers": [
-        "computer_move#better",
-        "computer_move#no_better",
-        "value_of#now.lost",
-        "value_of#now.open",
-        "open_squares#marked",
-        "open_squares#empty"
+        "computer_move > square'many > better",
+        "computer_move > square'many > no_better'lt",
+        "winner > line > three",
+        "value_of > now.lost",
+        "value_of > now.open > square",
+        "value_of > now.open > square'many"
       ]
     },
     "the_computer_blocks_a_line": {
-      "y": "y/src/tic_tac_toe.test.y:117",
+      "y": "y/src/tic_tac_toe.test.y:120",
       "rust": "tic_tac_toe_example::tic_tac_toe::tests::the_computer_blocks_a_line",
-      "covers": [
-        "computer_move#better"
-      ]
+      "covers": []
     },
     "the_board_shows_marks_and_numbers": {
-      "y": "y/src/tic_tac_toe.test.y:128",
+      "y": "y/src/tic_tac_toe.test.y:130",
       "rust": "tic_tac_toe_example::tic_tac_toe::tests::the_board_shows_marks_and_numbers",
       "covers": [
-        "square_shown#held.empty",
-        "square_shown#held.marked"
+        "shown > first'many > number'many",
+        "square_shown > held.empty",
+        "square_shown > held.marked"
       ]
     },
     "a_player_who_plays_perfectly_draws": {
-      "y": "y/src/tic_tac_toe.test.y:139",
+      "y": "y/src/tic_tac_toe.test.y:141",
       "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_player_who_plays_perfectly_draws",
       "covers": [
-        "play#playing",
-        "play#persons_turn",
-        "play#line_read",
-        "play#attempted.valid",
-        "play#computers_turn",
-        "play#game_over",
-        "play#drawn"
+        "computer_move > square'many > no_better'eq",
+        "play > playing'many > persons_turn",
+        "play > playing'many > computers_turn"
       ]
     },
     "a_player_who_plays_carelessly_loses": {
-      "y": "y/src/tic_tac_toe.test.y:152",
+      "y": "y/src/tic_tac_toe.test.y:154",
       "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_player_who_plays_carelessly_loses",
       "covers": [
-        "play#won"
+        "announce > won"
       ]
     },
     "a_player_is_told_what_was_wrong": {
-      "y": "y/src/tic_tac_toe.test.y:164",
+      "y": "y/src/tic_tac_toe.test.y:166",
       "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_player_is_told_what_was_wrong",
       "covers": [
-        "play#attempted.not_a_move",
-        "play#attempted.no_square",
-        "play#attempted.taken",
-        "play#closed",
-        "play!play_error.input_closed"
+        "play > playing'many > persons_turn > persons_move'fails",
+        "persons_move > line_read > attempted.invalid",
+        "persons_move > closed",
+        "complaint > wrong.no_square",
+        "complaint > wrong.taken"
       ]
     },
     "a_failing_console_ends_the_game": {
-      "y": "y/src/tic_tac_toe.test.y:180",
+      "y": "y/src/tic_tac_toe.test.y:182",
       "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_failing_console_ends_the_game",
       "covers": [
-        "play!play_error.console"
+        "winner > line'many > not_three'1",
+        "open_squares > number'many > empty",
+        "play > playing > persons_turn > persons_move'fails",
+        "persons_move > typed'fails"
+      ]
+    },
+    "square_zero_is_not_on_the_board": {
+      "y": "y/src/tic_tac_toe.test.y:195",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::square_zero_is_not_on_the_board",
+      "covers": [
+        "read_move > a_number > judged.off_board'1"
+      ]
+    },
+    "the_computer_takes_the_last_square": {
+      "y": "y/src/tic_tac_toe.test.y:206",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::the_computer_takes_the_last_square",
+      "covers": [
+        "computer_move > square > better"
+      ]
+    },
+    "an_end_cannot_be_shown_without_the_board": {
+      "y": "y/src/tic_tac_toe.test.y:217",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::an_end_cannot_be_shown_without_the_board",
+      "covers": [
+        "announce > write_line'1'fails"
+      ]
+    },
+    "a_draw_cannot_be_announced": {
+      "y": "y/src/tic_tac_toe.test.y:230",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_draw_cannot_be_announced",
+      "covers": [
+        "announce > drawn > write_line'2'fails"
+      ]
+    },
+    "a_win_cannot_be_announced": {
+      "y": "y/src/tic_tac_toe.test.y:243",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_win_cannot_be_announced",
+      "covers": [
+        "announce > won > write_line'3'fails"
+      ]
+    },
+    "a_move_cannot_be_asked_for_without_the_board": {
+      "y": "y/src/tic_tac_toe.test.y:256",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_move_cannot_be_asked_for_without_the_board",
+      "covers": [
+        "persons_move > write_line'1'fails"
+      ]
+    },
+    "a_move_cannot_be_asked_for": {
+      "y": "y/src/tic_tac_toe.test.y:270",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_move_cannot_be_asked_for",
+      "covers": [
+        "persons_move > write'fails"
+      ]
+    },
+    "a_wrong_move_cannot_be_complained_of": {
+      "y": "y/src/tic_tac_toe.test.y:284",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_wrong_move_cannot_be_complained_of",
+      "covers": [
+        "persons_move > line_read > attempted.invalid > write_line'2'fails",
+        "complaint > wrong.not_a_move"
+      ]
+    },
+    "a_console_that_cannot_greet_ends_play": {
+      "y": "y/src/tic_tac_toe.test.y:298",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_greet_ends_play",
+      "covers": [
+        "new_game",
+        "play > write_line'1'fails"
+      ]
+    },
+    "a_full_board_is_over_at_once": {
+      "y": "y/src/tic_tac_toe.test.y:310",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_full_board_is_over_at_once",
+      "covers": [
+        "play > over_at_once",
+        "announce > drawn"
+      ]
+    },
+    "a_console_that_cannot_announce_at_once_ends_play": {
+      "y": "y/src/tic_tac_toe.test.y:322",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_announce_at_once_ends_play",
+      "covers": [
+        "play > over_at_once > announce'fails"
+      ]
+    },
+    "the_player_fills_the_last_square": {
+      "y": "y/src/tic_tac_toe.test.y:334",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::the_player_fills_the_last_square",
+      "covers": [
+        "play > playing > persons_turn",
+        "persons_move > line_read > attempted.valid"
+      ]
+    },
+    "a_console_that_cannot_announce_the_players_last_move_ends_play": {
+      "y": "y/src/tic_tac_toe.test.y:346",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_announce_the_players_last_move_ends_play",
+      "covers": [
+        "play > playing > persons_turn > announce'fails"
+      ]
+    },
+    "the_computer_fills_the_last_square": {
+      "y": "y/src/tic_tac_toe.test.y:358",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::the_computer_fills_the_last_square",
+      "covers": [
+        "play > playing > computers_turn"
+      ]
+    },
+    "a_console_that_cannot_tell_the_computers_last_move_ends_play": {
+      "y": "y/src/tic_tac_toe.test.y:370",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_tell_the_computers_last_move_ends_play",
+      "covers": [
+        "play > playing > computers_turn > write_line'2'fails"
+      ]
+    },
+    "a_console_that_cannot_announce_the_computers_last_move_ends_play": {
+      "y": "y/src/tic_tac_toe.test.y:382",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_announce_the_computers_last_move_ends_play",
+      "covers": [
+        "play > playing > computers_turn > announce'fails"
+      ]
+    },
+    "a_console_that_cannot_tell_the_computers_move_ends_play": {
+      "y": "y/src/tic_tac_toe.test.y:394",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_tell_the_computers_move_ends_play",
+      "covers": [
+        "play > playing'many > computers_turn > write_line'2'fails"
+      ]
+    },
+    "a_console_that_cannot_announce_after_both_have_moved_ends_play": {
+      "y": "y/src/tic_tac_toe.test.y:406",
+      "rust": "tic_tac_toe_example::tic_tac_toe::tests::a_console_that_cannot_announce_after_both_have_moved_ends_play",
+      "covers": [
+        "play > playing'many > persons_turn > announce'fails",
+        "play > playing'many > computers_turn > announce'fails"
       ]
     }
   }

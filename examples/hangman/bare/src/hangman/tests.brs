@@ -6,7 +6,7 @@ use super::*;
 
 #[test]
 fn a_letter_in_the_word_is_a_hit() {
-    // y: covers guess#judged.in_word, shown_rune#known, shown_rune#unknown
+    // y: covers guess > judged.in_word, masked > letter'many, shown_rune > known, shown_rune > unknown
     let game = new_game(Word::new("gallows".to_string()).expect("given"));
     let verdict = guess(&mut game, "l").expect("when");
     assert!(verdict == Verdict::Hit, "hit");
@@ -15,7 +15,7 @@ fn a_letter_in_the_word_is_a_hit() {
 
 #[test]
 fn a_letter_not_in_the_word_is_a_miss() {
-    // y: covers guess#judged.not_in_word
+    // y: covers guess > judged.not_in_word
     let game = new_game(Word::new("rope".to_string()).expect("given"));
     let verdict = guess(&mut game, "z").expect("when");
     assert!(verdict == Verdict::Miss, "miss");
@@ -24,7 +24,7 @@ fn a_letter_not_in_the_word_is_a_miss() {
 
 #[test]
 fn a_repeated_letter_is_refused() {
-    // y: covers guess#judged.repeated, guess!guess_error.already_guessed
+    // y: covers guess > judged.repeated'2
     let game = Game { word: Word::new("rope".to_string()).expect("given"), hits: BTreeSet::new(), misses: vec![Rune('z')] };
     let refused = guess(&mut game, "Z");
     assert!(refused == Err(GuessError::AlreadyGuessed), "refused_as_repeated");
@@ -33,7 +33,7 @@ fn a_repeated_letter_is_refused() {
 
 #[test]
 fn typing_nothing_is_not_a_guess() {
-    // y: covers guess#judged.nothing_typed, guess!guess_error.empty
+    // y: covers guess > judged.nothing_typed
     let game = new_game(Word::new("rope".to_string()).expect("given"));
     let refused = guess(&mut game, "   ");
     assert!(refused == Err(GuessError::Empty), "refused_as_empty");
@@ -41,7 +41,7 @@ fn typing_nothing_is_not_a_guess() {
 
 #[test]
 fn two_letters_are_not_a_guess() {
-    // y: covers guess#judged.not_one_rune, guess!guess_error.not_one_letter
+    // y: covers guess > judged.not_one_rune
     let game = new_game(Word::new("rope".to_string()).expect("given"));
     let refused = guess(&mut game, "ab");
     assert!(refused == Err(GuessError::NotOneLetter), "refused_as_two");
@@ -49,7 +49,7 @@ fn two_letters_are_not_a_guess() {
 
 #[test]
 fn a_digit_is_not_a_guess() {
-    // y: covers guess#judged.not_a_letter
+    // y: covers guess > judged.not_a_letter
     let game = new_game(Word::new("rope".to_string()).expect("given"));
     let refused = guess(&mut game, "7");
     assert!(refused == Err(GuessError::NotOneLetter), "refused_as_digit");
@@ -57,7 +57,7 @@ fn a_digit_is_not_a_guess() {
 
 #[test]
 fn six_misses_hang_the_man() {
-    // y: covers outcome_of#judged.hanged
+    // y: covers outcome_of > judged.hanged
     let misses = vec![Rune('a'), Rune('b'), Rune('c'), Rune('d'), Rune('f'), Rune('g')];
     let game = Game { word: Word::new("rope".to_string()).expect("given"), hits: BTreeSet::new(), misses };
     let ending = outcome_of(&game);
@@ -66,7 +66,7 @@ fn six_misses_hang_the_man() {
 
 #[test]
 fn finding_every_letter_wins() {
-    // y: covers outcome_of#judged.solved
+    // y: covers outcome_of > judged.solved
     let hits = BTreeSet::from([Rune('r'), Rune('o'), Rune('p'), Rune('e')]);
     let game = Game { word: Word::new("rope".to_string()).expect("given"), hits, misses: vec![Rune('a')] };
     let ending = outcome_of(&game);
@@ -75,7 +75,7 @@ fn finding_every_letter_wins() {
 
 #[test]
 fn a_new_game_is_being_played() {
-    // y: covers outcome_of#judged.undecided
+    // y: covers new_game, outcome_of > judged.undecided
     let game = new_game(Word::new("rope".to_string()).expect("given"));
     let ending = outcome_of(&game);
     assert!(ending == Outcome::Playing, "playing");
@@ -83,7 +83,7 @@ fn a_new_game_is_being_played() {
 
 #[test]
 fn the_empty_gallows() {
-    // y: covers part#not_yet
+    // y: covers gallows, part > not_yet
     let picture = gallows(0);
     let expected = ["  +---+", "  |   |", "      |", "      |", "      |", "      |", "========="].join("\n");
     assert!(picture == expected, "empty");
@@ -91,7 +91,7 @@ fn the_empty_gallows() {
 
 #[test]
 fn the_full_gallows() {
-    // y: covers part#reached
+    // y: covers part > reached
     let picture = gallows(6);
     let expected = ["  +---+", "  |   |", "  O   |", " /|\\  |", " / \\  |", "      |", "========="].join("\n");
     assert!(picture == expected, "full");
@@ -99,7 +99,8 @@ fn the_full_gallows() {
 
 #[test]
 fn a_word_list_is_read_in_order() {
-    // y: covers parse_word_list#blank, parse_word_list#has_text, parse_word_list#checked.valid, parse_word_list#has_words
+    // y: covers parse_word_list > piece'many > has_text > checked.valid > has_words,
+    // parse_word_list > piece'many > blank > has_words
     let words = parse_word_list("rope  gallows").expect("when");
     let expected = vec![Word::new("rope".to_string()).expect("then"), Word::new("gallows".to_string()).expect("then")];
     assert!(words == expected, "both_in_order");
@@ -107,21 +108,21 @@ fn a_word_list_is_read_in_order() {
 
 #[test]
 fn an_empty_word_list_is_refused() {
-    // y: covers parse_word_list#empty, parse_word_list!word_list_error.empty
+    // y: covers parse_word_list > piece'many > blank > empty
     let refused = parse_word_list("   ");
     assert!(refused == Err(WordListError::Empty), "refused_as_empty");
 }
 
 #[test]
 fn a_short_word_is_refused() {
-    // y: covers parse_word_list#checked.invalid, parse_word_list!word_list_error.not_a_word
+    // y: covers parse_word_list > piece'many > has_text > checked.invalid
     let refused = parse_word_list("rope cat");
     assert!(refused == Err(WordListError::NotAWord), "refused_as_not_a_word");
 }
 
 #[test]
 fn a_player_who_finds_every_letter_wins() {
-    // y: covers play#playing, play#game_over, play#line_read, play#guessed.hit, play#won
+    // y: covers play > playing'many > line_read
     let words = vec![Word::new("rope".to_string()).expect("given")];
     let console = Console::fake(&["r", "o", "p", "e"], false);
     let random = Random::seeded(7);
@@ -133,7 +134,7 @@ fn a_player_who_finds_every_letter_wins() {
 
 #[test]
 fn a_player_who_misses_six_times_is_hanged() {
-    // y: covers play#guessed.miss, play#hanged
+    // y: covers show_end > hanged
     let words = vec![Word::new("rope".to_string()).expect("given")];
     let console = Console::fake(&["a", "b", "c", "d", "f", "g"], false);
     let random = Random::seeded(7);
@@ -145,7 +146,8 @@ fn a_player_who_misses_six_times_is_hanged() {
 
 #[test]
 fn a_player_is_told_what_was_wrong() {
-    // y: covers play#guessed.typed_nothing, play#guessed.typed_other, play#guessed.typed_again
+    // y: covers guess > judged.repeated'1, reply > said.typed_nothing, reply > said.typed_other,
+    // reply > said.typed_again
     let words = vec![Word::new("rope".to_string()).expect("given")];
     let console = Console::fake(&["", "ab", "r", "r", "o", "p", "e"], false);
     let random = Random::seeded(7);
@@ -160,7 +162,7 @@ fn a_player_is_told_what_was_wrong() {
 
 #[test]
 fn a_closed_console_ends_the_game() {
-    // y: covers play#closed, play!play_error.input_closed
+    // y: covers play > playing'many > closed
     let words = vec![Word::new("rope".to_string()).expect("given")];
     let console = Console::fake(&["r"], false);
     let random = Random::seeded(7);
@@ -171,11 +173,211 @@ fn a_closed_console_ends_the_game() {
 
 #[test]
 fn a_failing_console_ends_the_game() {
-    // y: covers play!play_error.console
+    // y: covers play > playing > typed'fails, show_turn
     let words = vec![Word::new("rope".to_string()).expect("given")];
     let console = Console::fake(&[], true);
     let random = Random::seeded(7);
     let forever = Forever::fake();
     let ended = play(&words, &mut console, &mut random, &forever);
     assert!(ended == Err(PlayError::Console { error: ConsoleError::fake_read_failure() }), "failed_reading");
+}
+
+#[test]
+fn a_list_of_one_piece_is_read() {
+    // y: covers parse_word_list > piece > has_text > checked.invalid,
+    // parse_word_list > piece > has_text > checked.valid > has_words, parse_word_list > piece > blank > empty
+    let one = parse_word_list("rope");
+    let blank = parse_word_list("");
+    let short = parse_word_list("cat");
+    assert!(one == Ok(vec![Word::new("rope".to_string()).expect("then")]), "the_word");
+    assert!(blank == Err(WordListError::Empty), "none");
+    assert!(short == Err(WordListError::NotAWord), "refused");
+}
+
+#[test]
+fn a_console_that_cannot_greet_ends_play() {
+    // y: covers play > write_line'1'fails
+    let words = vec![Word::new("rope".to_string()).expect("given")];
+    let console = Console::fake_failing_writes(&[], 0);
+    let random = Random::seeded(7);
+    let forever = Forever::fake();
+    let ended = play(&words, &mut console, &mut random, &forever);
+    assert!(ended == Err(PlayError::Console { error: ConsoleError::fake_write_failure() }), "failed_writing");
+}
+
+#[test]
+fn a_console_that_cannot_show_the_first_turn_ends_play() {
+    // y: covers play > playing > show_turn'fails
+    let words = vec![Word::new("rope".to_string()).expect("given")];
+    let console = Console::fake_failing_writes(&[], 1);
+    let random = Random::seeded(7);
+    let forever = Forever::fake();
+    let ended = play(&words, &mut console, &mut random, &forever);
+    assert!(ended == Err(PlayError::Console { error: ConsoleError::fake_write_failure() }), "failed_writing");
+}
+
+#[test]
+fn a_console_that_cannot_show_a_later_turn_ends_play() {
+    // y: covers play > playing'many > show_turn'fails, reply > said.miss
+    let words = vec![Word::new("rope".to_string()).expect("given")];
+    let console = Console::fake_failing_writes(&["x"], 6);
+    let random = Random::seeded(7);
+    let forever = Forever::fake();
+    let ended = play(&words, &mut console, &mut random, &forever);
+    assert!(ended == Err(PlayError::Console { error: ConsoleError::fake_write_failure() }), "failed_writing");
+}
+
+#[test]
+fn a_console_that_cannot_reply_to_the_first_guess_ends_play() {
+    // y: covers play > playing > line_read > write_line'2'fails, reply > said.hit
+    let words = vec![Word::new("rope".to_string()).expect("given")];
+    let console = Console::fake_failing_writes(&["r"], 5);
+    let random = Random::seeded(7);
+    let forever = Forever::fake();
+    let ended = play(&words, &mut console, &mut random, &forever);
+    assert!(ended == Err(PlayError::Console { error: ConsoleError::fake_write_failure() }), "failed_writing");
+}
+
+#[test]
+fn a_console_that_cannot_reply_to_a_later_guess_ends_play() {
+    // y: covers play > playing'many > line_read > write_line'2'fails
+    let words = vec![Word::new("rope".to_string()).expect("given")];
+    let console = Console::fake_failing_writes(&["r", "o"], 10);
+    let random = Random::seeded(7);
+    let forever = Forever::fake();
+    let ended = play(&words, &mut console, &mut random, &forever);
+    assert!(ended == Err(PlayError::Console { error: ConsoleError::fake_write_failure() }), "failed_writing");
+}
+
+#[test]
+fn a_console_that_cannot_show_a_quick_end_ends_play() {
+    // y: covers play > playing > line_read > show_end'fails
+    let words = vec![Word::new("aaaa".to_string()).expect("given")];
+    let console = Console::fake_failing_writes(&["a"], 6);
+    let random = Random::seeded(7);
+    let forever = Forever::fake();
+    let ended = play(&words, &mut console, &mut random, &forever);
+    assert!(ended == Err(PlayError::Console { error: ConsoleError::fake_write_failure() }), "failed_writing");
+}
+
+#[test]
+fn a_console_that_cannot_show_the_end_ends_play() {
+    // y: covers play > playing'many > line_read > show_end'fails
+    let words = vec![Word::new("rope".to_string()).expect("given")];
+    let console = Console::fake_failing_writes(&["r", "o", "p", "e"], 21);
+    let random = Random::seeded(7);
+    let forever = Forever::fake();
+    let ended = play(&words, &mut console, &mut random, &forever);
+    assert!(ended == Err(PlayError::Console { error: ConsoleError::fake_write_failure() }), "failed_writing");
+}
+
+#[test]
+fn a_word_of_one_letter_is_found_with_one_guess() {
+    // y: covers play > playing > line_read, show_end > won
+    let words = vec![Word::new("aaaa".to_string()).expect("given")];
+    let console = Console::fake(&["a"], false);
+    let random = Random::seeded(7);
+    let forever = Forever::fake();
+    let ended = play(&words, &mut console, &mut random, &forever);
+    assert!(ended.is_ok(), "played");
+    assert!(console.written().last().map(String::as_str) == Some("You win! The word was aaaa."), "won");
+}
+
+#[test]
+fn a_console_closed_at_once_ends_play() {
+    // y: covers play > playing > closed
+    let words = vec![Word::new("rope".to_string()).expect("given")];
+    let console = Console::fake(&[], false);
+    let random = Random::seeded(7);
+    let forever = Forever::fake();
+    let ended = play(&words, &mut console, &mut random, &forever);
+    assert!(ended == Err(PlayError::InputClosed), "closed");
+}
+
+#[test]
+fn a_console_that_cannot_read_a_later_guess_ends_play() {
+    // y: covers play > playing'many > typed'fails
+    let words = vec![Word::new("rope".to_string()).expect("given")];
+    let console = Console::fake_failing_reads(&["r"]);
+    let random = Random::seeded(7);
+    let forever = Forever::fake();
+    let ended = play(&words, &mut console, &mut random, &forever);
+    assert!(ended == Err(PlayError::Console { error: ConsoleError::fake_read_failure() }), "failed_reading");
+}
+
+#[test]
+fn a_turn_cannot_be_shown_after_no_lines() {
+    // y: covers show_turn > write_line'1'fails
+    let game = new_game(Word::new("rope".to_string()).expect("given"));
+    let console = Console::fake_failing_writes(&[], 0);
+    let shown = show_turn(&game, &mut console);
+    assert!(shown == Err(ConsoleError::fake_write_failure()), "failed_writing");
+}
+
+#[test]
+fn a_turn_cannot_be_shown_after_one_lines() {
+    // y: covers show_turn > write_line'2'fails
+    let game = new_game(Word::new("rope".to_string()).expect("given"));
+    let console = Console::fake_failing_writes(&[], 1);
+    let shown = show_turn(&game, &mut console);
+    assert!(shown == Err(ConsoleError::fake_write_failure()), "failed_writing");
+}
+
+#[test]
+fn a_turn_cannot_be_shown_after_two_lines() {
+    // y: covers show_turn > write_line'3'fails
+    let game = new_game(Word::new("rope".to_string()).expect("given"));
+    let console = Console::fake_failing_writes(&[], 2);
+    let shown = show_turn(&game, &mut console);
+    assert!(shown == Err(ConsoleError::fake_write_failure()), "failed_writing");
+}
+
+#[test]
+fn a_turn_cannot_be_shown_after_three_lines() {
+    // y: covers show_turn > write'fails
+    let game = new_game(Word::new("rope".to_string()).expect("given"));
+    let console = Console::fake_failing_writes(&[], 3);
+    let shown = show_turn(&game, &mut console);
+    assert!(shown == Err(ConsoleError::fake_write_failure()), "failed_writing");
+}
+
+#[test]
+fn an_end_cannot_be_shown_without_the_gallows() {
+    // y: covers show_end > write_line'1'fails
+    let game = new_game(Word::new("rope".to_string()).expect("given"));
+    guess(&mut game, "r").expect("given");
+    guess(&mut game, "o").expect("given");
+    guess(&mut game, "p").expect("given");
+    guess(&mut game, "e").expect("given");
+    let console = Console::fake_failing_writes(&[], 0);
+    let shown = show_end(&game, &mut console);
+    assert!(shown == Err(ConsoleError::fake_write_failure()), "failed_writing");
+}
+
+#[test]
+fn a_win_cannot_be_announced() {
+    // y: covers show_end > won > write_line'2'fails
+    let game = new_game(Word::new("rope".to_string()).expect("given"));
+    guess(&mut game, "r").expect("given");
+    guess(&mut game, "o").expect("given");
+    guess(&mut game, "p").expect("given");
+    guess(&mut game, "e").expect("given");
+    let console = Console::fake_failing_writes(&[], 1);
+    let shown = show_end(&game, &mut console);
+    assert!(shown == Err(ConsoleError::fake_write_failure()), "failed_writing");
+}
+
+#[test]
+fn a_hanging_cannot_be_announced() {
+    // y: covers show_end > hanged > write_line'3'fails
+    let game = new_game(Word::new("rope".to_string()).expect("given"));
+    guess(&mut game, "a").expect("given");
+    guess(&mut game, "b").expect("given");
+    guess(&mut game, "c").expect("given");
+    guess(&mut game, "d").expect("given");
+    guess(&mut game, "f").expect("given");
+    guess(&mut game, "g").expect("given");
+    let console = Console::fake_failing_writes(&[], 1);
+    let shown = show_end(&game, &mut console);
+    assert!(shown == Err(ConsoleError::fake_write_failure()), "failed_writing");
 }

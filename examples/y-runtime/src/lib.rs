@@ -28,6 +28,34 @@ pub fn invariant(holds: bool, identity: &str) {
     }
 }
 
+/// The run-time check of an `ensures` the compiler did not prove, on the value a function returns. A violation is a
+/// fault.
+pub fn ensure(holds: bool, identity: &str) {
+    if !holds {
+        fault(identity, "guarantee broken");
+    }
+}
+
+/// The run-time check of an `assert` the compiler did not prove: `assert name = (p)` is `fail not_reachable` when `p`
+/// does not hold. A violation is a fault.
+pub fn assertion(holds: bool, identity: &str) {
+    if !holds {
+        fault(identity, "assertion broken");
+    }
+}
+
+/// Y's `fail not_reachable`: a path the source declares cannot be travelled. It is not a failure case of the function;
+/// reaching it is a fault, which the build's fault setting handles (Y § 3.5): this runtime terminates the process.
+pub fn not_reachable(identity: &str) -> ! {
+    fault(identity, "a path declared not reachable was reached")
+}
+
+/// Y's `fail not_implemented`: a path the source has not implemented yet. Like `not_reachable`, it is not a failure case
+/// of the function, and reaching it is a fault.
+pub fn not_implemented(identity: &str) -> ! {
+    fault(identity, "a path not implemented yet was reached")
+}
+
 /// One character as a player sees it.
 ///
 /// Y's `Rune` is an extended grapheme cluster. This stand-in holds one Unicode scalar value, which is the same thing
@@ -233,6 +261,11 @@ impl ConsoleError {
     pub fn fake_read_failure() -> ConsoleError {
         ConsoleError { message: "the fake console was told to fail reading".to_string() }
     }
+
+    /// The error a fake console gives when it is told to fail writing.
+    pub fn fake_write_failure() -> ConsoleError {
+        ConsoleError { message: "the fake console was told to fail writing".to_string() }
+    }
 }
 
 impl From<std::io::Error> for ConsoleError {
@@ -243,7 +276,9 @@ impl From<std::io::Error> for ConsoleError {
 
 enum Input {
     Terminal,
-    Script { lines: VecDeque<String>, read_fails: bool },
+    /// `writes_left`: how many more writes succeed before every write fails, if they ever do.
+    /// `fails_when_out`: whether a read fails, instead of reporting that the input is closed, once the lines run out.
+    Script { lines: VecDeque<String>, read_fails: bool, writes_left: Option<usize>, fails_when_out: bool },
 }
 
 /// The terminal, or a fake of it for tests: it reads lines and writes text.
@@ -257,11 +292,37 @@ impl Console {
     /// read fails instead. It records what is written.
     pub fn fake(lines: &[&str], read_fails: bool) -> Console {
         let lines = lines.iter().map(|line| line.to_string()).collect();
-        Console { input: Input::Script { lines, read_fails }, written: Vec::new() }
+        Console { input: Input::Script { lines, read_fails, writes_left: None, fails_when_out: false }, written: Vec::new() }
+    }
+
+    /// A fake console that reads the given lines, and whose writes succeed `writes` times, after which every write
+    /// fails: Y's `fake console(lines: …, failing_after_writes: n)`.
+    pub fn fake_failing_writes(lines: &[&str], writes: usize) -> Console {
+        let lines = lines.iter().map(|line| line.to_string()).collect();
+        Console { input: Input::Script { lines, read_fails: false, writes_left: Some(writes), fails_when_out: false }, written: Vec::new() }
+    }
+
+    /// A fake console that reads the given lines, after which every read fails, instead of reporting that its input
+    /// is closed: Y's `fake console(input: …, failing_after_input: true)`.
+    pub fn fake_failing_reads(lines: &[&str]) -> Console {
+        let lines = lines.iter().map(|line| line.to_string()).collect();
+        Console { input: Input::Script { lines, read_fails: false, writes_left: None, fails_when_out: true }, written: Vec::new() }
+    }
+
+    /// Spends one of a fake console's writes, or fails when none is left.
+    fn spend_write(&mut self) -> Result<(), ConsoleError> {
+        if let Input::Script { writes_left: Some(left), .. } = &mut self.input {
+            if *left == 0 {
+                return Err(ConsoleError::fake_write_failure());
+            }
+            *left -= 1;
+        }
+        Ok(())
     }
 
     /// Writes a line.
     pub fn write_line(&mut self, text: &str) -> Result<(), ConsoleError> {
+        self.spend_write()?;
         match self.input {
             Input::Terminal => writeln!(std::io::stdout(), "{text}")?,
             Input::Script { .. } => self.written.push(text.to_string()),
@@ -271,6 +332,7 @@ impl Console {
 
     /// Writes text with no line ending, as a prompt.
     pub fn write(&mut self, text: &str) -> Result<(), ConsoleError> {
+        self.spend_write()?;
         match self.input {
             Input::Terminal => {
                 let mut out = std::io::stdout();
@@ -295,7 +357,10 @@ impl Console {
                 Ok(Some(line.trim_end_matches(['\n', '\r']).to_string()))
             }
             Input::Script { read_fails: true, .. } => Err(ConsoleError::fake_read_failure()),
-            Input::Script { lines, .. } => Ok(lines.pop_front()),
+            Input::Script { lines, fails_when_out, .. } => match lines.pop_front() {
+                None if *fails_when_out => Err(ConsoleError::fake_read_failure()),
+                line => Ok(line),
+            },
         }
     }
 

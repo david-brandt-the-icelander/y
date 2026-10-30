@@ -132,6 +132,51 @@
       "kind": "function",
       "name": "memory_example::memory::tests::what_is_not_a_drawing_ends_play",
       "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_click_between_two_rows_chooses_nothing",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_game_exactly_on_par_scores_no_seconds",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::two_clicks_in_a_frame_turn_two_cards",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_site_that_fails_partway_fails_the_setup",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_site_that_gives_a_bad_picture_partway_fails_the_setup",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_window_closed_while_fetching_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_window_closed_after_one_frame_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_site_that_fails_for_the_next_game_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_pair_shown_past_its_second_turns_back",
+      "params": []
     }
   ]
 }

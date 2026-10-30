@@ -154,7 +154,7 @@
         { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
       ],
       "result": { "type": "u32" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/nim.y:166" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/nim.y:169" }]
     },
     {
       "kind": "function",
@@ -167,7 +167,7 @@
         }
       ],
       "result": { "type": "u32" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/nim.y:181" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/nim.y:185" }]
     },
     {
       "kind": "function",
@@ -176,7 +176,7 @@
         { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
       ],
       "result": { "type": "text" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/nim.y:196" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/nim.y:201" }]
     },
     { "kind": "module", "name": "nim_example::nim::console_play", "visible": "public" },
     {
@@ -210,6 +210,7 @@
       "name": "nim_example::nim::console_play::play",
       "visible": "public",
       "params": [
+        { "name": "started", "type": "Game" },
         {
           "name": "console",
           "type": "ref<Console>",
@@ -219,9 +220,53 @@
       ],
       "result": { "type": "()", "fails": "PlayError" },
       "clauses": [
-        { "kind": "effects", "text": "effects only console", "source": "y/src/nim.y:225" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/nim.y:225" },
-        { "kind": "effects", "text": "no randomness", "source": "y/src/nim.y:225" }
+        { "kind": "effects", "text": "effects only console", "source": "y/src/nim.y:233" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/nim.y:233" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/nim.y:233" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::persons_move",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        {
+          "name": "console",
+          "type": "ref<Console>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        { "name": "forever", "type": "ref<Forever>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "Player", "fails": "PlayError" },
+      "clauses": [
+        { "kind": "effects", "text": "effects only console", "source": "y/src/nim.y:266" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/nim.y:266" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/nim.y:266" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::complaint",
+      "params": [{ "name": "error", "type": "MoveError" }],
+      "result": { "type": "ref<text>", "hold": { "kind": "borrows", "lifetime": "'static" } },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/nim.y:289" }]
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::announce",
+      "params": [
+        { "name": "turn", "type": "Player" },
+        {
+          "name": "console",
+          "type": "ref<Console>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "result": { "type": "()", "fails": "ConsoleError" },
+      "clauses": [
+        { "kind": "effects", "text": "effects only console", "source": "y/src/nim.y:310" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/nim.y:310" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/nim.y:310" }
       ]
     }
   ],

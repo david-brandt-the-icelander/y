@@ -34,6 +34,76 @@
       "params": []
     },
     { "kind": "function", "name": "nim_example::nim::tests::a_player_is_told_what_was_wrong", "params": [] },
-    { "kind": "function", "name": "nim_example::nim::tests::a_failing_console_ends_the_game", "params": [] }
+    { "kind": "function", "name": "nim_example::nim::tests::a_failing_console_ends_the_game", "params": [] },
+    { "kind": "function", "name": "nim_example::nim::tests::odd_lines_are_not_moves", "params": [] },
+    { "kind": "function", "name": "nim_example::nim::tests::the_last_heap_and_heap_zero", "params": [] },
+    { "kind": "function", "name": "nim_example::nim::tests::one_heap_and_none", "params": [] },
+    { "kind": "function", "name": "nim_example::nim::tests::the_computer_takes_a_lone_heap", "params": [] },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::a_console_that_cannot_greet_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::a_console_that_cannot_draw_the_heaps_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::a_console_that_cannot_draw_the_heaps_again_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::a_console_that_cannot_ask_for_a_move_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::a_console_that_cannot_complain_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::a_console_that_cannot_tell_the_computers_move_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::a_console_that_cannot_announce_the_computers_win_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::a_console_that_cannot_announce_a_quick_win_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::a_console_that_cannot_announce_a_win_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::a_console_that_cannot_announce_at_once_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::a_game_with_no_counters_is_over_at_once",
+      "params": []
+    },
+    { "kind": "function", "name": "nim_example::nim::tests::one_move_can_win_a_game", "params": [] },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::a_computers_win_cannot_be_announced",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "nim_example::nim::tests::a_players_win_cannot_be_announced",
+      "params": []
+    }
   ]
 }
