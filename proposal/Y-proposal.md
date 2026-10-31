@@ -823,7 +823,7 @@ conditional loaded = load_customer(id):
         try_later(loaded.failure.retry_after)
 ```
 
-**Faults are not failures.** A violated contract, arithmetic overflow, an exhausted allocator, a reached `todo`, a
+**Faults are not failures.** A violated contract, arithmetic overflow, an exhausted allocator, a
 failed `assert`, or a reached `fail not_reachable` or `fail not_implemented` is a *fault*, which means a bug. Faults:
 
 - do not appear in signatures;
@@ -843,8 +843,7 @@ the function does not declare it, and no caller can handle it.
   wherever the predicate does not hold.
 - A `fail not_implemented` may ship, in a release build as in any other: partly written code can be released and its
   written paths tested, while the path that is not written yet faults, as the build's setting says, if it is ever
-  taken. Its place is listed by `y status` and shown in the review packet (§ 3.16). This is what sets it apart from
-  `todo`, which a release build rejects where an entry point can reach it.
+  taken. Its place is listed by `y status` and shown in the review packet (§ 3.16).
 
 A fault report carries:
 
@@ -1683,13 +1682,13 @@ The number of claims in a module is a number worth watching. It should be small 
 Knowledge-driven development (August 2026) moved the backlog out of trackers and into the documents a reader opens
 anyway. Y moves the part of it that concerns code into the code, where the compiler can see it.
 
-- **`fail not_implemented`** ends a path that is not written yet (§ 3.4). It needs no test, `y status` lists it, and,
-  unlike `todo`, it may be released: the rest of the function is written, tested and usable, and that one path faults.
-- **`todo("what is missing")`** is a typed hole, for an expression rather than a path.
-  - It type-checks as whatever the context needs.
-  - It faults if reached.
-  - It is allowed in development and test builds, and rejected in a release build if reachable from an entry point.
-  - YAPL's `...` (2024) and the toolchain's `unimplemented` (October 2025) were earlier versions of it.
+- **`fail not_implemented`** ends a path that is not written yet (§ 3.4). It needs no test, `y status` lists it, and it
+  may be released: the rest of the function is written, tested and usable, and that one path faults.
+  - It is the only way to leave code unwritten. There is no typed hole for an expression: a value that cannot be
+    computed yet is a path that cannot be taken yet, so the code branches to a `fail not_implemented` where the value
+    would be computed, and the path is named, listed and counted like any other.
+  - YAPL's `...` (2024) and the toolchain's `unimplemented` (October 2025) were earlier versions of it, as was a
+    `todo(…)` expression in earlier drafts of this proposal.
 - **`gap:`, `defect:` and `blocked:`** are documentation roles (§ 3.2), matching ⚠️, ❌ and ⛔.
   - `blocked:` must follow a `gap:` or `defect:`, and must say what decision unblocks it and who makes it.
   - `y status` collects them all, by stable identity. That list *is* the backlog for code.
@@ -1702,7 +1701,7 @@ Together with claims and the coverage gate, this gives Y ai.lang's fifth invaria
 - A contract is either proven, or demoted and reported.
 - A path is either covered, declared not reachable or not implemented, or reported.
 - A requirement linked by `satisfies` either has code, or is listed without it.
-- An unfinished piece of work either compiles as a `todo` or a `gap`, or it does not compile.
+- An unfinished piece of work either compiles as a `fail not_implemented` or a `gap`, or it does not compile.
 
 ### 3.17 Evaluation at compile time
 
@@ -1738,7 +1737,7 @@ function checksum(bytes) returns crc:
 - **The value is the one the call would return at run time.** Pure code in Y depends on nothing that differs between
   the build machine and the target: integers have fixed sizes and are checked, and there is no locale or hash order
   (§ 4.7).
-- **A fault is a build error.** A failed `assert`, an overflow, a violated `where` precondition or a reached `todo` produces the
+- **A fault is a build error.** A failed `assert`, an overflow, a violated `where` precondition or a reached `fail not_implemented` produces the
   fault report of § 3.4, placed at the `compile` and at the construct that faulted.
 - **A failure is a build error too.** A call to a function that `fails` must succeed. A failure is reported with its
   case and the case's `fails` role, and the value is the function's result. Literal prefixes (`pattern"…"`, `url"…"`) are this rule with a shorter
@@ -2118,7 +2117,7 @@ control        if else conditional condition compare with for in while break con
 bindings       mutable lambda nested captures injected inject arena compile
 concurrency    within task supervise detach forever uncancellable
 transactions   atomic retry orelse enqueue submit
-claims, gaps   unsafe assume allow reveal because todo
+claims, gaps   unsafe assume allow reveal because
 tests          covers given inject faults when then fake
 observability  log metric
 operators      and or not
