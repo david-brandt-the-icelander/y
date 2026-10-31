@@ -3,8 +3,8 @@
 //! Each named decision of the Y source is marked `// y: #name` where its condition is tested, and each named `condition`
 //! of a `conditional` on its `match` arm.
 
-use y_runtime::{list, require, text, ConsoleError, Console, Forever};
-use self::{moves::*, setup::*};
+use y_runtime::{list, not_reachable, require, text, ConsoleError, Console, Forever};
+use self::{console_play::*, moves::*, setup::*};
 
 #[cfg(test)]
 mod tests;
@@ -70,10 +70,12 @@ mod moves {
         }
         let heap = pieces[0].parse().ok();
         let take = pieces[1].parse().ok();
-        let (Some(heap), Some(take)) = (heap, take) else { // y: #not_numbers, else #numbers
-            return Err(MoveError::NotTwoNumbers);
-        };
-        Ok(Move { heap, take })
+        // y: the `or` of the Y source's `if not_numbers` narrows both names; a `match` tests its operands in order
+        match (heap, take) {
+            (None, _) => Err(MoveError::NotTwoNumbers), // y: #not_numbers'1
+            (_, None) => Err(MoveError::NotTwoNumbers), // y: #not_numbers'2
+            (Some(heap), Some(take)) => Ok(Move { heap, take }), // y: #numbers, which narrows `heap` and `take` to `uint32`s
+        }
     }
 
     /// Checks that a move can be made in a game.
@@ -126,19 +128,26 @@ mod moves {
     fn computer_move(game) {
         require(counters_left(game) > 0, "nim::computer_move#still_playing");
         let sum = nim_sum(&game.heaps);
-        let number = 1;
-        while number <= list::count(&game.heaps) { // y: #searching
-            let heap = list::at_number(&game.heaps, number);
-            let target = heap ^ sum;
-            if target < heap { // y: #winning
-                return Move { heap: number, take: heap - target };
-            } else { // y: #not_this_heap
-                number += 1;
+        if sum == 0 { // y: #lost
+            let largest = list::largest(&game.heaps);
+            Move { heap: list::number_of(&game.heaps, &largest), take: 1 }
+        } else { // y: #winnable
+            let ran = false;
+            for number in 1..=list::count(&game.heaps) { // y: #number
+                ran = true;
+                let heap = list::at_number(&game.heaps, number);
+                let target = heap ^ sum;
+                if target < heap { // y: #winning
+                    return Move { heap: number, take: heap - target };
+                } else { // y: #not_this_heap
+                    continue;
+                }
             }
+            if !ran { // y: #no_heaps
+                not_reachable("nim::computer_move#no_heaps");
+            }
+            not_reachable("nim::computer_move#winnable")
         }
-        // y: #losing, the `else` of `while searching`: the loop has no `break`, so it runs when the loop ends
-        let largest = list::largest(&game.heaps);
-        Move { heap: list::number_of(&game.heaps, &largest), take: 1 }
     }
 }
 
@@ -148,7 +157,7 @@ mod moves {
 /// - Returns the counters in every heap together.
 fn counters_left(game) {
     let total = 0;
-    for heap in &game.heaps {
+    for heap in &game.heaps { // y: #heap, else #no_heaps
         total += heap;
     }
     total
@@ -160,7 +169,7 @@ fn counters_left(game) {
 /// - Returns the nim-sum, which is zero exactly when the player to move loses against perfect play.
 fn nim_sum(heaps) {
     let total = 0;
-    for heap in heaps {
+    for heap in heaps { // y: #heap, else #no_heaps
         total ^= heap;
     }
     total
@@ -173,7 +182,7 @@ fn nim_sum(heaps) {
 fn shown(game) {
     let lines = Vec::new();
     let number = 0;
-    for heap in &game.heaps {
+    for heap in &game.heaps { // y: #heap, else #no_heaps
         number += 1;
         let counters = text::repeated("|", *heap);
         lines.push(format!("  {number}: {counters}"));
@@ -199,36 +208,23 @@ mod console_play {
         }
     }
 
-    /// Plays one game at the console, the player against the computer, until the last counter is taken. The player
+    /// Plays a game at the console, the player against the computer, until the last counter is taken. The player
     /// moves first.
     ///
+    /// - `started`: the game as it starts.
     /// - `console`, `forever`: the Y `injected` parameters.
     /// - Returns nothing. The console shows the player how the game ended.
     /// - Fails `InputClosed`: the console closed before the game ended.
     /// - Fails `Console`: the console could not be read or written.
-    fn play(console, forever) {
-        let game = new_game();
+    fn play(started, console, forever) {
+        let game = started;
         let turn = Player::Person;
         console.write_line("Nim: take any number of counters from one heap. Whoever takes the last counter wins.")?;
-        while counters_left(&game) > 0 { // y: #playing
+        while counters_left(&game) > 0 { // y: #playing, else #nothing_to_play
             let picture = shown(&game);
             console.write_line(&picture)?;
             if turn == Player::Person { // y: #persons_turn
-                console.write("Your move (heap, then counters): ")?;
-                let typed = console.read_line(forever)?; // y: forever because "a player may think for as long as they like"
-                let Some(typed) = typed else { // y: #closed, else #line_read, which narrows `typed` to a `string`
-                    return Err(PlayError::InputClosed);
-                };
-                match read_move(&game, &typed) {
-                    Ok(chosen) => { // y: #attempted.valid
-                        remove(&mut game, &chosen);
-                        turn = Player::Computer;
-                    }
-                    Err(MoveError::NotTwoNumbers) => console.write_line("Type a heap's number and how many to take, such as 2 3.")?, // y: #attempted.not_a_move
-                    Err(MoveError::NoSuchHeap) => console.write_line("There is no such heap.")?, // y: #attempted.no_heap
-                    Err(MoveError::NothingTaken) => console.write_line("Take at least one counter.")?, // y: #attempted.none_taken
-                    Err(MoveError::TooMany) => console.write_line("That heap does not hold that many.")?, // y: #attempted.too_many
-                }
+                turn = persons_move(&mut game, console, forever)?;
             } else { // y: #computers_turn
                 let chosen = computer_move(&game);
                 remove(&mut game, &chosen);
@@ -236,12 +232,60 @@ mod console_play {
                 turn = Player::Person;
             }
         }
-        // y: #game_over, the `else` of `while playing`: the loop has no `break`, so it runs when the loop ends
-        if turn == Player::Person { // y: #computer_won
-            console.write_line("The computer took the last counter. The computer wins.")?;
-        } else { // y: #person_won
-            console.write_line("You took the last counter. You win!")?;
-        }
+        announce(turn, console)?;
         Ok(())
     }
 }
+
+/// Reads the player's move and makes it, or says what is wrong with what they typed.
+///
+/// - `game`: the game, which loses the counters taken when the move is made.
+/// - `console`, `forever`: the Y `injected` parameters.
+/// - Returns who moves next: the computer once a move is made, and the player again otherwise.
+/// - Fails `InputClosed`: the console closed before the player moved.
+/// - Fails `Console`: the console could not be read or written.
+fn persons_move(game, console, forever) {
+    console.write("Your move (heap, then counters): ")?;
+    let typed = console.read_line(forever)?; // y: forever because "a player may think for as long as they like"
+    let Some(typed) = typed else { // y: #closed, else #line_read, which narrows `typed` to a `string`
+        return Err(PlayError::InputClosed);
+    };
+    match read_move(game, &typed) {
+        Ok(chosen) => { // y: #attempted.valid
+            remove(game, &chosen);
+            Ok(Player::Computer)
+        }
+        Err(error) => { // y: #attempted.invalid
+            console.write_line(complaint(error))?;
+            Ok(Player::Person)
+        }
+    }
+}
+
+/// What the game says to what is not a move.
+///
+/// - `error`: why it is not.
+/// - Returns the line to write.
+fn complaint(error) {
+    match error {
+        MoveError::NotTwoNumbers => "Type a heap's number and how many to take, such as 2 3.", // y: #wrong.not_a_move
+        MoveError::NoSuchHeap => "There is no such heap.", // y: #wrong.no_heap
+        MoveError::NothingTaken => "Take at least one counter.", // y: #wrong.none_taken
+        MoveError::TooMany => "That heap does not hold that many.", // y: #wrong.too_many
+    }
+}
+
+/// Says who won.
+///
+/// - `turn`: whose turn it is once the last counter is taken: the other player's than the winner's.
+/// - `console`: the Y `injected` parameter.
+/// - Fails with a `ConsoleError`: the console could not be written.
+fn announce(turn, console) {
+    if turn == Player::Person { // y: #computer_won
+        console.write_line("The computer took the last counter. The computer wins.")?;
+    } else { // y: #person_won
+        console.write_line("You took the last counter. You win!")?;
+    }
+    Ok(())
+}
+

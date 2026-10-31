@@ -7,7 +7,7 @@
 
 use std::time::{Duration, Instant};
 use y_http::{Http, HttpError};
-use y_runtime::{list, require, time, Clock, Deadline, Expired, Forever, Random, Within};
+use y_runtime::{ensure, list, require, time, Clock, Deadline, Expired, Forever, Random, Within};
 use y_window::{Colour, Key, Picture, PictureError, Point, Window};
 use self::{drawing::*, rules::*, setup::*};
 
@@ -143,19 +143,19 @@ pub mod setup {
         {
             // y: within game_rules.fetch_time or fail
             let deadline = Deadline::after(game_rules::FETCH_TIME);
-            for code in codes {
+            for code in codes { // y: #code
                 let drawing = site.get(&format!("/data/color/svg/{code}.svg"), &deadline).await?;
                 let made = Picture::from_svg(&drawing, layout::PICTURE_SIZE)?;
                 pictures.push(made);
             }
         }
         let mut dealt = Vec::new();
-        for number in 1..=board::PAIRS {
+        for number in 1..=board::PAIRS { // y: #number
             dealt.push(number);
             dealt.push(number);
         }
         let now = clock.now();
-        Ok(Game {
+        let started = Game {
             pairs: random.shuffled(&dealt),
             sides: list::repeated(Side::FaceDown, board::CARDS),
             pictures,
@@ -165,7 +165,10 @@ pub mod setup {
             lives: game_rules::LIVES,
             started: now,
             elapsed: Duration::ZERO,
-        })
+        };
+        ensure(standing(&started) == Outcome::Playing, "memory::new_game#playing");
+        ensure(started.turned.is_empty(), "memory::new_game#nothing_turned");
+        Ok(started)
     }
 }
 
@@ -221,7 +224,7 @@ pub mod rules {
     /// - `game`: the game, which changes.
     pub fn turn_back(game: &mut Game) {
         require(list::count(&game.turned) == 2, "memory::turn_back#two_turned");
-        for number in &game.turned {
+        for number in &game.turned { // y: #number
             list::set_number(&mut game.sides, *number, Side::FaceDown);
         }
         game.turned = Vec::new();
@@ -274,8 +277,8 @@ fn time_bonus(elapsed: Duration) -> u32 {
 /// - Returns the card's number, or none when the point is between the cards or off the board.
 fn card_at(place: Point) -> Option<u32> {
     let mut number = 0;
-    for row in 0..board::ROWS {
-        for column in 0..board::COLUMNS {
+    for row in 0..board::ROWS { // y: #row
+        for column in 0..board::COLUMNS { // y: #column
             number += 1;
             let corner = corner_of(row, column);
             let across = place.x >= corner.x && place.x < corner.x + layout::CARD_SIZE;
@@ -368,8 +371,8 @@ pub mod drawing {
     pub fn draw(game: &Game, highest: u32, window: &mut Window) {
         window.clear(palette::BACKGROUND);
         let mut number = 0;
-        for row in 0..board::ROWS {
-            for column in 0..board::COLUMNS {
+        for row in 0..board::ROWS { // y: #row
+            for column in 0..board::COLUMNS { // y: #column
                 number += 1;
                 draw_card(game, number, corner_of(row, column), window);
             }
@@ -448,7 +451,7 @@ pub mod window_play {
         let mut game = new_game(random, clock, site).await?;
         let mut highest = 0;
         let mut quitting = false;
-        while !quitting && !window.close_requested() { // y: #open
+        while !quitting && !window.close_requested() { // y: #open, else #closed_at_once
             let keys = window.keys_pressed();
             let now = clock.now();
             quitting = keys.contains(&Key::Escape);
@@ -460,20 +463,28 @@ pub mod window_play {
                 turn_back(&mut game);
             } else if reached == Outcome::Playing { // y: #moment.picking
                 game.elapsed = now - game.started;
-                for place in window.clicks() {
-                    let choice = choosable(&game, place);
-                    match choice {
-                        Some(choice) => turn_over(&mut game, choice, now), // y: #chosen, which narrows `choice` to a `uint32`
-                        None => continue, // y: #ignored
-                    }
-                }
+                pick(&mut game, &window.clicks(), now);
             } else { // y: #moment.over
                 highest = highest.max(score(&game));
             }
             draw(&game, highest, window);
             window.next_frame(forever).await; // y: forever because "a hidden window shows no frames, and the game waits until it is shown"
         }
-        // y: #closed, the `else` of `while open`: the loop has no `break`, so it runs when the loop ends
         Ok(highest)
+    }
+}
+
+/// Turns over the cards the player clicked, in the order clicked. A click that turns no card is ignored.
+///
+/// - `game`: the game, which changes.
+/// - `clicks`: the points clicked.
+/// - `now`: the time now.
+fn pick(game: &mut Game, clicks: &[Point], now: Instant) {
+    for place in clicks { // y: #place, else #no_clicks
+        let choice = choosable(game, *place);
+        match choice {
+            Some(choice) => turn_over(game, choice, now), // y: #chosen, which narrows `choice` to a `uint32`
+            None => continue, // y: #ignored
+        }
     }
 }

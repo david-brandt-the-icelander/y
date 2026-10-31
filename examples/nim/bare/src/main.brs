@@ -1,6 +1,7 @@
 //! Lowered from `y/src/main.y`, the Y module `main`: the entry point.
 
 use nim_example::nim::console_play::{play, PlayError};
+use nim_example::nim::setup::new_game;
 use y_runtime::System;
 
 /// Plays one game of Nim at the terminal.
@@ -14,7 +15,7 @@ fn main() {
         // y: inject(console = system.console(), forever = system.forever())
         let console = system.console();
         let forever = system.forever();
-        play(&mut console, &forever)?;
+        play(new_game(), &mut console, &forever)?;
     }
     Ok(())
 }

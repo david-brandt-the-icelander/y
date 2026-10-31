@@ -6,7 +6,7 @@
 use std::collections::BTreeSet;
 use std::fmt;
 use y_runtime::text::{count, join_runes, runes, single_rune};
-use y_runtime::{invariant, require, ConsoleError, ConstraintViolation, Console, Forever, Random, Rune};
+use y_runtime::{invariant, not_reachable, require, ConsoleError, ConstraintViolation, Console, Forever, Random, Rune};
 use self::{display::*, rounds::*, setup::*};
 
 #[cfg(test)]
@@ -70,7 +70,7 @@ mod setup {
     /// - Fails `NotAWord`: a piece of the list is not a `Word`: it has a character other than `a` to `z`, or fewer than four.
     fn parse_word_list(text) {
         let found = Vec::new();
-        for piece in text.split(" ") {
+        for piece in text.split(" ") { // y: #piece
             if piece.is_empty() { // y: #blank, else #has_text
                 continue;
             }
@@ -188,7 +188,7 @@ mod display {
     /// - Returns each letter of the word, found or not, separated by spaces: `_ o _ e`.
     fn masked(game) {
         let letters = Vec::new();
-        for letter in runes(game.word.as_text()) {
+        for letter in runes(game.word.as_text()) { // y: #letter
             letters.push(shown_rune(letter, &game.hits));
         }
         join_runes(&letters, " ")
@@ -276,34 +276,68 @@ mod console_play {
         let chosen = random.index_below(words.len());
         let game = new_game(words[chosen].clone()); // y: a copy, because new_game keeps its word and `words` is still read
         console.write_line("Hangman: find the word, one letter at a time.")?;
+        let ran = false;
         while outcome_of(&game) == Outcome::Playing { // y: #playing
-            let picture = gallows(game.misses.len());
-            let shown = masked(&game);
-            let missed = join_runes(&game.misses, " ");
-            console.write_line(&picture)?;
-            console.write_line(&format!("Word:   {shown}"))?;
-            console.write_line(&format!("Missed: {missed}"))?;
-            console.write("Guess:  ")?;
+            ran = true;
+            show_turn(&game, console)?;
             let typed = console.read_line(forever)?; // y: forever because "a player may think for as long as they like"
             let Some(typed) = typed else { // y: #closed, else #line_read, which narrows `typed` to a `string`
                 return Err(PlayError::InputClosed);
             };
-            match guess(&mut game, &typed) {
-                Ok(Verdict::Hit) => console.write_line("Yes.")?, // y: #guessed.hit
-                Ok(Verdict::Miss) => console.write_line("No.")?, // y: #guessed.miss
-                Err(GuessError::Empty) => console.write_line("Type a letter.")?, // y: #guessed.typed_nothing
-                Err(GuessError::NotOneLetter) => console.write_line(&format!("\"{typed}\" is not one letter."))?, // y: #guessed.typed_other
-                Err(GuessError::AlreadyGuessed) => console.write_line(&format!("You have already guessed {typed}."))?, // y: #guessed.typed_again
-            }
+            let guessed = guess(&mut game, &typed);
+            console.write_line(&reply(&guessed, &typed))?;
         }
-        // y: #game_over, the `else` of `while playing`: the loop has no `break`, so it runs when the loop ends
-        let final_picture = gallows(game.misses.len());
-        console.write_line(&final_picture)?;
-        if outcome_of(&game) == Outcome::Won { // y: #won
-            console.write_line(&format!("You win! The word was {}.", game.word))?;
-        } else { // y: #hanged
-            console.write_line(&format!("Hanged! The word was {}.", game.word))?;
+        if !ran { // y: #over_at_once
+            not_reachable("hangman::play#over_at_once");
         }
+        show_end(&game, console)?;
         Ok(())
     }
+}
+
+/// Shows the gallows, the word as the player sees it and the letters missed, and asks for a guess.
+///
+/// - `game`: the game.
+/// - `console`: the Y `injected` parameter.
+/// - Fails with a `ConsoleError`: the console could not be written.
+fn show_turn(game, console) {
+    let picture = gallows(game.misses.len());
+    let shown = masked(game);
+    let missed = join_runes(&game.misses, " ");
+    console.write_line(&picture)?;
+    console.write_line(&format!("Word:   {shown}"))?;
+    console.write_line(&format!("Missed: {missed}"))?;
+    console.write("Guess:  ")?;
+    Ok(())
+}
+
+/// What the game says to a guess.
+///
+/// - `guessed`: what the guess did.
+/// - `typed`: what the player typed.
+/// - Returns the line to write.
+fn reply(guessed, typed) {
+    match guessed {
+        Ok(Verdict::Hit) => "Yes.".to_string(), // y: #said.hit
+        Ok(Verdict::Miss) => "No.".to_string(), // y: #said.miss
+        Err(GuessError::Empty) => "Type a letter.".to_string(), // y: #said.typed_nothing
+        Err(GuessError::NotOneLetter) => format!("\"{typed}\" is not one letter."), // y: #said.typed_other
+        Err(GuessError::AlreadyGuessed) => format!("You have already guessed {typed}."), // y: #said.typed_again
+    }
+}
+
+/// Shows how a game ended: the gallows, and whether the player won or was hanged.
+///
+/// - `game`: the game.
+/// - `console`: the Y `injected` parameter.
+/// - Fails with a `ConsoleError`: the console could not be written.
+fn show_end(game, console) {
+    let final_picture = gallows(game.misses.len());
+    console.write_line(&final_picture)?;
+    if outcome_of(game) == Outcome::Won { // y: #won
+        console.write_line(&format!("You win! The word was {}.", game.word))?;
+    } else { // y: #hanged
+        console.write_line(&format!("Hanged! The word was {}.", game.word))?;
+    }
+    Ok(())
 }

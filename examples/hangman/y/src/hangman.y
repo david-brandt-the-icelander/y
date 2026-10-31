@@ -260,34 +260,74 @@ public facet console_play:
         console.write_line("Hangman: find the word, one letter at a time.") or fail
 
         while playing = (outcome_of(game) == outcome.playing):
-            picture = gallows(game.misses.count())
-            shown = masked(game)
-            missed = game.misses.join(separator: " ")
-            console.write_line(picture) or fail
-            console.write_line("Word:   {shown}") or fail
-            console.write_line("Missed: {missed}") or fail
-            console.write("Guess:  ") or fail
+            show_turn(game) or fail
             typed = console.read_line() forever because "a player may think for as long as they like" or fail
 
             if closed = (typed == optional.none):
                 fail play_error.input_closed
             else line_read:
-                conditional guessed = guess(mutable game, typed):
-                    condition guessed.hit = (guessed == result.ok(verdict.hit)):
-                        console.write_line("Yes.") or fail
-                    condition guessed.miss = (guessed == result.ok(verdict.miss)):
-                        console.write_line("No.") or fail
-                    condition guessed.typed_nothing = (guessed == result.err(guess_error.empty)):
-                        console.write_line("Type a letter.") or fail
-                    condition guessed.typed_other = (guessed == result.err(guess_error.not_one_letter)):
-                        console.write_line("\"{typed}\" is not one letter.") or fail
-                    condition guessed.typed_again = (guessed == result.err(guess_error.already_guessed)):
-                        console.write_line("You have already guessed {typed}.") or fail
-        else game_over:
-            final_picture = gallows(game.misses.count())
-            console.write_line(final_picture) or fail
+                guessed = guess(mutable game, typed)
+                console.write_line(reply(guessed, typed)) or fail
+        else over_at_once:
+            fail not_reachable
+        show_end(game) or fail
 
-            if won = (outcome_of(game) == outcome.won):
-                console.write_line("You win! The word was {game.word}.") or fail
-            else hanged:
-                console.write_line("Hanged! The word was {game.word}.") or fail
+
+----------------------------------------------------------------------------------------------------------------
+Shows the gallows, the word as the player sees it and the letters missed, and asks for a guess.
+
+game: The game, as game.
+
+console: Where the game is shown, as console.
+
+fails console_error: The console could not be written.
+----------------------------------------------------------------------------------------------------------------
+function show_turn(game, injected console) fails console_error:
+    picture = gallows(game.misses.count())
+    shown = masked(game)
+    missed = game.misses.join(separator: " ")
+    console.write_line(picture) or fail
+    console.write_line("Word:   {shown}") or fail
+    console.write_line("Missed: {missed}") or fail
+    console.write("Guess:  ") or fail
+
+
+----------------------------------------------------------------------------------------------------------------
+What the game says to a guess.
+
+guessed: What the guess did, as result<verdict, guess_error>.
+typed: What the player typed, as string.
+
+answer: The line to write, as string.
+----------------------------------------------------------------------------------------------------------------
+function reply(guessed, typed) returns answer:
+    conditional said = guessed:
+        condition said.hit = (said == result.ok(verdict.hit)):
+            return answer = "Yes."
+        condition said.miss = (said == result.ok(verdict.miss)):
+            return answer = "No."
+        condition said.typed_nothing = (said == result.err(guess_error.empty)):
+            return answer = "Type a letter."
+        condition said.typed_other = (said == result.err(guess_error.not_one_letter)):
+            return answer = "\"{typed}\" is not one letter."
+        condition said.typed_again = (said == result.err(guess_error.already_guessed)):
+            return answer = "You have already guessed {typed}."
+
+
+----------------------------------------------------------------------------------------------------------------
+Shows how a game ended: the gallows, and whether the player won or was hanged.
+
+game: The game, as game.
+
+console: Where the end is shown, as console.
+
+fails console_error: The console could not be written.
+----------------------------------------------------------------------------------------------------------------
+function show_end(game, injected console) fails console_error:
+    final_picture = gallows(game.misses.count())
+    console.write_line(final_picture) or fail
+
+    if won = (outcome_of(game) == outcome.won):
+        console.write_line("You win! The word was {game.word}.") or fail
+    else hanged:
+        console.write_line("Hanged! The word was {game.word}.") or fail

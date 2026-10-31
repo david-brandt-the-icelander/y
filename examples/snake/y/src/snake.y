@@ -72,7 +72,8 @@ public facet setup:
 
     random: What chooses the food's cell, as random.
     ----------------------------------------------------------------------------------------------------------------------------
-    function new_game(injected random) returns started:
+    function new_game(injected random) returns started
+            ensures playing = (started.standing == outcome.playing):
         mutable fresh = game(
             head: cell(column: 6, row: 7),
             tail: [cell(column: 5, row: 7), cell(column: 4, row: 7)],
@@ -305,6 +306,7 @@ public facet drawing:
 
         for part in game.tail:
             fill_cell(part, palette.body)
+        else no_tail
         fill_cell(game.head, palette.head)
         line = banner(game, highest)
         window.write(text: line, x: 12, y: layout.height - 14, size: 24, colour: palette.text)
@@ -348,20 +350,48 @@ public facet window_play:
             now = clock.now()
             quitting := keys.contains(key.escape)
 
-            for pressed in keys:
-                game.wanted := turned(game, pressed)
-
             if again = ((game.standing != outcome.playing) and keys.contains(key.space)):
                 game := new_game()
                 last_step := now
             else going_on:
-                -- One step for each step time that has passed since the last, so that a slow frame does not slow the snake.
-                while due = ((game.standing == outcome.playing) and (now - last_step >= game_rules.step_time)):
-                    advance(mutable game)
-                    last_step := last_step + game_rules.step_time
-                else caught_up:
-                    highest := highest.max(game.eaten)
+                steer(mutable game, keys)
+                last_step := catch_up(mutable game, last_step, now)
+                highest := highest.max(game.eaten)
             draw(game, highest)
             window.next_frame() forever because "a hidden window shows no frames, and the game waits until it is shown"
-        else closed:
-            return best = highest
+        else closed_at_once
+        return best = highest
+
+
+--------------------------------------------------------------------------------------------------------------------------------
+Turns the snake the way each key pressed points, in the order they were pressed.
+
+game: The game, which changes, as game.
+keys: The keys pressed, as list<key>.
+--------------------------------------------------------------------------------------------------------------------------------
+function steer(mutable game, keys):
+    for pressed in keys:
+        game.wanted := turned(game, pressed)
+    else no_keys
+
+
+--------------------------------------------------------------------------------------------------------------------------------
+Moves the snake one step for each step time that has passed since its last step, so that a slow frame does not slow
+the snake.
+
+game: The game, which changes, as game.
+last_step: When the snake last stepped, as instant.
+now: The time now, as instant.
+
+stepped: When the snake last stepped once it has caught up, as instant.
+
+random: What places new food, as random.
+--------------------------------------------------------------------------------------------------------------------------------
+function catch_up(mutable game, last_step, now, injected random) returns stepped:
+    mutable step = last_step
+
+    while due = ((game.standing == outcome.playing) and (now - step >= game_rules.step_time)):
+        advance(mutable game)
+        step := step + game_rules.step_time
+    else not_due
+    return stepped = step

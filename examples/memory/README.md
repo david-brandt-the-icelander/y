@@ -45,11 +45,11 @@ beneath the board, and this repository holds none of them.
 
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
-| Y source | `y/src/memory.y`, `y/src/memory.test.y`, `y/src/main.y` | 484, 411, 32 | hand |
-| Bare bodies | `bare/src/memory.brs`, `bare/src/memory/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 479, 332, 56, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
-| Constraint files | `bare/src/*.constraints.json` (96 subjects, 40 clauses) | 764 | `strip`, plus the clauses and status the Y lowering adds, then `bare-rust libfmt` |
-| Y facts | `bare/y-facts.json` | 681 | the same, from the Y source and the bare bodies |
-| Rust | `src/memory.rs`, `src/memory/tests.rs`, `src/main.rs`, `src/lib.rs` | 479, 332, 56, 3 | `bare-rust weave`, which gives back the hand-written Rust exactly |
+| Y source | `y/src/memory.y`, `y/src/memory.test.y`, `y/src/main.y` | 519, 857, 32 | hand |
+| Bare bodies | `bare/src/memory.brs`, `bare/src/memory/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 490, 671, 56, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
+| Constraint files | `bare/src/*.constraints.json` (131 subjects, 47 clauses) | 943 | `strip`, plus the clauses and status the Y lowering adds, then `bare-rust libfmt` |
+| Y facts | `bare/y-facts.json` | 1198 | the same, from the Y source and the bare bodies |
+| Rust | `src/memory.rs`, `src/memory/tests.rs`, `src/main.rs`, `src/lib.rs` | 490, 671, 56, 3 | `bare-rust weave`, which gives back the hand-written Rust exactly |
 
 The network is a capability. It comes from [`../y-http`](../y-http/), a stand-in for a Y standard module
 `standard.http` that gets text over HTTPS with [ureq](https://github.com/algesten/ureq). It is a crate of its own, so
@@ -69,6 +69,7 @@ from [`../y-window`](../y-window/), and the clock, the randomness and deadlines 
 | `new_game` and `play`, which may suspend because `site.get()` and `window.next_frame()` may | `async fn`s, and `.await` at seven points, and one more in `main` | `y-facts.json` `suspensions` | the same |
 | `random.chosen(from: faces.codes, count: board.pairs)`, `random.shuffled(dealt)` | `random.chosen(&faces::CODES, board::PAIRS)`, `random.shuffled(&dealt)` | — | in `y_runtime::Random` |
 | `game.elapsed.whole_seconds()` | `time::whole_seconds(game.elapsed)` | — | a call into `y_runtime::time`, not an `as` cast |
+| `new_game(…) returns started fails setup_error ensures playing = (standing(started) == outcome.playing)`, and `ensures nothing_turned = started.turned.is_empty()` | `ensure(standing(&started) == Outcome::Playing, "memory::new_game#playing")` and the same for `nothing_turned`, before the return | `ensure playing : result is Ok(started) implies standing(started) is Playing`, and the same for `nothing_turned`; status `lifted` | run-time checks whose failure is a fault; the path enumeration knows from them that a new game has no card turned and is being played |
 | `game.pictures.at_number(n)`, for values that are not copied | `list::at_number_ref(&game.pictures, n)` | — | borrows the picture |
 
 ## What had to be assumed
@@ -90,20 +91,25 @@ Beyond what Hangman, Nim and Snake assumed:
 - **Narrowing in a `conditional`:** after `condition judged.off_cards = (number == optional.none):`, `number` is a
   `uint32` in the conditions that follow.
 - **Tests may `inject` before `given`,** when the given values need a capability, as `dealt(…, at: clock.now())` does.
-- **Fakes:** `fake http(text: …)`, `fake http(status: …)` and `fake http(expiring: true)`; and
+- **Fakes:** `fake http(text: …)`, `fake http(status: …)`, `fake http(expiring: true)`, `fake http(text: …, answers: n,
+  then_status: …)`, which answers `n` times and then fails, and `fake http(texts: […])`, which gives each text in turn; and
   `fake window(frames: …)`, in which `frame(keys: …, clicks: …)` gives what the player does in each frame.
 
 ## Checks
 
-- **`bare-rust weave`** of `bare/`: 4 files woven, 0 weave errors, 70 `mut` derived, 0 holes undetermined, 0 warnings.
+- **`bare-rust weave`** of `bare/`: 4 files woven, 0 weave errors, 132 `mut` derived, 0 holes undetermined, 0 warnings.
   The woven Rust is identical to the hand-written Rust it was stripped from.
-- **`cargo test`:** the 22 lowered Y tests pass. They cover the rules, the scoring, the banner, setting up a board
+- **`cargo test`:** the 55 lowered Y tests pass. They cover the rules, the scoring, the banner, setting up a board
   through a fake site, and each way the setup fails. Two tests run `play` with a fake window: one wins a whole game,
   clicking each pair in turn, and starts another; in the other, a pair that does not match shows for a second and turns
   back.
 - **`cargo clippy --all-targets`:** no warnings, here and in `../y-http`, `../y-window` and `../y-runtime`.
-- **Coverage:** the tests cover all 36 outcomes of the module: the 30 named branches and conditions of its 11 decisions,
-  and the 6 failure cases its functions document.
+- **Coverage:** the tests cover all 52 execution paths of the module (Y § 3.14), through the 19 decisions and the
+  `or fail` calls of its 17 functions. None ends in `fail not_reachable`. Each test was also run alone with every
+  decision and loop instrumented, to check that it takes each path it declares.
+- **One path per test:** 52 of the 55 tests each cover one path, and their `when` is one call of that path's
+  function (Y § 3.14). The other 3 cover none: they check what the paths do not tell apart, such as which failure
+  comes back.
 - **`tools/bare-rust/tests/y_examples.rs`** runs the same checks on Memory as on the other examples, and a new one: each
   `within` in `deadlines` starts its deadline in the bare body, and passes it to each wait inside it.
 - **The window itself:** under a virtual X display, the game fetched its pictures, drew the board, turned over the cards
@@ -120,3 +126,7 @@ Beyond what Hangman, Nim and Snake assumed:
 - **A blank `else` is avoidable here as well.** A click that turns no card is the `else ignored:` of a loop over the
   clicks, which goes on to the next. A pair that turns back is a `condition` of the frame, and leaves the other branches
   free.
+- **Paths are about the code's own facts.** The first frame of `play` could only be told apart from the rest once
+  `new_game` ensured what a new game is; without it, a first frame that turns a pair back is a path no test can take.
+  The clicks of a frame went to `pick`, whose loop and `else no_clicks` are tested on their own, so that `play` has a
+  path for each way a frame goes rather than for each number of clicks in it.

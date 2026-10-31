@@ -13,5 +13,8 @@ tree-sitter-language = "0.1"
 serde_json = { version = "1", features = ["preserve_order"] }
 jsonschema = { version = "0.58", default-features = false }
 
+[dev-dependencies]
+regex = "1"
+
 [build-dependencies]
 cc = "1"

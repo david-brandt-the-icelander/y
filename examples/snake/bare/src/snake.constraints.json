@@ -130,6 +130,12 @@
       ],
       "result": { "type": "Game" },
       "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure playing : result.standing is Playing",
+          "source": "y/src/snake.y:76",
+          "status": { "lifted": "src/snake.rs: y_runtime::ensure" }
+        },
         { "kind": "effects", "text": "effects only random", "source": "y/src/snake.y:75" },
         { "kind": "effects", "text": "no io", "source": "y/src/snake.y:75" },
         { "kind": "effects", "text": "no clock", "source": "y/src/snake.y:75" },
@@ -146,7 +152,7 @@
         { "name": "pressed", "type": "Key" }
       ],
       "result": { "type": "Direction" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/snake.y:102" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/snake.y:103" }]
     },
     {
       "kind": "function",
@@ -164,14 +170,14 @@
         {
           "kind": "require",
           "text": "require still_playing : game.standing is Playing",
-          "source": "y/src/snake.y:125",
+          "source": "y/src/snake.y:126",
           "status": { "lifted": "src/snake.rs: y_runtime::require" }
         },
-        { "kind": "effects", "text": "effects only random", "source": "y/src/snake.y:124" },
-        { "kind": "effects", "text": "no io", "source": "y/src/snake.y:124" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/snake.y:124" },
-        { "kind": "effects", "text": "no suspension", "source": "y/src/snake.y:124" },
-        { "kind": "access", "text": "mutates only game", "source": "y/src/snake.y:124" }
+        { "kind": "effects", "text": "effects only random", "source": "y/src/snake.y:125" },
+        { "kind": "effects", "text": "no io", "source": "y/src/snake.y:125" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/snake.y:125" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/snake.y:125" },
+        { "kind": "access", "text": "mutates only game", "source": "y/src/snake.y:125" }
       ]
     },
     {
@@ -182,14 +188,14 @@
         { "name": "toward", "type": "Direction" }
       ],
       "result": { "type": "Direction" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/snake.y:155" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/snake.y:156" }]
     },
     {
       "kind": "function",
       "name": "snake_example::snake::opposite",
       "params": [{ "name": "heading", "type": "Direction" }],
       "result": { "type": "Direction" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/snake.y:169" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/snake.y:170" }]
     },
     {
       "kind": "function",
@@ -199,7 +205,7 @@
         { "name": "heading", "type": "Direction" }
       ],
       "result": { "type": "Cell" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/snake.y:189" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/snake.y:190" }]
     },
     {
       "kind": "function",
@@ -208,7 +214,7 @@
         { "name": "place", "type": "ref<Cell>", "access": { "rights": "read", "guarantee": "readers" } }
       ],
       "result": { "type": "bool" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/snake.y:208" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/snake.y:209" }]
     },
     {
       "kind": "function",
@@ -217,7 +223,7 @@
         { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
       ],
       "result": { "type": "list<Cell> as 'Vec'" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/snake.y:219" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/snake.y:220" }]
     },
     {
       "kind": "function",
@@ -231,11 +237,11 @@
         }
       ],
       "clauses": [
-        { "kind": "effects", "text": "effects only random", "source": "y/src/snake.y:240" },
-        { "kind": "effects", "text": "no io", "source": "y/src/snake.y:240" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/snake.y:240" },
-        { "kind": "effects", "text": "no suspension", "source": "y/src/snake.y:240" },
-        { "kind": "access", "text": "mutates only game", "source": "y/src/snake.y:240" }
+        { "kind": "effects", "text": "effects only random", "source": "y/src/snake.y:241" },
+        { "kind": "effects", "text": "no io", "source": "y/src/snake.y:241" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/snake.y:241" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/snake.y:241" },
+        { "kind": "access", "text": "mutates only game", "source": "y/src/snake.y:241" }
       ]
     },
     { "kind": "module", "name": "snake_example::snake::drawing", "visible": "public" },
@@ -310,7 +316,7 @@
         { "name": "highest", "type": "u32" }
       ],
       "result": { "type": "text" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/snake.y:280" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/snake.y:281" }]
     },
     {
       "kind": "function",
@@ -326,10 +332,10 @@
         }
       ],
       "clauses": [
-        { "kind": "effects", "text": "effects only window", "source": "y/src/snake.y:300" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/snake.y:300" },
-        { "kind": "effects", "text": "no randomness", "source": "y/src/snake.y:300" },
-        { "kind": "effects", "text": "no suspension", "source": "y/src/snake.y:300" }
+        { "kind": "effects", "text": "effects only window", "source": "y/src/snake.y:301" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/snake.y:301" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/snake.y:301" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/snake.y:301" }
       ]
     },
     {
@@ -345,10 +351,10 @@
         }
       ],
       "clauses": [
-        { "kind": "effects", "text": "effects only window", "source": "y/src/snake.y:321" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/snake.y:321" },
-        { "kind": "effects", "text": "no randomness", "source": "y/src/snake.y:321" },
-        { "kind": "effects", "text": "no suspension", "source": "y/src/snake.y:321" }
+        { "kind": "effects", "text": "effects only window", "source": "y/src/snake.y:323" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/snake.y:323" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/snake.y:323" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/snake.y:323" }
       ]
     },
     { "kind": "module", "name": "snake_example::snake::window_play", "visible": "public" },
@@ -372,8 +378,49 @@
       ],
       "result": { "type": "u32" },
       "clauses": [
-        { "kind": "effects", "text": "effects only window, clock, random", "source": "y/src/snake.y:340" },
-        { "kind": "effects", "text": "no io", "source": "y/src/snake.y:340" }
+        { "kind": "effects", "text": "effects only window, clock, random", "source": "y/src/snake.y:342" },
+        { "kind": "effects", "text": "no io", "source": "y/src/snake.y:342" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::steer",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        {
+          "name": "keys",
+          "type": "ref<list<Key> as 'std::primitive::slice'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "clauses": [
+        { "kind": "effects", "text": "no io", "source": "y/src/snake.y:372" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/snake.y:372" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/snake.y:372" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/snake.y:372" },
+        { "kind": "access", "text": "mutates only game", "source": "y/src/snake.y:372" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::catch_up",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        { "name": "last_step", "type": "Instant" },
+        { "name": "now", "type": "Instant" },
+        {
+          "name": "random",
+          "type": "ref<Random>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "result": { "type": "Instant" },
+      "clauses": [
+        { "kind": "effects", "text": "effects only random", "source": "y/src/snake.y:390" },
+        { "kind": "effects", "text": "no io", "source": "y/src/snake.y:390" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/snake.y:390" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/snake.y:390" },
+        { "kind": "access", "text": "mutates only game", "source": "y/src/snake.y:390" }
       ]
     }
   ]

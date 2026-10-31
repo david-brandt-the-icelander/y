@@ -221,12 +221,10 @@ public facet rules:
 
         for captured in chosen.captures:
             game.squares.set_number(number_of(captured), optional.none)
-        game.squares.set_number(number_of(to), optional.some(crowned))
-
-        if capturing = (not chosen.captures.is_empty()):
             game.quiet := 0
         else quiet:
             game.quiet := game.quiet + 1
+        game.squares.set_number(number_of(to), optional.some(crowned))
         game.turns := game.turns + 1
         game.to_move := other(game.to_move)
         game.last := optional.some(chosen)
@@ -314,6 +312,7 @@ function all_steps(game) returns found:
                 steps.push(move(piece: placed.piece, from: placed.square, path: [to], captures: []))
             else blocked:
                 continue
+    else no_pieces
     return found = steps
 
 
@@ -329,6 +328,7 @@ function all_jumps(game) returns found:
 
     for placed in own_pieces(game):
         jumps.extend(chains(game, placed.piece, placed.square, placed.square, [], []))
+    else no_pieces
     return found = jumps
 
 
@@ -462,6 +462,7 @@ function own_pieces(game) returns found:
             pieces.push(placed)
         else theirs:
             continue
+    else no_pieces
     return found = pieces
 
 
@@ -470,9 +471,10 @@ The ways a piece may move.
 
 piece: The piece, as piece.
 
-ways: The directions, as list<direction>.
+ways: The directions: two for a man, and four for a king, as list<direction>.
 --------------------------------------------------------------------------------------------------------------------------------
-function directions_of(piece) returns ways:
+function directions_of(piece) returns ways
+        ensures several = (ways.count() >= 2):
     conditional moving:
         condition moving.king = piece.king:
             return ways = directions.all
@@ -597,8 +599,7 @@ public facet computer:
                 depth := depth + 1
             else ran_out:
                 exhausted := true
-        else deep_enough:
-            return chosen = best_sampled(game, options, values, game.level.checks - (allowance - left))
+        return chosen = best_sampled(game, options, values, game.level.checks - (allowance - left))
 
 
 --------------------------------------------------------------------------------------------------------------------------------
@@ -650,32 +651,39 @@ chosen: The move, as move.
 
 random: What plays the games out, as random.
 --------------------------------------------------------------------------------------------------------------------------------
-function best_sampled(game, options, values, checks, injected random) returns chosen:
+function best_sampled(game, options, values, checks, injected random) returns chosen
+        where has_options = (not options.is_empty()):
     best = values.largest()
     mutable tied = list.new()
 
     for option in range(from: 1, through: options.count()):
-        if top = (values.at_number(option) == best):
-            tied.push(option)
-        else lower:
-            continue
+        compare ranked = values.at_number(option) with best:
+            condition ranked.top = equal:
+                tied.push(option)
+            condition ranked.lower = less:
+                continue
+            condition ranked.above = greater:
+                fail not_reachable
 
-    if settled = (tied.count() == 1):
-        return chosen = options.at_number(tied[0])
-    else contested:
-        share = checks / tied.count()
-        mutable averages = list.new()
+    compare ties = tied.count() with 1:
+        condition ties.settled = equal:
+            return chosen = options.at_number(tied[0])
+        condition ties.contested = greater:
+            share = checks / tied.count()
+            mutable averages = list.new()
 
-        for option in tied:
-            mutable after = game
-            apply(mutable after, options.at_number(option))
-            averages.push(sampled_value(after, game.to_move, share))
-        return chosen = options.at_number(tied.at_number(averages.number_of(averages.largest())))
+            for option in tied:
+                mutable after = game
+                apply(mutable after, options.at_number(option))
+                averages.push(sampled_value(after, game.to_move, share))
+            return chosen = options.at_number(tied.at_number(averages.number_of(averages.largest())))
+        condition ties.none = less:
+            fail not_reachable
 
 
 --------------------------------------------------------------------------------------------------------------------------------
 What a position is worth to a player, from games played out from it at random within a share of the checks; or, when
-the share allows none, from the pieces on the board.
+there is no share, from the pieces on the board.
 
 position: The position, as game.
 owner: The player, as side.
@@ -686,21 +694,20 @@ value: The average of what the games' ends are worth, or the position's own wort
 random: What plays the games out, as random.
 --------------------------------------------------------------------------------------------------------------------------------
 function sampled_value(position, owner, share, injected random) returns value:
-    mutable left = share
-    mutable total = 0
-    mutable played = 0
+    if no_share = (share == 0):
+        return value = value_for(position, owner)
+    else some_share:
+        mutable left = share
+        mutable total = 0
+        mutable played = 0
 
-    while sampling = (left > 0):
-        length = (left - 1).min(search.playout_turns)
-        outcome = playout(position, owner, length)
-        total := total + outcome.value
-        played := played + 1
-        left := left - outcome.spent
-    else sampled:
-        if any = (played > 0):
-            return value = total / played
-        else none:
-            return value = value_for(position, owner)
+        while sampling = (left > 0):
+            length = (left - 1).min(search.playout_turns)
+            outcome = playout(position, owner, length)
+            total := total + outcome.value
+            played := played + 1
+            left := left - outcome.spent
+        return value = total / played
 
 
 --------------------------------------------------------------------------------------------------------------------------------
@@ -723,8 +730,8 @@ function playout(start, owner, length, injected random) returns played:
         apply(mutable position, random.one_of(moves))
         moves := legal_moves(position)
         made := made + 1
-    else ended:
-        return played = played_out(value: value_for(position, owner), spent: made + 1)
+    else ended
+    return played = played_out(value: value_for(position, owner), spent: made + 1)
 
 
 --------------------------------------------------------------------------------------------------------------------------------
@@ -769,6 +776,7 @@ function material(game, owner) returns worth:
                 total := total + search.king_value
             else counted.man:
                 total := total + search.man_value
+    else no_pieces
     return worth = total
 
 
@@ -875,20 +883,9 @@ public facet drawing:
     ----------------------------------------------------------------------------------------------------------------------------
     function draw(game, selected, highest, injected window):
         window.clear(palette.background)
-
-        for row in range(from: 0, below: board.size):
-            for column in range(from: 0, below: board.size):
-                here = square(row: row, column: column)
-                corner = corner_of(here)
-                shade = shade_of(game, here, selected)
-                window.fill(x: corner.x, y: corner.y, width: layout.square_size, height: layout.square_size, colour: shade)
-
-        for placed in placed_pieces(game):
-            draw_piece(placed)
-
-        for landing in landings(game, selected):
-            centre = centre_of(landing)
-            window.circle(x: centre.x, y: centre.y, radius: layout.mark_radius, colour: palette.mark)
+        draw_board(game, selected)
+        draw_pieces(game)
+        draw_marks(game, selected)
         lines = banner(game, highest)
         top = layout.height - layout.bar_height
         window.write(text: lines[0], x: layout.gap, y: top + 32, size: layout.text_size, colour: palette.text)
@@ -1034,7 +1031,53 @@ function landings(game, selected) returns found:
             squares.push(candidate.path.last())
         else from_elsewhere:
             continue
+    else no_moves
     return found = squares
+
+
+--------------------------------------------------------------------------------------------------------------------------------
+Draws the squares of the board.
+
+game: The game, as game.
+selected: The square of the piece the player has selected, if there is one, as optional<square>.
+
+window: Where the board is drawn, as window.
+--------------------------------------------------------------------------------------------------------------------------------
+function draw_board(game, selected, injected window):
+    for row in range(from: 0, below: board.size):
+        for column in range(from: 0, below: board.size):
+            here = square(row: row, column: column)
+            corner = corner_of(here)
+            shade = shade_of(game, here, selected)
+            window.fill(x: corner.x, y: corner.y, width: layout.square_size, height: layout.square_size, colour: shade)
+
+
+--------------------------------------------------------------------------------------------------------------------------------
+Draws every piece on the board.
+
+game: The game, as game.
+
+window: Where the pieces are drawn, as window.
+--------------------------------------------------------------------------------------------------------------------------------
+function draw_pieces(game, injected window):
+    for placed in placed_pieces(game):
+        draw_piece(placed)
+    else no_pieces
+
+
+--------------------------------------------------------------------------------------------------------------------------------
+Marks the squares the selected piece may move to.
+
+game: The game, as game.
+selected: The square of the piece the player has selected, if there is one, as optional<square>.
+
+window: Where the marks are drawn, as window.
+--------------------------------------------------------------------------------------------------------------------------------
+function draw_marks(game, selected, injected window):
+    for landing in landings(game, selected):
+        centre = centre_of(landing)
+        window.circle(x: centre.x, y: centre.y, radius: layout.mark_radius, colour: palette.mark)
+    else no_marks
 
 
 --------------------------------------------------------------------------------------------------------------------------------
@@ -1104,8 +1147,7 @@ public facet window_play:
                     ended = play_game(new_game(picked), highest)
                     highest := highest.max(ended.points)
                     quitting := ended.quitting
-        else closed:
-            return best = highest
+        return best = highest
 
 
     ----------------------------------------------------------------------------------------------------------------------------
@@ -1124,18 +1166,11 @@ public facet window_play:
 
         while choosing = ((chosen == optional.none) and (not quitting) and (not window.close_requested())):
             quitting := window.keys_pressed().contains(key.escape)
-
-            for place in window.clicks():
-                picked = level_at(place)
-
-                if hit = (picked != optional.none):
-                    chosen := picked
-                else miss:
-                    continue
+            chosen := level_clicked(window.clicks())
             draw_levels(highest)
             window.next_frame() forever because "a hidden window shows no frames, and the game waits until it is shown"
-        else chosen_or_stopped:
-            return found = chosen
+        else closed_at_once
+        return found = chosen
 
 
     ----------------------------------------------------------------------------------------------------------------------------
@@ -1167,12 +1202,11 @@ public facet window_play:
                     chosen = computer_move(game)
                     apply(mutable game, chosen)
                 else moment.players_turn:
-                    for place in window.clicks():
-                        clicked(mutable game, mutable selected, place)
+                    act_on_clicks(mutable game, mutable selected, window.clicks())
             draw(game, selected, highest)
             window.next_frame() forever because "a hidden window shows no frames, and the game waits until it is shown"
-        else stopped:
-            return ended = ending(points: score(game), quitting: quitting)
+        else closed_at_once
+        return ended = ending(points: score(game), quitting: quitting)
 
 
     ----------------------------------------------------------------------------------------------------------------------------
@@ -1198,6 +1232,38 @@ public facet window_play:
 
 
 --------------------------------------------------------------------------------------------------------------------------------
+The level whose button the player clicked first, if any click was on one.
+
+clicks: The points clicked, in order, as list<point>.
+
+found: The level, or none, as optional<level>.
+--------------------------------------------------------------------------------------------------------------------------------
+function level_clicked(clicks) returns found:
+    for place in clicks:
+        picked = level_at(place)
+
+        if hit = (picked != optional.none):
+            return found = picked
+        else miss:
+            continue
+    else no_clicks
+    return found = optional.none
+
+
+--------------------------------------------------------------------------------------------------------------------------------
+Acts on each of the player's clicks in turn.
+
+game: The game, which changes, as game.
+selected: The square of the piece the player has selected, if there is one, which changes, as optional<square>.
+clicks: The points clicked, in order, as list<point>.
+--------------------------------------------------------------------------------------------------------------------------------
+function act_on_clicks(mutable game, mutable selected, clicks):
+    for place in clicks:
+        clicked(mutable game, mutable selected, place)
+    else no_clicks
+
+
+--------------------------------------------------------------------------------------------------------------------------------
 The move from one square to another, if the player to move may make it.
 
 game: The game, as game.
@@ -1212,6 +1278,7 @@ function move_to(game, from, to) returns found:
             return found = optional.some(candidate)
         else differs:
             continue
+    else no_moves
     return found = optional.none
 
 
@@ -1229,4 +1296,5 @@ function may_move_from(game, square) returns can:
             return can = true
         else unmovable:
             continue
+    else no_moves
     return can = false

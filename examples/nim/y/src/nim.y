@@ -139,21 +139,24 @@ public facet moves:
     function computer_move(game) returns chosen
             where still_playing = (counters_left(game) > 0):
         sum = nim_sum(game.heaps)
-        mutable number = 1
 
-        -- Look for the heap that, made smaller, leaves a nim-sum of zero.
-        while searching = (number <= game.heaps.count().to_uint32()):
-            heap = game.heaps.at_number(number)
-            target = heap.xor(sum)
-
-            if winning = (target < heap):
-                return chosen = move(heap: number, take: heap - target)
-            else not_this_heap:
-                number := number + 1
-        else losing:
-            -- There is none, because the nim-sum is already zero: take one counter from the largest heap, and hope.
+        if lost = (sum == 0):
+            -- Every move leaves a nim-sum other than zero: take one counter from the largest heap, and hope.
             largest = game.heaps.largest()
             return chosen = move(heap: game.heaps.number_of(largest), take: 1)
+        else winnable:
+            -- Some heap, made smaller, leaves a nim-sum of zero.
+            for number in range(from: 1, through: game.heaps.count().to_uint32()):
+                heap = game.heaps.at_number(number)
+                target = heap.xor(sum)
+
+                if winning = (target < heap):
+                    return chosen = move(heap: number, take: heap - target)
+                else not_this_heap:
+                    continue
+            else no_heaps:
+                fail not_reachable
+            fail not_reachable
 
 
 ----------------------------------------------------------------------------------------------------------------------------
@@ -168,6 +171,7 @@ function counters_left(game) returns left:
 
     for heap in game.heaps:
         total := total + heap
+    else no_heaps
     return left = total
 
 
@@ -183,6 +187,7 @@ function nim_sum(heaps) returns sum:
 
     for heap in heaps:
         total := total.xor(heap)
+    else no_heaps
     return sum = total
 
 
@@ -201,6 +206,7 @@ function shown(game) returns picture:
         number := number + 1
         counters = "|".repeated(heap)
         lines.push("  {number}: {counters}")
+    else no_heaps
     return picture = lines.join(separator: "\n")
 
 
@@ -213,8 +219,10 @@ public facet console_play:
 
 
     ------------------------------------------------------------------------------------------------------------------------
-    Plays one game at the console, the player against the computer, until the last counter is taken. The player moves
+    Plays a game at the console, the player against the computer, until the last counter is taken. The player moves
     first.
+
+    started: The game as it starts, as game.
 
     console: Where the game is shown and the moves are read, as console.
     forever: The right to wait for the player as long as they take, as forever.
@@ -222,8 +230,8 @@ public facet console_play:
     fails play_error.input_closed: The console closed before the game ended.
     fails play_error.console: The console could not be read or written.
     ------------------------------------------------------------------------------------------------------------------------
-    function play(injected console, injected forever) fails play_error:
-        mutable game = new_game()
+    function play(started, injected console, injected forever) fails play_error:
+        mutable game = started
         mutable turn = player.person
         console.write_line("Nim: take any number of counters from one heap. Whoever takes the last counter wins.") or fail
 
@@ -232,32 +240,75 @@ public facet console_play:
             console.write_line(picture) or fail
 
             if persons_turn = (turn == player.person):
-                console.write("Your move (heap, then counters): ") or fail
-                typed = console.read_line() forever because "a player may think for as long as they like" or fail
-
-                if closed = (typed == optional.none):
-                    fail play_error.input_closed
-                else line_read:
-                    conditional attempted = read_move(game, typed):
-                        condition attempted.valid = (attempted == result.ok):
-                            remove(mutable game, attempted.value)
-                            turn := player.computer
-                        condition attempted.not_a_move = (attempted == result.err(move_error.not_two_numbers)):
-                            console.write_line("Type a heap's number and how many to take, such as 2 3.") or fail
-                        condition attempted.no_heap = (attempted == result.err(move_error.no_such_heap)):
-                            console.write_line("There is no such heap.") or fail
-                        condition attempted.none_taken = (attempted == result.err(move_error.nothing_taken)):
-                            console.write_line("Take at least one counter.") or fail
-                        condition attempted.too_many = (attempted == result.err(move_error.too_many)):
-                            console.write_line("That heap does not hold that many.") or fail
+                turn := persons_move(mutable game) or fail
             else computers_turn:
                 chosen = computer_move(game)
                 remove(mutable game, chosen)
                 console.write_line("The computer takes {chosen.take} from heap {chosen.heap}.") or fail
                 turn := player.person
-        else game_over:
-            -- Whoever took the last counter has passed the turn to the other.
-            if computer_won = (turn == player.person):
-                console.write_line("The computer took the last counter. The computer wins.") or fail
-            else person_won:
-                console.write_line("You took the last counter. You win!") or fail
+        else nothing_to_play
+        announce(turn) or fail
+
+
+----------------------------------------------------------------------------------------------------------------------------
+Reads the player's move and makes it, or says what is wrong with what they typed.
+
+game: The game, which loses the counters taken when the move is made, as game.
+
+next: Who moves next: the computer once a move is made, and the player again otherwise, as player.
+
+console: Where the move is read, and what is wrong with it is shown, as console.
+forever: The right to wait for the player as long as they take, as forever.
+
+fails play_error.input_closed: The console closed before the player moved.
+fails play_error.console: The console could not be read or written.
+----------------------------------------------------------------------------------------------------------------------------
+function persons_move(mutable game, injected console, injected forever) returns next fails play_error:
+    console.write("Your move (heap, then counters): ") or fail
+    typed = console.read_line() forever because "a player may think for as long as they like" or fail
+
+    if closed = (typed == optional.none):
+        fail play_error.input_closed
+    else line_read:
+        conditional attempted = read_move(game, typed):
+            condition attempted.valid = (attempted == result.ok):
+                remove(mutable game, attempted.value)
+                return next = player.computer
+            else attempted.invalid:
+                console.write_line(complaint(attempted.failure())) or fail
+                return next = player.person
+
+
+----------------------------------------------------------------------------------------------------------------------------
+What the game says to what is not a move.
+
+error: Why it is not, as move_error.
+
+said: The line to write, as string.
+----------------------------------------------------------------------------------------------------------------------------
+function complaint(error) returns said:
+    conditional wrong = error:
+        condition wrong.not_a_move = (wrong == move_error.not_two_numbers):
+            return said = "Type a heap's number and how many to take, such as 2 3."
+        condition wrong.no_heap = (wrong == move_error.no_such_heap):
+            return said = "There is no such heap."
+        condition wrong.none_taken = (wrong == move_error.nothing_taken):
+            return said = "Take at least one counter."
+        condition wrong.too_many = (wrong == move_error.too_many):
+            return said = "That heap does not hold that many."
+
+
+----------------------------------------------------------------------------------------------------------------------------
+Says who won.
+
+turn: Whose turn it is once the last counter is taken: the other player's than the winner's, as player.
+
+console: Where it is said, as console.
+
+fails console_error: The console could not be written.
+----------------------------------------------------------------------------------------------------------------------------
+function announce(turn, injected console) fails console_error:
+    if computer_won = (turn == player.person):
+        console.write_line("The computer took the last counter. The computer wins.") or fail
+    else person_won:
+        console.write_line("You took the last counter. You win!") or fail

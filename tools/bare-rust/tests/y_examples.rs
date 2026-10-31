@@ -7,15 +7,19 @@
 //!   the Y lowering adds beyond strip's output is only clauses and the file's status;
 //! - the constraint files are valid, and their clauses are well formed;
 //! - `bare/y-facts.json` matches the Y source and the bare bodies: each named decision is in both, where it says, and
-//!   each test covers what its Y source and its Rust comment say.
+//!   each test covers what its Y source and its Rust comment say;
+//! - the paths of each module (`y_paths`, Y § 3.5) are the ones `bare/y-facts.json` lists, every loop that may never
+//!   run has its `else`, and the tests together cover every path that needs a test (Y § 3.14).
 //!
 //! To refresh the Rust after editing the bare files, from `tools/bare-rust`:
 //! `cargo run -q -- weave ../../examples/<name>/bare --out ../../examples/.woven --crate ../../examples/<name>`, then
 //! copy `.woven/src` over `examples/<name>/src` and delete `.woven`.
+mod y_paths;
+
 use bare_rust::json::canonical;
 use bare_rust::{normalise_nomut, rustfmt, strip, weave};
 use serde_json::Value;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -207,28 +211,39 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
     let mut listed = BTreeSet::new();
     for (function, decisions) in facts["decisions"].as_object().unwrap() {
         for d in decisions.as_array().unwrap() {
-            // every outcome of a decision is a named branch (Y-proposal § 3.5): `if a = (…):`, `else if b = (…):`,
-            // `else c:`, each on a line of its own, and an `if` or a `while` always has its `else`; a `conditional`
-            // names each condition after its label, `condition label.a = p:`, and may end in `else label.c:`
-            let switch = d["kind"] == "conditional";
+            // every outcome of a decision is a named branch (Y-proposal § 3.5): `if a = (…):` and `else b:`, each on a
+            // line of its own; a `conditional` or a `compare` names each condition after its label, `condition
+            // label.a = p:`, and may end in `else label.c:`; `for a in …:` and `while a = (…):` end in `else c` or
+            // `else c:` unless they are sure to run
+            let kind = d["kind"].as_str().unwrap();
+            let switch = kind == "conditional" || kind == "compare";
             let branches = d["branches"].as_array().unwrap();
-            assert!(branches.len() >= 2, "{function}: a decision with one named outcome: {branches:?}");
+            let least = if kind == "for" || kind == "while" { 1 } else { 2 };
+            assert!(branches.len() >= least, "{function}: a decision with one named outcome: {branches:?}");
+            if switch {
+                let label = d["label"].as_str().unwrap();
+                assert!(at(d["y"].as_str().unwrap()).trim_start().starts_with(&format!("{kind} {label}")), "{function}: no `{kind} {label}` at {}", d["y"]);
+            }
             for (k, b) in branches.iter().enumerate() {
                 let name = b["name"].as_str().unwrap();
                 let y = at(b["y"].as_str().unwrap());
-                let opens = if switch {
-                    (y.trim_start().starts_with(&format!("condition {name} = ")) && y.ends_with(':')) || (k > 0 && y.trim() == format!("else {name}:"))
-                } else if k == 0 {
-                    y.contains(&format!(" {name} = ")) && y.trim_end().ends_with(':')
+                let t = y.trim();
+                let named_else = t == format!("else {name}:") || ((kind == "for" || kind == "while") && t == format!("else {name}"));
+                let opens = if k > 0 {
+                    named_else || (switch && t.starts_with(&format!("condition {name} = ")) && t.ends_with(':'))
+                } else if switch {
+                    t.starts_with(&format!("condition {name} = ")) && t.ends_with(':')
+                } else if kind == "for" {
+                    t.starts_with(&format!("for {name} in ")) && t.ends_with(':')
                 } else {
-                    (y.contains(&format!("else if {name} = ")) && y.trim_end().ends_with(':')) || y.trim() == format!("else {name}:")
+                    t.starts_with(&format!("{kind} {name} = ")) && t.ends_with(':')
                 };
                 assert!(opens, "{function}#{name}: not at {}: `{y}`", b["y"]);
                 assert!(at(b["bare"].as_str().unwrap()).contains(&format!("#{name}")), "{function}#{name}: not at {}", b["bare"]);
                 listed.insert(format!("{}#{name}", function.rsplit('.').next().unwrap()));
             }
             let last = branches.last().unwrap()["y"].as_str().unwrap();
-            assert!(switch || (at(last).trim().starts_with("else ") && !at(last).contains(" if ")), "{function}: the decision ends without an `else`");
+            assert!(kind != "if" || at(last).trim().starts_with("else "), "{function}: the `if` ends without an `else`");
         }
     }
     // each copy the lowering made is where the facts say, in the Y source and in the bare body
@@ -256,7 +271,8 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
             assert!(rest.iter().any(|l| l.contains(wait) && l.contains("&deadline")), "deadline {bound}: {wait} is not given it");
         }
     }
-    // every named decision of the Y source is listed: `if name = …:`, `while name = …:`, `condition label.name = …:` and `else name:`
+    // every named decision of the Y source is listed: `if name = …:`, `while name = …:`, `for name in …:`, `condition
+    // label.name = …:`, `else name:` and `else name`
     let mut in_source = BTreeSet::new();
     for y in &code {
         let mut function = String::new();
@@ -268,6 +284,13 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
             for (i, w) in words.iter().enumerate() {
                 if (*w == "if" || *w == "while") && words.get(i + 2) == Some(&"=") && line.trim_end().ends_with(':') {
                     in_source.insert(format!("{function}#{}", words[i + 1]));
+                }
+                if i == 0 && *w == "for" && words.get(2) == Some(&"in") && line.trim_end().ends_with(':') {
+                    in_source.insert(format!("{function}#{}", words[1]));
+                }
+                // `else name`, the loop's that may never run
+                if i == 0 && *w == "else" && words.len() == 2 && !words[1].ends_with(':') {
+                    in_source.insert(format!("{function}#{}", words[1]));
                 }
                 if i == 0 && *w == "condition" && words.get(2) == Some(&"=") {
                     in_source.insert(format!("{function}#{}", words[1]));
@@ -345,24 +368,37 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
             assert!(allowed, "{y}:{}: no blank line before the comment `{t}`", i + 1);
         }
     }
-    // the tests cover every outcome: each named branch, and each failure case its function documents (Y § 3.14)
-    let mut outcomes = listed.clone();
-    let mut failures = Vec::new();
-    // the module the tests belong to: its outcomes are the ones they must cover
-    let tested = facts["modules"].as_array().unwrap().iter().find(|m| m["y"].as_str().unwrap().ends_with(".test.y")).unwrap()["module"].as_str().unwrap().to_string();
-    let tested_code: Vec<String> = facts["modules"].as_array().unwrap().iter().filter(|m| m["module"] == tested.as_str() && !m["y"].as_str().unwrap().ends_with(".test.y")).map(|m| m["y"].as_str().unwrap().to_string()).collect();
-    for line in tested_code.iter().flat_map(|y| read(&dir.join(y)).lines().map(str::to_string).collect::<Vec<_>>()) {
-        let t = line.trim();
-        if let Some(case) = t.strip_prefix("fails ").and_then(|r| r.split(':').next()).filter(|c| c.contains('.') && !c.contains(' ')) {
-            failures.push(case.to_string());
-        }
-        if let Some(name) = t.strip_prefix("function ") {
-            let name = name.split('(').next().unwrap();
-            outcomes.extend(failures.drain(..).map(|f| format!("{name}!{f}")));
-        }
+    // the paths of the module are the ones the facts list, with how each ends; every loop in every Y file that may never
+    // run has its `else`, and none that is sure to run has one (Y § 3.5)
+    for y in &all {
+        let (_, problems) = y_paths::all_paths(&read(&dir.join(y)));
+        assert!(problems.is_empty(), "{y}: {problems:#?}");
     }
+    // the module the tests belong to: its paths are the ones they must cover
+    let tested = facts["modules"].as_array().unwrap().iter().find(|m| m["y"].as_str().unwrap().ends_with(".test.y")).unwrap()["module"].as_str().unwrap().to_string();
+    let tested_y = facts["modules"].as_array().unwrap().iter().find(|m| m["module"] == tested.as_str() && !m["y"].as_str().unwrap().ends_with(".test.y")).unwrap()["y"].as_str().unwrap();
+    let (paths, _) = y_paths::all_paths(&read(&dir.join(tested_y)));
+    let ends = |kind: &str| match kind {
+        "next" | "return" | "continue" | "break" => "returns",
+        "fail" => "fails",
+        other => other,
+    }
+    .to_string();
+    let found: BTreeMap<String, String> = paths.iter().map(|(p, k)| (p.clone(), ends(k))).collect();
+    let in_facts: BTreeMap<String, String> = facts["paths"].as_array().unwrap().iter().map(|p| (p["path"].as_str().unwrap().to_string(), p["ends"].as_str().unwrap().to_string())).collect();
+    assert_eq!(in_facts, found, "y-facts.json and the Y source have different paths");
+    // a function has fewer than 100 paths, the lint `too_many_paths` (Y § 3.14); only its own paths count
+    let mut per_function: BTreeMap<&str, usize> = BTreeMap::new();
+    for p in paths.keys() {
+        *per_function.entry(p.split(" > ").next().unwrap()).or_default() += 1;
+    }
+    for (function, n) in &per_function {
+        assert!(*n < 100, "{tested_y}: `{function}` has {n} paths, 100 or more (too_many_paths)");
+    }
+    // the tests cover every path but the ones `fail not_reachable` and `fail not_implemented` end (Y § 3.14)
+    let required: BTreeSet<String> = paths.iter().filter(|(_, k)| !y_paths::EXEMPT.contains(&k.as_str())).map(|(p, _)| p.clone()).collect();
     let covered: BTreeSet<String> = facts["tests"].as_object().unwrap().values().flat_map(|t| t["covers"].as_array().unwrap().iter().map(|c| c.as_str().unwrap().to_string())).collect();
-    assert_eq!(covered, outcomes, "the tests and the outcomes of the module differ");
+    assert_eq!(covered, required, "the paths the tests cover and the paths of the module differ");
     // documentation roles of one kind sit together, and one blank line separates the kinds (a lint rule of Y § 3.2)
     for y in &code {
         let source = read(&dir.join(y));
@@ -490,17 +526,98 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
     for y in &all {
         assert!(!read(&dir.join(y)).lines().any(|l| l.trim() == "else:"), "{y}: an `else` without a name");
     }
-    // each test covers what its Y source declares and its Rust comment repeats
+    // each test covers what its Y source declares and its Rust comment repeats; a test that covers no path of its own
+    // (it checks what the paths do not tell apart, such as which failure a call gives) says nothing of covering
     let test_module = facts["modules"].as_array().unwrap().iter().find(|m| m["y"].as_str().unwrap().ends_with(".test.y")).unwrap();
     let rust_tests = read(&dir.join(test_module["rust"].as_str().unwrap()));
     for (test, t) in facts["tests"].as_object().unwrap() {
         let covers: Vec<&str> = t["covers"].as_array().unwrap().iter().map(|c| c.as_str().unwrap()).collect();
         let y = at(t["y"].as_str().unwrap());
-        assert_eq!(y, format!("test {test}"), "{test}: not at {}", t["y"]);
+        let header = if covers.is_empty() { format!("test {test}:") } else { format!("test {test}") };
+        assert_eq!(y, header, "{test}: not at {}", t["y"]);
         let body = rust_tests.split(&format!("fn {test}() {{")).nth(1).unwrap_or_else(|| panic!("{test}: no Rust test"));
         let comment: String = body.lines().skip(1).take_while(|l| l.trim_start().starts_with("//")).map(|l| l.trim_start().trim_start_matches("//").trim()).collect::<Vec<_>>().join(" ");
-        let rust_covers: Vec<&str> = comment.trim_start_matches("y: covers").split(',').map(str::trim).collect();
-        assert_eq!(rust_covers, covers, "{test}: the Rust comment and y-facts.json cover different outcomes");
+        let rust_covers: Vec<&str> = comment.strip_prefix("y: covers").map_or(vec![], |c| c.split(',').map(str::trim).collect());
+        assert_eq!(rust_covers, covers, "{test}: the Rust comment and y-facts.json cover different paths");
         assert!(!covers.iter().any(|c| c.ends_with(".else")), "{test}: an outcome is named, never `.else`");
+        // a test covers at most one path, and its `when` is the one call of that path's function that takes it (Y § 3.14)
+        assert!(covers.len() <= 1, "{test}: covers {} paths, not one", covers.len());
+        if let Some(path) = covers.first() {
+            let function = path.split(" > ").next().unwrap();
+            let when = when_of(&read(&dir.join(test_module["y"].as_str().unwrap())), test);
+            assert_eq!(when.len(), 1, "{test}: `when` holds {} statements, not the one call: {when:?}", when.len());
+            let called = when[0].contains(&format!("{function}(")) && !when[0].contains(&format!(".{function}("));
+            assert!(called, "{test}: covers a path of `{function}`, but `when` does not call it: `{}`", when[0]);
+        }
     }
+}
+
+/// The statements of a test's `when` section, each with the lines it continues onto.
+fn when_of(source: &str, test: &str) -> Vec<String> {
+    let lines: Vec<&str> = source.lines().collect();
+    let start = lines.iter().position(|l| l.starts_with(&format!("test {test}")) && l[5 + test.len()..].trim_start_matches(':').is_empty()).unwrap();
+    let begin = start + lines[start..].iter().position(|l| l.trim() == "when:").unwrap_or_else(|| panic!("{test}: no `when`"));
+    let body: Vec<&str> = lines[begin + 1..].iter().copied().take_while(|l| l.starts_with("        ") || l.trim().is_empty()).filter(|l| !l.trim().is_empty() && !l.trim().starts_with("--")).collect();
+    let indent = body.first().map_or(0, |l| l.len() - l.trim_start().len());
+    let mut out: Vec<String> = vec![];
+    for l in body {
+        if l.len() - l.trim_start().len() == indent {
+            out.push(l.trim().to_string());
+        } else {
+            out.last_mut().unwrap().push_str(&format!(" {}", l.trim()));
+        }
+    }
+    out
+}
+
+/// A function of the path rules' own: a loop that may never run, a comparison of numbers on each side, and a `compare`
+/// whose `else` covers two orders.
+const FIRST_ABOVE: &str = "\
+----------------------------------------
+values: The values, as list<int32>.
+
+limit: The limit, as int32.
+
+found: The value found, as int32.
+----------------------------------------
+function first_above(values, limit) returns found:
+    for value in values:
+        if above = (value > limit):
+            return found = value
+        else not_above:
+            continue
+    else no_values
+
+    compare sign = limit with 0:
+        condition sign.negative = less:
+            fail not_reachable
+        else sign.rest:
+            return found = limit
+";
+
+#[test]
+fn paths_name_the_outcomes_hidden_in_a_comparison_and_a_loop() {
+    let (paths, problems) = y_paths::all_paths(FIRST_ABOVE);
+    assert!(problems.is_empty(), "{problems:#?}");
+    let id = |p: &str| format!("first_above > {p}");
+    // a pass that returns is named for how often the loop ran; `above` is the only order on its branch, so not split;
+    // `else sign.rest` stands for two orders, and names each; `not_above` is split by the order of value and limit
+    for p in ["value > above", "value'many > above", "no_values > sign.rest'eq", "no_values > sign.rest'gt", "value > not_above'lt > sign.rest'gt", "value'many > not_above'eq > sign.rest'eq"] {
+        assert_eq!(paths.get(&id(p)).map(String::as_str), Some("return"), "{p}: {paths:#?}");
+    }
+    // a path that ends in `fail not_reachable` needs no test
+    assert_eq!(paths.get(&id("no_values > sign.negative")).map(String::as_str), Some("not_reachable"));
+    assert_eq!(paths.len(), 17, "{paths:#?}");
+    assert_eq!(paths.values().filter(|k| y_paths::EXEMPT.contains(&k.as_str())).count(), 5);
+}
+
+#[test]
+fn a_loop_that_may_never_run_needs_its_else_and_one_sure_to_run_has_none() {
+    let (_, problems) = y_paths::all_paths(&FIRST_ABOVE.replace("    else no_values\n", ""));
+    assert_eq!(problems["first_above"], ["`for value in values` may never run, and has no named else"]);
+    let sure = "function counted():\n    for attempt in [1, 2, 3]:\n        log(attempt)\n    else none\n";
+    let (paths, problems) = y_paths::all_paths(sure);
+    assert_eq!(problems["counted"], ["`for attempt in [1, 2, 3]` runs for sure, and needs no else"]);
+    // three elements: the loop runs more than once, and only so
+    assert_eq!(paths.keys().collect::<Vec<_>>(), ["counted > attempt'many"]);
 }

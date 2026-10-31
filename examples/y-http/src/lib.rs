@@ -32,6 +32,9 @@ impl HttpError {
 enum Fake {
     /// Every path gives this text.
     Answer(String),
+    /// The paths asked for give these texts in turn; once they run out, every path gives `then`'s status, or the last
+    /// text again.
+    Script { texts: std::collections::VecDeque<String>, last: String, then: Option<u16> },
     /// Every path gives this status.
     Failing(u16),
     /// Every wait expires.
@@ -62,6 +65,21 @@ impl Http {
         Http { address: String::new(), fake: Some(Fake::Answer(text.to_string())) }
     }
 
+    /// A fake service for a test, which gives `text` for the first `answers` paths asked for, and then answers every
+    /// path with an HTTP status: Y's `fake http(text: …, answers: n, then_status: …)`.
+    pub fn fake_failing_after(text: &str, answers: usize, status: u16) -> Http {
+        let texts = std::iter::repeat_n(text.to_string(), answers).collect();
+        Http { address: String::new(), fake: Some(Fake::Script { texts, last: text.to_string(), then: Some(status) }) }
+    }
+
+    /// A fake service for a test, which gives the texts in turn, one for each path asked for, and then the last
+    /// again: Y's `fake http(texts: …)`.
+    pub fn fake_texts(texts: &[&str]) -> Http {
+        let last = texts.last().map(|t| t.to_string()).unwrap_or_default();
+        let texts = texts.iter().map(|t| t.to_string()).collect();
+        Http { address: String::new(), fake: Some(Fake::Script { texts, last, then: None }) }
+    }
+
     /// A fake service for a test, which answers every path with an HTTP status, such as 404.
     pub fn fake_failing(status: u16) -> Http {
         Http { address: String::new(), fake: Some(Fake::Failing(status)) }
@@ -74,8 +92,13 @@ impl Http {
 
     /// Gets the text at a path of the service, such as `/data/color/svg/1F600.svg`, before a deadline.
     pub async fn get(&mut self, path: &str, deadline: &Deadline) -> Result<String, Within<HttpError>> {
-        match &self.fake {
+        match &mut self.fake {
             Some(Fake::Answer(text)) => Ok(text.clone()),
+            Some(Fake::Script { texts, last, then }) => match (texts.pop_front(), then) {
+                (Some(text), _) => Ok(text),
+                (None, Some(status)) => Err(Within::Failed(HttpError::fake_status(*status))),
+                (None, None) => Ok(last.clone()),
+            },
             Some(Fake::Failing(status)) => Err(Within::Failed(HttpError::fake_status(*status))),
             Some(Fake::Expiring) => Err(Within::Expired(Expired::fake())),
             None => self.fetch(path, deadline),

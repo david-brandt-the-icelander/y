@@ -19,6 +19,11 @@
     },
     {
       "kind": "function",
+      "name": "hangman_example::hangman::tests::a_letter_already_found_is_refused",
+      "params": []
+    },
+    {
+      "kind": "function",
       "name": "hangman_example::hangman::tests::a_repeated_letter_is_refused",
       "params": []
     },
@@ -44,8 +49,34 @@
       "name": "hangman_example::hangman::tests::a_new_game_is_being_played",
       "params": []
     },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_new_game_has_nothing_guessed",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_found_letter_shows_wherever_it_occurs",
+      "params": []
+    },
+    { "kind": "function", "name": "hangman_example::hangman::tests::a_found_letter_is_shown", "params": [] },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_letter_not_found_is_hidden",
+      "params": []
+    },
     { "kind": "function", "name": "hangman_example::hangman::tests::the_empty_gallows", "params": [] },
     { "kind": "function", "name": "hangman_example::hangman::tests::the_full_gallows", "params": [] },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_part_is_drawn_once_enough_misses_are_made",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_part_is_blank_until_enough_misses_are_made",
+      "params": []
+    },
     {
       "kind": "function",
       "name": "hangman_example::hangman::tests::a_word_list_is_read_in_order",
@@ -53,10 +84,90 @@
     },
     {
       "kind": "function",
+      "name": "hangman_example::hangman::tests::spaces_after_the_last_word_are_allowed",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_list_of_one_word_is_read",
+      "params": []
+    },
+    {
+      "kind": "function",
       "name": "hangman_example::hangman::tests::an_empty_word_list_is_refused",
       "params": []
     },
+    { "kind": "function", "name": "hangman_example::hangman::tests::an_empty_text_is_refused", "params": [] },
     { "kind": "function", "name": "hangman_example::hangman::tests::a_short_word_is_refused", "params": [] },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_list_of_one_short_word_is_refused",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_turn_shows_the_game_and_asks_for_a_guess",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_turn_cannot_be_shown_after_no_lines",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_turn_cannot_be_shown_after_one_lines",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_turn_cannot_be_shown_after_two_lines",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_turn_cannot_be_shown_after_three_lines",
+      "params": []
+    },
+    { "kind": "function", "name": "hangman_example::hangman::tests::a_hit_is_answered_yes", "params": [] },
+    { "kind": "function", "name": "hangman_example::hangman::tests::a_miss_is_answered_no", "params": [] },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::typing_nothing_is_answered_with_a_request",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::typing_other_than_a_letter_is_answered_with_what_was_typed",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_repeated_letter_is_answered_with_the_letter",
+      "params": []
+    },
+    { "kind": "function", "name": "hangman_example::hangman::tests::a_win_is_announced", "params": [] },
+    { "kind": "function", "name": "hangman_example::hangman::tests::a_hanging_is_announced", "params": [] },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::an_end_cannot_be_shown_without_the_gallows",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_win_cannot_be_announced",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_hanging_cannot_be_announced",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_word_of_one_letter_is_found_with_one_guess",
+      "params": []
+    },
     {
       "kind": "function",
       "name": "hangman_example::hangman::tests::a_player_who_finds_every_letter_wins",
@@ -74,12 +185,57 @@
     },
     {
       "kind": "function",
-      "name": "hangman_example::hangman::tests::a_closed_console_ends_the_game",
+      "name": "hangman_example::hangman::tests::a_console_that_cannot_greet_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_console_that_cannot_show_the_first_turn_ends_play",
       "params": []
     },
     {
       "kind": "function",
       "name": "hangman_example::hangman::tests::a_failing_console_ends_the_game",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_console_closed_at_once_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_console_that_cannot_reply_to_the_first_guess_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_console_that_cannot_show_a_quick_end_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_console_that_cannot_show_a_later_turn_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_console_that_cannot_read_a_later_guess_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_closed_console_ends_the_game",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_console_that_cannot_reply_to_a_later_guess_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::tests::a_console_that_cannot_show_the_end_ends_play",
       "params": []
     }
   ]

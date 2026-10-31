@@ -225,13 +225,13 @@ $ y fix src/shop/checkout.y
   added   fails hold_error.timed_out: ...   (documentation for the new capabilities and failure case; prose left for the author)
 ```
 
-**The test** lives at the path computed from the module (`src/shop/checkout.test.y`), declares which outcome it covers,
+**The test** lives at the path computed from the module (`src/shop/checkout.test.y`), declares which path it covers,
 supplies capabilities the same way production code receives them, and forces the retry path instead of hoping for it:
 
 ```y
 -- A conflicting commit forces the transaction to run three times; the customer is still charged once.
 test charges_once_when_the_transaction_retries
-        covers hold_and_charge#in_stock:
+        covers hold_and_charge > in_stock:
     given:
         widget = item_id.parse("widget") or fail
         buyer = any<buyer>(seed: 11)
@@ -263,7 +263,7 @@ Commands
   charge_card                                             new submitter: hold_and_charge
 Claims            none
 Gaps              none
-Coverage          4 of 4 outcomes covered by 4 tests (#sold_out, #in_stock, !hold_error.unknown_item, !hold_error.timed_out)
+Coverage          4 of 4 paths covered by 4 tests (> in_stock, > sold_out, > stock'fails, the expiry of `within`)
                   1 fault schedule recorded (seed 0x5e1d)
 Contracts         none declared
 Oracles           rustc ownership projection agrees
@@ -823,12 +823,28 @@ conditional loaded = load_customer(id):
         try_later(loaded.failure.retry_after)
 ```
 
-**Faults are not failures.** A violated contract, arithmetic overflow, an exhausted allocator, a reached `todo`, or a
-failed `assert` is a *fault*, which means a bug. Faults:
+**Faults are not failures.** A violated contract, arithmetic overflow, an exhausted allocator, a reached `todo`, a
+failed `assert`, or a reached `fail not_reachable` or `fail not_implemented` is a *fault*, which means a bug. Faults:
 
 - do not appear in signatures;
 - cannot be caught by ordinary code;
 - end the enclosing task scope, which its supervision policy then handles (§ 3.8).
+
+**A path that cannot be taken says so.** `fail not_reachable` ends a path that the author declares cannot be taken, in
+the branch that would take it. `fail not_implemented` ends a path that is not written yet. Neither is a failure case:
+the function does not declare it, and no caller can handle it.
+
+- What reaching one does is a setting of the build, as it is for an exhausted allocator: `faults: terminate` ends the
+  process, and `faults: abort` ends the enclosing transaction and rolls it back, in a runtime that can (§ 3.9). A
+  build has the setting, or it does not compile.
+- The compiler tries to prove each `fail not_reachable`. What it proves costs nothing at run time; what it cannot prove,
+  it checks there, and lists, as it lists unproven contracts (§ 3.11).
+- `assert name = (predicate)` is the same declaration for a fact rather than a branch: it is `fail not_reachable`
+  wherever the predicate does not hold.
+- A `fail not_implemented` may ship, in a release build as in any other: partly written code can be released and its
+  written paths tested, while the path that is not written yet faults, as the build's setting says, if it is ever
+  taken. Its place is listed by `y status` and shown in the review packet (§ 3.16). This is what sets it apart from
+  `todo`, which a release build rejects where an entry point can reach it.
 
 A fault report carries:
 
@@ -847,7 +863,9 @@ This proposal restores the rule and extends it to every predicate in the languag
 | --- | --- |
 | Condition, two ways | `if empty = items.is_empty():`, then `else has_items:` |
 | Choice, more than two ways | `conditional compared = items[middle]:`, then `condition compared.found = (compared == target):`, …, `else compared.go_left:` |
-| Loop | `while searching = (low <= high):`, then `else exhausted:` |
+| Loop | `while searching = (low <= high):`, then `else never_searched:`, for when it never runs |
+| Loop over a list | `for line in lines:`, then `else no_lines`, for when there is nothing to go over |
+| Choice by order | `compare budget = cost with left:`, then `condition budget.affordable = less:`, `condition budget.spent = (equal or greater):` |
 | Precondition, guarantee | `where positive = (amount > 0isk)`, `ensures debited = (...)` |
 | Invariant, constraint | `invariant departs_after_arrival = (...)`, `where positive = (value > 0)` |
 | Assertion | `assert charged_once = (charges.committed().count() == 1)` |
@@ -859,9 +877,16 @@ This proposal restores the rule and extends it to every predicate in the languag
 - **`else` always has a name of its own:** `else has_items:`. The name is bound to `true` when the fall-through branch
   runs, so tests, traces, debuggers and logs can say which branch ran, as for every other branch. An `else` without a
   name does not compile (the toolchain's rule, language reference § 7).
-- **Every outcome of every decision is a named branch.** An `if` always ends in a named `else` block, and a `while`
-  has one too, which runs when the loop ends, as Python's does: `while searching = (low <= high):`, then
-  `else exhausted:`. A decision with an unnamed outcome does not compile.
+- **Every outcome of every decision is a named branch.** An `if` always ends in a named `else` block. A decision with
+  an unnamed outcome does not compile.
+- **A loop names the case in which it never runs.** `for line in lines:` ends in `else no_lines`, and `while searching
+  = (low <= high):` in `else never_searched`. An empty list, or a condition false from the start, is the boundary that
+  code most often forgets; Y makes it a decision the author names.
+  - The `else` may be left out only where the compiler proves that the loop runs: over a range or a list of constants,
+    or a list whose count a precondition, an `ensures`, a refined type or an earlier branch bounds.
+  - An `else` with nothing to do is a bare line, with no colon and no block: `else no_lines`. It says that the author
+    has thought of the case. An `else` that does something has a block: `else no_lines:`.
+  - A loop's `else` does not run when the loop ends, as Python's does. Code that runs after the loop follows it.
   - Each branch is a line of its own: Y never puts two statements on one line, so the name of the other outcome cannot
     ride on the header.
   - Code that follows a decision usually belongs in its `else` block (`else in_stock:` in § 0), so the block is never
@@ -886,13 +911,34 @@ This proposal restores the rule and extends it to every predicate in the languag
     twice. Evaluating the value once, under the label, is the fix. Where the repeat is intended, the author
     suppresses the error on that line with an inline linter directive, `-- lint: allow repeated_call because "…"`,
     which a review shows.
-  - A test covers a condition as it covers a branch, by its full name: `load#loaded.new_visitor` (§ 3.14).
-- A `for` loop is named by its variable. Inside nested loops, `break` and `continue` must name their loop:
-  `break line`.
+  - A test covers a path through a condition by the condition's full name: `load > loaded.new_visitor` (§ 3.14).
+- **`compare` chooses by order.** `compare budget = moves.count() with left:` evaluates both sides once and compares
+  them. Each condition names one order, or two joined by `or`: `condition budget.short = less:`, `condition
+  budget.spent = (equal or greater):`, and `else budget.name:` takes the rest. Every order is covered exactly once. There
+  is no three-way comparison operator: `compare` is the decision for it, and gives each order a name.
+
+**Hidden outcomes are named by the name that is there.** Some decisions have more ways to come out than their branches
+show. Each of those ways is an outcome too, named by annotating the name of the branch it falls on with `'`:
+
+- **A comparison of ordered values** (numbers, durations, instants) has three ways to come out: less, equal and greater.
+  `if short = (count < limit):` … `else enough:` has the outcomes `short`, `enough'eq` and `enough'gt`. A part that is
+  the only one possible is not written: `short` can only be `'lt`. A part the types rule out is no outcome at all: an
+  unsigned count is never less than 0. An `equal` is where most off-by-one errors live, which is why it gets a name.
+- **`and` and `or`** split by the operand at which evaluation stopped: `if open = (on_board(to) and is_free(to)):` …
+  `else blocked:` has `open`, `blocked'1` and `blocked'2`. On the branch where every operand was evaluated, their
+  comparisons' parts are written by position: `due'2eq`.
+- **A condition of `compare` that covers two orders** splits by them: `budget.spent'eq`, `budget.spent'gt`.
+- **A call with `or fail`** has a way out of the function at that call: `drawing'fails`, named by the name the statement
+  binds, or by the call (`write_line'fails`), and numbered when a function has more than one by that name
+  (`write_line'2'fails`).
+- **A loop** ran once or more than once: `line` and `line'many`.
+- A `for` loop is named by its variable, which also names its passes (below). Inside nested loops, `break` and
+  `continue` must name their loop: `break line`.
 - There is no `loop` and no `while true`.
 
 **What the names are for.** Each name becomes part of a stable address: `shop.checkout.holds.hold_and_charge#sold_out`,
-`#in_stock`, `#hold_one_unit`. Those addresses are what:
+`#in_stock`, `#hold_one_unit`. Strung together in the order a call passes through them, the names are the call's
+*path*: `hold_and_charge > in_stock` (§ 3.14). Those addresses and paths are what:
 
 - tests declare they cover (§ 3.14);
 - production traces record, when sampled;
@@ -929,13 +975,15 @@ function position_of(target, items) returns position:
                     return position = optional.none
                 else compared.go_left:
                     high := middle.previous()
-        else exhausted:
-            return position = optional.none
+        else never_searched:
+            -- A list that is not empty has its first index no later than its last.
+            fail not_reachable
+        return position = optional.none
 ```
 
 `first_index` and `last_index` require a list that is not empty, and `previous` an index past the first. The
 branches `has_items` and `compared.go_left` already establish both, so the calls need no checks of their own (§ 3.3,
-narrowing). Every way the search can end is a named branch.
+narrowing). Every way the search can end is a named branch, and the one way it cannot is declared.
 
 The parameter is a `sorted_list`, not a `list` with a `where sorted` precondition. Where a property can be carried by
 a type, Y prefers the type (§ 1.5, rule 2).
@@ -1516,11 +1564,11 @@ Tests are part of the language, because the compiler must know what a test claim
 - The tests for `src/shop/checkout.y` live in `src/shop/checkout.test.y`. That path is computed from the module, never
   searched for.
 - A test file belongs to its module, so it may use private declarations. It may not reach into a function's locals, as
-  YAPL's tests could. Tests address a function through its named outcomes and its faults, so they survive refactoring
-  of its body.
+  YAPL's tests could. Tests address a function through its paths and its faults, so they survive refactoring
+  of its body that keeps its decisions.
 
-**Shape.** A test has a documented purpose, a `covers` list, and fixed sections in a fixed order. Only `when` and
-`then` are mandatory:
+**Shape.** A test has a documented purpose, the one path it covers, if any, and fixed sections in a fixed order. Only
+`when` and `then` are mandatory:
 
 | Section | Holds |
 | --- | --- |
@@ -1545,17 +1593,52 @@ No `assert` keyword is needed there, because the section holds nothing else.
 
 - `assert name = …` stays the statement for a check inside ordinary code, where its failure is a fault (§ 3.4).
 
-**Coverage is declared, then verified.**
+**Coverage is of execution paths, declared, then verified.** Covering each outcome of each decision on its own misses
+the bugs that live in their combinations: an empty list followed by a division by its count, a failure on the second
+pass of a loop. Y tests paths.
 
-- A function's *outcomes* are the named branches of every decision (`f#sold_out` and `f#in_stock`; in an `if` with an
-  `else` block, the block's own name, `f#has_items`), every named `condition` (`f#loaded.new_visitor`), and every case of its
-  failure type, written with its type (`f!failure_type.case`).
-- A test lists the outcomes it covers. The runner fails the test if it did not actually reach every one of them.
-- A test contributes coverage only for what it declares. This is the April 2026 rule, and it keeps coverage an auditable
+- A function's *paths* are the sequences of named outcomes one call can pass through, from its start to a `return`, a
+  `fail` or its end, with the hidden outcomes of § 3.5. A path is written as breadcrumbs from the function's name:
+  `own_pieces > placed'many > mine`. A function with no decisions has one path, its name.
+- **A loop contributes how often it ran, and the path of one pass:** the pass that left the loop, by `return` or `fail`,
+  or else any pass, followed by what comes after the loop. Every way a pass can go is then a path, without a path for
+  every sequence of passes.
+- **What paths do not see is the order of passes.** A loop whose second pass goes wrong only after a first pass that
+  went a particular way (a running total that a first pass made negative, an element removed on one pass and read on
+  the next) has a path for each pass, `item'many > negative` and `item'many > positive`, but no path for "positive,
+  then negative". Path coverage does not ask for that sequence, and is not evidence that it was tried. Two things
+  bring it under coverage:
+  - Name the state that one pass leaves for the next as a decision in the body: `if overdrawn = (total < 0):` makes
+    "a pass that starts overdrawn" a path of its own, which a test must then take.
+  - Move the body into a function of its own, whose parameters are the state a pass starts from. Each of its paths is
+    then a pass starting from a state the test chooses, and the loop keeps only the paths of how often it ran.
+
+  A `'many` path is taken only by a test whose loop runs at least twice, so a test of it always crosses one pass into
+  the next; what it checks there is up to the test.
+- **What a path shows is known on the rest of it**: a branch taken, a condition found false, a precondition, a called
+  function's `ensures`, a refined type, an `assert`, a count of a list of constants. A path that this contradicts is not
+  a path. That is what the compiler's proof that a loop runs (§ 3.5) is made of.
+- A path that ends in `fail not_reachable` or `fail not_implemented` needs no test.
+- **A test covers at most one path**, and names it: `covers own_pieces > placed'many > mine`. Its `when` calls that
+  path's function, and the runner fails the test if the call did not take the path. A test is then about one way
+  through one function, its name and its checks say what that way does, and a failing test names the path that broke.
+  Every outcome lies on some path, so covering every path covers every outcome too, and a test names only a path.
+- A test may cover no path. It then checks what paths do not tell apart, such as which failure a single `or fail` call
+  passes on, or a whole run through several functions; it counts toward no function's coverage.
+- A test contributes coverage only for the path it declares. This is the April 2026 rule, and it keeps coverage an auditable
   claim rather than an accident.
-- **A release build requires every outcome of every function to be covered by at least one test that declares it.**
-  The toolchain reports outcomes that nothing reaches, and outcomes reached only incidentally by tests that do not
-  declare them. These are knowledge-driven development's 🙈 and 🙉, computed rather than hand-written.
+- **A release build requires every path of every function to be covered by at least one test that declares it, or to
+  end in `fail not_reachable` or `fail not_implemented`.** The toolchain reports paths that nothing takes, and paths
+  taken only by tests that do not declare them. These are knowledge-driven development's 🙈 and 🙉, computed rather
+  than hand-written.
+- **A function's paths are its own**, never multiplied by its callers' or its callees'. A call is one step of the
+  caller's path, however many paths the callee has; tools may still join them, to show the paths of a call through
+  several functions, but coverage and the limit below count each function alone.
+- **A function has fewer than 100 paths.** Paths grow with the product of a function's decisions: ten independent
+  `if`s in a row are 1,024 paths. `y lint` reports a function with 100 paths or more as `too_many_paths`. The limit is a
+  setting of the project's lint configuration, and one function may go past it as any lint is allowed, `-- lint: allow
+  too_many_paths because "…"`, which a review shows. The way to keep paths few is the way to keep functions readable:
+  when a function has many, its parts become functions of their own.
 
 **Test data.**
 
@@ -1600,7 +1683,9 @@ The number of claims in a module is a number worth watching. It should be small 
 Knowledge-driven development (August 2026) moved the backlog out of trackers and into the documents a reader opens
 anyway. Y moves the part of it that concerns code into the code, where the compiler can see it.
 
-- **`todo("what is missing")`** is a typed hole.
+- **`fail not_implemented`** ends a path that is not written yet (§ 3.4). It needs no test, `y status` lists it, and,
+  unlike `todo`, it may be released: the rest of the function is written, tested and usable, and that one path faults.
+- **`todo("what is missing")`** is a typed hole, for an expression rather than a path.
   - It type-checks as whatever the context needs.
   - It faults if reached.
   - It is allowed in development and test builds, and rejected in a release build if reachable from an entry point.
@@ -1615,7 +1700,7 @@ Together with claims and the coverage gate, this gives Y ai.lang's fifth invaria
 *everything claimed is provable or explicitly missing*.
 
 - A contract is either proven, or demoted and reported.
-- An outcome is either covered, or reported.
+- A path is either covered, declared not reachable or not implemented, or reported.
 - A requirement linked by `satisfies` either has code, or is listed without it.
 - An unfinished piece of work either compiles as a `todo` or a `gap`, or it does not compile.
 
@@ -1759,7 +1844,7 @@ September introduced this for hot swap (§ 5). This proposal uses it first for r
 2. **Authority widened** anywhere. Always shown.
 3. **Public signature changes**: types, failure sets, contracts. Always shown.
 4. **Transactions, commands, schemas and migrations** added or changed. Always shown.
-5. **Contracts demoted** to runtime checks, **gaps** added, **outcomes** left uncovered. Always shown.
+5. **Contracts demoted** to runtime checks, **gaps** added, **paths** left uncovered. Always shown.
 6. **New public declarations**, bodies included. Always shown.
 7. **Body-only changes** under unchanged compatibility signatures, fully covered and agreed by the oracles. **Sampled.**
    The probability of a body being shown rises with its size, with the authority reachable from it, and with the
@@ -1934,7 +2019,7 @@ premise changed, or because the iteration that tried them showed their cost. The
 | Two kinds of absence (`nada`/`nothing` and `undefined`) | Toolchain → April 2026 | `optional<t>` and definite initialisation | Definite initialisation makes "not yet provided" unrepresentable |
 | `afterCommit` | September 2026 | `enqueue`; buffered telemetry | Redundant if durable, a bug if not |
 | Module-level `shared` declarations | September 2026 | `shared<t>` values passed down | Global state by another name |
-| Tests reading a function's locals | YAPL (2024) | Named outcomes and fault injection | Couples tests to implementation |
+| Tests reading a function's locals | YAPL (2024) | Paths of named outcomes, and fault injection | Couples tests to implementation |
 
 **Syntax for policy, and scope beyond a language**
 
@@ -2029,7 +2114,7 @@ declarations   module from import public facet function returns fails structure 
                implementation constant constants is unit schema migrate to command handler workflow test derived rule
                transient me
 contracts      where ensures invariant old assert
-control        if else conditional condition for in while break continue return fail
+control        if else conditional condition compare with for in while break continue return fail
 bindings       mutable lambda nested captures injected inject arena compile
 concurrency    within task supervise detach forever uncancellable
 transactions   atomic retry orelse enqueue submit
@@ -2038,7 +2123,8 @@ tests          covers given inject faults when then fake
 observability  log metric
 operators      and or not
 values         true false
-contextual     as key reads reverse policy compensate park on, and the field names of
+contextual     as key reads reverse policy compensate park on, less equal greater (in `compare`), not_reachable
+               not_implemented (after `fail`), and the field names of
                `policy`, `supervise` and `faults` clauses (reserved only inside those clauses)
 ```
 

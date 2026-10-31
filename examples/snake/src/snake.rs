@@ -4,7 +4,8 @@
 //! of a `conditional` on its `match` arm or its `if`.
 //! `play` may suspend, because `window.next_frame()` may: Y has no `async`, and Rust's colouring makes it an `async fn`.
 
-use y_runtime::{list, require, Clock, Forever, Random};
+use std::time::Instant;
+use y_runtime::{ensure, list, require, Clock, Forever, Random};
 use y_window::{Colour, Key, Window};
 use self::{drawing::*, rules::*, setup::*};
 
@@ -89,6 +90,7 @@ pub mod setup {
             standing: Outcome::Playing,
         };
         place_food(&mut fresh, random);
+        ensure(fresh.standing == Outcome::Playing, "snake::new_game#playing");
         fresh
     }
 }
@@ -104,11 +106,16 @@ pub mod rules {
     /// - `pressed`: the key the player pressed.
     /// - Returns the way the snake will move next.
     pub fn turned(game: &Game, pressed: Key) -> Direction {
+        // y: each condition's `or` is an arm for each of its operands, named by the operand's place
         match pressed {
-            Key::Up | Key::W => unless_reversing(game, Direction::Up), // y: #arrow.up
-            Key::Down | Key::S => unless_reversing(game, Direction::Down), // y: #arrow.down
-            Key::Left | Key::A => unless_reversing(game, Direction::Left), // y: #arrow.left
-            Key::Right | Key::D => unless_reversing(game, Direction::Right), // y: #arrow.right
+            Key::Up => unless_reversing(game, Direction::Up), // y: #arrow.up'1
+            Key::W => unless_reversing(game, Direction::Up), // y: #arrow.up'2
+            Key::Down => unless_reversing(game, Direction::Down), // y: #arrow.down'1
+            Key::S => unless_reversing(game, Direction::Down), // y: #arrow.down'2
+            Key::Left => unless_reversing(game, Direction::Left), // y: #arrow.left'1
+            Key::A => unless_reversing(game, Direction::Left), // y: #arrow.left'2
+            Key::Right => unless_reversing(game, Direction::Right), // y: #arrow.right'1
+            Key::D => unless_reversing(game, Direction::Right), // y: #arrow.right'2
             _ => game.wanted, // y: #arrow.other
         }
     }
@@ -193,8 +200,8 @@ fn on_board(place: &Cell) -> bool {
 /// - Returns the cells.
 fn free_cells(game: &Game) -> Vec<Cell> {
     let mut found = Vec::new();
-    for row in 0..board::ROWS {
-        for column in 0..board::COLUMNS {
+    for row in 0..board::ROWS { // y: #row
+        for column in 0..board::COLUMNS { // y: #column
             let place = Cell { column, row };
             if place == game.head || game.tail.contains(&place) { // y: #taken
                 continue;
@@ -271,7 +278,7 @@ pub mod drawing {
         window.clear(palette::BACKGROUND);
         window.fill(0, 0, layout::WIDTH, board_height, palette::BOARD);
         fill_cell(&game.food, palette::FOOD, window);
-        for part in &game.tail {
+        for part in &game.tail { // y: #part, else #no_tail
             fill_cell(part, palette::BODY, window);
         }
         fill_cell(&game.head, palette::HEAD, window);
@@ -305,28 +312,49 @@ pub mod window_play {
         let mut highest = 0;
         let mut last_step = clock.now();
         let mut quitting = false;
-        while !quitting && !window.close_requested() { // y: #open
+        while !quitting && !window.close_requested() { // y: #open, else #closed_at_once
             let keys = window.keys_pressed();
             let now = clock.now();
             quitting = keys.contains(&Key::Escape);
-            for pressed in &keys {
-                game.wanted = turned(&game, *pressed);
-            }
             if game.standing != Outcome::Playing && keys.contains(&Key::Space) { // y: #again
                 game = new_game(random);
                 last_step = now;
             } else { // y: #going_on
-                while game.standing == Outcome::Playing && now - last_step >= game_rules::STEP_TIME { // y: #due
-                    advance(&mut game, random);
-                    last_step += game_rules::STEP_TIME;
-                }
-                // y: #caught_up, the `else` of `while due`: the loop has no `break`, so it runs when the loop ends
+                steer(&mut game, &keys);
+                last_step = catch_up(&mut game, last_step, now, random);
                 highest = highest.max(game.eaten);
             }
             draw(&game, highest, window);
             window.next_frame(forever).await; // y: forever because "a hidden window shows no frames, and the game waits until it is shown"
         }
-        // y: #closed, the `else` of `while open`: the loop has no `break`, so it runs when the loop ends
         highest
     }
 }
+
+/// Turns the snake the way each key pressed points, in the order they were pressed.
+///
+/// - `game`: the game, which changes.
+/// - `keys`: the keys pressed.
+fn steer(game: &mut Game, keys: &[Key]) {
+    for pressed in keys { // y: #pressed, else #no_keys
+        game.wanted = turned(game, *pressed);
+    }
+}
+
+/// Moves the snake one step for each step time that has passed since its last step, so that a slow frame does not
+/// slow the snake.
+///
+/// - `game`: the game, which changes.
+/// - `last_step`: when the snake last stepped.
+/// - `now`: the time now.
+/// - `random`: the Y `injected` parameter.
+/// - Returns when the snake last stepped once it has caught up.
+fn catch_up(game: &mut Game, last_step: Instant, now: Instant, random: &mut Random) -> Instant {
+    let mut step = last_step;
+    while game.standing == Outcome::Playing && now - step >= game_rules::STEP_TIME { // y: #due, else #not_due
+        advance(game, random);
+        step += game_rules::STEP_TIME;
+    }
+    step
+}
+

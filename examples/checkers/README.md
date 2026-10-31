@@ -79,11 +79,11 @@ than 100, and all of it times the level's weight. A win at the Club level in 30 
 
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
-| Y source | `y/src/checkers.y`, `y/src/checkers.test.y`, `y/src/main.y` | 1232, 447, 23 | hand |
-| Bare bodies | `bare/src/checkers.brs`, `bare/src/checkers/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 1097, 364, 30, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
-| Constraint files | `bare/src/*.constraints.json` (146 subjects, 83 clauses) | 1342 | `strip`, plus the clauses and status the Y lowering adds, then `bare-rust libfmt` |
-| Y facts | `bare/y-facts.json` | 1450 | the same, from the Y source and the bare bodies |
-| Rust | `src/checkers.rs`, `src/checkers/tests.rs`, `src/main.rs`, `src/lib.rs` | 1097, 364, 30, 3 | `bare-rust weave`, which gives back the hand-written Rust exactly |
+| Y source | `y/src/checkers.y`, `y/src/checkers.test.y`, `y/src/main.y` | 1300, 2274, 23 | hand |
+| Bare bodies | `bare/src/checkers.brs`, `bare/src/checkers/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 1146, 1703, 30, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
+| Constraint files | `bare/src/*.constraints.json` (311 subjects, 103 clauses) | 2199 | `strip`, plus the clauses and status the Y lowering adds, then `bare-rust libfmt` |
+| Y facts | `bare/y-facts.json` | 3540 | the same, from the Y source and the bare bodies |
+| Rust | `src/checkers.rs`, `src/checkers/tests.rs`, `src/main.rs`, `src/lib.rs` | 1146, 1703, 30, 3 | `bare-rust weave`, which gives back the hand-written Rust exactly |
 
 The window, which now also draws circles, comes from [`../y-window`](../y-window/), and the randomness from
 [`../y-runtime`](../y-runtime/).
@@ -103,6 +103,10 @@ The window, which now also draws circles, comes from [`../y-window`](../y-window
 | `(square.row * board.size + square.column + 1).to_uint32()` | `number::to_uint32(…)` | — | a call into `y_runtime::number`, which faults below zero, not an `as` cast |
 | `game.turns.divided_rounding_up(by: 2)` | `game.turns.div_ceil(2)` | — | the same |
 | `conditional shown = standing(game):` with `condition shown.your_move = ((shown == outcome.playing) and (game.to_move == side.red)):` | a `match` arm with a guard | `decisions`, kind `conditional` | the same |
+| `compare ranked = values.at_number(option) with best:` with `condition ranked.top = equal:`, `condition ranked.lower = less:` and `condition ranked.above = greater:` (Y § 3.5) | `match a.cmp(&b)`, an arm per `Ordering`, each marked `// y: #ranked.…` | `decisions`, kind `compare` | the same |
+| `fail not_reachable` under `ranked.above` and `ties.none`, orders the values cannot stand in | `not_reachable("checkers::best_sampled#ranked.above")` | — | a fault |
+| `for placed in own_pieces(game):` with a bare `else no_pieces`, the case in which the loop never runs | the loop, marked `// y: #placed, else #no_pieces` | `decisions`, kind `for` | the same |
+| `function directions_of(piece) returns ways ensures several = (ways.count() >= 2):` | `ensure(list::count(ways) >= 2, "checkers::directions_of#several")` before the return | `ensure several : size(result) >= 2`, status `lifted` | a run-time check whose failure is a fault; the path enumeration knows from it that a loop over the directions runs more than once |
 | `window.circle(x:, y:, radius:, colour:)` | the same, on `Window` | — | Macroquad's `draw_circle`, or nothing in a fake window |
 
 ## What had to be assumed
@@ -122,17 +126,20 @@ Beyond what the earlier examples assumed:
 
 ## Checks
 
-- **`bare-rust weave`** of `bare/`: 4 files woven, 0 weave errors, 67 `mut` derived, 0 holes undetermined, 0 warnings.
+- **`bare-rust weave`** of `bare/`: 4 files woven, 0 weave errors, 159 `mut` derived, 0 holes undetermined, 0 warnings.
   The woven Rust is identical to the hand-written Rust it was stripped from.
-- **`cargo test`:** the 25 lowered Y tests pass. They cover the rules (steps, forced captures, chains of jumps, crowning,
-  kings, winning, losing, drawing), the scoring, the worth of a position, both parts of the computer's search, the
-  drawing, and play through a fake window: choosing a level, selecting a man, moving him, the computer's reply, and
-  Space after a game.
+- **`cargo test`:** the 184 lowered Y tests pass, each covering one path. They cover the rules (steps, forced captures,
+  chains of jumps, crowning, kings, winning, losing, drawing), the scoring, the worth of a position, both parts of the
+  computer's search, the drawing, and play through a fake window: choosing a level, selecting a man, moving him, the
+  computer's reply, and Space after a game.
 - **`cargo clippy --all-targets`:** no warnings, here and in `../y-window` and `../y-runtime`.
-- **Coverage:** the tests cover all 104 outcomes of the module: the named branches and conditions of its 43 decisions.
-  It documents no failure cases. Each test was also run alone with every decision instrumented, to check that it
-  reaches each outcome it declares.
-- **`tools/bare-rust/tests/y_examples.rs`** runs the same checks on Checkers as on the other examples, the 17 copies
+- **Coverage:** the tests cover all 180 execution paths of the module that need a test (Y § 3.14). Its 51 functions
+  have 184 paths through 68 decisions; 4 end in `fail not_reachable`. Each test was also run alone with every decision
+  and loop instrumented, to check that it takes the path it declares. The searches are tested with small budgets of
+  checks (1 to 2,100), chosen so that each path of the search is taken.
+- **One path per test:** each of the 184 tests covers one path, and its `when` is one call of that path's function
+  (Y § 3.14). Where two tests cover the same path, each checks something the other does not.
+- **`tools/bare-rust/tests/y_examples.rs`** runs the same checks on Checkers as on the other examples, the 10 copies
   among them.
 - **The window itself:** under a virtual X display, the game showed the levels, started a game at the Club level, marked
   the squares a clicked man could move to, moved him, showed the computer's reply with its squares marked, and wrote the
@@ -142,7 +149,13 @@ Beyond what the earlier examples assumed:
 
 - **A budget is a parameter that changes.** The checks are a `mutable` parameter of the recursive search, which every
   call spends from; it lowers to a `&mut u32`, and the constraint file says that it is all the search changes.
-- **Value semantics cost copies in Rust.** Most of the 17 copies are moves: a move taken from a list to apply, or to
+- **Value semantics cost copies in Rust.** Most of the 10 copies are moves: a move taken from a list to apply, or to
   return, while the list still holds it. Y passes values; Rust must `clone` where both go on being used.
-- **Nothing needed a new kind of fact.** Recursion, copies, suspensions and claims all fit the kinds the earlier examples
+- **Path coverage asks for smaller functions.** `draw` had a path for each way its loops over the board, the pieces and
+  the marks combine; it is now `draw_board`, `draw_pieces` and `draw_marks`, each with a few. `choose_level` and
+  `play_game` hand the clicks of a frame to `level_clicked` and `act_on_clicks` for the same reason.
+- **The facts have to come from somewhere.** A loop over a piece's directions never fails to run, but nothing in the
+  code said so until `directions_of` ensured it; where a value is known only by the program's logic, as the best of a
+  list of values being in the list, `compare` names every order and `fail not_reachable` closes the impossible ones.
+- **Nothing needed a new kind of fact,** beyond the `paths` that all the examples now list. Recursion, copies, suspensions and claims all fit the kinds the earlier examples
   use.

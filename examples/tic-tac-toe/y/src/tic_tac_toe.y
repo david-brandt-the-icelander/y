@@ -113,6 +113,9 @@ public facet moves:
                 found := square
             else no_better:
                 continue
+        else no_open:
+            -- A game that is not over has an empty square.
+            fail not_reachable
         return chosen = found
 
 
@@ -186,9 +189,10 @@ win, zero for a draw, and less than zero for a loss. A win is worth more the soo
 
 game: The game, as game.
 
-value: The value, as int32.
+value: The value, from -10 to 10, as int32.
 --------------------------------------------------------------------------------------------------------------------------------
-function value_of(game) returns value:
+function value_of(game) returns value
+        ensures bounded = ((value >= -10) and (value <= 10)):
     open = open_squares(game)
 
     conditional now:
@@ -252,8 +256,10 @@ public facet console_play:
 
 
     ----------------------------------------------------------------------------------------------------------------------------
-    Plays one game at the console, the player's crosses against the computer's noughts, until a player has three in a
-    row or the board is full. The player moves first.
+    Plays a game at the console, the player's crosses against the computer's noughts, until a player has three in a row
+    or the board is full.
+
+    started: The game as it starts, as game.
 
     console: Where the game is shown and the moves are read, as console.
     forever: The right to wait for the player as long as they take, as forever.
@@ -261,39 +267,80 @@ public facet console_play:
     fails play_error.input_closed: The console closed before the game ended.
     fails play_error.console: The console could not be read or written.
     ----------------------------------------------------------------------------------------------------------------------------
-    function play(injected console, injected forever) fails play_error:
-        mutable game = new_game()
+    function play(started, injected console, injected forever) fails play_error:
+        mutable game = started
         console.write_line("Tic-tac-toe: you are X, and move first. Three in a row wins.") or fail
 
         while playing = (not over(game)):
             if persons_turn = (game.to_move == mark.cross):
-                picture = shown(game)
-                console.write_line(picture) or fail
-                console.write("Your move (a square's number): ") or fail
-                typed = console.read_line() forever because "a player may think for as long as they like" or fail
-
-                if closed = (typed == optional.none):
-                    fail play_error.input_closed
-                else line_read:
-                    conditional attempted = read_move(game, typed):
-                        condition attempted.valid = (attempted == result.ok):
-                            place(mutable game, attempted.value)
-                        condition attempted.not_a_move = (attempted == result.err(move_error.not_a_number)):
-                            console.write_line("Type the number of a square, from 1 to 9.") or fail
-                        condition attempted.no_square = (attempted == result.err(move_error.no_such_square)):
-                            console.write_line("There is no such square.") or fail
-                        condition attempted.taken = (attempted == result.err(move_error.taken)):
-                            console.write_line("That square is taken.") or fail
+                persons_move(mutable game) or fail
             else computers_turn:
                 chosen = computer_move(game)
                 place(mutable game, chosen)
                 console.write_line("The computer plays {chosen}.") or fail
-        else game_over:
-            picture = shown(game)
-            console.write_line(picture) or fail
-            found = winner(game)
+        else over_at_once
+        announce(game) or fail
 
-            if drawn = (found == optional.none):
-                console.write_line("The board is full. A draw.") or fail
-            else won:
-                console.write_line("{found} has three in a row, and wins.") or fail
+
+--------------------------------------------------------------------------------------------------------------------------------
+Shows the board and reads the player's move, then makes it, or says what is wrong with what they typed.
+
+game: The game, which changes when the move is made, as game.
+
+console: Where the board is shown and the move is read, as console.
+forever: The right to wait for the player as long as they take, as forever.
+
+fails play_error.input_closed: The console closed before the player moved.
+fails play_error.console: The console could not be read or written.
+--------------------------------------------------------------------------------------------------------------------------------
+function persons_move(mutable game, injected console, injected forever) fails play_error:
+    picture = shown(game)
+    console.write_line(picture) or fail
+    console.write("Your move (a square's number): ") or fail
+    typed = console.read_line() forever because "a player may think for as long as they like" or fail
+
+    if closed = (typed == optional.none):
+        fail play_error.input_closed
+    else line_read:
+        conditional attempted = read_move(game, typed):
+            condition attempted.valid = (attempted == result.ok):
+                place(mutable game, attempted.value)
+            else attempted.invalid:
+                console.write_line(complaint(attempted.failure())) or fail
+
+
+--------------------------------------------------------------------------------------------------------------------------------
+What the game says to what is not a move.
+
+error: Why it is not, as move_error.
+
+said: The line to write, as string.
+--------------------------------------------------------------------------------------------------------------------------------
+function complaint(error) returns said:
+    conditional wrong = error:
+        condition wrong.not_a_move = (wrong == move_error.not_a_number):
+            return said = "Type the number of a square, from 1 to 9."
+        condition wrong.no_square = (wrong == move_error.no_such_square):
+            return said = "There is no such square."
+        condition wrong.taken = (wrong == move_error.taken):
+            return said = "That square is taken."
+
+
+--------------------------------------------------------------------------------------------------------------------------------
+Shows the board as the game ended, and how it ended.
+
+game: The game, as game.
+
+console: Where it is shown, as console.
+
+fails console_error: The console could not be written.
+--------------------------------------------------------------------------------------------------------------------------------
+function announce(game, injected console) fails console_error:
+    picture = shown(game)
+    console.write_line(picture) or fail
+    found = winner(game)
+
+    if drawn = (found == optional.none):
+        console.write_line("The board is full. A draw.") or fail
+    else won:
+        console.write_line("{found} has three in a row, and wins.") or fail

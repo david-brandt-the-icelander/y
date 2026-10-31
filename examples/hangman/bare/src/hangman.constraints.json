@@ -302,6 +302,56 @@
         { "kind": "effects", "text": "effects only console, random", "source": "y/src/hangman.y:256" },
         { "kind": "effects", "text": "no clock", "source": "y/src/hangman.y:256" }
       ]
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::show_turn",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
+        {
+          "name": "console",
+          "type": "ref<Console>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "result": { "type": "()", "fails": "ConsoleError" },
+      "clauses": [
+        { "kind": "effects", "text": "effects only console", "source": "y/src/hangman.y:285" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/hangman.y:285" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/hangman.y:285" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::reply",
+      "params": [
+        {
+          "name": "guessed",
+          "type": "ref<Result<Verdict, GuessError>>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "typed", "type": "ref<text>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "text" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:303" }]
+    },
+    {
+      "kind": "function",
+      "name": "hangman_example::hangman::show_end",
+      "params": [
+        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
+        {
+          "name": "console",
+          "type": "ref<Console>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "result": { "type": "()", "fails": "ConsoleError" },
+      "clauses": [
+        { "kind": "effects", "text": "effects only console", "source": "y/src/hangman.y:326" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/hangman.y:326" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/hangman.y:326" }
+      ]
     }
   ]
 }
