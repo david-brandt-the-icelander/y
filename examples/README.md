@@ -8,6 +8,9 @@ The tests of every example cover every execution path of its module that needs a
 through each function, named by the outcomes along it, such as `computer_move > winnable > number'many > winning`.
 `tools/bare-rust/tests/y_examples.rs` enumerates the paths from the Y source and checks that the tests cover them.
 
+After changing an example's Y or Rust, remake its `bare/` files with [`../tools/paths/rebare.sh`](../tools/paths/)
+`<example>`, and check that each test takes the path it claims with `tools/paths/trace.py`.
+
 | Folder | What it is |
 |---|---|
 | [`checkers`](checkers/) | English draughts, in a window drawn with Macroquad, against a computer whose minimax and Monte Carlo searches spend a budget of positions set by the level: recursion that spends a `mutable` budget, constant structures, copies of moves, `compare`, and scoring by level and moves |
