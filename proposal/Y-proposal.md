@@ -1818,8 +1818,10 @@ same either way.
   }
   ```
 
-  [`../examples/y-http`](../examples/y-http/) is this implementation, written by hand before this section existed. The
-  declaration would now settle the small ways it differs, such as whether `get` may change its capability.
+  [`../examples/y-http`](../examples/y-http/) is this implementation, written by hand. The declaration settled one
+  question it had left open. `me` is immutable, so `get` takes `&self`, and a caller that only reads the capability
+  passes it as a shared borrow. A fake service that answers in turn keeps its place in a `RefCell`, because that is
+  the state of the fake world, not of the capability.
 - The implementation lives in the package, in a folder for its backend (`native/rust/`), and is compiled with the code
   the compiler generates. A signature that does not match is a type error in the backend's compiler. The toolchain
   reports it at the Y declaration.

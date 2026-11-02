@@ -37,6 +37,9 @@ def moved(place):
     if not hits and "function " in text:
         head = text.split("(")[0] + "("
         hits = [i for i, l in enumerate(lines(path), 1) if l.startswith(head)]
+    if not hits and len(lines(path)) == len(old[path]):
+        # a line edited in place, in a file that neither gained nor lost lines, keeps its number
+        hits = [int(n)]
     if not hits:
         raise SystemExit(f"{place}: `{text}` is gone")
     return f"{path}:{min(hits, key=lambda i: abs(i - int(n)))}"

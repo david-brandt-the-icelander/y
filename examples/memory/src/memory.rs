@@ -137,7 +137,7 @@ pub mod setup {
     /// - Fails `Unreachable`: OpenMoji did not give a picture.
     /// - Fails `TimedOut`: the pictures took longer than the fetch time to come.
     /// - Fails `NotAPicture`: what OpenMoji gave is not a picture.
-    pub async fn new_game(random: &mut Random, clock: &mut Clock, site: &mut Http) -> Result<Game, SetupError> {
+    pub async fn new_game(random: &mut Random, clock: &mut Clock, site: &Http) -> Result<Game, SetupError> {
         let codes = random.chosen(&faces::CODES, board::PAIRS);
         let mut pictures = Vec::new();
         {
@@ -446,7 +446,7 @@ pub mod window_play {
     /// - `window`, `clock`, `random`, `site`, `forever`: the Y `injected` parameters.
     /// - Returns the best score of the games played.
     /// - Fails `Unreachable`, `TimedOut`, `NotAPicture`: as `new_game` says.
-    pub async fn play(window: &mut Window, clock: &mut Clock, random: &mut Random, site: &mut Http, forever: &Forever) -> Result<u32, SetupError> {
+    pub async fn play(window: &mut Window, clock: &mut Clock, random: &mut Random, site: &Http, forever: &Forever) -> Result<u32, SetupError> {
         show_fetching(window, forever).await;
         let mut game = new_game(random, clock, site).await?;
         let mut highest = 0;

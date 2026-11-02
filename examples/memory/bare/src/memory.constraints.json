@@ -230,7 +230,7 @@
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         { "name": "clock", "type": "ref<Clock>", "access": { "rights": "write", "guarantee": "exclusive" } },
-        { "name": "site", "type": "ref<Http>", "access": { "rights": "write", "guarantee": "exclusive" } }
+        { "name": "site", "type": "ref<Http>", "access": { "rights": "read", "guarantee": "readers" } }
       ],
       "result": { "type": "Game", "fails": "SetupError" },
       "clauses": [
@@ -563,7 +563,7 @@
           "type": "ref<Random>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
-        { "name": "site", "type": "ref<Http>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        { "name": "site", "type": "ref<Http>", "access": { "rights": "read", "guarantee": "readers" } },
         { "name": "forever", "type": "ref<Forever>", "access": { "rights": "read", "guarantee": "readers" } }
       ],
       "result": { "type": "u32", "fails": "SetupError" },

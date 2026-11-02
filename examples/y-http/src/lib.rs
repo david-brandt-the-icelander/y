@@ -4,11 +4,18 @@
 //! It is a crate of its own, apart from `y-runtime`, so that the examples that do not reach the network do not build
 //! an HTTP client. It is only as large as the examples need: it gets text.
 //!
+//! It is the Rust implementation of the native declarations of `standard.http` (Y § 3.18), and has the signatures the
+//! lowering gives them. `get` is declared `function get(path) returns text fails http_error`: its `me` is immutable, so
+//! it takes `&self`. A fake service that answers in turn keeps its place in a `RefCell`, which is the fake world's state
+//! and not the capability's.
+//!
 //! A call to the network may suspend (Y § 3.7), so `get` is an `async fn`. Under Macroquad's executor, which drives
 //! no I/O, it does its work at once, blocking the frame it runs in; the examples call it while setting up, not while
 //! drawing. Every wait is bounded (Y § 3.8): `get` takes the `Deadline` of the `within` it runs in, and fails with
 //! `Within::Expired` when the deadline passes first.
 
+use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::time::Duration;
 use y_runtime::{Deadline, Expired, System, Within};
 
@@ -34,7 +41,7 @@ enum Fake {
     Answer(String),
     /// The paths asked for give these texts in turn; once they run out, every path gives `then`'s status, or the last
     /// text again.
-    Script { texts: std::collections::VecDeque<String>, last: String, then: Option<u16> },
+    Script { texts: RefCell<VecDeque<String>>, last: String, then: Option<u16> },
     /// Every path gives this status.
     Failing(u16),
     /// Every wait expires.
@@ -68,7 +75,7 @@ impl Http {
     /// A fake service for a test, which gives `text` for the first `answers` paths asked for, and then answers every
     /// path with an HTTP status: Y's `fake http(text: …, answers: n, then_status: …)`.
     pub fn fake_failing_after(text: &str, answers: usize, status: u16) -> Http {
-        let texts = std::iter::repeat_n(text.to_string(), answers).collect();
+        let texts = RefCell::new(std::iter::repeat_n(text.to_string(), answers).collect());
         Http { address: String::new(), fake: Some(Fake::Script { texts, last: text.to_string(), then: Some(status) }) }
     }
 
@@ -76,7 +83,7 @@ impl Http {
     /// again: Y's `fake http(texts: …)`.
     pub fn fake_texts(texts: &[&str]) -> Http {
         let last = texts.last().map(|t| t.to_string()).unwrap_or_default();
-        let texts = texts.iter().map(|t| t.to_string()).collect();
+        let texts = RefCell::new(texts.iter().map(|t| t.to_string()).collect());
         Http { address: String::new(), fake: Some(Fake::Script { texts, last, then: None }) }
     }
 
@@ -90,11 +97,12 @@ impl Http {
         Http { address: String::new(), fake: Some(Fake::Expiring) }
     }
 
-    /// Gets the text at a path of the service, such as `/data/color/svg/1F600.svg`, before a deadline.
-    pub async fn get(&mut self, path: &str, deadline: &Deadline) -> Result<String, Within<HttpError>> {
-        match &mut self.fake {
+    /// Gets the text at a path of the service, such as `/data/color/svg/1F600.svg`, before a deadline: Y's
+    /// `function get(path) returns text fails http_error native because "…"`.
+    pub async fn get(&self, path: &str, deadline: &Deadline) -> Result<String, Within<HttpError>> {
+        match &self.fake {
             Some(Fake::Answer(text)) => Ok(text.clone()),
-            Some(Fake::Script { texts, last, then }) => match (texts.pop_front(), then) {
+            Some(Fake::Script { texts, last, then }) => match (texts.borrow_mut().pop_front(), then) {
                 (Some(text), _) => Ok(text),
                 (None, Some(status)) => Err(Within::Failed(HttpError::fake_status(*status))),
                 (None, None) => Ok(last.clone()),
