@@ -47,9 +47,9 @@ async fn entry() -> Result<(), MainError> {
         let mut window = system.window();
         let mut clock = system.clock();
         let mut random = system.random();
-        let mut site = system.http(openmoji::ADDRESS);
+        let site = system.http(openmoji::ADDRESS);
         let forever = system.forever();
-        let best = play(&mut window, &mut clock, &mut random, &mut site, &forever).await?;
+        let best = play(&mut window, &mut clock, &mut random, &site, &forever).await?;
         console.write_line(&format!("Your best score: {best}."))?;
     }
     Ok(())

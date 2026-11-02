@@ -445,7 +445,7 @@ fn a_new_game_deals_two_cards_of_each_picture() {
     let random = Random::seeded(7);
     let clock = Clock::fake(Duration::from_millis(100));
     let site = Http::fake(stand_in::DRAWING);
-    let started = y_window::block_on(new_game(&mut random, &mut clock, &mut site)).expect("when");
+    let started = y_window::block_on(new_game(&mut random, &mut clock, &site)).expect("when");
     let sorted = started.pairs.clone();
     sorted.sort();
     assert!(list::count(&started.pictures) == board::PAIRS, "a_picture_for_each_pair");
@@ -460,7 +460,7 @@ fn a_site_that_fails_fails_the_setup() {
     let random = Random::seeded(7);
     let clock = Clock::fake(Duration::from_millis(100));
     let site = Http::fake_failing(404);
-    let refused = y_window::block_on(new_game(&mut random, &mut clock, &mut site));
+    let refused = y_window::block_on(new_game(&mut random, &mut clock, &site));
     assert!(refused == Err(SetupError::Unreachable { error: HttpError::fake_status(404) }), "unreachable");
 }
 
@@ -469,7 +469,7 @@ fn a_site_too_slow_fails_the_setup() {
     let random = Random::seeded(7);
     let clock = Clock::fake(Duration::from_millis(100));
     let site = Http::fake_expiring();
-    let refused = y_window::block_on(new_game(&mut random, &mut clock, &mut site));
+    let refused = y_window::block_on(new_game(&mut random, &mut clock, &site));
     assert!(refused == Err(SetupError::TimedOut { deadline: Expired::fake() }), "timed_out");
 }
 
@@ -480,7 +480,7 @@ fn what_is_not_a_drawing_fails_the_setup() {
     let clock = Clock::fake(Duration::from_millis(100));
     let site = Http::fake("not a picture");
     let expected = Picture::from_svg("not a picture", layout::PICTURE_SIZE);
-    let refused = y_window::block_on(new_game(&mut random, &mut clock, &mut site));
+    let refused = y_window::block_on(new_game(&mut random, &mut clock, &site));
     assert!(refused == Err(SetupError::NotAPicture { error: expected.expect_err("given") }), "not_a_picture");
 }
 
@@ -490,7 +490,7 @@ fn a_site_that_fails_partway_fails_the_setup() {
     let random = Random::seeded(7);
     let clock = Clock::fake(Duration::from_millis(100));
     let site = Http::fake_failing_after(stand_in::DRAWING, 3, 404);
-    let refused = y_window::block_on(new_game(&mut random, &mut clock, &mut site));
+    let refused = y_window::block_on(new_game(&mut random, &mut clock, &site));
     assert!(refused == Err(SetupError::Unreachable { error: HttpError::fake_status(404) }), "unreachable");
 }
 
@@ -501,7 +501,7 @@ fn a_site_that_gives_a_bad_picture_partway_fails_the_setup() {
     let random = Random::seeded(7);
     let clock = Clock::fake(Duration::from_millis(100));
     let site = Http::fake_texts(&[stand_in::DRAWING, "not a picture"]);
-    let refused = y_window::block_on(new_game(&mut random, &mut clock, &mut site));
+    let refused = y_window::block_on(new_game(&mut random, &mut clock, &site));
     assert!(refused == Err(SetupError::NotAPicture { error: expected.expect_err("given") }), "not_a_picture");
 }
 
@@ -513,7 +513,7 @@ fn a_site_that_fails_ends_play() {
     let random = Random::seeded(7);
     let site = Http::fake_failing(404);
     let forever = Forever::fake();
-    let ended = y_window::block_on(play(&mut window, &mut clock, &mut random, &mut site, &forever));
+    let ended = y_window::block_on(play(&mut window, &mut clock, &mut random, &site, &forever));
     assert!(ended == Err(SetupError::Unreachable { error: HttpError::fake_status(404) }), "unreachable");
 }
 
@@ -524,7 +524,7 @@ fn a_site_too_slow_ends_play() {
     let random = Random::seeded(7);
     let site = Http::fake_expiring();
     let forever = Forever::fake();
-    let ended = y_window::block_on(play(&mut window, &mut clock, &mut random, &mut site, &forever));
+    let ended = y_window::block_on(play(&mut window, &mut clock, &mut random, &site, &forever));
     assert!(ended == Err(SetupError::TimedOut { deadline: Expired::fake() }), "timed_out");
 }
 
@@ -536,7 +536,7 @@ fn what_is_not_a_drawing_ends_play() {
     let random = Random::seeded(7);
     let site = Http::fake("not a picture");
     let forever = Forever::fake();
-    let ended = y_window::block_on(play(&mut window, &mut clock, &mut random, &mut site, &forever));
+    let ended = y_window::block_on(play(&mut window, &mut clock, &mut random, &site, &forever));
     assert!(ended == Err(SetupError::NotAPicture { error: expected.expect_err("given") }), "not_a_picture");
 }
 
@@ -548,7 +548,7 @@ fn a_window_closed_while_fetching_ends_play() {
     let random = Random::seeded(7);
     let site = Http::fake(stand_in::DRAWING);
     let forever = Forever::fake();
-    let best = y_window::block_on(play(&mut window, &mut clock, &mut random, &mut site, &forever)).expect("when");
+    let best = y_window::block_on(play(&mut window, &mut clock, &mut random, &site, &forever)).expect("when");
     assert!(best == 0, "no_score");
     assert!(window.written() == ["Fetching pictures from OpenMoji..."], "no_game_drawn");
 }
@@ -561,7 +561,7 @@ fn a_window_closed_after_one_frame_ends_play() {
     let random = Random::seeded(7);
     let site = Http::fake(stand_in::DRAWING);
     let forever = Forever::fake();
-    let best = y_window::block_on(play(&mut window, &mut clock, &mut random, &mut site, &forever)).expect("when");
+    let best = y_window::block_on(play(&mut window, &mut clock, &mut random, &site, &forever)).expect("when");
     let written = window.written();
     assert!(best == 0, "no_score");
     assert!(written.iter().any(|line| line == "Pairs 0 of 10   Lives 10   Time 0s   Best 0"), "one_frame_of_the_game");
@@ -576,7 +576,7 @@ fn a_game_waits_for_clicks() {
     let random = Random::seeded(7);
     let site = Http::fake(stand_in::DRAWING);
     let forever = Forever::fake();
-    let best = y_window::block_on(play(&mut window, &mut clock, &mut random, &mut site, &forever)).expect("when");
+    let best = y_window::block_on(play(&mut window, &mut clock, &mut random, &site, &forever)).expect("when");
     assert!(best == 0, "no_score");
     assert!(window.pictures_drawn() == 0, "no_card_up");
     assert!(window.frames_shown() == 4, "four_frames");
@@ -593,7 +593,7 @@ fn a_pair_that_does_not_match_is_shown_then_turned_back() {
     let random = Random::seeded(7);
     let site = Http::fake(stand_in::DRAWING);
     let forever = Forever::fake();
-    let best = y_window::block_on(play(&mut window, &mut clock, &mut random, &mut site, &forever)).expect("when");
+    let best = y_window::block_on(play(&mut window, &mut clock, &mut random, &site, &forever)).expect("when");
     let written = window.written();
     assert!(best == 0, "no_score");
     assert!(written.iter().any(|line| line == "Pairs 0 of 10   Lives 9   Time 0s   Best 0"), "a_life_lost");
@@ -614,7 +614,7 @@ fn a_pair_shown_past_its_second_turns_back() {
     let random = Random::seeded(7);
     let site = Http::fake(stand_in::DRAWING);
     let forever = Forever::fake();
-    let best = y_window::block_on(play(&mut window, &mut clock, &mut random, &mut site, &forever)).expect("when");
+    let best = y_window::block_on(play(&mut window, &mut clock, &mut random, &site, &forever)).expect("when");
     assert!(best == 0, "no_score");
     assert!(window.written().iter().any(|line| line == "Pairs 0 of 10   Lives 9   Time 1s   Best 0"), "a_life_lost");
 }
@@ -630,7 +630,7 @@ fn a_won_game_keeps_its_score() {
     let random = Random::seeded(7);
     let site = Http::fake(stand_in::DRAWING);
     let forever = Forever::fake();
-    let best = y_window::block_on(play(&mut window, &mut clock, &mut random, &mut site, &forever)).expect("when");
+    let best = y_window::block_on(play(&mut window, &mut clock, &mut random, &site, &forever)).expect("when");
     let written = window.written();
     assert!(best == 2680, "scored: Expected 1000 for the pairs, 500 for the lives and 1180 for the seconds under par.");
     assert!(written.iter().any(|line| line == "All pairs in 2s! Score 2680   Best 2680"), "announced");
@@ -649,7 +649,7 @@ fn a_whole_game_is_won_and_another_begun() {
     let random = Random::seeded(7);
     let site = Http::fake(stand_in::DRAWING);
     let forever = Forever::fake();
-    let best = y_window::block_on(play(&mut window, &mut clock, &mut random, &mut site, &forever)).expect("when");
+    let best = y_window::block_on(play(&mut window, &mut clock, &mut random, &site, &forever)).expect("when");
     let written = window.written();
     assert!(best == 2680, "scored");
     assert!(written.iter().any(|line| line == "Pairs 0 of 10   Lives 10   Time 0s   Best 2680"), "dealt_again");
@@ -666,6 +666,6 @@ fn a_site_that_fails_for_the_next_game_ends_play() {
     let random = Random::seeded(7);
     let site = Http::fake_failing_after(stand_in::DRAWING, 10, 404);
     let forever = Forever::fake();
-    let ended = y_window::block_on(play(&mut window, &mut clock, &mut random, &mut site, &forever));
+    let ended = y_window::block_on(play(&mut window, &mut clock, &mut random, &site, &forever));
     assert!(ended == Err(SetupError::Unreachable { error: HttpError::fake_status(404) }), "unreachable");
 }

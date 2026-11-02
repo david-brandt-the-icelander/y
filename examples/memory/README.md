@@ -61,7 +61,7 @@ from [`../y-window`](../y-window/), and the clock, the randomness and deadlines 
 | Y | Bare body | Constraint file or `y-facts.json` | Rust |
 |---|---|---|---|
 | `service openmoji:` with `address = url"https://openmoji.org"` | `mod openmoji { const ADDRESS = "https://openmoji.org"; }` | — | the same |
-| `injected site`, as `http<openmoji>`, and `site = system.http(openmoji)` in `main` | `site: &mut Http`; `system.http(openmoji::ADDRESS)` | `effects only random, clock, site` | `y_http::Http`, or a fake for tests |
+| `injected site`, as `http<openmoji>`, and `site = system.http(openmoji)` in `main` | `site: &Http`, a shared borrow, because `get` does not change it; `system.http(openmoji::ADDRESS)` | `effects only random, clock, site` | `y_http::Http`, or a fake for tests |
 | `within game_rules.fetch_time or fail:` around the fetches | `Deadline::after(game_rules::FETCH_TIME)`, passed to each `site.get` | `y-facts.json` `deadlines`, a new kind | a deadline from the runtime's monotonic time |
 | `site.get(path"…") or fail`, which fails with `http_error` or, at the deadline, `expired` | `site.get(&path, &deadline).await?` | `y-facts.json` `suspensions` | `Within<HttpError>`, converted through `setup_error`'s `unreachable` and `timed_out` cases |
 | `picture.from_svg(drawing, size: …) or fail` | `Picture::from_svg(&drawing, …)?` | — | drawn by resvg into pixels; the window makes a texture of them when it first draws them |
