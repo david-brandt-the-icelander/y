@@ -147,7 +147,7 @@ computable. Three mechanisms, each described later:
   contracts, transactional writes and command classes. A change is classified by what it did to signatures, not by how
   many lines moved. Widened authority is always shown; a body-only change under an unchanged, fully tested signature is
   sampled.
-- **Claims** (§ 3.15). Every construct that asks the reader to trust the author — `unsafe`, `forever`, `detach`,
+- **Claims** (§ 3.15). Every construct that asks the reader to trust the author — `native`, `forever`, `detach`,
   `assume`, a suppressed lint — carries a `because` and is always shown.
 - **Gaps** (§ 3.16). Unfinished work is a typed construct the compiler knows about, not a comment it does not.
 
@@ -1090,7 +1090,7 @@ function export_invoices(month, injected invoices, injected uploads, injected cl
 | `store<schema>` | Persistent reads and writes (§ 3.12) |
 | `shared<t>` | Transactional access to shared state, may suspend on `retry` (§ 3.9) |
 | `enqueue<command>`, `submit<command>` | Durable command submission (§ 3.10) |
-| `detach`, `forever`, `reveal`, `native` | Trust-requiring operations, each also a claim (§ 3.15) |
+| `detach`, `forever`, `reveal` | Trust-requiring operations, each also a claim (§ 3.15) |
 
 **A function with no `injected` parameter is pure.** It may allocate, compute and fault, but it touches nothing else. Purity
 needs no annotation because the missing clause is the annotation. Contract expressions, constraints, `derived`,
@@ -1660,7 +1660,7 @@ Some things the compiler cannot check. Y does not pretend otherwise; it makes ea
 
 | Claim | What it asserts | Also requires |
 | --- | --- | --- |
-| `unsafe because "...": ...` | This native or foreign code upholds Y's rules | `native` |
+| `native because "..."`, in place of a body | The backend's implementation keeps the promises of this declaration (§ 3.18) | — |
 | `forever because "..."` | This wait is meant to be unbounded | `forever` |
 | `detach because "..." within 1h: ...` | This work may outlive its scope | `detach` |
 | `reveal(secret) because "..."` | This sensitive value may be seen here | `reveal` |
@@ -1767,6 +1767,113 @@ function checksum(bytes) returns crc:
   values. They would let a function specialise on a value (a buffer of fixed size, say). Generics (§ 8, question 2)
   decide whether they come.
 - Generating types or declarations. Y has no macros, and `compile` produces values only.
+
+### 3.18 Native functions: the backend is the way out
+
+Y has no foreign-function interface. It has no `extern` declarations, no memory layouts, no calling conventions, no
+pointers and no `unsafe` blocks. Each backend's language already has an FFI, with tools around it, and Y uses that one.
+
+- On the Rust backend, Rust is the way out. A C library is reached through Rust's `extern` blocks and `bindgen`, a C++
+  library through `cxx`, and a Go library through C. The Rust that does this is the backend's business. Y sees only a
+  declaration.
+- On a later backend, the same holds for that backend's language: Zig, for instance, reaches C through its own
+  `@cImport`.
+
+What Y does have is the **native function**: a function whose declaration is written in Y and whose body is written in
+the backend's language.
+
+```y
+------------------------------------------------------------------------------------------------------------
+Gets the text at a path of the service.
+
+path: Where the text is, under the service's address, as path.
+
+text: What the service gave, as string.
+
+fails http_error: The service did not answer, or answered with a status that is a failure.
+------------------------------------------------------------------------------------------------------------
+function get(path) returns text fails http_error
+        native because "ureq asks the service for the path and touches nothing else; every wait ends at the deadline"
+```
+
+The declaration is complete, with its documentation, parameters, result, failures and capabilities (this one is a method
+of `http<service>`, whose `me` is the capability). In place of the colon and the body, it ends with `native because "…"`.
+Callers cannot tell a native function from any other. `site.get(path"/data/color/svg/1F600.svg") or fail` reads the
+same either way.
+
+**The implementation is the lowering's signature, with a hand-written body.**
+
+- The Rust signature of a native function is the one the compiler would give a Y function with the same declaration.
+  The same rules decide it: parameters are borrowed or taken, `fails e` becomes a `Result`, injected capabilities come
+  last, and a function that may suspend is an `async fn` that receives the deadline of the `within` it runs in. There is
+  no second type mapping to learn or keep in step.
+- `y native --backend rust` writes those signatures out as a skeleton for the implementation to fill:
+
+  ```rust
+  impl Http {
+      /// Gets the text at a path of the service.
+      pub async fn get(&self, path: &str, deadline: &Deadline) -> Result<String, Within<HttpError>> {
+          // written by hand: ureq, under the deadline
+      }
+  }
+  ```
+
+  [`../examples/y-http`](../examples/y-http/) is this implementation, written by hand before this section existed. The
+  declaration would now settle the small ways it differs, such as whether `get` may change its capability.
+- The implementation lives in the package, in a folder for its backend (`native/rust/`), and is compiled with the code
+  the compiler generates. A signature that does not match is a type error in the backend's compiler. The toolchain
+  reports it at the Y declaration.
+- A **native type** works the same way: `type http<service> native because "…"` declares a type whose representation
+  the backend gives. Y code cannot see inside it. Its claim is that it behaves as a Y value: a copy is independent, and
+  what it holds is released when it is destroyed (§ 3.6).
+
+**What the declaration still promises, and who checks it.**
+
+| Part of the declaration | Checked by |
+| --- | --- |
+| Types, failure cases and capabilities | The backend's compiler: the implementation receives only the capabilities declared and can return only the declared cases |
+| `where` preconditions | The prover, at every call, as for any function. The implementation may rely on them |
+| `ensures`, and the constraints of a refined result | The runtime, when the call returns, because nothing can prove them. A broken one is a fault that names the native function |
+| Effects: touching nothing but the capabilities declared, and nothing at all with none; reading time or randomness only through `clock` and `random` (§ 4.7) | The claim |
+| No wait without a deadline, unless it holds `forever` (§ 3.8) | The claim |
+
+- A panic in the implementation is a fault of the native function, reported as § 3.4 reports any fault.
+- A native function with no `injected` parameter is pure as far as the compiler is concerned. It may be called in
+  contracts, in `compile` and inside `atomic`. The claim is what makes that safe. A native function whose capabilities
+  carry external effects is kept out of `atomic` by the same rule as any other (§ 3.9).
+
+**Each declaration is a claim** (§ 3.15). The `because` says why the author believes the implementation keeps the
+declaration's promises.
+
+- `y claims` lists each native function and type.
+- The review packet always shows a new or changed declaration. It also shows any change to an implementation in full,
+  because the backend's compiler checks only its types.
+- A package manifest says whether the package holds native code, and for which backends. A dependency upgrade that adds
+  native code is a review item, as widened authority is (§ 3.7).
+
+**Tests.** A native function has no paths, because Y cannot see its body.
+
+- Y tests of it claim no path (`test name:`, § 3.14). They check what the declaration promises, through the declaration.
+  Its capabilities are faked as any are, and the fakes of a native capability are native functions too.
+- The same tests run on every backend, against each backend's implementation. That is how the implementations are held
+  to one meaning: comparing backends is one of Y's oracles (§ 4.6).
+- How much of the body the tests reach is measured by the backend's tools. The review packet reports it next to the
+  change.
+
+**Backends.** A native function has one implementation for each backend the package supports.
+
+- Building for a backend that lacks one is a build error that names the function and the backend.
+- `y status` lists what is missing where.
+- A program that uses only the standard library's native code moves to a new backend once the standard library does.
+
+**The other direction.** Rust code can call Y without anything extra. A Y package lowers to a Rust crate, and its public
+facets are the crate's public functions, with the signatures `y native` would print for them. That surface changes only
+when a Y signature does, and the semantic diff (§ 4.4) already shows that.
+
+**The standard library is mostly native.** Its capabilities (`console`, `clock`, `random`, `file_system`, `http`, and
+the `window` the examples assume) are native types whose methods are native functions. [`../examples/y-runtime`](../examples/y-runtime/),
+[`y-window`](../examples/y-window/) and [`y-http`](../examples/y-http/) are their Rust implementations, as far as the
+examples need, written by hand before the declarations existed.
 
 ## 4. The toolchain is the reviewer's instrument
 
@@ -1877,6 +1984,8 @@ the right description.
   self-contained and explicit rather than compact. A consumer that needs a fact Core IR does not carry has found a
   defect in Core IR.
 - **Rust** is the first backend and the first oracle. Zig or C comes next, then a native backend.
+- **Each backend's language is Y's way out** (§ 3.18). A `native` function has one implementation per backend, and
+  the same Y tests run against each.
   [`../examples/hangman`](../examples/hangman/) is a whole program taken through it, with the lowering done by hand.
 - **Independent oracles:**
   - `rustc` and Miri check ownership.
@@ -1968,7 +2077,7 @@ owner still decides; the recommendation is here so that deciding is quick.
 | What triggers `converge` | A deployment action, post-v1 | § 5 |
 | Recursive rules | Not in v1 | § 3.13 |
 | Whether runtime generations are in Y | Post-v1; foundations in v1 | § 5 |
-| Native backend, ABI and FFI | Rust first; foreign calls are `unsafe` claims needing `native` | § 3.15, § 4.6 |
+| Native backend, ABI and FFI | Rust first. Y has no FFI: a `native` function is declared in Y and written in the backend's language, which reaches C, C++ or Go through its own FFI; each declaration is a claim | § 3.18, § 4.6 |
 
 ## 7. What this proposal drops, and why
 
@@ -2019,6 +2128,7 @@ premise changed, or because the iteration that tried them showed their cost. The
 | `afterCommit` | September 2026 | `enqueue`; buffered telemetry | Redundant if durable, a bug if not |
 | Module-level `shared` declarations | September 2026 | `shared<t>` values passed down | Global state by another name |
 | Tests reading a function's locals | YAPL (2024) | Paths of named outcomes, and fault injection | Couples tests to implementation |
+| `unsafe` blocks, and foreign calls written in Y | Earlier drafts of this proposal | `native` functions, declared in Y and written in the backend's language (§ 3.18) | Every backend's language already has an FFI and tools for it; a second one in Y would duplicate each, and tie Y to C's ABI |
 
 **Syntax for policy, and scope beyond a language**
 
@@ -2117,7 +2227,7 @@ control        if else conditional condition compare with for in while break con
 bindings       mutable lambda nested captures injected inject arena compile
 concurrency    within task supervise detach forever uncancellable
 transactions   atomic retry orelse enqueue submit
-claims, gaps   unsafe assume allow reveal because
+claims, gaps   native assume allow reveal because
 tests          covers given inject faults when then fake
 observability  log metric
 operators      and or not
