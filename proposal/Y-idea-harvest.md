@@ -34,7 +34,7 @@ document's own sections say "above" or "below".
 
 | When | Where (under `~/dev/`) | What it was |
 | --- | --- | --- |
-| ca. 2001 | Nowhere: never written down | **LCD**, *lowest common denominator*: one imperative language for business logic, to be translated into C, C++ under its frameworks, Java, PL/SQL and probably Pascal. A dream only, dropped for its cost in time. Recollection from intent, not from documentation; see [`LCD-2001.md`](LCD-2001.md) |
+| ca. 2001 | Nowhere: never written down; conceived at OZ | **LCD**, *lowest common denominator*: business logic written once and carried into C, C++ under its frameworks, Java, PL/SQL and probably Pascal, through levels of common denominator rather than one. Imperative at heart, with managed memory. A dream only, dropped for its cost in time. Recollection from intent, not from documentation; see [`LCD-2001.md`](LCD-2001.md) |
 | 2019-09 → 2021-04 | `padresmurfa@gmail.com/y26/yapl` — README, aspirational chapters, `v0`, `v1` | *Yet Another Programming Language*: "a language that I have been dreaming of creating for quite some time". A transpiler to "all machines", written in Python |
 | 2021-04 → 2022-08 | `yapl` — `v2`, `v3`, `v4` | The "hungry rabbit" walkthrough; semantic comments; refinement types; indentation-only blocks; then colon blocks, `--` comments and named conditions |
 | 2022-08 | `yapl` — `v5` (Rust), `v6` (Python) | Parsers organised around modules, classes and facets; a "Why?" attached to every rule; effects declared in the signature |
@@ -130,15 +130,18 @@ proposal that dropped any of them would not be Y.
 
 ### 3.0 LCD (ca. 2001): recollection, not record
 
-No ideas from LCD can be harvested, because nothing was written. What the author recalls is its purpose: business
-rules were written again for every execution environment, in C, C++ under different frameworks, Java, PL/SQL and
-probably Pascal, and one language translated into all of them would have ended that. It was to be a traditional
-imperative language with managed memory, the classical data types and a standard library. It never reached a grammar,
-and was dropped because it would have taken a massive amount of time.
+No ideas from LCD can be harvested, because nothing was written. What the author recalls is its purpose, from the
+years at OZ: business rules were written again for every execution environment, in C, C++ under different frameworks,
+Java, PL/SQL and probably Pascal, and writing them once would have ended that. It was to be imperative at heart, with
+managed memory, the classical data types and a standard library. The author did not expect one denominator to fit
+everything (PL/SQL being special-purpose), and thought instead of *levels* of common denominator, and of whether the
+idea could spread beyond imperative languages. It never reached a grammar, and was dropped because it would have taken
+a massive amount of time.
 
 [`LCD-2001.md`](LCD-2001.md) extrapolates what such a language would have had to be, and is labelled throughout as
-extrapolation. Its one claim on this ledger is interpretive: YAPL's 2020 thesis of a transpiler to "all machines" (§ 3.1
-below) is the second appearance of that purpose, not the first.
+extrapolation. Its claims on this ledger are interpretive: YAPL's 2020 thesis of a transpiler to "all machines" (§ 3.1
+below) is the second appearance of that purpose, not the first; and LCD's levels resemble the constraint language
+enabling its kinds host by host.
 
 ### 3.1 YAPL (2019 – 2024)
 
