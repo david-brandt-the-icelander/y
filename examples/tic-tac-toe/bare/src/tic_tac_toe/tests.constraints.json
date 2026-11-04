@@ -13,12 +13,12 @@
       "params": [
         {
           "name": "crosses",
-          "type": "ref<list<u32> as 'std::primitive::slice'>",
+          "type": "ref<target type=list<element type=u32> as 'std::primitive::slice'>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "noughts",
-          "type": "ref<list<u32> as 'std::primitive::slice'>",
+          "type": "ref<target type=list<element type=u32> as 'std::primitive::slice'>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "to_move", "type": "Mark" }

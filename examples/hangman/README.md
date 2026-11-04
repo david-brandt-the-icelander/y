@@ -40,9 +40,9 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | Y | Bare body | Constraint file or `y-facts.json` | Rust |
 |---|---|---|---|
 | `function f(x, mutable y) returns r fails e`, with `x: …, as t.` and `r: …, as u.` in the documentation above | `fn f(x, y)` | a `function` subject: `params` with the types from the documentation, `result` with `fails` | `fn f(x: &T, y: &mut Y) -> Result<U, E>` |
-| `x`, read only (Y's default) | the name | `type` `ref<t>`, `access` read/readers | `&T`, a shared borrow |
+| `x`, read only (Y's default) | the name | `type` `ref<target type=t>`, `access` read/readers | `&T`, a shared borrow |
 | `x` that the function keeps (`new_game(word)`) | the name | `type` `t` | `T` by value; the caller's last use moves it, and any other use is a copy |
-| `mutable x` in the signature, and `mutable x` at the call | the name; `&mut x` at the call | `type` `ref<t>`, `access` write/exclusive | `&mut T` |
+| `mutable x` in the signature, and `mutable x` at the call | the name; `&mut x` at the call | `type` `ref<target type=t>`, `access` write/exclusive | `&mut T` |
 | A copy the compiler had to make (`new_game(words[chosen])`, where `words` is still read) | `.clone()`, marked `// y: a copy` | `y-facts.json` `copies` | the same |
 | `return answer = value`, `fail guess_error.empty`, `or fail` | `return Ok(value)` or the last expression, `return Err(E::Case { .. })`, `?` | `result.fails` | the same |
 | `or fail` converting through the one case that carries the failure | `?` | an `impl From` subject | `impl From<ConsoleError> for PlayError` |
@@ -71,7 +71,7 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | `forever because "..."` | the `&Forever` argument of the call that waits | `y-facts.json` `claims` | `console.read_line(forever)` |
 | `compile parse_word_list(game_rules.word_list)` | the value, as a `const` array, and a `static` built once from it | `y-facts.json` `compiled` | the same, and a generated test that makes the call at run time and compares |
 | `count<of=rune>`: the misses, and the letters of a word | — (units are erased) | `y-facts.json` `units` | `usize` |
-| `string` (and a read-only `string` parameter), `rune`, `list<element=t>`, `set<element=t>` | — | `text`, `ref<text>`, `Rune`, `list<T> as 'Vec'`, `set<T> as 'BTreeSet'` | `String`, `&str`, `y_runtime::Rune`, `Vec<T>`, `BTreeSet<T>`: a `set` keeps insertion order (Y § 3.13), but `hits` is only asked what it contains, so the order is never seen, and the backend may sort |
+| `string` (and a read-only `string` parameter), `rune`, `list<element type=t>`, `set<element type=t>` | — | `string`, `ref<target type=string>`, `Rune`, `list<element type=T> as 'Vec'`, `set<element type=T> as 'BTreeSet'` | `String`, `&str`, `y_runtime::Rune`, `Vec<T>`, `BTreeSet<T>`: a `set` keeps insertion order (Y § 3.13), but `hits` is only asked what it contains, so the order is never seen, and the backend may sort |
 | Interpolation, `"{name}"` and `"{game.word}"` | `format!("{name}")`, `format!("{}", game.word)` | — | the same |
 | A binding, `picture = gallows(…)`; a name that changes, `mutable game = new_game(…)`; a change, `name := value` | `let`; `let` (weave adds `mut`); `name = value` | — | `let`; `let mut`, which `weave` derived through rustc (19 of them); `name = value` |
 | `test name` with `covers` and the one path its `when` takes, `covers guess > judged.in_word:` (or `test name:` for a test that claims no path), then the sections `given:`, `inject:`, `when:`, `then:` | `#[test] fn name()`; an `or fail` in `given` or `when` lowers to `expect`; `fake console(input: [...])` to `Console::fake(...)`; each named check of `then`, `name = p`, to `assert!(p, "name")`, with the comment above it, if any, added to the message | `y-facts.json` `tests`: the path each covers, repeated as the test's first line, `// y: covers guess > judged.in_word`; `paths`: every path of the module, and how it ends | the same |

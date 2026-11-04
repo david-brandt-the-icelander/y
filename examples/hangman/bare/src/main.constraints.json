@@ -10,10 +10,14 @@
     {
       "kind": "const",
       "name": "hangman_example::COMPILED_WORD_LIST",
-      "type": "list<ref<text>> where size(value) == 10 as 'std::primitive::array'",
+      "type": "list<element type=ref<target type=string>> where count(value) == 10 as 'std::primitive::array'",
       "access": { "rights": "read", "guarantee": "readers" }
     },
-    { "kind": "static", "name": "hangman_example::WORDS", "type": "LazyLock<list<Word> as 'Vec'>" },
+    {
+      "kind": "static",
+      "name": "hangman_example::WORDS",
+      "type": "LazyLock<list<element type=Word> as 'Vec'>"
+    },
     {
       "kind": "function",
       "name": "hangman_example::main",

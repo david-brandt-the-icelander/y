@@ -164,7 +164,7 @@ by the subject, that implements `I`; `any I` is a reference to a value of any ty
 type rust 'std::str::Chars'
     for 'a
     hold : borrows for 'a                         -- the type holds a borrow; a use says from what
-    implements 'std::iter::Iterator' { Item = char }, 'std::clone::Clone'
+    implements 'std::iter::Iterator' { Item = scalar }, 'std::clone::Clone'
 
 impl rust 'std::iter::Iterator' for 'std::str::Chars'
     function next(self: ref<Chars>) -> char?
@@ -377,7 +377,7 @@ of `s` in order".
 gains order: indexing `xs[i]`, slices `xs[i..j]`, `++`, `reverse`, and `map` and `filter` by a named pure function.
 
 ```text
-function rust 'std::primitive::str::chars'(self: ref<text>) -> some 'std::iter::Iterator' { Item = char }
+function rust 'std::primitive::str::chars'(self: ref<text>) -> some 'std::iter::Iterator' { Item = scalar }
     ensure in_order : yields(result) == scalars(self)
 ```
 

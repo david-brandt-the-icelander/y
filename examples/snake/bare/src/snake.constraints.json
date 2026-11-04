@@ -77,7 +77,7 @@
           "name": "tail",
           "visible": "path",
           "visible_path": "super",
-          "type": "list<Cell> as 'Vec'",
+          "type": "list<element type=Cell> as 'Vec'",
           "hold": { "kind": "owns" }
         },
         {
@@ -124,7 +124,7 @@
       "params": [
         {
           "name": "random",
-          "type": "ref<Random>",
+          "type": "ref<target type=Random>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -148,7 +148,11 @@
       "name": "snake_example::snake::rules::turned",
       "visible": "public",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
+        {
+          "name": "game",
+          "type": "ref<target type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
         { "name": "pressed", "type": "Key" }
       ],
       "result": { "type": "Direction" },
@@ -159,10 +163,14 @@
       "name": "snake_example::snake::rules::advance",
       "visible": "public",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        {
+          "name": "game",
+          "type": "ref<target type=Game>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
         {
           "name": "random",
-          "type": "ref<Random>",
+          "type": "ref<target type=Random>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -184,7 +192,11 @@
       "kind": "function",
       "name": "snake_example::snake::unless_reversing",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
+        {
+          "name": "game",
+          "type": "ref<target type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
         { "name": "toward", "type": "Direction" }
       ],
       "result": { "type": "Direction" },
@@ -201,7 +213,11 @@
       "kind": "function",
       "name": "snake_example::snake::ahead_of",
       "params": [
-        { "name": "here", "type": "ref<Cell>", "access": { "rights": "read", "guarantee": "readers" } },
+        {
+          "name": "here",
+          "type": "ref<target type=Cell>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
         { "name": "heading", "type": "Direction" }
       ],
       "result": { "type": "Cell" },
@@ -211,7 +227,11 @@
       "kind": "function",
       "name": "snake_example::snake::on_board",
       "params": [
-        { "name": "place", "type": "ref<Cell>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "place",
+          "type": "ref<target type=Cell>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
       "result": { "type": "bool" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/snake.y:209" }]
@@ -220,19 +240,27 @@
       "kind": "function",
       "name": "snake_example::snake::free_cells",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "game",
+          "type": "ref<target type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
-      "result": { "type": "list<Cell> as 'Vec'" },
+      "result": { "type": "list<element type=Cell> as 'Vec'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/snake.y:220" }]
     },
     {
       "kind": "function",
       "name": "snake_example::snake::place_food",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        {
+          "name": "game",
+          "type": "ref<target type=Game>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
         {
           "name": "random",
-          "type": "ref<Random>",
+          "type": "ref<target type=Random>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -312,10 +340,14 @@
       "name": "snake_example::snake::drawing::banner",
       "visible": "public",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
+        {
+          "name": "game",
+          "type": "ref<target type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
         { "name": "highest", "type": "u32" }
       ],
-      "result": { "type": "text" },
+      "result": { "type": "string" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/snake.y:281" }]
     },
     {
@@ -323,11 +355,15 @@
       "name": "snake_example::snake::drawing::draw",
       "visible": "public",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
+        {
+          "name": "game",
+          "type": "ref<target type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
         { "name": "highest", "type": "u32" },
         {
           "name": "window",
-          "type": "ref<Window>",
+          "type": "ref<target type=Window>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -342,11 +378,15 @@
       "kind": "function",
       "name": "snake_example::snake::fill_cell",
       "params": [
-        { "name": "place", "type": "ref<Cell>", "access": { "rights": "read", "guarantee": "readers" } },
+        {
+          "name": "place",
+          "type": "ref<target type=Cell>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
         { "name": "shade", "type": "Colour" },
         {
           "name": "window",
-          "type": "ref<Window>",
+          "type": "ref<target type=Window>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -365,16 +405,24 @@
       "params": [
         {
           "name": "window",
-          "type": "ref<Window>",
+          "type": "ref<target type=Window>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
-        { "name": "clock", "type": "ref<Clock>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        {
+          "name": "clock",
+          "type": "ref<target type=Clock>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
         {
           "name": "random",
-          "type": "ref<Random>",
+          "type": "ref<target type=Random>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
-        { "name": "forever", "type": "ref<Forever>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "forever",
+          "type": "ref<target type=Forever>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
       "result": { "type": "u32" },
       "clauses": [
@@ -386,10 +434,14 @@
       "kind": "function",
       "name": "snake_example::snake::steer",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        {
+          "name": "game",
+          "type": "ref<target type=Game>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
         {
           "name": "keys",
-          "type": "ref<list<Key> as 'std::primitive::slice'>",
+          "type": "ref<target type=list<element type=Key> as 'std::primitive::slice'>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -405,12 +457,16 @@
       "kind": "function",
       "name": "snake_example::snake::catch_up",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        {
+          "name": "game",
+          "type": "ref<target type=Game>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
         { "name": "last_step", "type": "Instant" },
         { "name": "now", "type": "Instant" },
         {
           "name": "random",
-          "type": "ref<Random>",
+          "type": "ref<target type=Random>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],

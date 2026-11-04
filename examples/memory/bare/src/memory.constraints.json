@@ -81,7 +81,7 @@
       "kind": "const",
       "name": "memory_example::memory::setup::faces::CODES",
       "visible": "public",
-      "type": "list<ref<text>> where size(value) == 20 as 'std::primitive::array'",
+      "type": "list<element type=ref<target type=string>> where count(value) == 20 as 'std::primitive::array'",
       "access": { "rights": "read", "guarantee": "readers" }
     },
     { "kind": "module", "name": "memory_example::memory::setup::openmoji", "visible": "public" },
@@ -89,7 +89,7 @@
       "kind": "const",
       "name": "memory_example::memory::setup::openmoji::ADDRESS",
       "visible": "public",
-      "type": "ref<text>",
+      "type": "ref<target type=string>",
       "access": { "rights": "read", "guarantee": "readers" }
     },
     {
@@ -113,28 +113,28 @@
           "name": "pairs",
           "visible": "path",
           "visible_path": "super",
-          "type": "list<u32> as 'Vec'",
+          "type": "list<element type=u32> as 'Vec'",
           "hold": { "kind": "owns" }
         },
         {
           "name": "sides",
           "visible": "path",
           "visible_path": "super",
-          "type": "list<Side> as 'Vec'",
+          "type": "list<element type=Side> as 'Vec'",
           "hold": { "kind": "owns" }
         },
         {
           "name": "pictures",
           "visible": "path",
           "visible_path": "super",
-          "type": "list<Picture> as 'Vec'",
+          "type": "list<element type=Picture> as 'Vec'",
           "hold": { "kind": "owns" }
         },
         {
           "name": "turned",
           "visible": "path",
           "visible_path": "super",
-          "type": "list<u32> as 'Vec'",
+          "type": "list<element type=u32> as 'Vec'",
           "hold": { "kind": "owns" }
         },
         {
@@ -226,11 +226,19 @@
       "params": [
         {
           "name": "random",
-          "type": "ref<Random>",
+          "type": "ref<target type=Random>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
-        { "name": "clock", "type": "ref<Clock>", "access": { "rights": "write", "guarantee": "exclusive" } },
-        { "name": "site", "type": "ref<Http>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "clock",
+          "type": "ref<target type=Clock>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        {
+          "name": "site",
+          "type": "ref<target type=Http>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
       "result": { "type": "Game", "fails": "SetupError" },
       "clauses": [
@@ -242,7 +250,7 @@
         },
         {
           "kind": "ensure",
-          "text": "ensure nothing_turned : result is Ok(started) implies size(started.turned) == 0",
+          "text": "ensure nothing_turned : result is Ok(started) implies count(started.turned) == 0",
           "source": "y/src/memory.y:131",
           "status": { "lifted": "src/memory.rs: y_runtime::ensure" }
         },
@@ -255,7 +263,11 @@
       "name": "memory_example::memory::rules::choosable",
       "visible": "public",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
+        {
+          "name": "game",
+          "type": "ref<target type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
         { "name": "place", "type": "Point" }
       ],
       "result": { "type": "u32?" },
@@ -266,14 +278,18 @@
       "name": "memory_example::memory::rules::turn_over",
       "visible": "public",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        {
+          "name": "game",
+          "type": "ref<target type=Game>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
         { "name": "number", "type": "u32" },
         { "name": "now", "type": "Instant" }
       ],
       "clauses": [
         {
           "kind": "require",
-          "text": "require may_turn : game.sides[number - 1] is FaceDown and size(game.turned) < 2",
+          "text": "require may_turn : game.sides[number - 1] is FaceDown and count(game.turned) < 2",
           "source": "y/src/memory.y:193",
           "status": { "lifted": "src/memory.rs: y_runtime::require" }
         },
@@ -289,12 +305,16 @@
       "name": "memory_example::memory::rules::turn_back",
       "visible": "public",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "write", "guarantee": "exclusive" } }
+        {
+          "name": "game",
+          "type": "ref<target type=Game>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
       ],
       "clauses": [
         {
           "kind": "require",
-          "text": "require two_turned : size(game.turned) == 2",
+          "text": "require two_turned : count(game.turned) == 2",
           "source": "y/src/memory.y:216",
           "status": { "lifted": "src/memory.rs: y_runtime::require" }
         },
@@ -310,7 +330,11 @@
       "name": "memory_example::memory::rules::standing",
       "visible": "public",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "game",
+          "type": "ref<target type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
       "result": { "type": "Outcome" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/memory.y:229" }]
@@ -320,7 +344,11 @@
       "name": "memory_example::memory::rules::score",
       "visible": "public",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "game",
+          "type": "ref<target type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
       "result": { "type": "u32" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/memory.y:247" }]
@@ -444,10 +472,14 @@
       "name": "memory_example::memory::drawing::banner",
       "visible": "public",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
+        {
+          "name": "game",
+          "type": "ref<target type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
         { "name": "highest", "type": "u32" }
       ],
-      "result": { "type": "list<text> as 'Vec'" },
+      "result": { "type": "list<element type=string> as 'Vec'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/memory.y:352" }]
     },
     {
@@ -455,11 +487,15 @@
       "name": "memory_example::memory::drawing::draw",
       "visible": "public",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
+        {
+          "name": "game",
+          "type": "ref<target type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
         { "name": "highest", "type": "u32" },
         {
           "name": "window",
-          "type": "ref<Window>",
+          "type": "ref<target type=Window>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -474,12 +510,16 @@
       "kind": "function",
       "name": "memory_example::memory::draw_card",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
+        {
+          "name": "game",
+          "type": "ref<target type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
         { "name": "number", "type": "u32" },
         { "name": "corner", "type": "Point" },
         {
           "name": "window",
-          "type": "ref<Window>",
+          "type": "ref<target type=Window>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -498,7 +538,7 @@
         { "name": "shade", "type": "Colour" },
         {
           "name": "window",
-          "type": "ref<Window>",
+          "type": "ref<target type=Window>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -513,12 +553,16 @@
       "kind": "function",
       "name": "memory_example::memory::draw_picture",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
+        {
+          "name": "game",
+          "type": "ref<target type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
         { "name": "number", "type": "u32" },
         { "name": "corner", "type": "Point" },
         {
           "name": "window",
-          "type": "ref<Window>",
+          "type": "ref<target type=Window>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -535,10 +579,14 @@
       "params": [
         {
           "name": "window",
-          "type": "ref<Window>",
+          "type": "ref<target type=Window>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
-        { "name": "forever", "type": "ref<Forever>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "forever",
+          "type": "ref<target type=Forever>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
       "clauses": [
         { "kind": "effects", "text": "effects only window", "source": "y/src/memory.y:450" },
@@ -554,17 +602,29 @@
       "params": [
         {
           "name": "window",
-          "type": "ref<Window>",
+          "type": "ref<target type=Window>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
-        { "name": "clock", "type": "ref<Clock>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        {
+          "name": "clock",
+          "type": "ref<target type=Clock>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
         {
           "name": "random",
-          "type": "ref<Random>",
+          "type": "ref<target type=Random>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
-        { "name": "site", "type": "ref<Http>", "access": { "rights": "read", "guarantee": "readers" } },
-        { "name": "forever", "type": "ref<Forever>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "site",
+          "type": "ref<target type=Http>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        {
+          "name": "forever",
+          "type": "ref<target type=Forever>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
       "result": { "type": "u32", "fails": "SetupError" },
       "clauses": [
@@ -579,10 +639,14 @@
       "kind": "function",
       "name": "memory_example::memory::pick",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        {
+          "name": "game",
+          "type": "ref<target type=Game>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
         {
           "name": "clicks",
-          "type": "ref<list<Point> as 'std::primitive::slice'>",
+          "type": "ref<target type=list<element type=Point> as 'std::primitive::slice'>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "now", "type": "Instant" }

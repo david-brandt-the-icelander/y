@@ -233,7 +233,7 @@ impl<'a> Stripper<'a> {
                 Ok(match n.child_by_field_name("length") {
                     None => Ty::As(Box::new(list), "std::primitive::slice".into()),
                     Some(len) => Ty::As(
-                        Box::new(Ty::Refined(Box::new(list), format!("size(value) == {}", collapse(text(len, src))))),
+                        Box::new(Ty::Refined(Box::new(list), format!("count(value) == {}", collapse(text(len, src))))),
                         "std::primitive::array".into(),
                     ),
                 })
@@ -246,7 +246,7 @@ impl<'a> Stripper<'a> {
         }
     }
 
-    /// What a reference or a pointer reaches: `str` is `text`, and `String` is `text` held as a `String`.
+    /// What a reference or a pointer reaches: `str` is `string`, and `String` is `string` held as a `String`.
     fn pointee(&self, inner: Node, cx: &Cx, refs: &mut Vec<Mark>) -> Result<Ty, String> {
         Ok(if inner.kind() == "primitive_type" && text(inner, self.src) == "str" {
             Ty::Text
@@ -1273,7 +1273,7 @@ impl<'a> Stripper<'a> {
                         let mutable = named_children(p).iter().any(|c| c.kind() == "mutable_specifier");
                         let lt = named_children(p).into_iter().find(|c| c.kind() == "lifetime").map(|l| text(l, src).to_string());
                         let lt = lt.filter(|l| l != "'_");
-                        o.insert("type".into(), json!(format!("ref<{}>", sc.self_ty)));
+                        o.insert("type".into(), json!(format!("ref<target type={}>", sc.self_ty)));
                         o.insert("access".into(), access(mutable));
                         if let Some(l) = lt.as_ref().filter(|l| !life.elide.contains(*l)) {
                             o.insert("hold".into(), json!({"kind": "borrows", "lifetime": l}));

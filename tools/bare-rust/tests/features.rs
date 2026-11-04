@@ -101,7 +101,7 @@ extern "C" {
     let (b, j) = roundtrip(src);
     assert!(b.contains("enum Shape") && b.contains("Pair(_, _)") && b.contains("Named { w, h }"), "{b}");
     assert_eq!(subject(&j, "demo::Shape")["variants"][1]["fields"][1]["type"], "f64");
-    assert_eq!(subject(&j, "demo::Shape")["variants"][2]["fields"][1]["type"], "ref<text>?");
+    assert_eq!(subject(&j, "demo::Shape")["variants"][2]["fields"][1]["type"], "ref<target type=string>?");
     assert_eq!(subject(&j, "demo::LIMIT")["type"], "u64 as 'usize'");
     assert_eq!(subject(&j, "demo::longest")["generics"][0]["name"], "'a");
     assert!(subject(&j, "demo::elid")["generics"].is_null(), "elidable lifetimes are dropped");
@@ -146,7 +146,7 @@ fn body_stuff(mut a: u8, (mut b, c): (u8, u8)) -> u32 {
     assert_eq!(h["locals"]["k2_5_f32"], "f32");
     assert!(h["hints"].is_null(), "{h}");
     let r = &j["realizations"];
-    assert_eq!(r["collect_vec_u8"], serde_json::json!({"template": "<_>::collect", "args": ["list<u8> as 'Vec'"]}));
+    assert_eq!(r["collect_vec_u8"], serde_json::json!({"template": "<_>::collect", "args": ["list<element type=u8> as 'Vec'"]}));
     assert_eq!(r["VecU8"], serde_json::json!({"template": "std::vec::Vec", "args": ["u8"]}));
     assert!(j["subjects"].as_array().unwrap().iter().any(|s| s["name"] == "demo::body_stuff::nested"));
     assert!(j["subjects"].as_array().unwrap().iter().any(|s| s["name"] == "demo::body_stuff::Local"));
@@ -394,20 +394,20 @@ pub const NULL: *const u8 = std::ptr::null();
 "#;
     let (b, j) = roundtrip(src);
     let fields = &subject(&j, "demo::Buf")["fields"];
-    assert_eq!(fields[0]["type"], "ptr<u8>");
+    assert_eq!(fields[0]["type"], "ptr<target type=u8>");
     assert_eq!(fields[0]["access"], serde_json::json!({"rights": "read"}));
-    assert_eq!(fields[1]["type"], "ptr<u8>");
+    assert_eq!(fields[1]["type"], "ptr<target type=u8>");
     assert!(fields[1]["access"].is_null());
-    assert_eq!(fields[2]["type"], "list<ptr<u8>> as 'Vec'");
-    assert_eq!(subject(&j, "demo::get")["result"], serde_json::json!({"type": "ptr<u8>"}));
+    assert_eq!(fields[2]["type"], "list<element type=ptr<target type=u8>> as 'Vec'");
+    assert_eq!(subject(&j, "demo::get")["result"], serde_json::json!({"type": "ptr<target type=u8>"}));
     assert_eq!(subject(&j, "demo::NULL")["access"], serde_json::json!({"rights": "read"}));
     // Two pointers of different access in one slot have no one access to carry.
     assert_eq!(subject(&j, "demo::both")["params"][0]["type"]["form"], "mixed_refs");
     // A cast to a pointer is a cast local, with its access.
     let locals = &j["holes"]["demo::get"]["locals"];
-    assert_eq!(locals["x"], serde_json::json!({"type": "ptr<u8>", "access": {"rights": "read"}}));
-    assert_eq!(locals["y"], serde_json::json!({"type": "ptr<u16>", "access": {"rights": "read"}, "cast": true}));
-    assert_eq!(locals["b_ptr"], serde_json::json!({"type": "ptr<Buf>", "access": {"rights": "read"}, "cast": true}));
+    assert_eq!(locals["x"], serde_json::json!({"type": "ptr<target type=u8>", "access": {"rights": "read"}}));
+    assert_eq!(locals["y"], serde_json::json!({"type": "ptr<target type=u16>", "access": {"rights": "read"}, "cast": true}));
+    assert_eq!(locals["b_ptr"], serde_json::json!({"type": "ptr<target type=Buf>", "access": {"rights": "read"}, "cast": true}));
     assert!(b.contains("let b_ptr = b;\n    let b_ptr_usize = b_ptr;\n    let z = b_ptr_usize + n;"), "{b}");
 }
 
@@ -427,7 +427,7 @@ fn a_union_is_a_type_with_fields_and_an_impl_may_be_for_a_pointer() {
     assert_eq!(subject(&j, "demo::Word")["fields"][0]["type"], "u32");
     // The self type of an impl has no slot for an access: a `*const` there is host text, as a `&mut` is.
     assert_eq!(subject(&j, "demo::T as Pointer")["self"]["host"], "*const T");
-    assert_eq!(subject(&j, "demo::T as Pointer#2")["self"], "ptr<T>");
+    assert_eq!(subject(&j, "demo::T as Pointer#2")["self"], "ptr<target type=T>");
 }
 
 #[test]
@@ -460,9 +460,9 @@ pub fn f(a: &[u8], b: &mut [Vec<u8>], c: [u32; 3], d: &[[u8; N]; 2]) -> [u8; 2] 
 "#;
     let (_, j) = roundtrip(src);
     let s = j.to_string();
-    assert!(s.contains("ref<list<u8> as 'std::primitive::slice'>"), "{s}");
-    assert!(s.contains("list<u32> where size(value) == 3 as 'std::primitive::array'"), "{s}");
-    assert!(s.contains("size(value) == N"), "{s}");
+    assert!(s.contains("ref<target type=list<element type=u8> as 'std::primitive::slice'>"), "{s}");
+    assert!(s.contains("list<element type=u32> where count(value) == 3 as 'std::primitive::array'"), "{s}");
+    assert!(s.contains("count(value) == N"), "{s}");
     assert!(!s.contains("\"form\":\"slice\"") && !s.contains("\"form\":\"array\""), "{s}");
 }
 
@@ -493,15 +493,15 @@ fn not_a_trait(x: &mut dyn FnMut(&mut u8)) {}
     let (b, j) = roundtrip(src);
     assert!(b.contains("fn show(what, k)") && !b.contains("impl "), "{b}");
     assert_eq!(subject(&j, "demo::show")["params"][0]["type"], "some Display");
-    assert_eq!(subject(&j, "demo::show")["params"][1]["type"], "some Into<text>");
+    assert_eq!(subject(&j, "demo::show")["params"][1]["type"], "some Into<string>");
     // a bound's references are shared and unnamed; a named lifetime or a `mut` there stays host text
-    assert_eq!(subject(&j, "demo::kinds")["result"]["type"], "some Iterator { Item = (u8, ref<text>) } + Clone");
+    assert_eq!(subject(&j, "demo::kinds")["result"]["type"], "some Iterator { Item = (u8, ref<target type=string>) } + Clone");
     assert_eq!(subject(&j, "demo::kinds")["result"]["hold"], serde_json::json!({"kind": "borrows", "from": "v"}));
     assert_eq!(subject(&j, "demo::pairs")["result"]["type"]["form"], "impl_trait");
     assert_eq!(subject(&j, "demo::errs")["result"]["fails"], "any std::error::Error + Send + Sync as 'Box'");
-    assert_eq!(subject(&j, "demo::each")["params"][0]["type"], "ref<any Iterator { Item = u8 }>");
+    assert_eq!(subject(&j, "demo::each")["params"][0]["type"], "ref<target type=any Iterator { Item = u8 }>");
     assert_eq!(subject(&j, "demo::each")["params"][0]["access"]["rights"], "write");
-    assert_eq!(subject(&j, "demo::each")["params"][1]["type"], "ref<any Fn(ref<u8>) -> bool>");
+    assert_eq!(subject(&j, "demo::each")["params"][1]["type"], "ref<target type=any Fn(ref<target type=u8>) -> bool>");
     assert_eq!(subject(&j, "demo::not_a_trait")["params"][0]["type"]["form"], "dyn");
 }
 
@@ -528,10 +528,10 @@ fn pick<'a, 'b>(a: &'a Node<'b>) -> &'a Node<'b> {
 "#;
     let (_, j) = roundtrip(src);
     assert_eq!(subject(&j, "demo::first")["params"][0]["type"], "Node<'a>");
-    assert_eq!(subject(&j, "demo::first")["result"]["type"], "list<Node<'a>> as 'Vec'");
-    assert_eq!(subject(&j, "demo::fill")["params"][0]["type"], "ref<list<Node<'_>> as 'Vec'>");
-    assert_eq!(subject(&j, "demo::fill")["params"][1]["type"], "ref<fmt::Formatter<'_>>");
-    assert_eq!(subject(&j, "demo::pick")["params"][0]["type"], "ref<Node<'b>>");
+    assert_eq!(subject(&j, "demo::first")["result"]["type"], "list<element type=Node<'a>> as 'Vec'");
+    assert_eq!(subject(&j, "demo::fill")["params"][0]["type"], "ref<target type=list<element type=Node<'_>> as 'Vec'>");
+    assert_eq!(subject(&j, "demo::fill")["params"][1]["type"], "ref<target type=fmt::Formatter<'_>>");
+    assert_eq!(subject(&j, "demo::pick")["params"][0]["type"], "ref<target type=Node<'b>>");
     // a type with lifetime parameters holds a borrow for each: `hold : borrows for 'a, 'b`
     assert_eq!(subject(&j, "demo::Node")["hold"], serde_json::json!({"kind": "borrows", "for": ["'t"]}));
     assert_eq!(subject(&j, "demo::Cursor")["hold"]["for"], serde_json::json!(["'a", "'b"]));
@@ -582,18 +582,18 @@ impl<'a> Shape for Chars2<'a> {
     let (b, j) = roundtrip(src);
     assert!(b.contains("impl Iterator for Chars2") && b.contains("fn into_iter(self)") && !b.contains("Self::IntoIter"), "{b}");
     let c = subject(&j, "demo::Chars2");
-    assert_eq!(c["implements"][0], serde_json::json!({"trait": "Iterator", "assoc": {"Item": "text where length(value) == 1 as 'char'"}, "impl": "demo::Chars2 as Iterator"}));
+    assert_eq!(c["implements"][0], serde_json::json!({"trait": "Iterator", "assoc": {"Item": "scalar as 'char'"}, "impl": "demo::Chars2 as Iterator"}));
     assert_eq!(c["implements"][1]["trait"], "Clone");
     assert_eq!(c["implements"].as_array().unwrap().len(), 3, "the impl for `&Chars2` is not the type's own");
     // an associated type of an impl is a type: `Self::IntoIter` in a signature names it
     assert_eq!(subject(&j, "demo::Chars2 as IntoIterator::into_iter")["result"]["type"], "Self::IntoIter");
     assert_eq!(subject(&j, "demo::Chars2 as IntoIterator::IntoIter")["type"], "Chars2<'b>");
-    assert_eq!(subject(&j, "demo::Chars2 as IntoIterator")["self"], "ref<Chars2<'b>>");
+    assert_eq!(subject(&j, "demo::Chars2 as IntoIterator")["self"], "ref<target type=Chars2<'b>>");
     assert_eq!(subject(&j, "demo::Chars2 as Shape::area")["result"]["type"], "Self::Unit");
     // the generics of an impl, and its trait with arguments, stay on the impl subject
     let w = subject(&j, "demo::Wrap as From");
     assert_eq!(w["generics"][0]["name"], "'a");
-    assert_eq!(w["trait"], "From<list<T> as 'Vec'>");
+    assert_eq!(w["trait"], "From<list<element type=T> as 'Vec'>");
     assert_eq!(w["self"], "Wrap<'a, T>");
     assert_eq!(subject(&j, "demo::Wrap")["implements"][0]["impl"], "demo::Wrap as From");
 }
@@ -828,7 +828,7 @@ pub fn f(s: &str, v: Vec<i32>) -> Result<usize, std::num::ParseIntError> {
     assert_eq!(r["parse_u16"], serde_json::json!({"template": "<_>::parse", "args": ["u16"]}));
     assert_eq!(r["size_of_u64"], serde_json::json!({"template": "std::mem::size_of", "args": ["u64"]}));
     assert_eq!(r["VecU8"], serde_json::json!({"template": "std::vec::Vec", "args": ["u8"]}));
-    assert_eq!(r["collect_vec"], serde_json::json!({"template": "<_>::collect", "args": ["list<_> as 'Vec'"]}));
+    assert_eq!(r["collect_vec"], serde_json::json!({"template": "<_>::collect", "args": ["list<element type=_> as 'Vec'"]}));
     assert_eq!(r["ok_unit"], serde_json::json!({"template": "std::result::Result::Ok", "args": ["_", "()"]}));
     assert_eq!(r.as_object().unwrap().len(), 5, "{r}");
 }

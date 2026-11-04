@@ -29,12 +29,12 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<Unfold<St, F>>",
+          "type": "ref<target type=Unfold<St, F>>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "f",
-          "type": "ref<fmt::Formatter<'_>>",
+          "type": "ref<target type=fmt::Formatter<'_>>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -78,7 +78,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<Unfold<St, F>>",
+          "type": "ref<target type=Unfold<St, F>>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -117,12 +117,12 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<Iterate<St, F>>",
+          "type": "ref<target type=Iterate<St, F>>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "f",
-          "type": "ref<fmt::Formatter<'_>>",
+          "type": "ref<target type=fmt::Formatter<'_>>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -144,7 +144,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<Iterate<St, F>>",
+          "type": "ref<target type=Iterate<St, F>>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -156,7 +156,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<Iterate<St, F>>",
+          "type": "ref<target type=Iterate<St, F>>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],

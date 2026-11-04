@@ -10,7 +10,7 @@
       "name": "human_size::ParseSizeError",
       "visible": "public",
       "fields": [
-        { "name": "original", "type": "text", "hold": { "kind": "owns" } },
+        { "name": "original", "type": "string", "hold": { "kind": "owns" } },
         { "name": "kind", "type": "ParseSizeErrorKind", "hold": { "kind": "owns" } }
       ],
       "implements": [
@@ -34,7 +34,11 @@
       "kind": "function",
       "name": "human_size::ParseSizeError::format",
       "params": [
-        { "name": "original", "type": "ref<text>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "original",
+          "type": "ref<target type=string>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
       "result": { "type": "ParseSizeError" }
     },
@@ -42,7 +46,11 @@
       "kind": "function",
       "name": "human_size::ParseSizeError::int",
       "params": [
-        { "name": "original", "type": "ref<text>", "access": { "rights": "read", "guarantee": "readers" } },
+        {
+          "name": "original",
+          "type": "ref<target type=string>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
         { "name": "err", "type": "std::num::ParseIntError" }
       ],
       "result": { "type": "ParseSizeError" }
@@ -51,7 +59,11 @@
       "kind": "function",
       "name": "human_size::ParseSizeError::overflow",
       "params": [
-        { "name": "original", "type": "ref<text>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "original",
+          "type": "ref<target type=string>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
       "result": { "type": "ParseSizeError" }
     },
@@ -63,12 +75,12 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<ParseSizeError>",
+          "type": "ref<target type=ParseSizeError>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "f",
-          "type": "ref<std::fmt::Formatter<'_>>",
+          "type": "ref<target type=std::fmt::Formatter<'_>>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -86,7 +98,11 @@
       "name": "human_size::parse_human_readable_size",
       "visible": "public",
       "params": [
-        { "name": "size", "type": "ref<text>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "size",
+          "type": "ref<target type=string>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
       "result": { "type": "u64", "fails": "ParseSizeError" }
     },

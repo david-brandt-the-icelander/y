@@ -279,7 +279,7 @@ fn cargo_fnv() {
 
 #[test]
 fn cargo_itoa() {
-    // Pointer casts, as cast locals of type `ptr<T>`; an impl for a primitive type.
+    // Pointer casts, as cast locals of type `ptr<target type=T>`; an impl for a primitive type.
     let r = run_checks(root().join("corpora/src/itoa"), true, true);
     assert_holes_are_sites(&r);
 }

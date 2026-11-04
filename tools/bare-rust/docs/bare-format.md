@@ -11,8 +11,8 @@ Rules that cover most edits:
   `crate::Type as Trait::method`; a second item of the same name gets `#2`.
 - `self` stays in the bare parameter list; whether it is `&self`, `&mut self` or `self` is in the subject's first
   parameter (`access` read or write, or none for an owned `self`).
-- Types are written in the constraint type syntax (`text`, `list<T> as 'Vec'`, `map<K, V> as 'HashMap'`, `ref<T>`,
-  `ptr<T>` for a raw pointer, `T?` for `Option<T>`, `u32`, a plain name for any other type); `{ "host": "..." }` is
+- Types are written in the constraint type syntax (`string`, `list<element type=T> as 'Vec'`, `map<key type=K, value type=V> as 'HashMap'`, `ref<target type=T>`,
+  `ptr<target type=T>` for a raw pointer, `T?` for `Option<T>`, `u32`, a plain name for any other type); `{ "host": "..." }` is
   Rust text for a type that has no such form.
 - `mut` is not written: the weave derives it through rustc, in every build the crate is checked in. Besides the
   default build, `strip` chooses a few others (another target, a feature, a `--cfg`, a release build, listed in
@@ -21,8 +21,8 @@ Rules that cover most edits:
   target that is not installed); there the bare body keeps its `mut`. A `let` has no type in
   the bare body; where rustc cannot infer it, it goes under `"holes"` (a local, a cast local; see the last example), and
   a realization of a generic goes in the crate's table, `"realizations"`, in the crate root's file.
-- A field or parameter whose type is a `ref<...>` needs an `access`; a result that borrows says `"hold": {"kind":
-  "borrows", "from": "self"}`. A `ptr<...>` has `"access": {"rights": "read"}` for `*const` and no `access` for `*mut`:
+- A field or parameter whose type is a `ref<target type=...>` needs an `access`; a result that borrows says `"hold": {"kind":
+  "borrows", "from": "self"}`. A `ptr<target type=...>` has `"access": {"rights": "read"}` for `*const` and no `access` for `*mut`:
   a pointer has no guarantee and no lifetime.
 - A union is a `type` subject with `fields`, as a struct is; the bare body keeps the keyword `union`. A generic
   parameter's default is `"default"` on it: a type (`{"name": "E", "bounds": [], "default": "Error"}`), or host text for
@@ -103,14 +103,14 @@ Constraint file (`.constraints.json`, under `"subjects"`):
   "kind": "function",
   "name": "format_demo::Counter::get",
   "visible": "public",
-  "params": [{"name": "self", "type": "ref<Counter>", "access": {"rights": "read", "guarantee": "readers"}}, {"name": "word", "type": "ref<text>", "access": {"rights": "read", "guarantee": "readers"}}],
-  "result": {"type": "ref<u32>?", "hold": {"kind": "borrows", "from": "self"}}
+  "params": [{"name": "self", "type": "ref<target type=Counter>", "access": {"rights": "read", "guarantee": "readers"}}, {"name": "word", "type": "ref<target type=string>", "access": {"rights": "read", "guarantee": "readers"}}],
+  "result": {"type": "ref<target type=u32>?", "hold": {"kind": "borrows", "from": "self"}}
 }
 {
   "kind": "function",
   "name": "format_demo::Counter::bump",
   "visible": "public",
-  "params": [{"name": "self", "type": "ref<Counter>", "access": {"rights": "write", "guarantee": "exclusive"}}, {"name": "word", "type": "text"}]
+  "params": [{"name": "self", "type": "ref<target type=Counter>", "access": {"rights": "write", "guarantee": "exclusive"}}, {"name": "word", "type": "string"}]
 }
 ```
 
@@ -154,7 +154,7 @@ Constraint file (`.constraints.json`, under `"subjects"`):
   "name": "format_demo::largest",
   "visible": "public",
   "generics": [{"name": "T", "bounds": ["PartialOrd", "Copy"]}],
-  "params": [{"name": "items", "type": "ref<list<T> as 'std::primitive::slice'>", "access": {"rights": "read", "guarantee": "readers"}}],
+  "params": [{"name": "items", "type": "ref<target type=list<element type=T> as 'std::primitive::slice'>", "access": {"rights": "read", "guarantee": "readers"}}],
   "result": {"type": "T"}
 }
 ```
@@ -193,8 +193,8 @@ Constraint file (`.constraints.json`, under `"subjects"`):
 {
   "kind": "function",
   "name": "format_demo::Counter as Describe::describe",
-  "params": [{"name": "self", "type": "ref<Counter>", "access": {"rights": "read", "guarantee": "readers"}}],
-  "result": {"type": "text"}
+  "params": [{"name": "self", "type": "ref<target type=Counter>", "access": {"rights": "read", "guarantee": "readers"}}],
+  "result": {"type": "string"}
 }
 ```
 
@@ -221,7 +221,7 @@ Constraint file (`.constraints.json`, under `"subjects"`):
   "kind": "alias",
   "name": "format_demo::Table",
   "visible": "public",
-  "type": "map<text, u32> as 'HashMap'"
+  "type": "map<key type=string, value type=u32> as 'HashMap'"
 }
 ```
 
@@ -322,9 +322,9 @@ Constraint file (`.constraints.json`, under `"subjects"`):
 
 ### Locals, casts and hints
 
-What rustc cannot infer from the bare body goes in `holes`, keyed by the subject: a `locals` entry per `let` (keyed by the pattern; the second `let x` is `x#2`), and per typed parameter of a closure that a `let` names (keyed `<closure>.<parameter>`: `let by_len = |a, b| ...` with `"by_len.a": "<T>"`). A closure's return type is carried by a local in its body: `|s| { let out = { ... }; out }` with `"out": "<T>"`. A turbofish is a *realization* of a template (a generic function or type with its type arguments), and the body names it: the name takes the place of the template's last segment and its arguments, and a path before it stays. `s.parse::<u16>()` is `s.parse_u16()` in the body, `Vec::<u8>::new()` is `VecU8::new()`, and `std::mem::size_of::<u64>()` is `std::mem::size_of_u64()`. The realizations are one table for the crate, at the top of its root's constraint file (`src/lib.constraints.json`; `src/main.constraints.json` for a binary), under `realizations`: `"parse_u16": {"template": "<_>::parse", "args": ["u16"]}`. The template is its full path (`std::mem::size_of`, `std::vec::Vec`), or `<_>::name` for a method, whose type is the receiver's. One name serves every use in the crate with the same template and arguments, and an argument can be `_` for the host to infer (`"collect_vec": {"template": "<_>::collect", "args": ["list<_> as 'Vec'"]}`). A new use of a realization the table has needs nothing more; a new one needs its entry. Rename the mechanical names like the others (every use and the key together).
+What rustc cannot infer from the bare body goes in `holes`, keyed by the subject: a `locals` entry per `let` (keyed by the pattern; the second `let x` is `x#2`), and per typed parameter of a closure that a `let` names (keyed `<closure>.<parameter>`: `let by_len = |a, b| ...` with `"by_len.a": "<T>"`). A closure's return type is carried by a local in its body: `|s| { let out = { ... }; out }` with `"out": "<T>"`. A turbofish is a *realization* of a template (a generic function or type with its type arguments), and the body names it: the name takes the place of the template's last segment and its arguments, and a path before it stays. `s.parse::<u16>()` is `s.parse_u16()` in the body, `Vec::<u8>::new()` is `VecU8::new()`, and `std::mem::size_of::<u64>()` is `std::mem::size_of_u64()`. The realizations are one table for the crate, at the top of its root's constraint file (`src/lib.constraints.json`; `src/main.constraints.json` for a binary), under `realizations`: `"parse_u16": {"template": "<_>::parse", "args": ["u16"]}`. The template is its full path (`std::mem::size_of`, `std::vec::Vec`), or `<_>::name` for a method, whose type is the receiver's. One name serves every use in the crate with the same template and arguments, and an argument can be `_` for the host to infer (`"collect_vec": {"template": "<_>::collect", "args": ["list<element type=_> as 'Vec'"]}`). A new use of a realization the table has needs nothing more; a new one needs its entry. Rename the mechanical names like the others (every use and the key together).
 
-**Every cast and suffixed literal has a name.** A conversion between built-in types (`as u64`, `as f64`, ...) and a literal's type (`1u8`) are not written in the body. The value initialises a `let`, and the local's entry carries the type: `{"type": "<T>", "cast": true}` for a cast, so that `let n = e;` weaves to `let n: T = e as T;` (with brackets around `e` when it needs them), and `"<T>"` for a literal, so that `let one = 1;` weaves to `let one: u8 = 1;`. A cast to a pointer carries its access too: `{"type": "ptr<u8>", "access": {"rights": "read"}, "cast": true}` weaves to `let p: *const u8 = e as *const u8;`. Any other target is carried the same way: a type alias (`{"type": "Word", "cast": true}`), a reference (`{"type": "ref<any Display>", "cast": true}` for `&x as &dyn Display`), a `fn` pointer (as host text). A `const` or `static` whose whole value is a cast carries it on its subject, `"cast": true`, as a cast local does: `const W = N;` weaves to `const W: usize = N as usize;`. Write a `let` where the Rust would cast in the middle of an expression too: `1.0 - d / m`, with `d` and `m` cast locals, rather than `1.0 - (d as f64) / (m as f64)`.
+**Every cast and suffixed literal has a name.** A conversion between built-in types (`as u64`, `as f64`, ...) and a literal's type (`1u8`) are not written in the body. The value initialises a `let`, and the local's entry carries the type: `{"type": "<T>", "cast": true}` for a cast, so that `let n = e;` weaves to `let n: T = e as T;` (with brackets around `e` when it needs them), and `"<T>"` for a literal, so that `let one = 1;` weaves to `let one: u8 = 1;`. A cast to a pointer carries its access too: `{"type": "ptr<target type=u8>", "access": {"rights": "read"}, "cast": true}` weaves to `let p: *const u8 = e as *const u8;`. Any other target is carried the same way: a type alias (`{"type": "Word", "cast": true}`), a reference (`{"type": "ref<target type=any Display>", "cast": true}` for `&x as &dyn Display`), a `fn` pointer (as host text). A `const` or `static` whose whole value is a cast carries it on its subject, `"cast": true`, as a cast local does: `const W = N;` weaves to `const W: usize = N as usize;`. Write a `let` where the Rust would cast in the middle of an expression too: `1.0 - d / m`, with `d` and `m` cast locals, rather than `1.0 - (d as f64) / (m as f64)`.
 
 `strip` does this to the Rust it reads (`bare-rust bind <file.rs>` shows the result), and gives a closure with typed parameters a name the same way (`v.retain(|s: &String| ...)` becomes `let retain_fn = |s: &String| ...;` and `v.retain(retain_fn)`): `(h as u64).wrapping_mul(P)` becomes `let h_u64: u64 = h as u64;` before the statement and `h_u64.wrapping_mul(P)` in it. Where the statement would compute the value when the Rust might not (the right of `&&` or `||`, a match arm or guard, an `else if`, a `while` condition, a closure body), the `let` goes into a new block in that place: `c && { let h_u8 = h; h_u8 > 3 }`. A constant context (an array's length, the value of a `const` or `static`), a `while let` value and a part of a let chain get a block in their place the same way: `[0; { let n_usize = N; n_usize }]`, `if let Some(y) = a && { let n_u8 = n; y > n_u8 }`. What runs earlier in the statement and has an effect is named first, so the order stays the Rust's: a method receiver that is a value is named whole (`let largest = v.iter().max().copied().unwrap_or(0);` and `largest.max(a_u8)`), a place stays where it is and what it computes on the way is named (`let row = next_row();` and `self.rows[row].push(n_u32)`), and the right of an assignment is named before its left. Which side of `+=` runs first depends on the types, so where the other side has an effect the `let` goes into a block in place of the part it is in: `v[{ let i_usize = i; i_usize }] += next()`. Names such as `h_u64` and `k1_u8` are mechanical; rename them (the `.brs` and the `holes` key together) to say what the value is.
 
@@ -357,7 +357,7 @@ Constraint file (`.constraints.json`, under `"subjects"` and `"holes"`):
   "kind": "function",
   "name": "format_demo::mean",
   "visible": "public",
-  "params": [{"name": "values", "type": "ref<list<f64> as 'std::primitive::slice'>", "access": {"rights": "read", "guarantee": "readers"}}],
+  "params": [{"name": "values", "type": "ref<target type=list<element type=f64> as 'std::primitive::slice'>", "access": {"rights": "read", "guarantee": "readers"}}],
   "result": {"type": "f64"}
 }
 {
@@ -395,8 +395,8 @@ The same messages appear in the text output of `bare-rust weave` and in the `err
 Types default to `TODO`. See `bare-rust` with no arguments for the options.
 
 ```
-bare-rust scaffold fn util::Counter::peek --self ref --params key --param-types 'ref<text>' --result 'u32?'
+bare-rust scaffold fn util::Counter::peek --self ref --params key --param-types 'ref<target type=string>' --result 'u32?'
 bare-rust scaffold impl Counter --trait Describe --methods describe,reset:mut
-bare-rust scaffold alias Table --type "map<text, u32> as 'HashMap'"
+bare-rust scaffold alias Table --type "map<key type=string, value type=u32> as 'HashMap'"
 bare-rust scaffold struct Point --fields x,y --field-types f64,f64 --write .
 ```

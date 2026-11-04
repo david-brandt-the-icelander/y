@@ -690,10 +690,10 @@ fn call(f: &str, args: &[Ex], env: &mut Env) -> ER {
         }
     };
     match f {
-        "size" | "count" | "length" => {
+        "count" => {
             arity(1)?;
-            let xs = list_of(ev(0, env)?, "the argument of `size`")?;
-            xs.len().map(|n| Value::Int(n as i64)).ok_or_else(|| EvalErr::Undecided("`size` of an infinite sequence has no value".into()))
+            let xs = list_of(ev(0, env)?, "the argument of `count`")?;
+            xs.len().map(|n| Value::Int(n as i64)).ok_or_else(|| EvalErr::Undecided("`count` of an infinite sequence has no value".into()))
         }
         "take" | "skip" => {
             arity(2)?;
@@ -831,7 +831,7 @@ mod tests {
         assert_eq!(holds("present(old(yields(self)), 2) and not present(old(yields(self)), 3)", &mut e), Ok(true));
         assert_eq!(holds("flatten([[1], [2, 3]]) == [1, 2, 3]", &mut e), Ok(true));
         e.fin.insert("self".into(), ints(&[7]));
-        assert_eq!(holds("final(yields(self)) == skip(size(keep), old(yields(self)))", &mut e), Ok(true));
+        assert_eq!(holds("final(yields(self)) == skip(count(keep), old(yields(self)))", &mut e), Ok(true));
         assert_eq!(run_let("let (a, b) = r", &mut e), Ok(()));
         assert_eq!(holds("a ++ b == [1, 2]", &mut e), Ok(true));
         assert!(matches!(run_let("let a = 1", &mut e), Err(EvalErr::Build(_))));
@@ -842,8 +842,8 @@ mod tests {
         let t = Value::Tuple(vec![ints(&[1]), ints(&[2, 3])]);
         let mut e = env(&[("result", t), ("mid", Value::Int(1))], &[("self", ints(&[1, 2, 3]))]);
         assert_eq!(holds("result.0 == old(self)[..mid] and result.1 == old(self)[mid..]", &mut e), Ok(true));
-        assert_eq!(holds("result is (head, tail) implies size(head) + size(tail) == old(size(self))", &mut e), Ok(true));
-        assert!(matches!(holds("size(result.2) == 0", &mut e), Err(EvalErr::Build(_))));
+        assert_eq!(holds("result is (head, tail) implies count(head) + count(tail) == old(count(self))", &mut e), Ok(true));
+        assert!(matches!(holds("count(result.2) == 0", &mut e), Err(EvalErr::Build(_))));
         assert!(matches!(holds("result is (a, b, c)", &mut e), Err(EvalErr::Build(_))));
     }
 
@@ -853,7 +853,7 @@ mod tests {
         let mut e = env(&[("result", c)], &[]);
         assert_eq!(holds("take(3, yields(result)) == [0, 1, 2]", &mut e), Ok(true));
         assert!(matches!(holds("yields(result) == yields(result)", &mut e), Err(EvalErr::Undecided(_))));
-        assert!(matches!(holds("size(result) == 3", &mut e), Err(EvalErr::Undecided(_))));
+        assert!(matches!(holds("count(result) == 3", &mut e), Err(EvalErr::Undecided(_))));
         assert_eq!(holds("skip(1, result) == result", &mut e), Ok(false));
     }
 }

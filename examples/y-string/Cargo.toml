@@ -1,0 +1,12 @@
+[package]
+name = "y-string"
+version = "0.0.0"
+edition = "2021"
+description = "Y's standard.string (y-string): strings of runes, normalised to NFC, and ASCII strings for the constraint character set=ascii."
+
+[dependencies]
+unicode-normalization = "0.1"
+unicode-segmentation = "1"
+y-runtime = { path = "../y-runtime" }
+
+[workspace]

@@ -31,7 +31,7 @@ Constraint file (`.constraints.json`, under `"subjects"` and `"holes"`):
   "kind": "function",
   "name": "format_demo::mean",
   "visible": "public",
-  "params": [{"name": "values", "type": "ref<list<f64> as 'std::primitive::slice'>", "access": {"rights": "read", "guarantee": "readers"}}],
+  "params": [{"name": "values", "type": "ref<target type=list<element type=f64> as 'std::primitive::slice'>", "access": {"rights": "read", "guarantee": "readers"}}],
   "result": {"type": "f64"}
 }
 {

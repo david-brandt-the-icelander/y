@@ -37,7 +37,7 @@ public facet setup:
 
     text: The words, separated by spaces, as string.
 
-    words: Every word of the list, in order, as list<element=word>.
+    words: Every word of the list, in order, as list<element type=word>.
 
     fails word_list_error.empty: The list has no words.
     fails word_list_error.not_a_word: A piece of the list is not a `word`: it has a character other than `a` to `z`, or
@@ -67,8 +67,8 @@ public facet rounds:
     -- One game: the secret word, and every letter guessed so far.
     structure game:
         word is word
-        hits is set<element=rune>
-        misses is list<element=rune>
+        hits is set<element type=rune>
+        misses is list<element type=rune>
 
         derived miss_count is count<of=rune> = misses.count()
 
@@ -224,7 +224,7 @@ public facet display:
 Shows one letter of the word: the letter once it is found, and an underscore until then.
 
 letter: The letter of the word, as rune.
-hits: The letters found so far, as set<element=rune>.
+hits: The letters found so far, as set<element type=rune>.
 
 shown: What the player sees in its place, as rune.
 ----------------------------------------------------------------------------------------------------------------
@@ -262,7 +262,7 @@ public facet console_play:
     ------------------------------------------------------------------------------------------------------------
     Plays one game at the console, with a word chosen at random, until it is won or lost.
 
-    words: The words to choose from, as list<element=word>.
+    words: The words to choose from, as list<element type=word>.
 
     console: Where the game is shown and the guesses are read, as console.
     random: What chooses the word, as random.
@@ -313,7 +313,7 @@ function show_turn(game, injected console) fails console_error:
 ----------------------------------------------------------------------------------------------------------------
 What the game says to a guess.
 
-guessed: What the guess did, as result<value=verdict, failure=guess_error>.
+guessed: What the guess did, as result<value type=verdict, failure type=guess_error>.
 typed: What the player typed, as string.
 
 answer: The line to write, as string.

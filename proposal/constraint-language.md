@@ -150,7 +150,7 @@ use economy                   -- quantities: Isk, ItemQuantity
 | Subject | Binds to | Example |
 | --- | --- | --- |
 | `procedure` | A stored procedure in the catalog, in Rust or T-SQL | `procedure space.ActivateModule(moduleID: u64, targetID: u64)` |
-| `method` | An RPC method, by service and method | `method inventory.MoveItems(itemIDs: list<u64>, toLocationID: u64)` |
+| `method` | An RPC method, by service and method | `method inventory.MoveItems(itemIDs: list<element type=u64>, toLocationID: u64)` |
 | `function` | A function or method in a host language | `function python 'eve.inventory.InventoryMgr.MoveItems'` |
 | `type` | A type of a host language, or of the language itself | `type csharp 'Studio.Ui.InventoryWindow'` |
 | `table` | A table in the catalog | `table space.Ships` |
@@ -200,21 +200,24 @@ cannot check is reported as such for every subject of that host, never silently 
 - **Primitive:** `bool`; `int`, the mathematical integers, with `u8` to `u128` and `i8` to `i128` as named refinements
   of it; `decimal`, the exact decimals, constrained as in Y by `precision` and `scale` (`decimal<precision=19,
   scale=2>`; `decimal16<scale=s>` to `decimal256<scale=s>` name ClickHouse's precisions, Y § 3.3); `rational`, the
-  exact fractions, constrained by `precision`; `f32` and `f64`; `text`; `bytes`; `time`, simulation time at a place in history; `instant`,
-  wall-clock time, allowed only in watched constraints; `duration`; `id<T>`, the identity of a row or entity of `T`.
+  exact fractions, constrained by `precision`; `f32` and `f64`; `string`; `bytes`; `time`, simulation time at a place in history; `instant`,
+  wall-clock time, allowed only in watched constraints; `duration`; `id<entity type=T>`, the identity of a row or entity of `T`.
 - **Composite:** records `{ name: T, ... }`; tuples; variants `A | B(T)`, closed unless marked `open`; optional `T?`;
-  collections and mappings (below); `ref<T>`, a reference to a host entity, used by the memory clauses; `ptr<T>`,
-  a host pointer: the address of a `T`, with no guarantee that it is valid or about any other path (§ 8.1). The kinds of
-  pointer between the two (valid, a cursor, an element, a C string, code) are refinements of `ptr<T>`, and `ref<T>` is
-  the most refined of them (§ 7.8).
+  collections and mappings (below); `ref<target type=T>`, a reference to a host entity, used by the memory clauses;
+  `ptr<target type=T>`, a host pointer: the address of a `T`, with no guarantee that it is valid or about any other
+  path (§ 8.1). The kinds of pointer between the two (valid, a cursor, an element, a C string, code) are refinements
+  of `ptr<target type=T>`, and `ref<target type=T>` is the most refined of them (§ 7.8).
 - **Collections and mappings.** A collection is one-dimensional and a mapping two-dimensional, as in Y (Y § 3.13).
   Lists, arrays, sets, bags, stacks, queues, linked lists and iterators are collections, and maps of every order are
-  mappings, each with the constraints that say what it holds and how it may be used: `element`, or `key` and `value`;
-  `ordered by position | insertion | value | key`, `unordered`, `unique`, `count fixed`, `count at most n`, `offers
-  …`, `costs …`, `values many`. `list<T>`, `set<T>` and `map<K, V>` are three of them, written here with the hosts'
-  positional arguments, which Y writes named (`list<element=word>`, Y § 3.1). A host type maps onto one through its
-  profile, by its constraints: Rust's `Vec<T>` onto `list<T>`, `BTreeSet<T>` onto `sorted_set<T>`, `HashMap<K, V>`
-  onto `unordered_map<K, V>`.
+  mappings, each with the constraints that say what it holds and how it may be used: `element type`, or `key type` and
+  `value type`; `ordered by position | insertion | value | key`, `unordered`, `unique`, `count fixed`, `count at most
+  n`, `offers …`, `costs …`, `values many`. `list<element type=T>`, `set<element type=T>` and `map<key type=K, value
+  type=V>` are three of them. A host type maps onto one through its profile, by its constraints: Rust's `Vec<T>` onto
+  `list<element type=T>`, `BTreeSet<T>` onto `sorted_set<element type=T>`, `HashMap<K, V>` onto `unordered_map<key
+  type=K, value type=V>`.
+- **Type arguments are named,** as in Y (Y § 3.1): `ref<target type=T>`, `list<element type=T>`, `map<key type=K,
+  value type=V>`, and a third, `hasher type`, where a host's map has one. A positional argument is refused at build.
+  The arguments of a host's own type (`Node<'a>`) are the host's, and stay positional.
 - **Refinements:** `T where p`, in which `value` names the value being refined; shorthands `T in a..b` and `T in {a, b,
   c}`; named refinements: `type Quantity = i64 where value >= 0`. A refinement on an optional type applies to the value
   when it is present. `where` always filters: the values of a type here, the rows of a table in an expression (§ 4).
@@ -225,9 +228,9 @@ cannot check is reported as such for every subject of that host, never silently 
   (§ 6.11). **Existential types:** `some I` is a value of one type, fixed by the subject, that implements `I`; `any I` is a
   value of any type that implements `I` (§ 6.11).
 - **Representation.** A type in the language says which values are allowed. When a host needs a representation the
-  profile does not choose by default, `as` names it: `map<Key, Entry> as 'std::collections::BTreeMap'`.
+  profile does not choose by default, `as` names it: `map<key type=Key, value type=Entry> as 'std::collections::BTreeMap'`.
 
-A host type maps onto these through its profile: T-SQL `INT` to `i32`, `NVARCHAR(50)` to `text where utf16_length(value)
+A host type maps onto these through its profile: T-SQL `INT` to `i32`, `NVARCHAR(50)` to `string where count(code_units(value, utf16))
 <= 50`, C# `int?` to `i32?`, Rust `Option<u64>` to `u64?`, Python `int` to `int`.
 
 ### 3.5 Templates and realizations
@@ -240,7 +243,7 @@ same realization.
 
 - **A realized type** is a type like any other: `Vec<u8>` has the fields and methods of `Vec` with `u8` for `T`.
 - **A realized function** has the template's signature with the arguments in place: `parse<u32>` is
-  `(self: ref<str>) -> Result<u32, ParseIntError>`. A method of a realized type is realized with it: `Vec<u8>::push`.
+  `(self: ref<target type=str>) -> Result<u32, ParseIntError>`. A method of a realized type is realized with it: `Vec<u8>::push`.
 - **Bounds** say which arguments a template accepts: `T: Ord` is a condition for the realization to exist. A use that
   breaks it does not realize anything; it is an error.
 - **Clauses.** A clause of the template holds of every realization, with the arguments in place. A clause can also be
@@ -367,11 +370,16 @@ profile 'tranquility-2026-10' from replay 'tq-2026-10-14' on platform 'x86_64-un
   Transcendental functions are named functions with one pinned implementation. `finite x` excludes `NaN` and the
   infinities, and is the usual refinement. `approx(a, b, abs: e, rel: r)` states a tolerance where the code being
   compared did not pin its arithmetic.
-- **Text is a sequence of Unicode scalar values.** `==` compares scalars and `length` counts them; `utf16_length` and
-  `byte_length(x, utf8)` count code units, which is what `NVARCHAR(n)` and many host limits count. Normalisation and
-  collation are named functions: `normalized(x, NFC)`; `collate(x, 'Latin1_General_CI_AS')`, which gives a key that
-  compares as the collation does; and `sql_equals(a, b, collation)`, which also ignores trailing spaces as T-SQL's `=`
-  does. A comparison lifted from T-SQL is written with them. `x matches /re/` uses linear-time regular expressions only.
+- **Strings are y-string's (Y § 3.3).** A `string` is a sequence of runes, each one extended grapheme cluster, which
+  is what a person sees as one character; `count(s)` counts them. Its Unicode scalar values are `scalars(s)`, and a
+  host's single character (Rust's `char`, a Java `int` code point) is a `scalar`. `count(code_units(s, utf16))` and
+  `count(code_units(s, utf8))` count an encoding's code units, which is what `NVARCHAR(n)` and many host limits count.
+  `==` compares scalars: a host's string is not normalised unless its profile says so, so `string<normalization=nfc>`
+  states that it is, as every string Y makes is. `string<character set=ascii>` holds ASCII only, so a rune is one
+  scalar and one byte, and the three counts agree. Collation is a named function: `collate(x,
+  'Latin1_General_CI_AS')`, which gives a key that compares as the collation does; and `sql_equals(a, b, collation)`,
+  which also ignores trailing spaces as T-SQL's `=` does. A comparison lifted from T-SQL is written with them. `x
+  matches /re/` uses linear-time regular expressions only.
 - **Time:** `now` is the time of the request at its place in history and `tick` its tick; durations carry units: `50us`,
   `5 ticks`, `30 s`, `2 frames`.
 - **Equality and identity:** `==` is structural on values; `same(a, b)` is identity of host references; rows compare by
@@ -390,7 +398,7 @@ profile 'tranquility-2026-10' from replay 'tq-2026-10-14' on platform 'x86_64-un
   whether `x` is that very entity. It is pure and total, a view of the map and the key (Rust's `get_key_value`).
 - **Tuples:** `e.0`, `e.1` are the parts of a tuple, and a pattern `(a, b)` names them, in `let` and after `is` (§ 6.14.7).
 - **Collections:** `size`, `in`, `subset`, `distinct`, `sorted by`, `all x in c : p`, `any x in c : p`, `count`, `sum`.
-  `min` and `max` return an optional value, absent for an empty collection. A `list<T>` has an order: `xs[i]`,
+  `min` and `max` return an optional value, absent for an empty collection. A `list<element type=T>` has an order: `xs[i]`,
   `present(xs, i)`, `xs[i..j]`, `xs ++ ys`, `reverse`, `take`, `skip`, `zip`, `enumerate`, `select`, `while_true`,
   `flatten`, and `map` and `filter` by a named function; and `yields(it)` is the sequence an iterator gives (§ 6.15). In a `law` only, a quantifier may range over
   a type, `all x : T : p`, because laws are checked on generated values and never at run time.
@@ -480,7 +488,7 @@ it, a layout.
 ```text
 failure TooLarge : user
 
-method inventory.MoveItems(itemIDs: list<u64> where size(value) in 1..1000 and distinct(value),
+method inventory.MoveItems(itemIDs: list<element type=u64> where count(value) in 1..1000 and distinct(value),
                            toLocationID: u64,
                            flag: u8 in {4, 5, 62, 133},
                            quantity: i32? where value > 0)
@@ -488,7 +496,7 @@ method inventory.MoveItems(itemIDs: list<u64> where size(value) in 1..1000 and d
     require volume_fits : exists quantity implies quantity * inv.unitVolume(itemIDs) fits i64 else TooLarge
 
 type CycleWindow = { started: time, ends: time } where started <= ends
-type ShipName    = text where length(value) in 1..32 and value matches /^[\p{L}\p{N} ._'-]+$/
+type ShipName    = string where count(scalars(value)) in 1..32 and value matches /^[\p{L}\p{N} ._'-]+$/
 quantity Distance : decimal in m
 
 type rust 'eve_net::wire::Header'
@@ -522,7 +530,7 @@ failure InsufficientFunds : user
 failure OutOfRange        : user { distance: Distance, range: Distance }
 
 procedure market.PlaceOrder(typeID: u32, price: decimal<precision=19, scale=2> where value > 0, quantity: i32 where value > 0)
-    -> id<market.Orders>
+    -> id<entity type=market.Orders>
     from Player
     require docked      : exists session.stationID                          else NotDocked
     let w = wallet.Balances[actor]
@@ -534,7 +542,7 @@ procedure market.PlaceOrder(typeID: u32, price: decimal<precision=19, scale=2> w
     fails only NotDocked, InsufficientFunds
     result must be used
 
-function kotlin 'studio.ui.withLock'(lock: ref<Lock>, body: ref<Function0>)
+function kotlin 'studio.ui.withLock'(lock: ref<target type=Lock>, body: ref<target type=Function0>)
     callback body : called exactly once before return
 
 function rust 'eve_net::frame::encode'(f: Frame) -> bytes
@@ -592,19 +600,19 @@ interface rust 'edb::Procedure'
     no randomness except rolls
     deterministic
 
-function 'eve.dogma.stacking.penalised'(values: list<f64>) -> f64
+function 'eve.dogma.stacking.penalised'(values: list<element type=f64>) -> f64
     effects none
     depends only on values
     terminates
 
-procedure wallet.Credit(requestID: id<Requests>, amount: decimal<precision=19, scale=2>)
+procedure wallet.Credit(requestID: id<entity type=Requests>, amount: decimal<precision=19, scale=2>)
     idempotent by requestID        -- the same request twice changes the world once
 
 -- economy/bounds.constraints: a rule, not a description
 interface rust 'eve_market::Procedure'
     writes only market.*, wallet.Escrow
 
-function rust 'eve::fitting::apply'(ship: ref<Ship>, fit: ref<Fit>)
+function rust 'eve::fitting::apply'(ship: ref<target type=Ship>, fit: ref<target type=Fit>)
     reads only ship.modules, ship.cargo, fit
     mutates only ship.modules              when not docked(ship)
     mutates only ship.modules, ship.cargo  when docked(ship)    -- docked, the unfitted modules go to the cargo
@@ -788,9 +796,9 @@ procedure space.ActivateModule(moduleID: u64, targetID: u64)
     budget work O(1)
     budget round_trips <= 0
 
-method inventory.MoveItems(itemIDs: list<u64>, toLocationID: u64)
-    budget work O(size(itemIDs))
-    budget bytes sent <= 256 * size(itemIDs)
+method inventory.MoveItems(itemIDs: list<element type=u64>, toLocationID: u64)
+    budget work O(count(itemIDs))
+    budget bytes sent <= 256 * count(itemIDs)
 
 type csharp 'Studio.Ui.InventoryWindow'
     budget retains at most 2 MB per instance
@@ -879,7 +887,7 @@ table space.Ships
     label cloaked : hidden(ownerID)
     label position : hidden(ownerID) when cloaked
 
-method chat.Send(channelID: u64, message: text)
+method chat.Send(channelID: u64, message: string)
     label message : untrusted
     sanitised by chat.escape before log, client
 
@@ -958,22 +966,22 @@ interfaces.
 type rust 'std::str::Chars'
     for 'a                                          -- a lifetime parameter, as `for T where T: Bound` is a type one
     hold : borrows for 'a                           -- the type holds a borrow; a use says from what
-    implements 'std::iter::Iterator' { Item = char }, 'std::clone::Clone'
+    implements 'std::iter::Iterator' { Item = scalar as 'char' }, 'std::clone::Clone'
 
 impl rust 'std::iter::Iterator' for 'std::str::Chars'
     for 'a
-    assoc Item = char
-    function next(self: ref<Chars<'a>>) -> char?
+    assoc Item = scalar as 'char'
+    function next(self: ref<target type=Chars<'a>>) -> (scalar as 'char')?
         access self : write exclusive
     effects none                                    -- beyond what Iterator says of every implementation
 
-impl rust 'std::convert::From<ref<text>>' for 'std::string::String'    -- the interface's arguments choose the impl
-    function from(value: ref<text>) -> text as 'std::string::String'
+impl rust 'std::convert::From<ref<target type=string>>' for 'std::string::String'    -- the interface's arguments choose the impl
+    function from(value: ref<target type=string>) -> string as 'std::string::String'
 
-function rust 'eve_cache::Cache::keys'(self: ref<Cache>) -> some 'std::iter::Iterator' { Item = ref<Key> }
+function rust 'eve_cache::Cache::keys'(self: ref<target type=Cache>) -> some 'std::iter::Iterator' { Item = ref<target type=Key> }
     hold result : borrows from self
 
-function rust 'eve_cache::Cache::extend'(self: ref<Cache>, items: some 'std::iter::IntoIterator' { Item = T })
+function rust 'eve_cache::Cache::extend'(self: ref<target type=Cache>, items: some 'std::iter::IntoIterator' { Item = T })
     for T where T: Clone
     access self : write exclusive
 ```
@@ -995,7 +1003,7 @@ function rust 'eve_cache::Cache::extend'(self: ref<Cache>, items: some 'std::ite
   with call syntax. A reference inside the bounds is shared and unnamed, and a result that has one borrows, so that
   `hold result : borrows from self` says from what.
 - **`any I`** is the type of a value of any type that implements `I`, with dispatch through the interface: it is the
-  referent, and is reached through a reference or a host pointer, as an unsized list is (§ 3.4): `ref<any I>`, `any I as
+  referent, and is reached through a reference or a host pointer, as an unsized list is (§ 3.4): `ref<target type=any I>`, `any I as
   'std::boxed::Box'`. Only the interface's clauses hold of it, never an impl's.
 - **`for 'a`, `for T where T: Bound`** bind parameters on any host subject: a type, a function, an impl. Bounds are
   interfaces, so they are checked as behavioural subtyping (§ 6.10). A host type is applied to lifetimes as it is to types:
@@ -1037,7 +1045,7 @@ setting**: `given build overflow_checks` names a setting the host profile lists 
 every build fixes.
 
 ```text
-function rust 'std::collections::HashMap::get'(self: ref<HashMap<K, V>>, k: ref<Q>) -> ref<V>?
+function rust 'std::collections::HashMap::get'(self: ref<target type=HashMap<K, V>>, k: ref<target type=Q>) -> ref<target type=V>?
     for K, V, Q where K: 'std::borrow::Borrow<Q>', Q: 'std::hash::Hash' + 'std::cmp::Eq'
     never panics   given Q.hash, Q.eq never panic
     effects none   given Q.hash, Q.eq effects none
@@ -1113,7 +1121,7 @@ function rust 'std::collections::hash_map::Entry::and_modify'(self: Entry<'a, K,
 function rust 'std::iter::Iterator::count'(self: Self) -> u64 as 'usize'
     protocol self.next+                  -- next is called, and at least once, even if there are no items
 
-macro rust 'std::assert_eq!'(left: ref<T>, right: ref<U>)
+macro rust 'std::assert_eq!'(left: ref<target type=T>, right: ref<target type=U>)
     protocol left right                  -- left is evaluated, then right, once each
 ```
 
@@ -1162,8 +1170,8 @@ function rust 'std::iter::Iterator::map'(self: Self, f: F) -> 'std::iter::Map'
 function rust 'std::iter::Iterator::take_while'(self: Self, predicate: P) -> 'std::iter::TakeWhile'
     callback predicate  : called by result.next, at most once per call, with x, returning keep
     ensure items        : yields(result) == while_true(keep, old(yields(self)))
-    ensure consumed     : x == take(size(keep), old(yields(self)))
-    ensure not_put_back : final(yields(self)) == skip(size(keep), old(yields(self)))
+    ensure consumed     : x == take(count(keep), old(yields(self)))
+    ensure not_put_back : final(yields(self)) == skip(count(keep), old(yields(self)))
 
 function rust 'std::iter::Iterator::enumerate'(self: Self) -> 'std::iter::Enumerate'
     fails panic in result.next when old(count(self)) > 18446744073709551615   given build overflow_checks
@@ -1176,7 +1184,7 @@ function rust 'std::iter::Iterator::enumerate'(self: Self) -> 'std::iter::Enumer
   not stated here: it follows from the sequence equations, as `x == old(yields(self))` says that every item is passed.
 - **The logs.** In a `called by` clause `with a` and `returning r` bind lists, not values: `a` is the list of the
   argument over the calls of the run, in order, and `r` the list of the results, so that `a[k]` and `r[k]` belong to
-  the `k`-th call and `size(r)` is the number of calls. `with` takes names only, because an expression has no value at
+  the `k`-th call and `count(r)` is the number of calls. `with` takes names only, because an expression has no value at
   a call that has not happened; and the clause has no `when`, because a condition on the subject's entry says nothing
   about calls made later (the equations state which calls there are). The names are in scope in the subject's other
   clauses, which are about the run and not about the call of the subject, so `ensure items : yields(result) == y`
@@ -1229,9 +1237,9 @@ arguments, which is what `mem::swap` does. It is a promise only where the host p
 is evaluable under an unstable host feature makes none, and states none.
 
 ```text
-function rust 'std::primitive::slice::len'(self: ref<list<T> as 'std::primitive::slice'>) -> u64 as 'usize'
+function rust 'std::primitive::slice::len'(self: ref<target type=list<element type=T> as 'std::primitive::slice'>) -> u64 as 'usize'
     evaluable at compile time
-function rust 'std::mem::swap'(x: ref<T>, y: ref<T>)
+function rust 'std::mem::swap'(x: ref<target type=T>, y: ref<target type=T>)
     evaluable at compile time          -- and the writes through x and y are allowed
 ```
 
@@ -1274,7 +1282,7 @@ call is the entity `q` named at entry: moved, not copied or cloned. It is an exp
 ```text
 function rust 'std::cmp::max'(v1: T, v2: T) -> T
     ensure tie_second : (v1 <= v2 and v1 >= v2) implies result moved from v2
-function rust 'std::mem::replace'(dest: ref<T>, src: T) -> T
+function rust 'std::mem::replace'(dest: ref<target type=T>, src: T) -> T
     hold dest   : moved from src
     hold result : moved from dest
 ```
@@ -1294,7 +1302,7 @@ to a result or to a holder is a survival. For a reference parameter the entity i
 `call` (§ 7.1). A by-value argument that neither clause names is left unstated.
 
 ```text
-function rust 'std::mem::swap'(x: ref<T>, y: ref<T>)
+function rust 'std::mem::swap'(x: ref<target type=T>, y: ref<target type=T>)
     lifetime x, y survive call
 function rust 'std::mem::drop'(v: T)
     lifetime v ends in call              -- "disposes of a value"; with `when p` only where p holds
@@ -1317,7 +1325,7 @@ panic and no other runtime failure is possible. It may carry `given` (§ 6.12), 
 cannot happen, which is the stronger promise.
 
 ```text
-function rust 'std::collections::HashMap::entry'(self: ref<map<K, V, S>>, key: K) -> Entry<'_, K, V>
+function rust 'std::collections::HashMap::entry'(self: ref<target type=map<key type=K, value type=V, hasher type=S>>, key: K) -> Entry<'_, K, V>
     never panics except exhausted given K.hash, K.eq, S.hash_one never panic
 ```
 
@@ -1335,9 +1343,9 @@ O(f)` bounds the total of any sequence of n calls on one instance, started from 
 cost more, the average per call does not. Both words together say both. A budget never fails a request (§ 6.7).
 
 ```text
-function rust 'std::collections::HashMap::get'(self: ref<map<K, V, S>>, k: ref<Q>) -> ref<V>?
+function rust 'std::collections::HashMap::get'(self: ref<target type=map<key type=K, value type=V, hasher type=S>>, k: ref<target type=Q>) -> ref<target type=V>?
     budget work expected O(1)
-function rust 'std::collections::HashMap::insert'(self: ref<map<K, V, S>>, k: K, v: V) -> V?
+function rust 'std::collections::HashMap::insert'(self: ref<target type=map<key type=K, value type=V, hasher type=S>>, k: K, v: V) -> V?
     budget work expected amortised O(1)
 ```
 
@@ -1353,16 +1361,16 @@ wanted, binds a name to each part: `let (a, b) = e` for the later clauses of the
 binds the names of a variant. Both are for a call that returns a tuple.
 
 ```text
-function rust 'std::primitive::slice::split_at_mut'(self: ref<list<T> as 'std::primitive::slice'>, mid: u64 as 'usize')
-        -> (ref<list<T> as 'std::primitive::slice'>, ref<list<T> as 'std::primitive::slice'>)
-    ensure sizes : size(result.0) == mid and size(result.1) == old(size(self)) - mid
+function rust 'std::primitive::slice::split_at_mut'(self: ref<target type=list<element type=T> as 'std::primitive::slice'>, mid: u64 as 'usize')
+        -> (ref<target type=list<element type=T> as 'std::primitive::slice'>, ref<target type=list<element type=T> as 'std::primitive::slice'>)
+    ensure sizes : count(result.0) == mid and count(result.1) == old(count(self)) - mid
     disjoint result.0, result.1
-    ensure same_sizes : result is (head, tail) implies size(head) + size(tail) == old(size(self))
+    ensure same_sizes : result is (head, tail) implies count(head) + count(tail) == old(count(self))
 
-function rust 'std::primitive::slice::split_at_mut'(self: ref<list<T> as 'std::primitive::slice'>, mid: u64 as 'usize')
-        -> (ref<list<T> as 'std::primitive::slice'>, ref<list<T> as 'std::primitive::slice'>)
+function rust 'std::primitive::slice::split_at_mut'(self: ref<target type=list<element type=T> as 'std::primitive::slice'>, mid: u64 as 'usize')
+        -> (ref<target type=list<element type=T> as 'std::primitive::slice'>, ref<target type=list<element type=T> as 'std::primitive::slice'>)
     let (head, tail) = result
-    ensure sizes : size(head) == mid and size(tail) == old(size(self)) - mid
+    ensure sizes : count(head) == mid and count(tail) == old(count(self)) - mid
 ```
 
 A `let` clause binds for the clauses after it, once: a name that is already bound (a parameter, an earlier `let`, a
@@ -1380,7 +1388,7 @@ collection's state that is not an element (a capacity, a hasher), which a path o
 what `ensure others_kept : all k2 in old(self) : k2 != k implies self[k2] == old(self[k2])` says of one subject.
 
 ```text
-function rust 'std::collections::HashMap::insert'(self: ref<map<K, V, S>>, k: K, v: V) -> V?
+function rust 'std::collections::HashMap::insert'(self: ref<target type=map<key type=K, value type=V, hasher type=S>>, k: K, v: V) -> V?
     mutates only self[k]
 ```
 
@@ -1389,7 +1397,7 @@ says that a call that consumes an entry changes the element of the entry's key a
 is that element afterwards. `key` is a view the entry's type declares (`Entry::key`).
 
 ```text
-function rust 'std::collections::hash_map::Entry::or_insert'(self: Entry<'a, K, V>, default: V) -> ref<V>
+function rust 'std::collections::hash_map::Entry::or_insert'(self: Entry<'a, K, V>, default: V) -> ref<target type=V>
     ensure stored : self is Vacant(e) implies owner(self)[old(key(self))] == default
     mutates only owner(self)[old(key(self))]
 ```
@@ -1407,8 +1415,8 @@ anything (for `unsafe fn` in Rust, undefined behaviour). The `because` says what
 call site.
 
 ```text
-function rust 'std::primitive::slice::get_unchecked'(self: ref<list<T> as 'std::primitive::slice'>, i: u64 as 'usize') -> ref<T>
-    obliges caller : i < size(self) because "the index is not checked; out of bounds is undefined behaviour"
+function rust 'std::primitive::slice::get_unchecked'(self: ref<target type=list<element type=T> as 'std::primitive::slice'>, i: u64 as 'usize') -> ref<target type=T>
+    obliges caller : i < count(self) because "the index is not checked; out of bounds is undefined behaviour"
 ```
 
 - **Checked:** each call site shows the reason, as an `assume` of its own in review; where `p` is a predicate, a debug
@@ -1421,7 +1429,7 @@ cannot state the absence of a promise); and a macro's arm, whose parameters a cl
 
 ### 6.15 Sequences: order, positions, and what an iterator yields
 
-**Meaning.** A `list<T>` has an order: its elements stand at positions 0, 1, 2 and so on, and two lists are equal when
+**Meaning.** A `list<element type=T>` has an order: its elements stand at positions 0, 1, 2 and so on, and two lists are equal when
 they have the same elements at the same positions. A list may be finite, or infinite: the sequence a counter yields has
 no last element. `size`, `reverse` and `in` need the end; everything else below is defined for both. The operators are
 pure and deterministic, total on every list for which they have a value (`size` and `reverse` have none for an infinite
@@ -1430,25 +1438,25 @@ one, below), and each is defined here by its elements, so that every host compil
 
 | Operator | Value | Defined by |
 | --- | --- | --- |
-| `xs[i]` | `T?` | The element at position `i`; `none` when `i < 0` or `i >= size(xs)` (for an infinite `xs`, when `i < 0`). It never fails. For an optional `T` it is flat, below. |
-| `present(xs, i)` | `bool` | `i >= 0` and (`xs` is infinite or `i < size(xs)`): position `i` holds an element, whether or not that element is `none`. |
-| `take(n, xs)` | `list<T>` | The first `n` elements, or all of them if there are fewer; empty when `n <= 0`. `take(n, xs)[k] == xs[k]` for `0 <= k < n`. |
-| `skip(n, xs)` | `list<T>` | `xs` without its first `n` elements; `xs` when `n <= 0`, empty when `n >= size(xs)`. `skip(n, xs)[k] == xs[k + n]`. |
-| `xs[i..j]`, `xs[i..]`, `xs[..j]` | `list<T>` | `take(j - max(i, 0), skip(max(i, 0), xs))`, `skip(i, xs)` and `take(j, xs)`, where `skip` and `take` of a negative count are `skip`/`take` of 0. Positions outside the list are not elements, so a slice never fails: `xs[2..9]` of three elements has one. |
-| `xs ++ ys` | `list<T>` | For a finite `xs`, `size(xs) + size(ys)` elements: `xs[k]` for `k < size(xs)`, then `ys[k - size(xs)]`. For an infinite `xs`, `xs`. It is associative, and `[]` is its unit. |
-| `reverse(xs)` | `list<T>` | For a finite `xs`: `reverse(xs)[k] == xs[size(xs) - 1 - k]`. |
-| `map(f, xs)` | `list<U>` | `f` is a named pure function (below). Same size as `xs`; `map(f, xs)[k] == f(xs[k])`. |
-| `filter(p, xs)` | `list<T>` | `p` is a named pure predicate. `filter(p, []) == []`, and `filter(p, [x] ++ r) == (if p(x) then [x] else []) ++ filter(p, r)`: the elements for which `p` holds, in their order. |
-| `select(bs, xs)` | `list<T>` | `bs` is a list of booleans. The elements `xs[k]` at the positions `k` where `bs[k] == true`, in order, for the positions both lists have. `select([b] ++ r, [x] ++ s) == (if b then [x] else []) ++ select(r, s)`, and `filter(p, xs) == select(map(p, xs), xs)`. |
-| `while_true(bs, xs)` | `list<T>` | `take(n, xs)`, with `n` the position of the first `false` in `bs`, or `size(bs)` when there is none (`xs` when `bs` is infinite and has none): the elements before the first verdict that fails. |
-| `flatten(xss)` | `list<T>` | `xss` is a list of lists (or of values that implement `IntoIterator`, read as their `yields`). `flatten([]) == []` and `flatten([xs] ++ r) == xs ++ flatten(r)`: with an infinite `xss[k]`, the elements after it are never reached. |
-| `zip(xs, ys)` | `list<(T, U)>` | `zip(xs, ys)[k] == (xs[k], ys[k])` while both exist: as many pairs as the shorter list has. |
-| `enumerate(xs)` | `list<(int, T)>` | `enumerate(xs)[k] == (k, xs[k])`. |
-| `scalars(s)` | `list<char>` | The Unicode scalar values of the text `s`, in order (§ 4): `size(scalars(s)) == length(s)`. |
-| `deref(r)` | `T` | For a `ref<T>`, the value it refers to. `map(deref, xs)` reads a list of references as the list of values. |
+| `xs[i]` | `T?` | The element at position `i`; `none` when `i < 0` or `i >= count(xs)` (for an infinite `xs`, when `i < 0`). It never fails. For an optional `T` it is flat, below. |
+| `present(xs, i)` | `bool` | `i >= 0` and (`xs` is infinite or `i < count(xs)`): position `i` holds an element, whether or not that element is `none`. |
+| `take(n, xs)` | `list<element type=T>` | The first `n` elements, or all of them if there are fewer; empty when `n <= 0`. `take(n, xs)[k] == xs[k]` for `0 <= k < n`. |
+| `skip(n, xs)` | `list<element type=T>` | `xs` without its first `n` elements; `xs` when `n <= 0`, empty when `n >= count(xs)`. `skip(n, xs)[k] == xs[k + n]`. |
+| `xs[i..j]`, `xs[i..]`, `xs[..j]` | `list<element type=T>` | `take(j - max(i, 0), skip(max(i, 0), xs))`, `skip(i, xs)` and `take(j, xs)`, where `skip` and `take` of a negative count are `skip`/`take` of 0. Positions outside the list are not elements, so a slice never fails: `xs[2..9]` of three elements has one. |
+| `xs ++ ys` | `list<element type=T>` | For a finite `xs`, `count(xs) + count(ys)` elements: `xs[k]` for `k < count(xs)`, then `ys[k - count(xs)]`. For an infinite `xs`, `xs`. It is associative, and `[]` is its unit. |
+| `reverse(xs)` | `list<element type=T>` | For a finite `xs`: `reverse(xs)[k] == xs[count(xs) - 1 - k]`. |
+| `map(f, xs)` | `list<element type=U>` | `f` is a named pure function (below). Same size as `xs`; `map(f, xs)[k] == f(xs[k])`. |
+| `filter(p, xs)` | `list<element type=T>` | `p` is a named pure predicate. `filter(p, []) == []`, and `filter(p, [x] ++ r) == (if p(x) then [x] else []) ++ filter(p, r)`: the elements for which `p` holds, in their order. |
+| `select(bs, xs)` | `list<element type=T>` | `bs` is a list of booleans. The elements `xs[k]` at the positions `k` where `bs[k] == true`, in order, for the positions both lists have. `select([b] ++ r, [x] ++ s) == (if b then [x] else []) ++ select(r, s)`, and `filter(p, xs) == select(map(p, xs), xs)`. |
+| `while_true(bs, xs)` | `list<element type=T>` | `take(n, xs)`, with `n` the position of the first `false` in `bs`, or `count(bs)` when there is none (`xs` when `bs` is infinite and has none): the elements before the first verdict that fails. |
+| `flatten(xss)` | `list<element type=T>` | `xss` is a list of lists (or of values that implement `IntoIterator`, read as their `yields`). `flatten([]) == []` and `flatten([xs] ++ r) == xs ++ flatten(r)`: with an infinite `xss[k]`, the elements after it are never reached. |
+| `zip(xs, ys)` | `list<element type=(T, U)>` | `zip(xs, ys)[k] == (xs[k], ys[k])` while both exist: as many pairs as the shorter list has. |
+| `enumerate(xs)` | `list<element type=(int, T)>` | `enumerate(xs)[k] == (k, xs[k])`. |
+| `scalars(s)` | `list<element type=scalar>` | The Unicode scalar values of the string `s`, in order (§ 4): `count(scalars(s))` is how many it has. |
+| `deref(r)` | `T` | For a `ref<target type=T>`, the value it refers to. `map(deref, xs)` reads a list of references as the list of values. |
 
-A list literal `[a, b]` is the list of its elements, and `[]` the empty list. A `ref<list<T>>` is read as the list it
-refers to wherever a list is expected, as `size(self)` has always been. If the element type is optional, `xs[i]` is flat
+A list literal `[a, b]` is the list of its elements, and `[]` the empty list. A `ref<target type=list<element type=T>>` is read as the list it
+refers to wherever a list is expected, as `count(self)` has always been. If the element type is optional, `xs[i]` is flat
 like every optional (§ 4: absence is one value): it is `none` both beyond the ends and for an element that is `none`, and
 `xs[i] == none` does not tell the two apart. `present(xs, i)` does, and so does the slice `xs[i..i + 1]`, which is `[]`
 or a list of one element and cannot be mistaken because a list does not flatten. A host `Option<Option<U>>` read at the
@@ -1473,7 +1481,7 @@ sequence of items that calling `next` on it would return, in order, from its pre
 first `None`. It is a view of the state (a pure projection, § 4): evaluating it does not advance the iterator, and
 `old(yields(it))` is what was left at entry. It is finite when the iterator ends and infinite when it does not. For a
 value that is not an iterator but a collection (it implements `IntoIterator`), `yields(c)` is its items in the order its
-`IntoIterator` defines; for a list, the list. `count(it)` is `size(yields(it))`, the count the older clauses already use
+`IntoIterator` defines; for a list, the list. `count(it)` is `count(yields(it))`, the count the older clauses already use
 (§ 4's "Collections"). A double-ended iterator gives one sequence, read from either end: `next_back` returns the last element of `yields` and removes it, so repeated `next_back`
 gives `reverse(yields(it))`, and the `DoubleEndedIterator` an `implements` clause states needs no clause of its own about
 order. After a `None`, a host iterator that is not fused may resume; `yields` is defined from the state at the time of
@@ -1482,14 +1490,14 @@ deterministic given its state, or has an effect that matters (it reads a clock),
 has it only in the clauses of a subject that names the closure's logs (§ 6.13.1).
 
 ```text
-function rust 'std::primitive::str::chars'(self: ref<text>) -> 'std::str::Chars'
+function rust 'std::primitive::str::chars'(self: ref<target type=string>) -> 'std::str::Chars'
     ensure scalars : yields(result) == scalars(self)
 
-function rust 'std::primitive::slice::split_at_mut'(self: ref<list<T> as 'std::primitive::slice'>, mid: u64 as 'usize')
-        -> (ref<list<T> as 'std::primitive::slice'>, ref<list<T> as 'std::primitive::slice'>)
+function rust 'std::primitive::slice::split_at_mut'(self: ref<target type=list<element type=T> as 'std::primitive::slice'>, mid: u64 as 'usize')
+        -> (ref<target type=list<element type=T> as 'std::primitive::slice'>, ref<target type=list<element type=T> as 'std::primitive::slice'>)
     ensure part_elements : result.0 == old(self)[..mid] and result.1 == old(self)[mid..]
 
-function rust 'std::iter::Iterator::next'(self: ref<Self>) -> Self::Item?
+function rust 'std::iter::Iterator::next'(self: ref<target type=Self>) -> Self::Item?
     ensure head     : result == old(yields(self))[0]
     ensure advances : present(old(yields(self)), 0) implies yields(self) == old(yields(self))[1..]
 
@@ -1511,7 +1519,7 @@ says something of the first `n` elements for every `n`, which is how a promise a
 
 - **Fails:** nothing at run time: every operator is total on the lists it has a value for, and an index or a slice
   beyond the ends gives `none` or fewer elements, never a failure. A promise that an index is in range is a `require` or a
-  `fails … when` of its own (`fails panic when mid > size(self)`); Rust's slicing panics there, and a clause that claims
+  `fails … when` of its own (`fails panic when mid > count(self)`); Rust's slicing panics there, and a clause that claims
   the same is a `fails`, not the slice. Refused at build: `yields` of a type that has no `next`; `map` or `filter` given a
   parameter, a callback, a generic closure or an expression instead of a named function; a named function that does not
   exist in the catalog or the file; the wrong number of arguments; `select` or `while_true` whose first argument is not a list of booleans, and `flatten` of
@@ -1571,11 +1579,11 @@ none; and when nothing orders them (a `protocol`, § 6.5; a lock order, § 6.8).
 in either order, and the outcome is the one of program order.
 
 ```text
-function rust 'eve::dogma::Fitting::recalc_cpu'(self: ref<Fitting>)
+function rust 'eve::dogma::Fitting::recalc_cpu'(self: ref<target type=Fitting>)
     reads only self.modules
     mutates only self.cpu
 
-function rust 'eve::dogma::Fitting::recalc_power'(self: ref<Fitting>)
+function rust 'eve::dogma::Fitting::recalc_power'(self: ref<target type=Fitting>)
     reads only self.modules
     mutates only self.power
     -- the two read the same field and write different ones: they may run at the same time
@@ -1606,10 +1614,10 @@ works in: an unspecified order lets a hash map be replaced and a loop be split a
 reassociated and vectorised, and a log that may be batched need not be written on the hot path.
 
 ```text
-function rust 'std::collections::HashMap::iter'(self: ref<map<K, V>>) -> some 'std::iter::Iterator' { Item = (ref<K>, ref<V>) }
+function rust 'std::collections::HashMap::iter'(self: ref<target type=map<key type=K, value type=V>>) -> some 'std::iter::Iterator' { Item = (ref<target type=K>, ref<target type=V>) }
     order unspecified yields(result)                -- the pairs, in an order that may differ between maps and runs
 
-function rust 'eve::dogma::sum_bonuses'(xs: list<f64>) -> f64
+function rust 'eve::dogma::sum_bonuses'(xs: list<element type=f64>) -> f64
     may reassociate within abs: 1e-9, rel: 1e-12    -- any order of the additions; the result within that of the written one
 
 procedure 'eve::market::FindSeller'(typeID: u64, qty: u64) -> u64?
@@ -1656,7 +1664,7 @@ function rust 'eve::dogma::stack'(a: Modifier, b: Modifier) -> Modifier
     commutative
     identity Modifier::NONE
 
-function rust 'eve::text::normalise'(s: text) -> text
+function rust 'eve::text::normalise'(s: string) -> string
     idempotent
 
 function rust 'eve::market::price_after_tax'(p: decimal<precision=19, scale=2>, rate: decimal<precision=5, scale=4>) -> decimal<precision=19, scale=2>
@@ -1702,8 +1710,8 @@ type rust 'eve::market::Book'
     invariant bids_sorted : sorted(self.bids, by: price, descending)
     invariant one_per_id  : distinct(self.bids, by: orderID)
 
-function rust 'eve::inventory::slots'(ship: ref<Ship>) -> list<u16>
-    ensure dense(result, 0 .. size(result))          -- the slots are 0, 1, 2, … with no gap, in some order
+function rust 'eve::inventory::slots'(ship: ref<target type=Ship>) -> list<element type=u16>
+    ensure dense(result, 0 .. count(result))          -- the slots are 0, 1, 2, … with no gap, in some order
 ```
 
 | Predicate | Holds when |
@@ -1712,7 +1720,7 @@ function rust 'eve::inventory::slots'(ship: ref<Ship>) -> list<u16>
 | `distinct(xs [, by: k])` | no two elements (no two `k`s) are equal |
 | `dense(xs, a .. b)` | the elements are exactly the integers of `a .. b`, each once |
 | `heap ordered(xs [, by: k])` | every element at `i` is not less than those at `2i + 1` and `2i + 2` |
-| `nonempty(xs)` | `size(xs) > 0` |
+| `nonempty(xs)` | `count(xs) > 0` |
 
 - A property of a structure's own shape (a balanced tree, a hash table's load) is an invariant of that type, stated by
   its own projections (§ 9, `view`), not one of these names.
@@ -1731,11 +1739,11 @@ expectation is reported, as a budget is (§ 6.7). Where an expectation is a pers
 small by design), a profile (§ 3.7) is the measurement of a build, and the two are compared.
 
 ```text
-function rust 'eve::dogma::Fitting::modules_of'(self: ref<Fitting>, group: u32) -> list<ModuleID>
-    expect size(result) <= 8  usually 0.99
+function rust 'eve::dogma::Fitting::modules_of'(self: ref<target type=Fitting>, group: u32) -> list<element type=ModuleID>
+    expect count(result) <= 8  usually 0.99
     expect hot
 
-procedure 'wallet.Credit'(requestID: id<Requests>, amount: decimal<precision=19, scale=2>)
+procedure 'wallet.Credit'(requestID: id<entity type=Requests>, amount: decimal<precision=19, scale=2>)
     expect fails InsufficientFunds  rarely
 
 type rust 'eve::market::Book'
@@ -1778,11 +1786,11 @@ may move across it, and what a caller may assume after it, depend on it.
 function rust 'eve_net::frame::encode'(f: Frame) -> bytes
     exits only return                              -- never fails, panics or suspends
 
-function rust 'eve::market::Book::place'(self: ref<Book>, o: Order) -> Result<OrderID, PlaceError>
+function rust 'eve::market::Book::place'(self: ref<target type=Book>, o: Order) -> Result<OrderID, PlaceError>
     exits only return, fails PlaceError
     on failure unchanged
 
-function rust 'eve_client::net::Session::send'(self: ref<Session>, m: Message) -> Result<(), NetError>
+function rust 'eve_client::net::Session::send'(self: ref<target type=Session>, m: Message) -> Result<(), NetError>
     exits only return, fails NetError, cancelled
     on cancel unchanged                            -- cancelled before the frame is written, or not at all
 ```
@@ -1818,18 +1826,18 @@ function rust 'eve_client::net::Session::send'(self: ref<Session>, m: Message) -
 The levels are Y's (Y § 3.19), after LCD's levels of common denominator, and each contains the ones below it: `data`,
 declarations only, which is what this language can say; `calculations`, functions of values, with no mutable name, loop
 or recursion; `structured`, with mutable names, loops and recursion; `shared`, with transactional shared state, arenas
-and resources; and `effects`, with capabilities, waits and external effects. A `level` clause on a module is a ceiling
+and resources; and `effects`, with capabilities, waits and external effects. A `level` on a module is a ceiling
 that nothing in the module may rise above, so that the module can be carried by every backend and host that carries
 that level.
 
-```text
--- pricing.constraints
-module pricing
-    level calculations
+It is a field of the module's subject in the constraint data, which is JSON (bare Rust § 2.5), and the text form
+prints it under the file's `module` line:
+
+```json
+{ "kind": "module", "name": "pricing", "visible": "public", "level": "calculations" }
 ```
 
-- **Subject:** the module, in the clause under the file's `module` line; for a woven host, the module subject of the
-  constraint data (bare Rust § 4).
+- **Subject:** the module.
 - **Fails:** a construct above the level, at build, naming the construct, where it is and the level it needs; and an
   import of a module whose level is higher.
 - **Checked:** by the Y compiler, which infers every module's level, for Y; for another host, by the analysis its
@@ -1903,7 +1911,7 @@ type swift 'Scene.Node'
     hold delegate : observes
     lifetime delegate outlives self          -- `unowned`, checked by the runtime's trap
 
-function rust 'eve_cache::Cache::get'(self: ref<Cache>, key: ref<Key>) -> ref<Entry>?
+function rust 'eve_cache::Cache::get'(self: ref<target type=Cache>, key: ref<target type=Key>) -> ref<target type=Entry>?
     hold result : borrows from self
 ```
 
@@ -1965,7 +1973,7 @@ Each predicate is defined over the core; § 7.4 and § 7.5 give its meaning unde
   moment the predicate's event happens: the items `e` has then, each an entity. `lifetime every item of yields(self)
   ends with self` says that the elements an iterator has not yet given end when the iterator does, which is what
   dropping a `vec::IntoIter` does to them; the elements already given are not in `yields(self)` and moved out.
-- **`lifetime every ref<T> [obtained from p] within s`:** the same predicate over every reference of a type, or every
+- **`lifetime every ref<target type=T> [obtained from p] within s`:** the same predicate over every reference of a type, or every
   reference obtained through a path; this is how a rule for a whole interface is written.
 - **`no strong cycle [through f, g]`:** no cycle of `owns` and `shares` references through the named fields, which under
   counting is a leak.
@@ -2069,32 +2077,32 @@ give `instances`.
 
 ### 7.8 What a pointer may point at
 
-**Meaning.** A host pointer, `ptr<T>` (§ 3.4), is an address and nothing more: it may be anything, and reading through
+**Meaning.** A host pointer, `ptr<target type=T>` (§ 3.4), is an address and nothing more: it may be anything, and reading through
 it is defined only if something else says it is safe. Every safer kind of pointer is the same address with constraints
-on what it may point at, and a reference is the most constrained of them. The kinds are refinements of `ptr<T>`, named
+on what it may point at, and a reference is the most constrained of them. The kinds are refinements of `ptr<target type=T>`, named
 predicates of § 4 written with `where`, so that a parameter, a field or a result says which kind it is and a checker or
 an optimizer knows what it may assume of it.
 
 | Kind | Refinement | May point at |
 | --- | --- | --- |
-| A pointer that may be invalid | `ptr<T>` | Any address, or none. It may be held, compared and passed on; reading or writing through it is undefined. |
-| A valid pointer | `ptr<T> where valid(value)` | Null, or an address the process can reach inside an allocation that has begun and not ended, at any byte of it, not only at the start of an entity. |
+| A pointer that may be invalid | `ptr<target type=T>` | Any address, or none. It may be held, compared and passed on; reading or writing through it is undefined. |
+| A valid pointer | `ptr<target type=T> where valid(value)` | Null, or an address the process can reach inside an allocation that has begun and not ended, at any byte of it, not only at the start of an entity. |
 | Not null | `where nonnull(value)` | Anything but null; with `valid`, a live allocation. |
 | A cursor over `a` | `where cursor(value, a)` | An element of the array `a`, or one past its last: it may be compared and stepped, and read through only where it is not at the end. |
-| An element of `a` | `where element(value, a)` | The start of an element of `a`: `value - base(a)` is a multiple of `size_of(T)`, and less than `size(a) * size_of(T)`. |
+| An element of `a` | `where element(value, a)` | The start of an element of `a`: `value - base(a)` is a multiple of `size_of(T)`, and less than `count(a) * size_of(T)`. |
 | Aligned | `where aligned(value)` | An address that is a multiple of the alignment of `T`. |
-| A C string | `ptr<u8> where terminated(value, 0)` | A valid address from which a `0` byte comes before the end of its allocation; `terminated(value, v)` for any sentinel. |
+| A C string | `ptr<target type=u8> where terminated(value, 0)` | A valid address from which a `0` byte comes before the end of its allocation; `terminated(value, v)` for any sentinel. |
 | Data | `where data(value)` | Memory the program reads and writes: its stacks, heaps and data segments, never its code. |
 | Code | `fn(…) -> … where code(value)` | The start of a function in the code the process loaded and may run, never data. |
-| A reference | `ref<T>` | `ptr<T> where valid(value) and nonnull(value) and aligned(value)`, at the start of a live entity of type `T`, which stays live while the reference is used (§ 7.2), with the access of § 8.1. |
+| A reference | `ref<target type=T>` | `ptr<target type=T> where valid(value) and nonnull(value) and aligned(value)`, at the start of a live entity of type `T`, which stays live while the reference is used (§ 7.2), with the access of § 8.1. |
 
 ```text
-function c 'eve_native::name_of'(p: ptr<u8> where valid(value) and terminated(value, 0)) -> u64
+function c 'eve_native::name_of'(p: ptr<target type=u8> where valid(value) and terminated(value, 0)) -> u64
     ensure len : result == position(value, 0)          -- the length, up to the terminator
 
-function rust 'eve::mesh::Vertices::iter_raw'(self: ref<Vertices>) -> (ptr<Vertex>, ptr<Vertex>)
-    ensure first : element(result.0, self.items) or size(self.items) == 0
-    ensure end   : cursor(result.1, self.items) and result.1 == base(self.items) + size(self.items)
+function rust 'eve::mesh::Vertices::iter_raw'(self: ref<target type=Vertices>) -> (ptr<target type=Vertex>, ptr<target type=Vertex>)
+    ensure first : element(result.0, self.items) or count(self.items) == 0
+    ensure end   : cursor(result.1, self.items) and result.1 == base(self.items) + count(self.items)
 
 type c 'eve_native::Callbacks'
     field on_tick : fn(u64) where code(value)
@@ -2150,15 +2158,15 @@ isolation`, so the correspondence for those two holds with that clause added.
 | `read any` | This path cannot write; others may | `box`, with confinement | `*const T` | `const T&`, `const T*`, shallowly | A read-only view or interface | — | A read-only proxy |
 | `identify any` | Identity only | `tag` | An id or handle | An opaque handle | An id | An id | An id |
 
-A host pointer, `ptr<T>`, has rights and never a guarantee, so its access is `read any` or `write any`, and the file
-writes only the rights. `*const T` is `ptr<T>` with `read`, a constraint. `*mut T` is `ptr<T>` with no access: `write
+A host pointer, `ptr<target type=T>`, has rights and never a guarantee, so its access is `read any` or `write any`, and the file
+writes only the rights. `*const T` is `ptr<target type=T>` with `read`, a constraint. `*mut T` is `ptr<target type=T>` with no access: `write
 any` constrains nothing, so writing through a pointer is the absence of the read-only constraint rather than a
 constraint of its own. That is where a pointer and a reference differ: `&mut T` is `write exclusive`, and its
 exclusivity is a constraint that an optimiser relies on and `*mut T` does not have. What a reference adds to a pointer
 is the guarantee and validity: a reference is not null, is aligned, and its target lives while it is used, where a
 pointer may dangle, and whoever reads or writes through it must know otherwise (in Rust, in `unsafe` code). What the two
 share is that each designates a place, so what other paths write shows through it, and that neither constructs nor ends
-what it reaches: a slot holds a pointer as it holds any value. The kinds of pointer between `ptr<T>` and `ref<T>`, and
+what it reaches: a slot holds a pointer as it holds any value. The kinds of pointer between `ptr<target type=T>` and `ref<target type=T>`, and
 what each may point at, are in § 7.8.
 
 The distinction between `read readers` and `read any` is the one most languages blur: a `const` reference in C++ and a
@@ -2198,7 +2206,7 @@ read-only interface in Java promise only that this path does not write, not that
 - **`shared readonly e`:** many paths, none writing; one way to be `shareable` (§ 6.8).
 
 ```text
-function python 'eve.fitting.FittingSvc.ApplyFit'(self, ship: ref<Ship>, fit: ref<Fit>)
+function python 'eve.fitting.FittingSvc.ApplyFit'(self, ship: ref<target type=Ship>, fit: ref<target type=Fit>)
     readonly fit                   -- harvested: no recorded call changed it
     mutates only ship.modules, ship.cargo
     disjoint ship, fit
@@ -2251,7 +2259,7 @@ path that breaks it before it is enforced.
 - **Blocks.** `block in_space(s: space.Ships)` names a sequence of `require` clauses with their failures; `use
   in_space(m.ship)` expands it in place, in order. A check repeated across hundreds of methods ("the actor flies this
   ship, is in space, is not in warp") is written once and keeps its original order everywhere.
-- **Refinement types.** `type Quantity = i64 where value >= 0` and `type ShipName = text where …` are named and reused
+- **Refinement types.** `type Quantity = i64 where value >= 0` and `type ShipName = string where …` are named and reused
   in every signature.
 - **Generics.** `for T where T: Comparable` binds a type parameter; a clause stated for every `T` applies to every
   realization (§ 3.5).
@@ -2274,7 +2282,7 @@ block in_space(s: space.Ships)
     require undocked : s.location != Docked         else Docked
     require not_warp : s.location != Warping        else InWarp
 
-procedure space.LaunchDrones(shipID: u64, droneIDs: list<u64>)
+procedure space.LaunchDrones(shipID: u64, droneIDs: list<element type=u64>)
     from Player
     let s = space.Ships[shipID]
     require found : exists s                        else Gone
@@ -2587,7 +2595,7 @@ table maps the mechanisms in use onto the clauses here.
 | Units of measure | F#, units libraries | `unit`; `quantity … in` |
 | Generic bounds, traits, concepts | Rust, C#, Java, Swift, C++ concepts | `for T where T: …` |
 | Message and document schemas | protobuf, JSON Schema, OpenAPI, XSD | Parameter and result types on `method` |
-| String length and format | SQL `NVARCHAR(n)`, validators | `text where utf16_length(value) <= n and value matches /…/` |
+| String length and format | SQL `NVARCHAR(n)`, validators | `string where count(code_units(value, utf16)) <= n and value matches /…/` |
 | Float finiteness and tolerance | Game engines, numeric code | `finite`; `approx` |
 | Overflow behaviour | Rust checked arithmetic, C# `checked` | Exact arithmetic; `fits`; `ensure` on exact results |
 | Layout and ABI | Rust `repr(C)`, C# `StructLayout`, C packing | `layout`, `size`, `align` |
@@ -2705,7 +2713,7 @@ type python 'eve.inventory.LocationCache'
     lifetime self reachable only from 'eve.inventory.InventoryMgr.caches'
     instances attributed to session are none within 5 s after end(session)
 
-function python 'eve.inventory.InventoryMgr.MoveItems'(self, itemIDs: list<u64>, toLocationID: u64)
+function python 'eve.inventory.InventoryMgr.MoveItems'(self, itemIDs: list<element type=u64>, toLocationID: u64)
     from Player
     readonly itemIDs
     hold itemIDs : borrows
@@ -2725,7 +2733,7 @@ accident.
 interface rust 'edb::Procedure'
     hold tx : borrows
     access tx : write exclusive
-    lifetime every ref<edb::Row> obtained from tx within transaction
+    lifetime every ref<target type=edb::Row> obtained from tx within transaction
     effects only tx
     no io
     no clock
@@ -2829,16 +2837,16 @@ The constraint file says what must hold, including everything Rust's own annotat
 -- eve_cache/cache.constraints
 type rust 'eve_cache::Cache'
     visible to crate
-    field entries : map<Key, Entry> as 'std::collections::HashMap'
+    field entries : map<key type=Key, value type=Entry> as 'std::collections::HashMap'
     hold entries : owns
 
-function rust 'eve_cache::Cache::get'(self: ref<Cache>, key: ref<Key>) -> ref<Entry>?
+function rust 'eve_cache::Cache::get'(self: ref<target type=Cache>, key: ref<target type=Key>) -> ref<target type=Entry>?
     visible to public
     access self : read readers
     access key : read readers
     hold result : borrows from self
 
-function rust 'eve_cache::Cache::insert'(self: ref<Cache>, key: Key, entry: Entry)
+function rust 'eve_cache::Cache::insert'(self: ref<target type=Cache>, key: Key, entry: Entry)
     visible to public
     access self : write exclusive
 ```
@@ -2998,7 +3006,7 @@ memory        = "hold" [ path ] ":" ( "owns" | "shares" | "borrows" [ "from" pat
               | "instances" [ "per" scope_ref ] "at most" NUMBER
               | "instances attributed to" scope_ref "are none within" duration "after" event
               | "no strong cycle" [ "through" path_list ] ;
-target        = path | "every ref<" type ">" [ "obtained from" path ] | "every item of" expr | "rows"
+target        = path | "every ref<target type=" type ">" [ "obtained from" path ] | "every item of" expr | "rows"
               | "every value labelled" NAME ;
 lifetime_pred = "usable after construct" | "reclaimed only after released"
               | "outlives" path | "within" scope_ref | "ends with" path | "ends in call" [ "when" expr ]
@@ -3046,8 +3054,8 @@ place         = "client" | "proxy" | "python" | "tsql" | "engine" | "host" | "re
 status        = "observed" | "lifted" | "watched" | "enforced" | "proven" | "assumed" ;
 MODEL         = "ownership" | "tracing" | "counting" | "tracked" | "region" | "manual" | "rows" ;
 (* type, record_type, duration, size, percentile, complexity, unit_expr and regex_over_calls are
-   written as in the examples: "u64?", "map<K, V> as 'std::collections::BTreeMap'", "{ a: T }", "50us", "2 MB",
-   "p99", "O(size(x))", "m / s", "begin (send | receive)* finish". A type may also be an existential,
+   written as in the examples: "u64?", "map<key type=K, value type=V> as 'std::collections::BTreeMap'", "{ a: T }", "50us", "2 MB",
+   "p99", "O(count(x))", "m / s", "begin (send | receive)* finish". A type may also be an existential,
    "some" bounds or "any" bounds, as in "some 'std::iter::Iterator' { Item = u8 } + Clone"; a host type applied to
    lifetimes, "Chars<'a>"; or an associated type, "Self::Item" (§ 6.11). A "for" clause on a subject binds its
    generics: "for 'a", "for T where T: Comparable". *)

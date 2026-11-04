@@ -102,7 +102,7 @@ mod tests {
         let lib = json!({"host":"rust","subjects":[{"kind":"macro","name":"std::vec!"}]});
         let p = json!({"format":"y-host/0","host":"rust","panic":{"strategy":"unwind","location":{"attribute":"#[track_caller]","reports":"caller"}},
             "build":BUILD_SETTINGS.iter().map(|s| json!({"setting":s,"default":"d","source":"s"})).collect::<Vec<_>>(),
-            "macros":{"std::vec!":{"arms":[{"pattern":"vec![]","params":[],"result":"list<u8>","source":"s"}]}}});
+            "macros":{"std::vec!":{"arms":[{"pattern":"vec![]","params":[],"result":"list<element type=u8>","source":"s"}]}}});
         assert_eq!(validate(&p, &lib, None), (1, vec![]));
         let mut bad = p.clone();
         bad["panic"]["strategy"] = json!("loud");

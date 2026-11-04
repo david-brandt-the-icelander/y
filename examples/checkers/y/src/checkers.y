@@ -70,13 +70,13 @@ public facet setup:
     -- The ways a piece may move.
     constants directions:
         -- Towards the top of the board, the way red's men move.
-        up is list<element=direction> = [direction(rows: -1, columns: -1), direction(rows: -1, columns: 1)]
+        up is list<element type=direction> = [direction(rows: -1, columns: -1), direction(rows: -1, columns: 1)]
 
         -- Towards the bottom of the board, the way white's men move.
-        down is list<element=direction> = [direction(rows: 1, columns: -1), direction(rows: 1, columns: 1)]
+        down is list<element type=direction> = [direction(rows: 1, columns: -1), direction(rows: 1, columns: 1)]
 
         -- Every way, as kings move.
-        all is list<element=direction> = [
+        all is list<element type=direction> = [
             direction(rows: -1, columns: -1),
             direction(rows: -1, columns: 1),
             direction(rows: 1, columns: -1),
@@ -94,10 +94,10 @@ public facet setup:
         from is square
 
         -- The squares it lands on, in order; the last is where it ends.
-        path is list<element=square>
+        path is list<element type=square>
 
         -- The squares of the pieces it jumps over, in order: none for a step.
-        captures is list<element=square>
+        captures is list<element type=square>
 
 
     -- How hard the computer plays.
@@ -115,7 +115,7 @@ public facet setup:
     -- The levels the player may choose from.
     constants levels:
         -- From the easiest to the hardest. Each looks at ten times as many positions as the one before.
-        all is list<element=level> = [
+        all is list<element type=level> = [
             level(name: "Beginner", checks: 25, weight: 1),
             level(name: "Casual", checks: 250, weight: 2),
             level(name: "Club", checks: 2500, weight: 3),
@@ -135,7 +135,7 @@ public facet setup:
     -- One game.
     structure game:
         -- Every square, row by row from the top left: the piece on it, or none.
-        squares is list<element=optional<value=piece>>
+        squares is list<element type=optional<value type=piece>>
 
         -- Whose turn it is.
         to_move is side
@@ -150,7 +150,7 @@ public facet setup:
         quiet is uint32
 
         -- The move made last, if one has been.
-        last is optional<value=move>
+        last is optional<value type=move>
 
 
     ----------------------------------------------------------------------------------------------------------------------------
@@ -174,7 +174,7 @@ The piece a square holds when a game starts.
 
 square: The square, as square.
 
-held: Its piece, or none, as optional<value=piece>.
+held: Its piece, or none, as optional<value type=piece>.
 --------------------------------------------------------------------------------------------------------------------------------
 function starting_piece(square) returns held:
     conditional placed:
@@ -195,7 +195,7 @@ public facet rules:
 
     game: The game, as game.
 
-    moves: The moves, as list<element=move>.
+    moves: The moves, as list<element type=move>.
     ----------------------------------------------------------------------------------------------------------------------------
     function legal_moves(game) returns moves:
         jumps = all_jumps(game)
@@ -299,7 +299,7 @@ The steps the player to move may make: to an empty square next to a piece, the w
 
 game: The game, as game.
 
-found: The steps, as list<element=move>.
+found: The steps, as list<element type=move>.
 --------------------------------------------------------------------------------------------------------------------------------
 function all_steps(game) returns found:
     mutable steps = list.new()
@@ -321,7 +321,7 @@ The jumps the player to move may make, each as long a chain as it can go.
 
 game: The game, as game.
 
-found: The jumps, as list<element=move>.
+found: The jumps, as list<element type=move>.
 --------------------------------------------------------------------------------------------------------------------------------
 function all_jumps(game) returns found:
     mutable jumps = list.new()
@@ -341,10 +341,10 @@ game: The game, as it was before the chain started, as game.
 piece: The piece that jumps, as piece.
 start: The square the chain started from, as square.
 at: The square the piece has reached, as square.
-path: The squares it has landed on so far, as list<element=square>.
-captured: The squares of the pieces it has jumped over so far, as list<element=square>.
+path: The squares it has landed on so far, as list<element type=square>.
+captured: The squares of the pieces it has jumped over so far, as list<element type=square>.
 
-found: The chains, each a whole move, or none when it cannot jump from `at`, as list<element=move>.
+found: The chains, each a whole move, or none when it cannot jump from `at`, as list<element type=move>.
 --------------------------------------------------------------------------------------------------------------------------------
 function chains(game, piece, start, at, path, captured) returns found:
     mutable moves = list.new()
@@ -376,10 +376,10 @@ game: The game, as it was before the chain started, as game.
 piece: The piece that jumps, as piece.
 start: The square the chain started from, as square.
 land: The square just landed on, as square.
-path: The squares it has landed on so far, as list<element=square>.
-captured: The squares of the pieces it has jumped over so far, as list<element=square>.
+path: The squares it has landed on so far, as list<element type=square>.
+captured: The squares of the pieces it has jumped over so far, as list<element type=square>.
 
-found: The chains, as list<element=move>.
+found: The chains, as list<element type=move>.
 --------------------------------------------------------------------------------------------------------------------------------
 function chains_after(game, piece, start, land, path, captured) returns found:
     if crowned = ((not piece.king) and (land.row == far_row(piece.owner))):
@@ -430,7 +430,7 @@ Every piece on the board, with its square, row by row from the top left.
 
 game: The game, as game.
 
-found: The pieces, as list<element=placed>.
+found: The pieces, as list<element type=placed>.
 --------------------------------------------------------------------------------------------------------------------------------
 function placed_pieces(game) returns found:
     mutable pieces = list.new()
@@ -452,7 +452,7 @@ The pieces of the player to move, with their squares.
 
 game: The game, as game.
 
-found: The pieces, as list<element=placed>.
+found: The pieces, as list<element type=placed>.
 --------------------------------------------------------------------------------------------------------------------------------
 function own_pieces(game) returns found:
     mutable pieces = list.new()
@@ -471,7 +471,7 @@ The ways a piece may move.
 
 piece: The piece, as piece.
 
-ways: The directions: two for a man, and four for a king, as list<element=direction>.
+ways: The directions: two for a man, and four for a king, as list<element type=direction>.
 --------------------------------------------------------------------------------------------------------------------------------
 function directions_of(piece) returns ways
         ensures several = (ways.count() >= 2):
@@ -504,7 +504,7 @@ The piece on a square, if there is one.
 game: The game, as game.
 square: The square, on the board, as square.
 
-held: The piece, or none, as optional<value=piece>.
+held: The piece, or none, as optional<value type=piece>.
 --------------------------------------------------------------------------------------------------------------------------------
 function piece_at(game, square) returns held:
     return held = game.squares.at_number(number_of(square))
@@ -643,8 +643,8 @@ The best of the moves the minimax search weighs best, by games played out at ran
 checks. When one move is weighed best, it is chosen without them.
 
 game: The game, as game.
-options: The moves, as list<element=move>.
-values: What the minimax search weighs each move at, in the same order, as list<element=int32>.
+options: The moves, as list<element type=move>.
+values: What the minimax search weighs each move at, in the same order, as list<element type=int32>.
 checks: How many positions the games may look at in all, as uint32.
 
 chosen: The move, as move.
@@ -838,7 +838,7 @@ public facet drawing:
     game: The game, as game.
     highest: The best score so far, as uint32.
 
-    lines: The two lines, as list<element=string>.
+    lines: The two lines, as list<element type=string>.
     ----------------------------------------------------------------------------------------------------------------------------
     function banner(game, highest) returns lines:
         moves = player_moves(game)
@@ -876,7 +876,7 @@ public facet drawing:
     Draws a game: the board, the pieces, the squares the selected piece may move to, and the banner beneath.
 
     game: The game, as game.
-    selected: The square of the piece the player has selected, if there is one, as optional<value=square>.
+    selected: The square of the piece the player has selected, if there is one, as optional<value type=square>.
     highest: The best score so far, as uint32.
 
     window: Where the game is drawn, as window.
@@ -920,7 +920,7 @@ public facet drawing:
 
     place: The point, as point.
 
-    found: The square, or none when the point is off the board, as optional<value=square>.
+    found: The square, or none when the point is off the board, as optional<value type=square>.
     ----------------------------------------------------------------------------------------------------------------------------
     function square_at(place) returns found:
         across = ((place.x >= layout.gap) and (place.x < layout.gap + layout.board_size))
@@ -939,7 +939,7 @@ public facet drawing:
 
     place: The point, as point.
 
-    found: The level, or none when the point is on no button, as optional<value=level>.
+    found: The level, or none when the point is on no button, as optional<value type=level>.
     ----------------------------------------------------------------------------------------------------------------------------
     function level_at(place) returns found:
         mutable top = layout.button_top
@@ -983,7 +983,7 @@ The colour of a square: light or dark, or marked as the selected piece's or as p
 
 game: The game, as game.
 square: The square, as square.
-selected: The square of the piece the player has selected, if there is one, as optional<value=square>.
+selected: The square of the piece the player has selected, if there is one, as optional<value type=square>.
 
 shade: The colour, as colour.
 --------------------------------------------------------------------------------------------------------------------------------
@@ -1019,9 +1019,9 @@ function in_last_move(game, square) returns part:
 The squares the selected piece may move to.
 
 game: The game, as game.
-selected: The square of the piece the player has selected, if there is one, as optional<value=square>.
+selected: The square of the piece the player has selected, if there is one, as optional<value type=square>.
 
-found: The squares: none when no piece is selected, as list<element=square>.
+found: The squares: none when no piece is selected, as list<element type=square>.
 --------------------------------------------------------------------------------------------------------------------------------
 function landings(game, selected) returns found:
     mutable squares = list.new()
@@ -1039,7 +1039,7 @@ function landings(game, selected) returns found:
 Draws the squares of the board.
 
 game: The game, as game.
-selected: The square of the piece the player has selected, if there is one, as optional<value=square>.
+selected: The square of the piece the player has selected, if there is one, as optional<value type=square>.
 
 window: Where the board is drawn, as window.
 --------------------------------------------------------------------------------------------------------------------------------
@@ -1069,7 +1069,7 @@ function draw_pieces(game, injected window):
 Marks the squares the selected piece may move to.
 
 game: The game, as game.
-selected: The square of the piece the player has selected, if there is one, as optional<value=square>.
+selected: The square of the piece the player has selected, if there is one, as optional<value type=square>.
 
 window: Where the marks are drawn, as window.
 --------------------------------------------------------------------------------------------------------------------------------
@@ -1100,7 +1100,7 @@ The colours a piece is drawn in.
 
 piece: The piece, as piece.
 
-colours: The colours of its disc, its ring and its centre, as list<element=colour>.
+colours: The colours of its disc, its ring and its centre, as list<element type=colour>.
 --------------------------------------------------------------------------------------------------------------------------------
 function colours_of(piece) returns colours:
     conditional painted:
@@ -1155,7 +1155,7 @@ public facet window_play:
 
     highest: The best score so far, as uint32.
 
-    found: The level clicked, or none when the player stopped, as optional<value=level>.
+    found: The level clicked, or none when the player stopped, as optional<value type=level>.
 
     window: Where the levels are drawn and the clicks and keys are read, as window.
     forever: The right to wait for the next frame as long as it takes, as forever.
@@ -1214,7 +1214,7 @@ public facet window_play:
     piece of the player's that may move selects it, and any other click selects nothing.
 
     game: The game, which changes, as game.
-    selected: The square of the piece the player has selected, if there is one, which changes, as optional<value=square>.
+    selected: The square of the piece the player has selected, if there is one, which changes, as optional<value type=square>.
     place: The point clicked, as point.
     ----------------------------------------------------------------------------------------------------------------------------
     function clicked(mutable game, mutable selected, place):
@@ -1234,9 +1234,9 @@ public facet window_play:
 --------------------------------------------------------------------------------------------------------------------------------
 The level whose button the player clicked first, if any click was on one.
 
-clicks: The points clicked, in order, as list<element=point>.
+clicks: The points clicked, in order, as list<element type=point>.
 
-found: The level, or none, as optional<value=level>.
+found: The level, or none, as optional<value type=level>.
 --------------------------------------------------------------------------------------------------------------------------------
 function level_clicked(clicks) returns found:
     for place in clicks:
@@ -1254,8 +1254,8 @@ function level_clicked(clicks) returns found:
 Acts on each of the player's clicks in turn.
 
 game: The game, which changes, as game.
-selected: The square of the piece the player has selected, if there is one, which changes, as optional<value=square>.
-clicks: The points clicked, in order, as list<element=point>.
+selected: The square of the piece the player has selected, if there is one, which changes, as optional<value type=square>.
+clicks: The points clicked, in order, as list<element type=point>.
 --------------------------------------------------------------------------------------------------------------------------------
 function act_on_clicks(mutable game, mutable selected, clicks):
     for place in clicks:
@@ -1267,10 +1267,10 @@ function act_on_clicks(mutable game, mutable selected, clicks):
 The move from one square to another, if the player to move may make it.
 
 game: The game, as game.
-from: The square the move starts from, if there is one, as optional<value=square>.
-to: The square it ends on, if there is one, as optional<value=square>.
+from: The square the move starts from, if there is one, as optional<value type=square>.
+to: The square it ends on, if there is one, as optional<value type=square>.
 
-found: The move, or none, as optional<value=move>.
+found: The move, or none, as optional<value type=move>.
 --------------------------------------------------------------------------------------------------------------------------------
 function move_to(game, from, to) returns found:
     for candidate in legal_moves(game):
@@ -1286,7 +1286,7 @@ function move_to(game, from, to) returns found:
 Whether the player to move may move the piece on a square.
 
 game: The game, as game.
-square: The square, if there is one, as optional<value=square>.
+square: The square, if there is one, as optional<value type=square>.
 
 can: Whether they may, as boolean.
 --------------------------------------------------------------------------------------------------------------------------------

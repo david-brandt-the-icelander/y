@@ -3,7 +3,7 @@
 //! (`conformance/sequences.json`, see `conformance.rs`).
 //!
 //! A sequence is finite or infinite: it has an optional length and an element at every position below it. Nothing here
-//! fails: an operator with no value on an infinite sequence (`size`, `reverse`) says so, and an equality that no finite
+//! fails: an operator with no value on an infinite sequence (`count`, `reverse`) says so, and an equality that no finite
 //! prefix refutes is undecided, as the text has it.
 use serde_json::{json, Map, Value as Json};
 use std::cmp::Ordering;
@@ -474,7 +474,7 @@ fn undefined() -> Json {
 
 /// Evaluate one operator of the table. The operators and their arguments:
 /// `index(xs, i)`, `take(n, xs)`, `skip(n, xs)`, `slice(xs, i|null, j|null)`, `concat(xs, ys)`, `reverse(xs)`,
-/// `map(f, xs)`, `filter(p, xs)`, `zip(xs, ys)`, `enumerate(xs)`, `scalars(s)`, `deref(v)`, `size(xs)`, `eq(a, b)`,
+/// `map(f, xs)`, `filter(p, xs)`, `zip(xs, ys)`, `enumerate(xs)`, `scalars(s)`, `deref(v)`, `count(xs)`, `eq(a, b)`,
 /// `part(tuple, k)`, `bind(pattern, value)`, `next(xs)`, `next_back(xs)`.
 pub fn eval_op(op: &str, args: &[Json]) -> Result<Json, String> {
     Ok(match op {
@@ -502,7 +502,7 @@ pub fn eval_op(op: &str, args: &[Json]) -> Result<Json, String> {
         "enumerate" => list_json(seq_arg(args, 0, op)?.enumerate()),
         "scalars" => list_json(Seq::scalars(arg(args, 0, op)?.as_str().ok_or("scalars: a text is expected")?)),
         "deref" => arg(args, 0, op)?.clone(),
-        "size" => seq_arg(args, 0, op)?.len().map_or_else(undefined, |n| json!(n)),
+        "count" => seq_arg(args, 0, op)?.len().map_or_else(undefined, |n| json!(n)),
         "eq" => match from_json(arg(args, 0, op)?)?.eq_dec(&from_json(arg(args, 1, op)?)?) {
             Some(b) => json!(b),
             None => json!({ "undecided": true }),

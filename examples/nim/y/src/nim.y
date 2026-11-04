@@ -9,12 +9,12 @@ public facet setup:
     -- The rules every game is played by.
     constants game_rules:
         -- How many counters each heap holds at the start, from the first heap to the last.
-        starting_heaps is list<element=uint32> = [3, 4, 5]
+        starting_heaps is list<element type=uint32> = [3, 4, 5]
 
 
     -- One game: how many counters are left in each heap.
     structure game:
-        heaps is list<element=uint32>
+        heaps is list<element type=uint32>
 
 
     -- Who is playing.
@@ -178,7 +178,7 @@ function counters_left(game) returns left:
 ----------------------------------------------------------------------------------------------------------------------------
 The nim-sum of the heaps: their sizes combined with exclusive or.
 
-heaps: The heaps, as list<element=uint32>.
+heaps: The heaps, as list<element type=uint32>.
 
 sum: The nim-sum, which is zero exactly when the player to move loses against perfect play, as uint32.
 ----------------------------------------------------------------------------------------------------------------------------

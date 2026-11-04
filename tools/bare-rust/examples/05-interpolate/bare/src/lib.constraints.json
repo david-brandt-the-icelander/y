@@ -16,14 +16,14 @@
       "params": [
         {
           "name": "replacement",
-          "type": "ref<list<u8> as 'std::primitive::slice'>",
+          "type": "ref<target type=list<element type=u8> as 'std::primitive::slice'>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "append", "type": "A" },
         { "name": "name_to_index", "type": "N" },
         {
           "name": "dst",
-          "type": "ref<list<u8> as 'Vec'>",
+          "type": "ref<target type=list<element type=u8> as 'Vec'>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ]
@@ -47,7 +47,7 @@
           "name": "Named",
           "fields": [
             {
-              "type": "ref<text>",
+              "type": "ref<target type=string>",
               "access": { "rights": "read", "guarantee": "readers" },
               "hold": { "kind": "borrows", "lifetime": "'a" }
             }
@@ -74,7 +74,7 @@
       "params": [
         {
           "name": "x",
-          "type": "ref<text>",
+          "type": "ref<target type=string>",
           "access": { "rights": "read", "guarantee": "readers" },
           "hold": { "kind": "borrows", "lifetime": "'a" }
         }
@@ -99,7 +99,7 @@
       "params": [
         {
           "name": "replacement",
-          "type": "ref<list<u8> as 'std::primitive::slice'>",
+          "type": "ref<target type=list<element type=u8> as 'std::primitive::slice'>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -108,7 +108,13 @@
     {
       "kind": "function",
       "name": "interpolate::is_valid_cap_letter",
-      "params": [{ "name": "b", "type": "ref<u8>", "access": { "rights": "read", "guarantee": "readers" } }],
+      "params": [
+        {
+          "name": "b",
+          "type": "ref<target type=u8>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
       "result": { "type": "bool" }
     }
   ],

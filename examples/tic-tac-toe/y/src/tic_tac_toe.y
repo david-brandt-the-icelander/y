@@ -12,7 +12,7 @@ public facet setup:
         squares is uint32 = 9
 
         -- The board's eight lines of three squares: three rows, three columns and two diagonals.
-        lines is list<element=list<element=uint32>> = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [1, 4, 7], [2, 5, 8], [3, 6, 9], [1, 5, 9], [3, 5, 7]]
+        lines is list<element type=list<element type=uint32>> = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [1, 4, 7], [2, 5, 8], [3, 6, 9], [1, 5, 9], [3, 5, 7]]
 
 
     -- A mark a player puts in a square. The person plays crosses and moves first; the computer plays noughts.
@@ -24,7 +24,7 @@ public facet setup:
     -- One game.
     structure game:
         -- The squares, in the order they are numbered: the mark in each, or none.
-        squares is list<element=optional<value=mark>>
+        squares is list<element type=optional<value type=mark>>
 
         -- Whose turn it is.
         to_move is mark
@@ -135,7 +135,7 @@ The player who has three in a row, if one has.
 
 game: The game, as game.
 
-found: That player's mark, or none, as optional<value=mark>.
+found: That player's mark, or none, as optional<value type=mark>.
 --------------------------------------------------------------------------------------------------------------------------------
 function winner(game) returns found:
     for line in board.lines:
@@ -170,7 +170,7 @@ The squares that hold no mark, in the order they are numbered.
 
 game: The game, as game.
 
-open: Their numbers, as list<element=uint32>.
+open: Their numbers, as list<element type=uint32>.
 --------------------------------------------------------------------------------------------------------------------------------
 function open_squares(game) returns open:
     mutable found = list.new()

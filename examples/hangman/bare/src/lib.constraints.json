@@ -6,5 +6,7 @@
   "status": {
     "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
   },
-  "subjects": [{ "kind": "module", "name": "hangman_example::hangman", "visible": "public" }]
+  "subjects": [
+    { "kind": "module", "name": "hangman_example::hangman", "visible": "public", "level": "effects" }
+  ]
 }

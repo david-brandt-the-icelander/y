@@ -13,7 +13,7 @@
       "kind": "const",
       "name": "hangman_example::hangman::setup::game_rules::WORD_LIST",
       "visible": "public",
-      "type": "ref<text>",
+      "type": "ref<target type=string>",
       "access": { "rights": "read", "guarantee": "readers" }
     },
     {
@@ -26,7 +26,7 @@
       "kind": "type",
       "name": "hangman_example::hangman::setup::Word",
       "visible": "public",
-      "fields": [{ "type": "text", "hold": { "kind": "owns" } }],
+      "fields": [{ "type": "string", "hold": { "kind": "owns" } }],
       "implements": [
         { "trait": "fmt::Display", "impl": "hangman_example::hangman::setup::Word as fmt::Display" }
       ],
@@ -39,7 +39,7 @@
         },
         {
           "kind": "invariant",
-          "text": "invariant long_enough : length(self.0) >= 4",
+          "text": "invariant long_enough : count(scalars(self.0)) >= 4",
           "source": "y/src/hangman.y:26",
           "status": { "lifted": "src/hangman.rs: Word::new" }
         }
@@ -49,7 +49,7 @@
       "kind": "function",
       "name": "hangman_example::hangman::setup::Word::new",
       "visible": "public",
-      "params": [{ "name": "value", "type": "text" }],
+      "params": [{ "name": "value", "type": "string" }],
       "result": { "type": "Word", "fails": "ConstraintViolation" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:24" }]
     },
@@ -58,19 +58,27 @@
       "name": "hangman_example::hangman::setup::Word::as_text",
       "visible": "public",
       "params": [
-        { "name": "self", "type": "ref<Word>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "self",
+          "type": "ref<target type=Word>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
-      "result": { "type": "ref<text>", "hold": { "kind": "borrows", "from": "self" } }
+      "result": { "type": "ref<target type=string>", "hold": { "kind": "borrows", "from": "self" } }
     },
     { "kind": "impl", "name": "hangman_example::hangman::setup::Word as fmt::Display" },
     {
       "kind": "function",
       "name": "hangman_example::hangman::setup::Word as fmt::Display::fmt",
       "params": [
-        { "name": "self", "type": "ref<Word>", "access": { "rights": "read", "guarantee": "readers" } },
+        {
+          "name": "self",
+          "type": "ref<target type=Word>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
         {
           "name": "f",
-          "type": "ref<std::fmt::Formatter<'_>>",
+          "type": "ref<target type=std::fmt::Formatter<'_>>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -87,9 +95,13 @@
       "name": "hangman_example::hangman::setup::parse_word_list",
       "visible": "public",
       "params": [
-        { "name": "text", "type": "ref<text>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "text",
+          "type": "ref<target type=string>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
-      "result": { "type": "list<Word> as 'Vec'", "fails": "WordListError" },
+      "result": { "type": "list<element type=Word> as 'Vec'", "fails": "WordListError" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:46" }]
     },
     { "kind": "module", "name": "hangman_example::hangman::rounds", "visible": "public" },
@@ -109,21 +121,21 @@
           "name": "hits",
           "visible": "path",
           "visible_path": "super",
-          "type": "set<Rune> as 'BTreeSet'",
+          "type": "set<element type=Rune> as 'BTreeSet'",
           "hold": { "kind": "owns" }
         },
         {
           "name": "misses",
           "visible": "path",
           "visible_path": "super",
-          "type": "list<Rune> as 'Vec'",
+          "type": "list<element type=Rune> as 'Vec'",
           "hold": { "kind": "owns" }
         }
       ],
       "clauses": [
         {
           "kind": "invariant",
-          "text": "invariant within_allowance : size(self.misses) <= ALLOWED_MISSES",
+          "text": "invariant within_allowance : count(self.misses) <= ALLOWED_MISSES",
           "source": "y/src/hangman.y:75",
           "status": { "lifted": "src/hangman.rs: guess, after the one write to misses" }
         }
@@ -134,7 +146,11 @@
       "name": "hangman_example::hangman::rounds::Game::miss_count",
       "visible": "public",
       "params": [
-        { "name": "self", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "self",
+          "type": "ref<target type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
       "result": { "type": "u64 as 'usize'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:73" }]
@@ -170,7 +186,11 @@
       "name": "hangman_example::hangman::rounds::hanged",
       "visible": "public",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "game",
+          "type": "ref<target type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
       "result": { "type": "bool" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:114" }]
@@ -180,7 +200,11 @@
       "name": "hangman_example::hangman::rounds::solved",
       "visible": "public",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "game",
+          "type": "ref<target type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
       "result": { "type": "bool" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:122" }]
@@ -190,7 +214,11 @@
       "name": "hangman_example::hangman::rounds::outcome_of",
       "visible": "public",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "game",
+          "type": "ref<target type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
       "result": { "type": "Outcome" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:133" }]
@@ -200,8 +228,16 @@
       "name": "hangman_example::hangman::rounds::guess",
       "visible": "public",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "write", "guarantee": "exclusive" } },
-        { "name": "line", "type": "ref<text>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "game",
+          "type": "ref<target type=Game>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        {
+          "name": "line",
+          "type": "ref<target type=string>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
       "result": { "type": "Verdict", "fails": "GuessError" },
       "clauses": [
@@ -223,9 +259,13 @@
       "name": "hangman_example::hangman::display::masked",
       "visible": "public",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "game",
+          "type": "ref<target type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
-      "result": { "type": "text" },
+      "result": { "type": "string" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:188" }]
     },
     {
@@ -233,7 +273,7 @@
       "name": "hangman_example::hangman::display::gallows",
       "visible": "public",
       "params": [{ "name": "misses", "type": "u64 as 'usize'" }],
-      "result": { "type": "text" },
+      "result": { "type": "string" },
       "clauses": [
         {
           "kind": "require",
@@ -251,7 +291,7 @@
         { "name": "letter", "type": "Rune" },
         {
           "name": "hits",
-          "type": "ref<set<Rune> as 'BTreeSet'>",
+          "type": "ref<target type=set<element type=Rune> as 'BTreeSet'>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -264,9 +304,13 @@
       "params": [
         { "name": "misses", "type": "u64 as 'usize'" },
         { "name": "needed", "type": "u64 as 'usize'" },
-        { "name": "mark", "type": "ref<text>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "mark",
+          "type": "ref<target type=string>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
-      "result": { "type": "text" },
+      "result": { "type": "string" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:247" }]
     },
     { "kind": "module", "name": "hangman_example::hangman::console_play", "visible": "public" },
@@ -306,26 +350,30 @@
       "params": [
         {
           "name": "words",
-          "type": "ref<list<Word> as 'std::primitive::slice'>",
+          "type": "ref<target type=list<element type=Word> as 'std::primitive::slice'>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "console",
-          "type": "ref<Console>",
+          "type": "ref<target type=Console>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         {
           "name": "random",
-          "type": "ref<Random>",
+          "type": "ref<target type=Random>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
-        { "name": "forever", "type": "ref<Forever>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "forever",
+          "type": "ref<target type=Forever>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
       "result": { "type": "()", "fails": "PlayError" },
       "clauses": [
         {
           "kind": "require",
-          "text": "require has_words : size(words) > 0",
+          "text": "require has_words : count(words) > 0",
           "source": "y/src/hangman.y:275",
           "status": { "lifted": "src/hangman.rs: y_runtime::require" }
         },
@@ -337,10 +385,14 @@
       "kind": "function",
       "name": "hangman_example::hangman::show_turn",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
+        {
+          "name": "game",
+          "type": "ref<target type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
         {
           "name": "console",
-          "type": "ref<Console>",
+          "type": "ref<target type=Console>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -357,22 +409,30 @@
       "params": [
         {
           "name": "guessed",
-          "type": "ref<Result<Verdict, GuessError>>",
+          "type": "ref<target type=Result<Verdict, GuessError>>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
-        { "name": "typed", "type": "ref<text>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "typed",
+          "type": "ref<target type=string>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
-      "result": { "type": "text" },
+      "result": { "type": "string" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:321" }]
     },
     {
       "kind": "function",
       "name": "hangman_example::hangman::show_end",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
+        {
+          "name": "game",
+          "type": "ref<target type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
         {
           "name": "console",
-          "type": "ref<Console>",
+          "type": "ref<target type=Console>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],

@@ -31,8 +31,8 @@ fn walk(dir: &Path, ext: &str, out: &mut Vec<PathBuf>) {
 fn form(s: &str) -> String {
     match Ty::parse(s) {
         Ok(Ty::Prim(_)) => "prim".into(),
-        Ok(Ty::Text) => "text".into(),
-        Ok(Ty::Char) => "char".into(),
+        Ok(Ty::Text) => "string".into(),
+        Ok(Ty::Char) => "scalar".into(),
         Ok(Ty::Name(_)) => "name".into(),
         Ok(Ty::App(..)) => "generic".into(),
         Ok(Ty::Ref(_)) => "ref".into(),
