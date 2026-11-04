@@ -7,12 +7,16 @@
 //!
 //! | Y | Rust |
 //! |---|---|
-//! | `decimal64<scale=2>` | `Decimal64<2>`, which is `Decimal<i64, 18, 2>` |
+//! | `decimal64<scale=2>`, which is `decimal<precision=18, scale=2>` | `Decimal64<2>`, which is `Decimal<i64, 18, 2>` |
 //! | `decimal<precision=12, scale=2>` | `Decimal<i64, 12, 2>`: the smallest size that holds 12 digits |
-//! | `rational128` | `Rational128`, which is `Rational<i128, 38>`: two `i128`, 256 bits |
+//! | `rational128`, which is `rational<precision=38>` | `Rational128`, which is `Rational<i128, 38>`: two `i128`, 256 bits |
 //! | `rational<precision=12>` | `Rational<i64, 12>` |
+//! | `decimal<scale=2>`, with no precision | `Decimal<Big, UNBOUNDED, 2>` |
+//! | `rational`, with no precision | `Rational<Big, UNBOUNDED>` |
 //!
-//! Every result is checked against its precision, and an overflow is a fault. Intermediate results are computed
+//! In Y a size is a constraint, not a type, and the compiler derives each result's constraints; the lowering converts
+//! operands stored in different sizes with `to_decimal` and `to_rational`. Every value is checked against the precision
+//! of the type it is stored in, and an overflow is a fault. Intermediate results are computed
 //! exactly, in an integer of any size ([`Big`]), so a result that fits is never lost to an intermediate that would not.
 //! That is slower than Y's runtime would be, and the same in meaning.
 //!
@@ -105,11 +109,11 @@ fn divide_exactly(numerator: &Big, denominator: &Big) -> Result<Big, Inexact> {
 // Decimals
 
 /// An integer type that stores a decimal's digits: `i16`, `i32`, `i64`, `i128` or [`I256`].
-pub trait Digits: Copy + Eq + Ord + std::hash::Hash + fmt::Debug {
+pub trait Digits: Clone + Eq + Ord + std::hash::Hash + fmt::Debug {
     /// The most digits the type always holds: ClickHouse's precision for its size (4 for `i16`, by the same rule).
     const PRECISION: u32;
     /// The value, exactly.
-    fn to_big(self) -> Big;
+    fn to_big(&self) -> Big;
     /// The value, if the type holds it.
     fn from_big(value: &Big) -> Option<Self>;
 }
@@ -118,8 +122,8 @@ macro_rules! digits {
     ($t:ty, $precision:expr) => {
         impl Digits for $t {
             const PRECISION: u32 = $precision;
-            fn to_big(self) -> Big {
-                Big::from_i128(self as i128)
+            fn to_big(&self) -> Big {
+                Big::from_i128(*self as i128)
             }
             fn from_big(value: &Big) -> Option<Self> {
                 value.to_i128().and_then(|v| <$t>::try_from(v).ok())
@@ -132,6 +136,21 @@ digits!(i16, 4);
 digits!(i32, 9);
 digits!(i64, 18);
 digits!(i128, 38);
+
+/// The precision of a decimal or rational with none: Y's `decimal<scale=s>` and `rational`, stored in a [`Big`].
+pub const UNBOUNDED: u32 = u32::MAX;
+
+impl Digits for Big {
+    const PRECISION: u32 = UNBOUNDED;
+
+    fn to_big(&self) -> Big {
+        self.clone()
+    }
+
+    fn from_big(value: &Big) -> Option<Self> {
+        Some(value.clone())
+    }
+}
 
 /// A signed 256-bit integer in two's complement, least significant word first: the storage of a `decimal256`. Rust has
 /// none, so this one only stores; arithmetic goes through [`Big`].
@@ -153,7 +172,7 @@ impl Ord for I256 {
 impl Digits for I256 {
     const PRECISION: u32 = 76;
 
-    fn to_big(self) -> Big {
+    fn to_big(&self) -> Big {
         let negative = self.0[3] >> 63 == 1;
         let mut words = self.0;
         if negative {
@@ -223,7 +242,7 @@ impl<D: Digits, const P: u32, const S: u32> Decimal<D, P, S> {
     /// The decimal whose last place holds `units`, if its precision holds it.
     fn from_units(units: &Big) -> Option<Self> {
         assert!(P >= 1 && P <= D::PRECISION && S <= P, "a decimal's precision and scale are out of range");
-        if units.compare_magnitude(&Big::power_of_ten(P)) != Ordering::Less {
+        if P != UNBOUNDED && units.compare_magnitude(&Big::power_of_ten(P)) != Ordering::Less {
             return None;
         }
         D::from_big(units).map(|units| Decimal { units })
@@ -235,7 +254,7 @@ impl<D: Digits, const P: u32, const S: u32> Decimal<D, P, S> {
     }
 
     /// The units of the last place, exactly.
-    pub fn units(self) -> Big {
+    pub fn units(&self) -> Big {
         self.units.to_big()
     }
 
@@ -444,9 +463,9 @@ impl<D: Digits, const P: u32> Rational<D, P> {
             numerator = numerator.negate();
             denominator = denominator.negate();
         }
-        let limit = Big::power_of_ten(P);
+        let limit = (P != UNBOUNDED).then(|| Big::power_of_ten(P));
         let part = |value: &Big| {
-            if value.compare_magnitude(&limit) != Ordering::Less {
+            if limit.as_ref().is_some_and(|limit| value.compare_magnitude(limit) != Ordering::Less) {
                 fault(Self::IDENTITY, "overflow");
             }
             D::from_big(value).unwrap_or_else(|| fault(Self::IDENTITY, "overflow"))
@@ -460,12 +479,12 @@ impl<D: Digits, const P: u32> Rational<D, P> {
     }
 
     /// The numerator, in lowest terms; its sign is the rational's.
-    pub fn numerator(self) -> Big {
+    pub fn numerator(&self) -> Big {
         self.numerator.to_big()
     }
 
     /// The denominator, in lowest terms: always positive.
-    pub fn denominator(self) -> Big {
+    pub fn denominator(&self) -> Big {
         self.denominator.to_big()
     }
 
@@ -562,9 +581,10 @@ impl<D: Digits, const P: u32> fmt::Debug for Rational<D, P> {
 // ---------------------------------------------------------------------------------------------------------------------
 // Exact integers
 
-/// An integer of any size, for the exact intermediate results of decimal and rational arithmetic: a sign and a
-/// magnitude in 32-bit limbs, least significant first, with no zero limb at the top. Zero is not negative.
-#[derive(Clone, PartialEq, Eq, Debug)]
+/// An integer of any size: the exact intermediate results of decimal and rational arithmetic, and the storage of a
+/// decimal or rational with no precision. A sign and a magnitude in 32-bit limbs, least significant first, with no zero
+/// limb at the top. Zero is not negative.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Big {
     negative: bool,
     magnitude: Vec<u32>,
@@ -758,6 +778,18 @@ impl Big {
     }
 }
 
+impl PartialOrd for Big {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Big {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.compare(other)
+    }
+}
+
 impl fmt::Display for Big {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let sign = if self.negative { "-" } else { "" };
@@ -925,6 +957,22 @@ mod tests {
         assert_eq!(share.to_decimal_exact::<i64, 18, 2>(), Err(Inexact));
         assert_eq!(Rational64::new(1, 4).to_decimal_exact::<i64, 18, 2>().map(|d| d.to_string()), Ok("0.25".into()));
         assert!(std::panic::catch_unwind(|| Rational16::new(1, 9999) * Rational16::new(1, 2)).is_err());
+    }
+
+    #[test]
+    fn a_decimal_or_rational_with_no_precision_has_no_limit() {
+        type Exact = Decimal<Big, UNBOUNDED, 2>;
+        let huge = Exact::literal(&format!("{}.99", "9".repeat(100)));
+        let doubled = huge.clone() + huge;
+        assert_eq!(doubled.to_string(), format!("1{}.98", "9".repeat(100)));
+        type Fraction = Rational<Big, UNBOUNDED>;
+        let tiny = Fraction::new(1, i128::MAX);
+        let product = tiny.clone() * tiny;
+        assert_eq!(product.denominator(), Big::from_i128(i128::MAX).multiply(&Big::from_i128(i128::MAX)));
+        // Operands stored in different sizes meet in the size of the result.
+        let small = Decimal16::<2>::literal("12.50");
+        let large = Decimal128::<2>::literal("1000000000000.25");
+        assert_eq!((small.to_decimal::<i128, 38, 2>() + large).to_string(), "1000000000012.75");
     }
 
     #[test]

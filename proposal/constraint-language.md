@@ -198,22 +198,23 @@ cannot check is reported as such for every subject of that host, never silently 
 ### 3.4 Types
 
 - **Primitive:** `bool`; `int`, the mathematical integers, with `u8` to `u128` and `i8` to `i128` as named refinements
-  of it; `decimal`, the exact decimals, with Y's `decimal16<scale=s>` to `decimal256<scale=s>` and
-  `decimal<precision=p, scale=s>` as named refinements of it (Y § 3.3, after ClickHouse); `rational`, the exact
-  fractions, with Y's `rational16` to `rational256` and `rational<precision=p>`; `f32` and `f64`; `text`; `bytes`; `time`, simulation time at a place in history; `instant`,
+  of it; `decimal`, the exact decimals, constrained as in Y by `precision` and `scale` (`decimal<precision=19,
+  scale=2>`; `decimal16<scale=s>` to `decimal256<scale=s>` name ClickHouse's precisions, Y § 3.3); `rational`, the
+  exact fractions, constrained by `precision`; `f32` and `f64`; `text`; `bytes`; `time`, simulation time at a place in history; `instant`,
   wall-clock time, allowed only in watched constraints; `duration`; `id<T>`, the identity of a row or entity of `T`.
 - **Composite:** records `{ name: T, ... }`; tuples; variants `A | B(T)`, closed unless marked `open`; optional `T?`;
   collections and mappings (below); `ref<T>`, a reference to a host entity, used by the memory clauses; `ptr<T>`,
   a host pointer: the address of a `T`, with no guarantee that it is valid or about any other path (§ 8.1). The kinds of
   pointer between the two (valid, a cursor, an element, a C string, code) are refinements of `ptr<T>`, and `ref<T>` is
   the most refined of them (§ 7.8).
-- **Collections and mappings.** `collection<T>` is one-dimensional and `mapping<K, V>` two-dimensional, as in Y
-  (Y § 3.13). Lists, arrays, sets, bags, stacks, queues, linked lists and iterators are collections, and maps of every
-  order are mappings, each with the clauses that say how it may be used and what its operations do: `ordered by
-  position | insertion | value | key`, `unordered`, `unique`, `count fixed`, `count at most n`, `offers …`, `costs …`,
-  `values many`. `list<T>`, `set<T>` and `map<K, V>` are Y's declarations of three of them. A host type maps onto one
-  through its profile, by its clauses: Rust's `Vec<T>` onto `list<T>`, `BTreeSet<T>` onto `sorted_set<T>`, `HashMap<K,
-  V>` onto `unordered_map<K, V>`.
+- **Collections and mappings.** A collection is one-dimensional and a mapping two-dimensional, as in Y (Y § 3.13).
+  Lists, arrays, sets, bags, stacks, queues, linked lists and iterators are collections, and maps of every order are
+  mappings, each with the constraints that say what it holds and how it may be used: `element`, or `key` and `value`;
+  `ordered by position | insertion | value | key`, `unordered`, `unique`, `count fixed`, `count at most n`, `offers
+  …`, `costs …`, `values many`. `list<T>`, `set<T>` and `map<K, V>` are three of them, written here with the hosts'
+  positional arguments, which Y writes named (`list<element=word>`, Y § 3.1). A host type maps onto one through its
+  profile, by its constraints: Rust's `Vec<T>` onto `list<T>`, `BTreeSet<T>` onto `sorted_set<T>`, `HashMap<K, V>`
+  onto `unordered_map<K, V>`.
 - **Refinements:** `T where p`, in which `value` names the value being refined; shorthands `T in a..b` and `T in {a, b,
   c}`; named refinements: `type Quantity = i64 where value >= 0`. A refinement on an optional type applies to the value
   when it is present. `where` always filters: the values of a type here, the rows of a table in an expression (§ 4).

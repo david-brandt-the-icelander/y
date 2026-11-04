@@ -49,7 +49,7 @@ public facet setup:
     -- The pictures the cards may show.
     constants faces:
         -- The OpenMoji codes of twenty animals' faces, from which each game chooses its pictures.
-        codes is list<string> = [
+        codes is list<element=string> = [
             "1F436", "1F431", "1F42D", "1F439", "1F430", "1F98A", "1F43B", "1F43C", "1F428", "1F42F", "1F981", "1F42E",
             "1F437", "1F438", "1F435", "1F414", "1F427", "1F426", "1F989", "1F984",
         ]
@@ -78,16 +78,16 @@ public facet setup:
     -- One game.
     structure game:
         -- For each card, in the order they are numbered, the number of the picture it shows.
-        pairs is list<uint32>
+        pairs is list<element=uint32>
 
         -- For each card, in the same order, which side is up.
-        sides is list<side>
+        sides is list<element=side>
 
         -- The pictures, numbered from 1.
-        pictures is list<picture>
+        pictures is list<element=picture>
 
         -- The cards turned face up this turn, and not yet matched: none, one or two.
-        turned is list<uint32>
+        turned is list<element=uint32>
 
         -- When the second card of the turn was turned, or when the game started.
         turned_at is instant
@@ -120,7 +120,7 @@ public facet setup:
 
     random: What chooses the pictures and deals the cards, as random.
     clock: What tells the time the game starts, as clock.
-    site: The OpenMoji website, as http<openmoji>.
+    site: The OpenMoji website, as http<service=openmoji>.
 
     fails setup_error.unreachable: OpenMoji did not give a picture.
     fails setup_error.timed_out: The pictures took longer than the fetch time to come.
@@ -165,7 +165,7 @@ public facet rules:
     place: The point clicked, as point.
 
     choice: The card's number, or none when the point is not on a card, the card is face up, or two cards are already
-      face up, as optional<uint32>.
+      face up, as optional<value=uint32>.
     ------------------------------------------------------------------------------------------------------------------------------------
     function choosable(game, place) returns choice:
         number = card_at(place)
@@ -272,7 +272,7 @@ The card under a point, if there is one.
 
 place: The point, as point.
 
-found: The card's number, or none when the point is between the cards or off the board, as optional<uint32>.
+found: The card's number, or none when the point is between the cards or off the board, as optional<value=uint32>.
 ----------------------------------------------------------------------------------------------------------------------------------------
 function card_at(place) returns found:
     mutable number = 0
@@ -347,7 +347,7 @@ public facet drawing:
     game: The game, as game.
     highest: The best score so far, as uint32.
 
-    lines: The two lines, as list<string>.
+    lines: The two lines, as list<element=string>.
     ------------------------------------------------------------------------------------------------------------------------------------
     function banner(game, highest) returns lines:
         seconds = game.elapsed.whole_seconds()
@@ -465,7 +465,7 @@ public facet window_play:
     window: Where the games are drawn and the clicks and keys are read, as window.
     clock: What times the games, as clock.
     random: What chooses the pictures and deals the cards, as random.
-    site: The OpenMoji website, as http<openmoji>.
+    site: The OpenMoji website, as http<service=openmoji>.
     forever: The right to wait for the next frame as long as it takes, as forever.
 
     fails setup_error.unreachable: OpenMoji did not give a picture.
@@ -505,7 +505,7 @@ public facet window_play:
 Turns over the cards the player clicked, in the order clicked. A click that turns no card is ignored.
 
 game: The game, which changes, as game.
-clicks: The points clicked, as list<point>.
+clicks: The points clicked, as list<element=point>.
 now: The time now, as instant.
 ----------------------------------------------------------------------------------------------------------------------------------------
 function pick(mutable game, clicks, now):
