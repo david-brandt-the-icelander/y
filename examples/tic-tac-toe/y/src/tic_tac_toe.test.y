@@ -1,8 +1,8 @@
 ------------------------------------------------------------------------------------------------------------------------
 A game with crosses and noughts in the given squares.
 
-crosses: The squares that hold a cross, as list<uint32>.
-noughts: The squares that hold a nought, as list<uint32>.
+crosses: The squares that hold a cross, as list<element=uint32>.
+noughts: The squares that hold a nought, as list<element=uint32>.
 to_move: Whose turn it is, as mark.
 
 made: The game, as game.

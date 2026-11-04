@@ -92,7 +92,7 @@ The window, which now also draws circles, comes from [`../y-window`](../y-window
 
 | Y | Bare body | Constraint file or `y-facts.json` | Rust |
 |---|---|---|---|
-| `structure level:` with `name is string`, and `levels.all is list<level> = [level(name: "Beginner", …), …]` | `const ALL: [Level; 5] = [Level { name: "Beginner", … }, …];` | the field's type, `&'static str` | a constant array of structures |
+| `structure level:` with `name is string`, and `levels.all is list<element=level> = [level(name: "Beginner", …), …]` | `const ALL: [Level; 5] = [Level { name: "Beginner", … }, …];` | the field's type, `&'static str` | a constant array of structures |
 | `chains(…)`, which calls itself through `chains_after` for each further jump | the same | `effects pure` | two mutually recursive `fn`s. A piece can jump at most twelve times, so the recursion is shallow |
 | `searched(game, owner, depth, mutable left)`, a recursive minimax that spends a budget it is given | `left: &mut u32` | `access mutates only left` | the budget is shared by every call of the search |
 | `mutable longer = path`, a copy of a list parameter to go on with | `path.to_vec()`, marked `// y: a copy` | `y-facts.json` `copies` | the same |

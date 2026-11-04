@@ -46,8 +46,8 @@ public facet holds:
 
     hold: The hold, waiting for the charge to be confirmed, as hold.
 
-    inventory: The stock and the holds on it, as shared<inventory>.
-    charges: Where charges are queued, as enqueue<charge_card>.
+    inventory: The stock and the holds on it, as shared<value=inventory>.
+    charges: Where charges are queued, as enqueue<command=charge_card>.
 
     fails hold_error.unknown_item: The item is not stocked here.
     fails hold_error.timed_out: No unit became free within five seconds.
@@ -83,7 +83,8 @@ documentation (spec blocks, April 2026); authority passed explicitly, never ambi
 context object, March 2026); units on every length and index (July and March 2026); tests that declare what they cover
 (toolchain, October 2025); fixtures generated from constraints (October 2025); *provable or explicitly missing*
 (ai.lang, March 2026); gaps recorded where the code is (knowledge-driven development, August 2026); facets as the one
-place visibility is written (toolchain, 2025); `name is type` for fields (YAPL).
+place visibility is written (toolchain, 2025); `name is type` for fields (YAPL); levels of common denominator,
+as modules' levels (LCD, ca. 2001; § 3.19).
 
 **Dropped**, with reasons in § 7: braces; classes,
 factory methods and inheritance; exceptions; ambient `using` contexts; transactional memory for *all* state;
@@ -193,12 +194,12 @@ error[Y0412]: external effect inside a transaction
   --> src/shop/checkout.y:27:13
    |
 27 |             gateway.charge(method: buyer.payment_method, amount: stock.price) or fail
-   |             ^^^^^^^^^^^^^^ `http<payment_gateway>` performs network I/O
+   |             ^^^^^^^^^^^^^^ `http<service=payment_gateway>` performs network I/O
    |
    = why: `atomic hold_one_unit` may run more than once; this call cannot be undone, so it may happen more than once
    = fix: submit a durable command, which is persisted if and only if the transaction commits:
           enqueue charge_card(hold: ..., amount: ..., method: ...)
-          (needs a capability of type `enqueue<charge_card>` as an `injected` parameter; `y fix` adds it)
+          (needs a capability of type `enqueue<command=charge_card>` as an `injected` parameter; `y fix` adds it)
    = spec: y:spec/shared-state#no-external-effect
 ```
 
@@ -221,7 +222,7 @@ no case carrying it. The agent adds `case timed_out(deadline is expired)`, and `
 ```text
 $ y fix src/shop/checkout.y
   pinned  with inventory, charges   (hold_and_charge)
-  added   inventory: ..., as shared<inventory>.   charges: ..., as enqueue<charge_card>.
+  added   inventory: ..., as shared<value=inventory>.   charges: ..., as enqueue<command=charge_card>.
   added   fails hold_error.timed_out: ...   (documentation for the new capabilities and failure case; prose left for the author)
 ```
 
@@ -234,10 +235,10 @@ test charges_once_when_the_transaction_retries
         covers hold_and_charge > in_stock:
     given:
         widget = item_id.parse("widget") or fail
-        buyer = any<buyer>(seed: 11)
+        buyer = any<of=buyer>(seed: 11)
     inject:
             inventory = shared.new(inventory.stocked(item: widget, available: 1, price: 1_500isk))
-            charges = fake enqueue<charge_card>
+            charges = fake enqueue<command=charge_card>
     faults:
         conflict at hold_and_charge#hold_one_unit, times: 2
     when:
@@ -255,7 +256,7 @@ $ y review main..hold-and-charge
 
 Signatures
   + shop.checkout.holds.hold_and_charge                   new, public
-      authority    shared<inventory>, enqueue<charge_card>
+      authority    shared<value=inventory>, enqueue<command=charge_card>
       fails        hold_error.unknown_item, hold_error.timed_out
       waits        at most 5s
       transacts    hold_one_unit — writes inventory.stocks, inventory.holds; enqueues charge_card
@@ -329,6 +330,21 @@ person can judge: is five seconds right, and is this the behaviour the business 
 - **No shadowing:** a name visible in a scope may not be declared again inside it, including parameter names. Within a
   function, a name means one thing.
 
+**Type arguments are named, and are constraints.** A type written with arguments, such as a list of words or a
+decimal of twelve digits, is a type with constraints on what it may hold, and every argument names the constraint it
+sets: `list<element=word>`, `map<key=word, value=count<of=rune>>`, `decimal<precision=12, scale=2>`,
+`result<value=verdict, failure=guess_error>`. A positional argument (`list<word>`, `map<word, int64>`) does not compile.
+
+- A reader never has to know which position means what, and `pair<string, string>` cannot hide which is which.
+- The arguments may come in any order, and the formatter writes them in the order the type declares them.
+- The names the standard library uses: `element` for what a collection holds (§ 3.13); `key` and `value` for a mapping;
+  `value` for `optional`, `shared`, `sensitive` and the other types that hold one thing; `value` and `failure` for
+  `result`; `of` for what a `count`, an `index` or a test-data generator such as `any<of=quantity>` is of;
+  `precision` and `scale` for numbers (§ 3.3); and a capability's own name for what it reaches, such as
+  `http<service=payments>` or `store<schema=order>` (§ 3.7).
+- A declaration does not list type parameters. A constraint it leaves open is filled where the type is used: `type
+  queue is collection:` declares no element, and `queue<element=job>` sets it (§ 3.13).
+
 **Expressions.**
 
 - **Y keeps symbols few.** Boolean operators are words (`and`, `or`, `not`), a result is named with `returns`, and a
@@ -341,10 +357,14 @@ person can judge: is five seconds right, and is this the behaviour the business 
   an arithmetic or boolean expression, and `not` keep theirs where a named condition binds them:
   `if reached = (misses >= needed):`. Parentheses are there to show grouping, and where nothing is grouped they
   only add noise.
-- `/` is defined only on fractional types.
+- `/` is defined only where division is exact or is expected to round: on the rationals and on `float64` (§ 3.3).
   - Integer division is spelled with the rounding it performs: `divide_floor`, `divide_truncated`, `divide_euclidean`,
-    or `divide_exact`, which fails with `inexact` if there would be a remainder.
-  - There is no `%`; use `remainder_euclidean` or `remainder_truncated`.
+    or `divide_exact`, which fails with `inexact` if there would be a remainder. `divide_rounded(b, rounding.half_even)`
+    takes any of the rounding modes of § 3.3; `divide_floor` and `divide_truncated` are its two commonest modes, named.
+  - Decimal division is spelled the same way: `divide_rounded` or `divide_exact` (§ 3.3).
+  - There is no `%`; use `remainder_euclidean`, `remainder_truncated`, which takes the sign of the dividend, as `%`
+    does in Rust, C, Java and T-SQL, or `remainder_floor`, which takes the sign of the divisor, as `%` does in Python.
+  - Dividing by zero breaks a `where` precondition of the division, and is a fault.
   - Arithmetic is checked, and overflow is a fault (§ 3.4).
 - Conversions that can lose information say so in their names (`to_integer_truncated`,
   `to_integer_rounded(rounding.half_even)`). No conversion is implicit.
@@ -481,7 +501,7 @@ seconds_per_minute is constant int64 = 60
 -- The rules every game is played by.
 constants game_rules:
     -- How many wrong guesses a player may make.
-    allowed_misses is count<rune> = 6
+    allowed_misses is count<of=rune> = 6
     constants scoring:
         points_per_hit = 10
 
@@ -557,11 +577,11 @@ public facet ledgers:
         -- What every holder of an account may read.
         public facet statement:
             number is account_number
-            balance is money<isk>
+            balance is money<currency=isk>
 
         -- Kept to this module: changed only through `withdraw` and `deposit`.
         facet bookkeeping:
-            entries is list<entry>
+            entries is list<element=entry>
 ```
 
 - **A facet is a named group of declarations,** in a module or in a structure. It holds any declaration except a
@@ -601,7 +621,7 @@ set of roles, and it is where a function's types are written:
 Takes money out of an account.
 
 account: The account to debit, as account.
-amount: How much to take, as money<isk>.
+amount: How much to take, as money<currency=isk>.
 
 debit: A receipt for the debit, as receipt.
 
@@ -635,7 +655,7 @@ Reads a word list.
 
 text: The words, separated by spaces, as string.
 
-words: Every word of the list, in order, as list<word>.
+words: Every word of the list, in order, as list<element=word>.
 
 fails word_list_error.empty: The list has no words.
 fails word_list_error.not_a_word: A piece of the list is not a `word`.
@@ -671,10 +691,100 @@ Prose is constrained CommonMark:
 **Scalars.**
 
 - `boolean`, and `int64`, which is 64-bit and checked.
-- `int8` … `int64` and `uint8` … `uint64`; `float64`; `decimal`.
+- `int8` … `int64` and `uint8` … `uint64`; `float64`; the decimals and the rationals, below.
 - `void` is an ordinary type with one value.
 
 There is no truthiness, no null, and no implicit numeric widening.
+
+**Decimals and rationals are two types, and their sizes are constraints.** `decimal` and `rational` are the types.
+How many digits a value may have, and how many of them come after the point, are constraints on it, written as named
+type arguments (§ 3.1): `decimal<precision=12, scale=2>`, `rational<precision=38>`. The size a value is stored in is
+the backend's choice, made from its constraints, as how a value is passed is (§ 3.6). So a program writes `rational`,
+with the constraints that say what it may hold, and never converts between sizes: no syntax is needed for it.
+
+**Decimals.** A decimal is a whole number of digits, its *precision*, of which a fixed number come after the point, its
+*scale*.
+
+- `decimal<scale=s>` holds any number of digits. `decimal<precision=p, scale=s>` holds at most `p`, so its magnitude is
+  below 10<sup>p−s</sup>: `decimal<precision=12, scale=2>` holds at most 9 999 999 999.99. The scale is required, and
+  is from 0 to the precision.
+- **The sizes are ClickHouse's.** The standard library names the precision each size of integer always holds, with a
+  16-bit size by ClickHouse's rule (an `int16` holds 32 767, so 4 digits). Each name is a set of constraints, not a type
+  of its own:
+
+  | Name | Is | A backend stores it in |
+  |---|---|---|
+  | `decimal16<scale=s>` | `decimal<precision=4, scale=s>` | `int16` |
+  | `decimal32<scale=s>` | `decimal<precision=9, scale=s>` | `int32` |
+  | `decimal64<scale=s>` | `decimal<precision=18, scale=s>` | `int64` |
+  | `decimal128<scale=s>` | `decimal<precision=38, scale=s>` | `int128` |
+  | `decimal256<scale=s>` | `decimal<precision=76, scale=s>` | a 256-bit integer |
+
+  A precision of 76 or less is stored in the smallest of these that holds it; a larger one, or none, in an integer of
+  any size.
+- **A decimal literal takes its constraints from context,** as an integer literal does. A literal with more digits
+  after the point than the scale does not compile.
+
+**Decimal arithmetic is exact, or names how it rounds.**
+
+- **The compiler derives each result's constraints from its operands'.** The scale follows ClickHouse: `max(s1, s2)` for
+  `+` and `-`, `s1 + s2` for `*`, and the dividend's `s1` for division. The precision is the most digits the exact
+  result can need, so arithmetic itself never overflows. A decimal times an integer keeps the decimal's scale.
+- **A constraint is checked where a value meets it:** a name, a field, a parameter or a result declared with one. The
+  check is proven at compile time where it can be, and is otherwise made at run time; a value beyond its precision there
+  is an overflow, and a fault (§ 3.4), at every precision. ClickHouse checks precision only on conversion from text, and
+  leaves `Decimal128` and `Decimal256` unchecked.
+- **A scale never falls silently.** A value with more digits after the point than the constraint it meets does not
+  compile; `to_decimal_rounded(scale: 2, rounding: rounding.half_away_from_zero)` lowers it, as named.
+- There is no `/` on decimals. `a.divide_rounded(b, rounding.half_even)` gives the dividend's scale, rounded as named;
+  `a.divide_exact(b)` fails with `inexact` if the quotient has more digits than that scale.
+- `to_integer_rounded(rounding.half_even)` and `to_float64_nearest()` leave the decimals; `float64`'s
+  `to_decimal_rounded(scale: s, rounding: …)` enters them. Comparison is exact across scales and precisions. There is
+  no arithmetic between a decimal and a `float64`.
+
+**Rationals.** A rational is a numerator and a denominator, each a whole number. `rational` holds any; `rational<precision=p>`
+holds at most `p` digits in each part.
+
+- **Each part is a decimal of scale 0,** because a scale shared by both parts cancels: (n / 10<sup>s</sup>) /
+  (d / 10<sup>s</sup>) is n / d.
+- **The sizes are named as the decimals' are:** `rational16` to `rational256` are `rational<precision=4>` to
+  `rational<precision=76>`, stored as two integers of that size. A `rational128` is two `int128`: 256 bits.
+- **A rational is kept in lowest terms, with a positive denominator,** and zero is 0/1. Each value therefore has one
+  representation, so the structural equality and hashing Y derives (below) are the equality of numbers.
+- `rational.new(numerator: 1, denominator: 3)` constructs one; a zero denominator breaks its `where` precondition.
+- `+`, `-`, `*` and `/` are exact, and their results' constraints are derived, as for decimals. A part beyond the
+  precision of the constraint a value meets, after reduction, is an overflow, and a fault.
+- A decimal or an integer becomes a rational exactly (`to_rational()`). A rational leaves as a decimal with
+  `to_decimal_rounded(scale: s, rounding: …)`, or with `to_decimal_exact(scale: s)`, which fails with `inexact` when
+  the decimal cannot hold it.
+- Rationals are for quantities that must stay exact until one deliberate rounding: shares of a bill, ratios, rates
+  that are thirds or sevenths.
+
+**Rounding.** Every operation that rounds names its mode, a case of the standard library's closed type `rounding`.
+There is no default mode:
+
+| Mode | Rounds to | A tie goes | Also known as |
+|---|---|---|---|
+| `rounding.half_even` | the nearest | to the even neighbour | banker's rounding; IEEE 754's default; Python's `round`, Delphi's `Round` |
+| `rounding.half_away_from_zero` | the nearest | away from zero | Oracle's and T-SQL's `ROUND`, COBOL's `ROUNDED`, Java's `HALF_UP` |
+| `rounding.half_toward_zero` | the nearest | toward zero | Java's `HALF_DOWN` |
+| `rounding.half_toward_positive` | the nearest | toward +∞ | JavaScript's `Math.round` |
+| `rounding.half_toward_negative` | the nearest | toward −∞ | |
+| `rounding.toward_zero` | the neighbour toward zero | | truncation; ClickHouse's decimal division; Java's `DOWN` |
+| `rounding.away_from_zero` | the neighbour away from zero | | Java's `UP` |
+| `rounding.toward_positive` | the neighbour toward +∞ | | the ceiling |
+| `rounding.toward_negative` | the neighbour toward −∞ | | the floor |
+
+- The operations that take a mode are `divide_rounded`, `to_decimal_rounded` and `to_integer_rounded`.
+- Exactness is not a mode. An operation that must not round is the `_exact` form, which fails with `inexact`.
+
+**Lowering.** The decimals, rationals and rounding modes are native types of the standard library (§ 3.18), and
+[`../examples/y-runtime/src/decimal.rs`](../examples/y-runtime/src/decimal.rs) is their Rust implementation. The
+lowering chooses each value's Rust type from its constraints: `decimal<precision=12, scale=2>` is `Decimal<i64, 12, 2>`;
+`decimal<scale=2>`, with no precision, is `Decimal<Big, UNBOUNDED, 2>`; `rational<precision=38>` is `Rational<i128,
+38>`, two `i128`; `rational` is `Rational<Big, UNBOUNDED>`. Where an operation's operands are stored in different
+sizes, the lowering converts them to the result's size, which the compiler derived. A 256-bit size is stored in an
+integer of the runtime's own, since Rust has none.
 
 **Structures** have named, typed fields, each `name is type`, and may declare named invariants:
 
@@ -708,7 +818,7 @@ Referring to a case:
 
 **Absence.**
 
-- A value that may be absent has the type `optional<t>`, which is distinct from `t`. Neither converts to the other
+- A value that may be absent has the type `optional<value=t>`, which is distinct from `t`. Neither converts to the other
   implicitly.
 - **Absence is handled by a named decision, never by an operator.** There is no default operator (`??`) and no
   operator that reaches through absence (`?.`). A program tests for absence with `if` and `else`, or
@@ -716,7 +826,7 @@ Referring to a case:
   traces, logs and debuggers report. Such operators make code quicker to write and slower to read, maintain and
   observe.
 - **A condition narrows.** In the branch of `if found = (user != optional.none):`, and in the `else present:` branch
-  of `if missing = (user == optional.none):`, `user` is a `user`, no longer an `optional<user>`. Nothing is written for
+  of `if missing = (user == optional.none):`, `user` is a `user`, no longer an `optional<value=user>`. Nothing is written for
   this: every condition adds its predicate as a fact at the points it guards (constraint language § 11.1.1), and the type checker reads the fact.
   - The fact ends where the value may change: an assignment with `:=`, or a call that takes it `mutable`. A field path
     such as `order.customer` narrows the same way, until something may write to that path.
@@ -744,8 +854,8 @@ type word is string:
 - A literal is checked at compile time: `ship(quantity: 0)` does not compile when the parameter is a `quantity`.
 - A violation names the constraint that failed and the values of its subexpressions. Constraints never carry
   hand-written messages; the name *is* the message.
-- The same declaration drives test data. `any<quantity>(seed: 7)` produces values that satisfy every constraint, and
-  `any_violating<quantity>(seed: 7)` produces values that break exactly one.
+- The same declaration drives test data. `any<of=quantity>(seed: 7)` produces values that satisfy every constraint, and
+  `any_violating<of=quantity>(seed: 7)` produces values that break exactly one.
 
 **Units.** A quantity's unit is part of its type:
 
@@ -756,14 +866,14 @@ type word is string:
 
 The same mechanism gives every length and index its unit:
 
-- **`count<t>` is a number of `t`s:** the type argument names the thing counted, not the number's representation.
-  `string.count()` gives a `count<rune>`, `bytes.count()` a `count<byte>`, and a `list<t>`'s `count()` a `count<t>`,
-  so the misses of a game, a `list<rune>`, number a `count<rune>`.
+- **`count<of=t>` is a number of `t`s:** the type argument names the thing counted, not the number's representation.
+  `string.count()` gives a `count<of=rune>`, `bytes.count()` a `count<of=byte>`, and a `list<element=t>`'s `count()` a `count<of=t>`,
+  so the misses of a game, a `list<element=rune>`, number a `count<of=rune>`.
 - A count is stored as an unsigned integer, and that is all it is at run time: units are erased. What it adds is
   checking. A count is never negative, cannot be added to a count of something else or to a plain `uint32` without a
   stated conversion, and indexes only what it counts. Where none of that is wanted, a plain `uint32` is the right
   type.
-- `index<rune>` does not index `bytes`.
+- `index<of=rune>` does not index `bytes`.
 - An integer *literal* takes its count or index unit from context, so `list.count() == 1` needs no ceremony. An `int64`
   *value* never converts implicitly. Physical units get no such allowance: `within 5` is an error, because `5` could
   mean seconds or milliseconds, but a count of runes can only mean runes.
@@ -785,7 +895,7 @@ The same mechanism gives every length and index its unit:
 - A field marked `transient` is excluded from equality, hashing and serialisation.
 - Comparison returns an `ordering` (`ordering.less`, `ordering.equal`, `ordering.greater`), never an integer.
 
-**Sensitive data.** `sensitive<t>` wraps values such as credentials and personal data.
+**Sensitive data.** `sensitive<value=t>` wraps values such as credentials and personal data.
 
 - It cannot be interpolated, logged, traced or serialised outside a schema field declared sensitive.
 - `reveal(value)` requires the `reveal` capability (§ 3.7).
@@ -797,7 +907,7 @@ A function that can fail names its failure type in its signature: `returns debit
 
 - **A call's outcome is a built-in two-case sum,** `result.ok(value)` or `result.err(failure)`. This settles the September open
   question: one `conditional` ranges over success and failure together, and an optional result that can fail (`as
-  optional<receipt>` with `fails e`) composes without a special rule. Core IR still records every propagation edge explicitly,
+  optional<value=receipt>` with `fails e`) composes without a special rule. Core IR still records every propagation edge explicitly,
   so *which failures can escape, and from where* is always answerable.
 - Inside the function, success is `return debit = value`, never `result.ok(value)`, and failure is written
   `fail withdraw_error.insufficient_funds(shortfall: gap)`. Every failure exit is spelled with `fail`, so a search for it finds every
@@ -951,9 +1061,9 @@ show. Each of those ways is an outcome too, named by annotating the name of the 
 Finds where a value sits in a sorted list.
 
 target: The value to look for, as int64.
-items: The list to search, as sorted_list<int64>.
+items: The list to search, as sorted_list<element=int64>.
 
-position: The target's position, or nothing when it is absent, as optional<index<element>>.
+position: The target's position, or nothing when it is absent, as optional<value=index<of=element>>.
 --------------------------------------------------------------------------------
 function position_of(target, items) returns position:
     if empty = items.is_empty():
@@ -1006,7 +1116,7 @@ is change under someone who holds it: Y values have value semantics.
   the code that holds it.
 - **Immutability is not atomicity.** Under parallel or concurrent execution, an immutable name guarantees that its
   value does not change, not that a group of changes elsewhere appears all at once. Shared state that changes is a
-  `shared<t>`, changed only inside `atomic` (§ 3.9).
+  `shared<value=t>`, changed only inside `atomic` (§ 3.9).
 - **`mutable` marks the exception, at both ends of the call.** A parameter `mutable x` lets the callee change the
   caller's value, and the call says so: `guess(mutable game, line)`. While the call runs, nothing else can reach that
   value. This is YAPL's two-sided `mutable` (2024): a reviewer sees at the call which arguments the callee may change.
@@ -1023,8 +1133,12 @@ is change under someone who holds it: Y values have value semantics.
 
 - An immutable parameter that the callee only reads is passed as a shared borrow.
 - A value that the callee keeps is moved when the caller no longer uses it, and copied when it does.
-- A large value that would be copied often may be counted and copied on write instead.
 - A `mutable` parameter is an exclusive borrow.
+
+How long a value lives, and who holds it meanwhile, is its *lifetime*, which the constraint language states
+([`constraint-language.md`](constraint-language.md) § 7) and Y source never writes. Sharing one copy between holders
+until one of them writes, counting references, and keeping a value in an arena are ways a backend may give a value
+that lifetime. No program can tell them apart, so Y has no syntax for them, and each backend does as it sees fit.
 
 `y explain` lists every copy the compiler made and why it made it, and the review packet counts them. A copy is
 visible where it costs something, without being written where it does not.
@@ -1040,9 +1154,9 @@ holds values, never references to them. Borrows exist only in the generated code
 
 **Sharing:**
 
-- Mutable state reachable from more than one task is `shared<t>` and nothing else (§ 3.9). There is no interior
+- Mutable state reachable from more than one task is `shared<value=t>` and nothing else (§ 3.9). There is no interior
   mutability outside transactions.
-- Graphs live in an arena or collection and refer to each other by typed index (`index<node>`).
+- Graphs live in an arena or collection and refer to each other by typed index (`index<of=node>`).
 
 **Cleanup.**
 
@@ -1070,9 +1184,9 @@ Exports one month's invoices as files.
 
 month: The month to export, as month.
 
-exported: How many invoices were written, as count<invoice>.
+exported: How many invoices were written, as count<of=invoice>.
 
-invoices: The stored invoices, as store<invoice>.
+invoices: The stored invoices, as store<schema=invoice>.
 uploads: Where the files go, as file_system.
 clock: The time the export is stamped with, as clock.
 
@@ -1086,10 +1200,10 @@ function export_invoices(month, injected invoices, injected uploads, injected cl
 | Capability | Effects it carries |
 | --- | --- |
 | `clock`, `random` | Reads time, draws randomness. Replay records them; tests fake them |
-| `http<service>`, `file_system`, `process`, `secrets<name>` | External I/O, may suspend |
-| `store<schema>` | Persistent reads and writes (§ 3.12) |
-| `shared<t>` | Transactional access to shared state, may suspend on `retry` (§ 3.9) |
-| `enqueue<command>`, `submit<command>` | Durable command submission (§ 3.10) |
+| `http<service=…>`, `file_system`, `process`, `secrets<name=…>` | External I/O, may suspend |
+| `store<schema=…>` | Persistent reads and writes (§ 3.12) |
+| `shared<value=t>` | Transactional access to shared state, may suspend on `retry` (§ 3.9) |
+| `enqueue<command=…>`, `submit<command=…>` | Durable command submission (§ 3.10) |
 | `detach`, `forever`, `reveal` | Trust-requiring operations, each also a claim (§ 3.15) |
 
 **A function with no `injected` parameter is pure.** It may allocate, compute and fault, but it touches nothing else. Purity
@@ -1224,11 +1338,11 @@ This settles September's overlap between task scopes and supervisors by making t
 
 ### 3.9 Shared state
 
-**Shared mutable state exists only as `shared<t>`**, a capability created with `shared.new(initial)`, normally by the
+**Shared mutable state exists only as `shared<value=t>`**, a capability created with `shared.new(initial)`, normally by the
 entry point, and passed down. September's module-level `shared inventory: inventory` becomes a value someone had to
 hand you. There is no global state to reach.
 
-- A `shared<t>` is read and written only inside `atomic`, where it behaves as a `mutable` value and the runtime tracks what
+- A `shared<value=t>` is read and written only inside `atomic`, where it behaves as a `mutable` value and the runtime tracks what
   was read and written.
 - `snapshot()` outside a transaction returns an immutable, consistent copy. It is a read-only transaction, and exists
   so that tests and reports need not open one.
@@ -1243,7 +1357,7 @@ Takes the next job, from the pending queue first and from the retried queue when
 
 job: The job to run, as job.
 
-jobs: The queues, as shared<job_queues>.
+jobs: The queues, as shared<value=job_queues>.
 ------------------------------------------------------------
 function take_job(injected jobs) returns job:
     atomic take_next_job:
@@ -1299,7 +1413,7 @@ decision someone has to make:
 -- Charges a buyer's payment method for a hold.
 command charge_card:
     hold is hold_id
-    amount is money<isk>
+    amount is money<currency=isk>
     method is payment_method_id
 
     policy:
@@ -1317,7 +1431,7 @@ command: The charge to make, as charge_card.
 
 charged: The payment gateway's receipt, as charge_receipt.
 
-gateway: The payment gateway, as http<payment_gateway>.
+gateway: The payment gateway, as http<service=payment_gateway>.
 
 fails charge_error.declined: The gateway refused the charge.
 --------------------------------------------------------------------------------------------------------------------------------
@@ -1350,9 +1464,9 @@ hold: The hold to fulfil, as hold_id.
 
 shipped: The shipment, as shipment.
 
-orders: The stored orders, as store<order>.
-charges: Where charges are submitted, as submit<charge_card>.
-shipments: Where shipments are submitted, as submit<create_shipment>.
+orders: The stored orders, as store<schema=order>.
+charges: Where charges are submitted, as submit<command=charge_card>.
+shipments: Where shipments are submitted, as submit<command=create_shipment>.
 
 fails fulfilment_error.payment_declined: The charge was refused.
 fails fulfilment_error.payment_unreachable: The charge could not be delivered.
@@ -1370,7 +1484,7 @@ workflow fulfil(hold, injected orders, injected charges, injected shipments) ret
 ```
 
 - `submit` suspends the workflow durably until the command's outcome is recorded.
-- It succeeds with the handler's result, or fails with `undelivered<e>`, whose two failure cases are `undelivered.failed(e)` and `undelivered.abandoned(...)`. Abandonment is
+- It succeeds with the handler's result, or fails with `undelivered<failure=e>`, whose two failure cases are `undelivered.failed(e)` and `undelivered.abandoned(...)`. Abandonment is
   therefore an ordinary failure that must be matched or propagated, and cannot be ignored.
 - A workflow may open `atomic` blocks.
 - A workflow's determinism is enforced by its capability set. It may hold `store`, `shared`, `submit` and `enqueue`,
@@ -1389,7 +1503,7 @@ workflow fulfil(hold, injected orders, injected charges, injected shipments) ret
 Takes money out of an account.
 
 account: The account to debit, as account.
-amount: How much to take, as money<isk>.
+amount: How much to take, as money<currency=isk>.
 
 debit: A receipt for the debit, as receipt.
 
@@ -1415,7 +1529,7 @@ documentation rules make the choice visible: a `where` precondition has no `fail
 - Contract expressions are pure, since they can have no `injected` parameter.
 - A structure's `invariant` holds whenever the structure is not being mutated. A function taking it `mutable` may break the
   invariant inside its body, and must restore it before returning.
-- An invariant on a structure held in `shared<t>` is checked at the commit of every transaction that wrote the structure.
+- An invariant on a structure held in `shared<value=t>` is checked at the commit of every transaction that wrote the structure.
   This is the April 2026 "watch list" idea, with the watch list taken from the fields.
 
 **Checking.**
@@ -1435,7 +1549,7 @@ documentation rules make the choice visible: a `where` precondition has no `fail
 -- An order's life from creation to payment.
 state order:
     id is order_id
-    lines is list<line>
+    lines is list<element=line>
 
     case created
     case payment_pending(charge is command_id)
@@ -1475,7 +1589,7 @@ A record that outlives its process has a second type: the one on disk. Y makes t
 schema customer v3:
     key id is customer_id
     name is string
-    email is optional<email_address>
+    email is optional<value=email_address>
     marketing_consent is consent
 
 
@@ -1502,18 +1616,83 @@ migrate customer v2 to v3:
   back.
 - An additive change with a total default needs no migration, and the compiler says so.
 
-`store<schema>` is the capability for persistent data, and its reads and writes inside `atomic` join the transaction.
+`store<schema=…>` is the capability for persistent data, and its reads and writes inside `atomic` join the transaction.
 
 Live migration (`converge`), and the choice of physical representation, belong to the runtime and come later (§ 5). v1
 must not prevent them, and does not need them.
 
 ### 3.13 Collections and queries
 
-**Collections.**
+**Collections are two shapes, with constraints.** Vectors, arrays, sets, bags, lists, linked lists, queues, stacks and
+enumerables are all one-dimensional collections that differ only in how they may be used and what their operations do.
+Ordered and unordered maps are both two-dimensional mappings that differ in the same way. Y has the two shapes, and
+the constraints:
 
-- `list<t>`, `map<k, v>` and `set<t>`.
-- **Iteration order is always deterministic.** A `list` iterates by position; a `map` or `set` by insertion. No
-  collection exposes hash order, because hash order breaks replay (§ 4.7), and an agent will eventually rely on it.
+- `collection` holds elements. Its constraint `element` says of what type: `collection<element=word>`.
+- `mapping` holds, for each key, a value, or several. Its constraints `key` and `value` say of what types.
+- A kind of collection is a refined type of one of them (§ 3.3). Its constraints are clauses of its declaration, one
+  to a line, and the standard library's names are declarations like any other. A constraint the declaration leaves
+  open, such as the element type of a queue, is set where the kind is used (§ 3.1):
+
+```y
+-- Taken from the front, in the order they were added at the back.
+type queue is collection:
+    ordered by position
+    offers back_add, front_take
+
+
+-- The jobs not yet started.
+structure backlog:
+    waiting is queue<element=job>
+```
+
+The constraints of a collection:
+
+| Constraint | Says | Choices |
+|---|---|---|
+| `element` | The type of every element | Any type; open until set, in a kind's declaration |
+| `ordered by` | What order iteration follows | `position`, where each element was put; `insertion`, the order elements were first added; `value`, the element's derived ordering (§ 3.3), or `value using f` for a named comparison |
+| `unordered` | No order exists to observe | |
+| `unique` | No two elements are equal | Without it, duplicates are allowed |
+| `count` | How many elements it may hold | `count fixed`, set at construction; `count at most n` |
+| `offers` | Which operations it has, besides the ones every collection has | `index`, reading and writing at a position; `front` and `back`, adding, taking and reading at an end, or one of them alone, such as `back_add`; `cursor`, a place in it to read, insert and remove at; `iterate_only`, which removes everything else |
+| `costs` | What an operation may cost, as the constraint language's budgets state it (§ 6.7 of that document) | `costs constant for cursor insert` |
+
+The constraints of a mapping are the same, with `key` and `value` in place of `element`, keys always unique, `ordered
+by key` in place of `ordered by value`, and `values many` for a mapping that holds several values for a key.
+
+The standard library declares the familiar kinds. The Rust in the last column is what the first backend chooses, not
+part of the type:
+
+| Kind | Constraints | Rust |
+|---|---|---|
+| `list` | `ordered by position`; `offers index, front, back` | `Vec<T>` |
+| `array` | `ordered by position`; `count fixed`; `offers index` | `Box<[T]>`, or `[T; N]` when the count is a constant |
+| `stack` | `ordered by position`; `offers back` | `Vec<T>` |
+| `queue` | `ordered by position`; `offers back_add, front_take` | `VecDeque<T>` |
+| `deque` | `ordered by position`; `offers front, back` | `VecDeque<T>` |
+| `linked_list` | `ordered by position`; `offers cursor`; `costs constant for cursor insert, cursor remove` | `LinkedList<T>`, or a list in an arena |
+| `sorted_list` | `ordered by value` | `Vec<T>`, kept sorted |
+| `set` | `unique`; `ordered by insertion` | a set that keeps insertion order |
+| `sorted_set` | `unique`; `ordered by value` | `BTreeSet<T>` |
+| `unordered_set` | `unique`; `unordered` | `HashSet<T>` or `BTreeSet<T>` |
+| `bag` | `unordered` | a map from each element to its count |
+| `enumerable` | `ordered by position`; `offers iterate_only` | an iterator |
+| `map` | `ordered by insertion` | a map that keeps insertion order |
+| `sorted_map` | `ordered by key` | `BTreeMap<K, V>` |
+| `unordered_map` | `unordered` | `HashMap<K, V>` |
+| `multimap` | `ordered by insertion`; `values many` | a map from each key to a `Vec` of its values |
+
+- **The constraints are the meaning; the representation is the backend's.** A backend chooses the representation from
+  the clauses and from the operations the program uses, as it chooses how to pass a value (§ 3.6). Two kinds with the
+  same clauses are the same type.
+- **Iteration order is always deterministic.** An ordered collection iterates in its order. An `unordered` one offers
+  only what cannot depend on order: membership, counting, `all`, `any`, sums, minimum and maximum, set operations,
+  pipelines into another unordered collection, and `sorted()`, which gives a `sorted_list` of the same elements. To
+  visit its elements one by one, a program asks for an order first: `for name in names.sorted():`. So no collection exposes hash order, which
+  breaks replay (§ 4.7) and which an agent would eventually rely on, while a backend may still hash.
+- **Converting between kinds is explicit:** `to_list()`, `to_set()`, `sorted()`. An operation a kind does not offer
+  does not compile, and the diagnostic names the clause that rules it out.
 
 **Pipelines** say what the answer is, which leaves the compiler free to fuse, parallelise or index:
 
@@ -1530,18 +1709,24 @@ active_names = users.filter(active).map(name_of).sorted()
 
 **Derived values and rules.**
 
-- `derived` declares a value maintained from other state, and is pure. Whether it is stored, cached or recomputed is a
-  physical decision, not a keyword.
-- `rule` declares a named predicate over data, usable in pipelines, contracts and other rules. **In v1 rules are not
-  recursive.** That keeps the declarative subset a vocabulary of named conditions rather than a second evaluator.
-  Recursion, with the stratification it requires, can be added later.
+- `derived` declares a value of a structure that is maintained from its other fields. It is read like a field
+  (`directory.active_user_count`), is never assigned, and is pure. Whether it is stored, cached or recomputed is a
+  physical decision, not a keyword, like copying on write (§ 3.6).
+- `rule` declares a named predicate over data, usable in pipelines, conditions, contracts and other rules. It is pure:
+  it has no `injected` parameter and no `mutable` one. **In v1 rules are not recursive.** That keeps the declarative
+  subset a vocabulary of named conditions rather than a second evaluator. Recursion, with the stratification it
+  requires, can be added later.
 
 ```y
 -- user: The person to judge, as user.
-rule active(user) = (user.last_seen > 30d.ago())
+rule active(user) = (user.visits_this_month > 0)
 
 
-derived active_user_count: count<user> = users.filter(active).count()
+-- Everyone who has an account.
+structure directory:
+    users is list<element=user>
+
+    derived active_user_count is count<of=user> = users.filter(active).count()
 
 
 ----------------------------------------------------------------------------------------------------
@@ -1551,6 +1736,18 @@ customer: The customer to judge, as customer.
 ----------------------------------------------------------------------------------------------------
 rule high_risk(customer) = (customer.failed_payments > 3) and (customer.outstanding > 100_000isk)
 ```
+
+**Lowering.** Both are functions in the generated code, and [`../examples/hangman`](../examples/hangman/) has one of
+each:
+
+- A rule is a function returning `boolean`: `fn active(user: &User) -> bool`, with the constraint file's `pure`
+  effects clause. A constraint may name it, since it is total, deterministic and free of effects (constraint language
+  § 4), and the constraint language's checks then call the same function.
+- A derived value is a method that reads the structure: `fn active_user_count(&self) -> usize`, recomputed on every
+  read, which is the first backend's physical choice. A read, `directory.active_user_count`, becomes the call
+  `directory.active_user_count()`.
+- A pipeline is an iterator chain over the stages' functions:
+  `users.iter().filter(|user| active(user)).count()`.
 
 Y has no query strings, and no user-visible index management in v1.
 
@@ -1571,7 +1768,7 @@ Tests are part of the language, because the compiler must know what a test claim
 
 | Section | Holds |
 | --- | --- |
-| `given` | Plain values, including generated ones: `any<buyer>(seed: 11)` |
+| `given` | Plain values, including generated ones: `any<of=buyer>(seed: 11)` |
 | `inject` | The capabilities the code under test receives: real, attenuated, or `fake` |
 | `faults` | What to force: `conflict at f#txn, times: 2`, `crash after commit f#txn`, `expire at f#txn`, `cancel at f#task` |
 | `when` | The single action under test |
@@ -1729,7 +1926,7 @@ function checksum(bytes) returns crc:
 - Every argument is known when the program is built: a literal, a `constant`, or a name bound by another `compile`. Any
   other argument is an error that names it.
 - The result holds no capability. It cannot hold a reference either, because Y has none (§ 3.6).
-- A constant is evaluated the same way, so `standard_crc_table is constant list<uint32> =
+- A constant is evaluated the same way, so `standard_crc_table is constant list<element=uint32> =
   crc_table(polynomial: 0xEDB8_8320)` needs no keyword. `compile` is the same evaluation inside a body, for a value that one function uses.
 
 **What evaluation produces.**
@@ -1797,7 +1994,7 @@ function get(path) returns text fails http_error
 ```
 
 The declaration is complete, with its documentation, parameters, result, failures and capabilities (this one is a method
-of `http<service>`, whose `me` is the capability). In place of the colon and the body, it ends with `native because "…"`.
+of `http<service=…>`, whose `me` is the capability). In place of the colon and the body, it ends with `native because "…"`.
 Callers cannot tell a native function from any other. `site.get(path"/data/color/svg/1F600.svg") or fail` reads the
 same either way.
 
@@ -1825,7 +2022,7 @@ same either way.
 - The implementation lives in the package, in a folder for its backend (`native/rust/`), and is compiled with the code
   the compiler generates. A signature that does not match is a type error in the backend's compiler. The toolchain
   reports it at the Y declaration.
-- A **native type** works the same way: `type http<service> native because "…"` declares a type whose representation
+- A **native type** works the same way: `type http native because "…"` declares a type whose representation
   the backend gives. Y code cannot see inside it. Its claim is that it behaves as a Y value: a copy is independent, and
   what it holds is released when it is destroyed (§ 3.6).
 
@@ -1876,6 +2073,40 @@ when a Y signature does, and the semantic diff (§ 4.4) already shows that.
 the `window` the examples assume) are native types whose methods are native functions. [`../examples/y-runtime`](../examples/y-runtime/),
 [`y-window`](../examples/y-window/) and [`y-http`](../examples/y-http/) are their Rust implementations, as far as the
 examples need, written by hand before the declarations existed.
+
+### 3.19 Levels: how much of Y a module uses
+
+Not every backend can carry all of Y. SQL can say a calculation and cannot say a loop. A language without transactions
+cannot say `atomic`. Y therefore comes in levels, after the levels of common denominator of LCD
+([`../articles/lowest-common-denominator`](../articles/lowest-common-denominator/), part 2), each of which contains
+the levels below it:
+
+| Level | Adds | Carried by |
+|---|---|---|
+| `data` | Declarations: scalars, structures, sums, constants, collections, refined types and their restrictions, invariants, schemas and migrations. This is what the constraint language can say | Every backend, SQL's tables and the constraint language |
+| `calculations` | Functions of values: no `mutable` name, no loop and no recursion. Named decisions, `conditional`, failures, `where` and `ensures`, rules, derived values, pipelines, `compile` | Every imperative backend; SQL, as expressions and queries |
+| `structured` | `mutable` names and parameters, `:=`, `for` and `while`, recursion | Every imperative backend; SQL's procedural dialects |
+| `shared` | `shared<value=t>` and `atomic`, arenas and their `index<of=t>`, resources | Backends with a runtime for transactions |
+| `effects` | `injected` capabilities, `within` and `forever`, suspension, external effects (§ 3.10) | Backends with Y's runtime |
+
+- **A module's level is the highest level of anything it declares or imports.** A function from a `structured`
+  module makes a `calculations` module that calls it `structured`. A `native` function counts at the level of its
+  declaration, which names its capabilities.
+- **The level is a constraint on the module.** The compiler infers it, and a module pins it as it pins anything else
+  (§ 1.2), with a clause under its `module` line:
+
+  ```y
+  module pricing
+          level calculations
+  ```
+
+  A pinned module that uses anything above its level does not compile, and the diagnostic names the construct and the
+  level it needs. The clause is the module subject's `level` clause in its constraint file (constraint language
+  § 6.22), and the review packet shows a change that raises a module's inferred level or its pin.
+- **A backend states the levels it carries.** Rust carries all five. Building a module for a backend that does not
+  carry its level is a build error that names the module, its level and the backend.
+- **Use the lowest level that can say it**, because that is the level that reaches the most places. Most business
+  rules are calculations, and live low.
 
 ## 4. The toolchain is the reviewer's instrument
 
@@ -2066,7 +2297,7 @@ owner still decides; the recommendation is here so that deciding is quick.
 | Macro or metaprogramming model | None in v1. The compiler derives equality, hashing, ordering and codecs; agents write the rest | § 3.3, § 7 |
 | Failure: distinct channel or sum type | `fails e` in the signature; a call's outcome is a built-in two-case sum; Core IR records propagation edges | § 3.4 |
 | Degree of ownership inference | All of it: source has value semantics and `mutable` at both ends of a call; borrows, moves and copies are the compiler's, and it reports copies | § 3.6 |
-| Types that opt out of single ownership | None needed: values are shared freely; `shared<t>` for mutable state between tasks; arenas and typed indices for graphs | § 3.6 |
+| Types that opt out of single ownership | None needed: values are shared freely; `shared<value=t>` for mutable state between tasks; arenas and typed indices for graphs | § 3.6 |
 | Effect annotation syntax | `injected` parameters: effects are what capabilities carry | § 3.7 |
 | Capability declaration and passing | Declared per function, threaded by type from the caller's scope, overridden explicitly | § 3.7 |
 | Where handler failure escalates | Mandatory `on_abandon`: compensate or park; in workflows, `undelivered.abandoned` is a failure to handle | § 3.10 |
@@ -2106,7 +2337,7 @@ premise changed, or because the iteration that tried them showed their cost. The
 | `with` for capabilities, at both ends | Earlier drafts of this proposal | `injected` parameters where a function declares what it needs, `inject(…)` where a caller supplies it, after YAPL v0's `dependency` and `inject` | One keyword per side of the injection; a reader sees which side a line is on |
 | `?` to pass a failure on | Earlier drafts of this proposal | `or fail`, and `or fail as <case>` to name the conversion | A symbol a reader has to know; with the words, every failure exit contains `fail` |
 | `??` for a default and `?.` through absence | September → earlier drafts of this proposal | A named decision: `if` and `else`, or `conditional` | Each hides a branch that tests, traces and debuggers cannot name |
-| `t?` for an optional type | September → earlier drafts of this proposal | `optional<t>` | Spelled as the type it is, as `optional.some` and `optional.none` already were |
+| `t?` for an optional type | September → earlier drafts of this proposal | `optional<value=t>` | Spelled as the type it is, as `optional.some` and `optional.none` already were |
 | `public` on any declaration | Earlier drafts of this proposal | `public facet`, as in the toolchain; private by default | Visibility is written in one place per group, and a module's surface reads as a list of facets |
 | A case written `.case` where the type is known | September → earlier drafts of this proposal | `type_name.case` everywhere, as YAPL had it (`color.red`) | The reader never infers which type a case belongs to |
 | `let` | Earlier drafts of this proposal | `name = value` declares; `name := value` changes, as in YAPL | Every change to a value is spelled one way and found by one search |
@@ -2123,12 +2354,12 @@ premise changed, or because the iteration that tried them showed their cost. The
 | Classes, factory methods, singletons, properties, inheritance; facets' override and telemetry rules | YAPL → toolchain | Structures, sum types, traits, `implementation`; facets that carry visibility only | Every iteration with more kinds spent its effort reconciling them; facets carried visibility, telemetry and override rules at once |
 | Exceptions, `throws`, wrapping in `unexpected_exception` | YAPL → April 2026 | `fails e`, and a two-case sum at the call | Values can be matched exhaustively; wrapping hid the failure set |
 | Ambient `using` contexts, context stacks, affinity-based name lookup | YAPL → toolchain | Capabilities as `injected` parameters and `inject(…)` | Action at a distance; March 2026 had already reversed it ("no global or thread-local state") |
-| Transactional memory for every variable; reference tracing; one OS thread per process as a guarantee | YAPL → July 2026 | `shared<t>` only; ownership; runtime's choice | Costs paid by code that shares nothing; semantics should not depend on the scheduler |
+| Transactional memory for every variable; reference tracing; one OS thread per process as a guarantee | YAPL → July 2026 | `shared<value=t>` only; ownership; runtime's choice | Costs paid by code that shares nothing; semantics should not depend on the scheduler |
 | Affinities and placements in types | Toolchain | Physical parameters behind Core IR | Runtime detail in source, which agents misuse |
 | Comments with runtime meaning (interpolated, traced) | YAPL → toolchain | `log` statements | A comment that runs surprises the reviewer |
-| Two kinds of absence (`nada`/`nothing` and `undefined`) | Toolchain → April 2026 | `optional<t>` and definite initialisation | Definite initialisation makes "not yet provided" unrepresentable |
+| Two kinds of absence (`nada`/`nothing` and `undefined`) | Toolchain → April 2026 | `optional<value=t>` and definite initialisation | Definite initialisation makes "not yet provided" unrepresentable |
 | `afterCommit` | September 2026 | `enqueue`; buffered telemetry | Redundant if durable, a bug if not |
-| Module-level `shared` declarations | September 2026 | `shared<t>` values passed down | Global state by another name |
+| Module-level `shared` declarations | September 2026 | `shared<value=t>` values passed down | Global state by another name |
 | Tests reading a function's locals | YAPL (2024) | Paths of named outcomes, and fault injection | Couples tests to implementation |
 | `unsafe` blocks, and foreign calls written in Y | Earlier drafts of this proposal | `native` functions, declared in Y and written in the backend's language (§ 3.18) | Every backend's language already has an FFI and tools for it; a second one in Y would duplicate each, and tie Y to C's ABI |
 
@@ -2136,7 +2367,7 @@ premise changed, or because the iteration that tried them showed their cost. The
 
 | Dropped | Held in | Replaced by | Why |
 | --- | --- | --- | --- |
-| Encrypted-log syntax; `throw ... capturing snapshot ... trace retry sandbox` | Toolchain (Nov 2025) | `sensitive<t>`, fault reports, replay | Policy and debugging configuration do not belong in grammar |
+| Encrypted-log syntax; `throw ... capturing snapshot ... trace retry sandbox` | Toolchain (Nov 2025) | `sensitive<value=t>`, fault reports, replay | Policy and debugging configuration do not belong in grammar |
 | The five-layer organisational ontology; Markdown with metadata in HTML comments; natural language as primary meaning | ai.lang | `satisfies:` and `y:` links | Not a programming-language concern; the spec and its tooling drifted apart within a week |
 | "No standard library" | Toolchain | A small standard library: capabilities, collections, text, units | Contradicted by every iteration's practice |
 | Hungarian-style prefixes (`i_`, `o_`, `m_`) | C++ directives, 2026 | Types and keywords | They were C++ workarounds for missing language features |
@@ -2235,7 +2466,8 @@ observability  log metric
 operators      and or not
 values         true false
 contextual     as key reads reverse policy compensate park on, less equal greater (in `compare`), not_reachable
-               not_implemented (after `fail`), and the field names of
+               not_implemented (after `fail`), ordered by unordered unique count offers costs values (in a
+               collection's declaration), level (under a `module` line), and the field names of
                `policy`, `supervise` and `faults` clauses (reserved only inside those clauses)
 ```
 

@@ -1,5 +1,6 @@
 """Remake an example's bare files from a fresh strip: the clauses of the committed constraint files carry over by
-subject, each re-pointed at its line in the Y source; `extra` adds clauses for subjects that have none yet.
+subject, each re-pointed at its line in the Y source; `extra` adds clauses for subjects that have none yet, placed at
+the function, rule or derived value of the subject's name.
 
     python3 tools/paths/regen.py <example folder> <strip output> ['{"crate::module::function": [clause, ...]}']
 
@@ -40,6 +41,9 @@ def place(subject, c):
         return at(f"where {name} = ")
     if c["kind"] == "ensure":
         return at(f"ensures {name} = ")
+    for needle in (f"function {fn}(", f"rule {fn}(", f"derived {fn} is "):
+        if any(needle in l for y in ys for l in src[y]):
+            return at(needle)
     return at(f"function {fn}(")
 
 missing = []

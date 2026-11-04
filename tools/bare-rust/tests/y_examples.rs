@@ -574,7 +574,7 @@ fn when_of(source: &str, test: &str) -> Vec<String> {
 /// whose `else` covers two orders.
 const FIRST_ABOVE: &str = "\
 ----------------------------------------
-values: The values, as list<int32>.
+values: The values, as list<element=int32>.
 
 limit: The limit, as int32.
 

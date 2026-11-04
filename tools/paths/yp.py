@@ -182,7 +182,7 @@ class Module:
             if refined:
                 for op, n in re.findall(r"value\.count\(\) (>=|>|<=|<|==) (\d+)", t):
                     self.refinements.setdefault(refined, []).append((op, int(n)))
-            m = re.match(r"(\w+) is ([\w<>, ]+?)(?: = (.*))?$", t)
+            m = re.match(r"(\w+) is ([\w<>=, ]+?)(?: = (.*))?$", t)
             if m and group and l.startswith(" "):
                 name, ty, value = m.groups()
                 if kind == "structure":
@@ -203,7 +203,7 @@ class Module:
                 current = name
                 types = {}
                 for d in doc:
-                    dm = re.match(r"(\w+): .*, as ([\w<>, ]+)\.$", d)
+                    dm = re.match(r"(\w+): .*, as ([\w<>=, ]+)\.$", d)
                     if dm:
                         types[dm.group(1)] = dm.group(2)
                 names = [p.strip().split()[-1] for p in params.split(",") if p.strip()]
@@ -286,7 +286,7 @@ class Module:
             or re.fullmatch(r"(.+)\[[^\]]*\]", e)
         if m:
             inner = self.type_of(m.group(1), env) or ""
-            mm = re.fullmatch(r"list<(.+)>", inner)
+            mm = re.fullmatch(r"list<element=(.+)>", inner)
             return mm.group(1) if mm else None
         m = re.fullmatch(r"(\w+)\(.*\)", e)
         if m and m.group(1) in self.results:
@@ -683,7 +683,7 @@ class Function:
         if m:
             src = m.group(2)
             ty = self.module.type_of(src, self.env) or ""
-            mm = re.fullmatch(r"list<(.+)>", ty)
+            mm = re.fullmatch(r"list<element=(.+)>", ty)
             if mm:
                 self.env[m.group(1)] = mm.group(1)
             elif src.startswith("range("):

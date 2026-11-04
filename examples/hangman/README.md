@@ -25,12 +25,12 @@ letter. Six misses hang the man.
 
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
-| Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 333, 694, 18 | hand |
-| Bare bodies | `bare/src/hangman.brs`, `bare/src/hangman/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 343, 517, 44, 3 | hand, as the Y compiler would lower the source |
-| Constraint files | `bare/src/*.constraints.json` (92 subjects, 27 clauses) | 638 | the same, then `bare-rust libfmt` for the canonical form |
+| Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 351, 694, 18 | hand |
+| Bare bodies | `bare/src/hangman.brs`, `bare/src/hangman/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 364, 517, 44, 3 | hand, as the Y compiler would lower the source |
+| Constraint files | `bare/src/*.constraints.json` (95 subjects, 30 clauses) | 668 | the same, then `bare-rust libfmt` for the canonical form |
 | Y facts | `bare/y-facts.json` | 1017 | the same |
-| Rust | `src/hangman.rs`, `src/hangman/tests.rs`, `src/main.rs`, `src/lib.rs` | 343, 517, 44, 3 | `bare-rust weave` |
-| Y runtime | `../y-runtime/src/lib.rs` | 503 | hand: a small stand-in for the runtime that lowered code calls |
+| Rust | `src/hangman.rs`, `src/hangman/tests.rs`, `src/main.rs`, `src/lib.rs` | 364, 517, 44, 3 | `bare-rust weave` |
+| Y runtime | `../y-runtime/src/lib.rs` | 506 | hand: a small stand-in for the runtime that lowered code calls |
 
 The Y package has two modules. `hangman` holds the game, and `main` is the entry point. They lower to one Rust package:
 a library crate with the module `hangman`, and a binary crate whose `main` calls it.
@@ -49,12 +49,14 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | A facet: `public facet setup:` makes its members visible to other modules, and its name is part of their paths (`hangman.setup.parse_word_list`); `shown_rune` and `part`, outside every facet, stay private | a module `mod setup { use super::*; … }`, so the Rust path keeps the facet too; the parent imports the facets it uses, `use self::{display::*, rounds::*, setup::*};`, so the members reach one another by their own names, as in Y | a `module` subject per facet, and `visible` on each member; `y-facts.json` `facets`: each facet, its path, its visibility and its members | `pub mod setup`; members `pub`, helpers private to `hangman`, which its facet modules can call |
 | An import by path, `from hangman import setup.parse_word_list, console_play.play` | `use hangman_example::hangman::setup::Word;` and so on | — | the same |
 | `lower_snake_case` type and case names (`guess_error`, `guess_error.not_one_letter`) | `GuessError`, `NotOneLetter`: the lowering's one renaming, to Rust's casing | Rust names | the same |
-| A constant group, `constants game_rules:` with `allowed_misses is count<rune> = 6` | a module `game_rules` holding `const ALLOWED_MISSES = 6;`; uses are `game_rules::ALLOWED_MISSES` | a `module` subject and its `const` subjects | the same |
+| A constant group, `constants game_rules:` with `allowed_misses is count<of=rune> = 6` | a module `game_rules` holding `const ALLOWED_MISSES = 6;`; uses are `game_rules::ALLOWED_MISSES` | a `module` subject and its `const` subjects | the same |
 | `type word is string:` with the block `where letters_only = value.matches(pattern"^[a-z]*$") and long_enough = ...` | `struct Word(_)` and a constructor that checks each constraint in order | two `invariant` clauses, with status `lifted` by the constructor | a newtype with `Word::new(..) -> Result<Word, ConstraintViolation>` |
 | `structure` with fields `word is word`, private to the module: `pub(super)` from the facet's Rust module; a constant group used as a closed type (`outcome`, `verdict` and the failures `word_list_error`, `guess_error`: named values with no order, so not enumerations); a `type` with `case`s that carry data (`play_error`, `case console(error is console_error)`) | `struct`; `enum` with unit variants; `enum` with named fields | `fields`, `variants` | the same, deriving the structural equality Y always derives |
 | Blocks: a colon and indentation | braces, as Rust has | — | the same |
 | `conditional checked = word.new(…):` with named conditions, `condition checked.valid = (checked == result.ok):`, the statements beneath | `match`, each arm marked `// y: #checked.valid` | `y-facts.json` `decisions`, with `kind` `conditional`: the label, and each condition's name, Y line and bare line | the same, with the comment |
 | No inline lambdas: `masked` builds its list with a `for` loop, and `outcome_of` asks `is_subset_of` | the loop; `.all(|letter| …)`, Rust's form of the subset test | — | the same |
+| `rule hanged(game) = (game.miss_count == game_rules.allowed_misses)`, and `rule solved(game)`, used by `outcome_of`'s conditions (`condition judged.hanged = hanged(game):`) | `fn hanged(game) -> bool`, the expression its body | a `function` subject with the `pure` effects clause, at the rule's line | `pub fn hanged(game: &Game) -> bool` |
+| `derived miss_count is count<of=rune> = misses.count()` in `structure game`, read as `game.miss_count` | `impl Game { fn miss_count(self) { … } }`, recomputed on every read; a read is the call `game.miss_count()` | a `function` subject for the method, `self` read only, with the `pure` effects clause | `pub fn miss_count(&self) -> usize` |
 | No `injected` parameter: the function is pure | — | `effects` clause `pure` | — |
 | A `mutable` parameter and no `injected` one | — | `no io`, `no clock`, `no randomness`, `mutates only game.hits, game.misses` | — |
 | `injected console, injected random, injected forever` after `words`, each documented by how `play` uses it | the same three parameters | their types and access; `effects only console, random`; the clause also in `y-facts.json` `capabilities` | `&mut Console, &mut Random, &Forever` |
@@ -68,8 +70,8 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | A condition that narrows (`if not_one_rune = (letter == optional.none): fail ...`) | `let Some(letter) = letter else { ... }` | — | let-else, so rustc checks the narrowing |
 | `forever because "..."` | the `&Forever` argument of the call that waits | `y-facts.json` `claims` | `console.read_line(forever)` |
 | `compile parse_word_list(game_rules.word_list)` | the value, as a `const` array, and a `static` built once from it | `y-facts.json` `compiled` | the same, and a generated test that makes the call at run time and compares |
-| `count<rune>`: the misses, and the letters of a word | — (units are erased) | `y-facts.json` `units` | `usize` |
-| `string` (and a read-only `string` parameter), `rune`, `list<t>`, `set<t>` | — | `text`, `ref<text>`, `Rune`, `list<T> as 'Vec'`, `set<T> as 'BTreeSet'` | `String`, `&str`, `y_runtime::Rune`, `Vec<T>`, `BTreeSet<T>` |
+| `count<of=rune>`: the misses, and the letters of a word | — (units are erased) | `y-facts.json` `units` | `usize` |
+| `string` (and a read-only `string` parameter), `rune`, `list<element=t>`, `set<element=t>` | — | `text`, `ref<text>`, `Rune`, `list<T> as 'Vec'`, `set<T> as 'BTreeSet'` | `String`, `&str`, `y_runtime::Rune`, `Vec<T>`, `BTreeSet<T>`: a `set` keeps insertion order (Y § 3.13), but `hits` is only asked what it contains, so the order is never seen, and the backend may sort |
 | Interpolation, `"{name}"` and `"{game.word}"` | `format!("{name}")`, `format!("{}", game.word)` | — | the same |
 | A binding, `picture = gallows(…)`; a name that changes, `mutable game = new_game(…)`; a change, `name := value` | `let`; `let` (weave adds `mut`); `name = value` | — | `let`; `let mut`, which `weave` derived through rustc (19 of them); `name = value` |
 | `test name` with `covers` and the one path its `when` takes, `covers guess > judged.in_word:` (or `test name:` for a test that claims no path), then the sections `given:`, `inject:`, `when:`, `then:` | `#[test] fn name()`; an `or fail` in `given` or `when` lowers to `expect`; `fake console(input: [...])` to `Console::fake(...)`; each named check of `then`, `name = p`, to `assert!(p, "name")`, with the comment above it, if any, added to the message | `y-facts.json` `tests`: the path each covers, repeated as the test's first line, `// y: covers guess > judged.in_word`; `paths`: every path of the module, and how it ends | the same |
