@@ -132,7 +132,7 @@ public facet setup:
         codes = random.chosen(from: faces.codes, count: board.pairs)
         mutable pictures = list.new()
 
-        within game_rules.fetch_time or fail:
+        region fetch is within game_rules.fetch_time or fail:
             for code in codes:
                 drawing = site.get(path"/data/color/svg/{code}.svg") or fail
                 made = picture.from_svg(drawing, size: layout.picture_size) or fail
@@ -451,7 +451,9 @@ function show_fetching(injected window, injected forever):
     window.clear(palette.background)
     message = "Fetching pictures from OpenMoji..."
     window.write(text: message, x: layout.gap, y: layout.height / 2, size: layout.text_size, colour: palette.text)
-    window.next_frame() forever because "a hidden window shows no frames, and the game waits until it is shown"
+
+    region frame_shown is forever because "a hidden window shows no frames, and the game waits until it is shown":
+        window.next_frame()
 
 
 -- Playing in a window, one game after another, until the window is closed.
@@ -496,7 +498,9 @@ public facet window_play:
                 else moment.over:
                     highest := highest.max(score(game))
             draw(game, highest)
-            window.next_frame() forever because "a hidden window shows no frames, and the game waits until it is shown"
+
+            region frame_shown is forever because "a hidden window shows no frames, and the game waits until it is shown":
+                window.next_frame()
         else closed_at_once
         return best = highest
 

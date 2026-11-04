@@ -53,18 +53,17 @@ public facet holds:
     fails hold_error.timed_out: No unit became free within five seconds.
     ------------------------------------------------------------------------------------------------------------
     function hold_and_charge(item, buyer, injected inventory, injected charges) returns hold fails hold_error:
-        within 5s or fail:
-            atomic hold_one_unit:
-                mutable stock = inventory.stock_of(item) or fail
+        region hold_one_unit is atomic, within 5s or fail:
+            mutable stock = inventory.stock_of(item) or fail
 
-                if sold_out = (stock.available == 0):
-                    retry
-                else in_stock:
-                    stock.available := stock.available - 1
-                    price = stock.price
-                    opened = inventory.open_hold(item: item, buyer: buyer.id)
-                    enqueue charge_card(hold: opened.id, amount: price, method: buyer.payment_method)
-                    return hold = opened
+            if sold_out = (stock.available == 0):
+                retry
+            else in_stock:
+                stock.available := stock.available - 1
+                price = stock.price
+                opened = inventory.open_hold(item: item, buyer: buyer.id)
+                enqueue charge_card(hold: opened.id, amount: price, method: buyer.payment_method)
+                return hold = opened
 ```
 
 Without opening another file, a reviewer can see that this function touches exactly two things (one shared inventory,
@@ -74,8 +73,7 @@ which branch a test must reach to cover the sold-out path (`hold_and_charge#sold
 convention; each one is checked, and the compiler rejects the program if any of them is false.
 
 **Kept from September**, unchanged in meaning: deterministic semantics; Core IR as the definition of a program;
-deterministic destruction; typed failure; software transactional memory with no external effect inside a
-transaction; durable commands and workflows; bounded suspension without `async` colouring; structured concurrency;
+deterministic destruction; typed failure; transactions, with no external effect inside one,; durable commands and workflows; bounded suspension without `async` colouring; structured concurrency;
 contracts, typestate and units; versioned schemas; independent oracles.
 
 **Brought back from earlier iterations:** named decisions and named results (YAPL, 2020–2024); mandatory, closed-grammar
@@ -180,7 +178,7 @@ told this story in prose. Here it is in the proposed language.
 **The agent's first draft** puts the charge where it reads naturally:
 
 ```y
-        atomic hold_one_unit:
+        region hold_one_unit is atomic:
             -- ...
             stock.available := stock.available - 1
             gateway.charge(method: buyer.payment_method, amount: stock.price) or fail
@@ -196,7 +194,7 @@ error[Y0412]: external effect inside a transaction
 27 |             gateway.charge(method: buyer.payment_method, amount: stock.price) or fail
    |             ^^^^^^^^^^^^^^ `http<service=payment_gateway>` performs network I/O
    |
-   = why: `atomic hold_one_unit` may run more than once; this call cannot be undone, so it may happen more than once
+   = why: `region hold_one_unit is atomic` may run more than once; this call cannot be undone, so it may happen more than once
    = fix: submit a durable command, which is persisted if and only if the transaction commits:
           enqueue charge_card(hold: ..., amount: ..., method: ...)
           (needs a capability of type `enqueue<command_type=charge_card>` as an `injected` parameter; `y fix` adds it)
@@ -213,10 +211,10 @@ error[Y0301]: unbounded wait
 22 |                 retry
    |                 ^^^^^ waits until `inventory.stocks` changes, with no deadline above it
    |
-   = fix: bound the enclosing scope, e.g. `within 5s or fail: ...`; the expiry becomes a typed failure
+   = fix: bound the region: `region hold_one_unit is atomic, within 5s or fail:`; the expiry becomes a typed failure
 ```
 
-After `within 5s or fail:`, the compiler reports that the failure set now includes `expired` and that `hold_error` has
+After `within 5s or fail` joins the region's constraints, the compiler reports that the failure set now includes `expired` and that `hold_error` has
 no case carrying it. The agent adds `case timed_out(deadline is expired)`, and `y fix` pins the authority it inferred:
 
 ```text
@@ -264,7 +262,7 @@ Commands
   charge_card                                             new submitter: hold_and_charge
 Claims            none
 Gaps              none
-Coverage          4 of 4 paths covered by 4 tests (> in_stock, > sold_out, > stock'fails, the expiry of `within`)
+Coverage          4 of 4 paths covered by 4 tests (> in_stock, > sold_out, > stock'fails, the expiry of `hold_one_unit`'s `within`)
                   1 fault schedule recorded (seed 0x5e1d)
 Contracts         none declared
 Oracles           rustc ownership projection agrees
@@ -384,8 +382,7 @@ literal, a constant, a declared service, or a unit: `decimal<precision=12, scale
   indexing and arithmetic are computed into a named local first.
 - Literals that are small languages are checked at compile time: `pattern"^[a-z]+$"` (a regular expression),
   `url"https://example.com"`, and format strings. Y has no query strings (§ 3.13).
-- **Blocks are statements.** `if`, `conditional`, loops, `within`, `atomic`, `orelse`, `inject`, `arena`, `uncancellable` and
-  `supervise` produce no value, and Y has no conditional expression and no ternary operator.
+- **Blocks are statements.** `if`, `conditional`, loops, `region`, `orelse`, `inject` and `arena` produce no value, and Y has no conditional expression and no ternary operator.
   - A value chosen by a condition is assigned in each branch. The decision then has a name and a place, like every
     other: `if has_head = (misses >= 1):` assigns `head = "O"`, and `else no_head:` assigns `head = " "`.
   - A value made inside a transaction or a deadline is returned from inside it, or assigned with `:=` to a name declared
@@ -413,8 +410,8 @@ function meaning_of_life() returns answer:
   it a value: `return answer = verdict.hit`. Assigning to the result anywhere else is an error (the toolchain's rule,
   language reference § 8).
   - Every path ends in `return` or `fail`.
-  - A `return` inside `atomic` commits the transaction and then returns; inside `within`, it leaves the deadline's
-    block. So a value made inside a transaction is returned from inside it (§ 0's `hold`).
+  - A `return` inside an atomic region commits the transaction and then returns; inside any region, it leaves the
+    region. So a value made inside a transaction is returned from inside it (§ 0's `hold`).
   - A function without `returns` has no result, and its `return` takes no name.
 - **A function that can fail says so in its signature:** `fails guess_error`. Its documentation then has a
   `fails <type>.<case>:` role for every case: `fails guess_error.empty:`.
@@ -481,7 +478,7 @@ active_users = users.filter(is_active)
   structure, a type, a constant group or an enumeration are not declarations in this sense, and follow one another
   directly, except that a member with a comment above it has a blank line before the comment.
 - **A blank line comes before every flow-control statement** (`if`, `while`, `for`, `conditional`, `break`, `continue`,
-  `retry`, and the blocks `atomic`, `within`, `inject`, `arena`, `uncancellable` and `supervise`), unless it is the first
+  `retry`, and the blocks `region`, `inject` and `arena`), unless it is the first
   statement of its block. Comments about the statement may sit between the blank line and the statement. `fail` and
   `return` need no blank line, and neither do `else`, `orelse` and a `conditional`'s `condition`, which continue the
   statement above them. The rule holds in every block, not only in functions: a test's sections, a lambda, a handler,
@@ -967,7 +964,7 @@ A function that can fail names its failure type in its signature: `returns debit
 - **`or fail as <case>` names the conversion** where the author wants it seen:
   `typed = console.read_line() or fail as play_error.console`. The named case must be the one the conversion would
   choose, or one that carries the failure when two could; it is optional otherwise.
-- A failure leaving an `atomic` block aborts the transaction, which leaves no trace (§ 3.9). This is the July 2026
+- A failure leaving an atomic region aborts the transaction, which leaves no trace (§ 3.9). This is the July 2026
   rollback-on-failure rule, carried into the language.
 
 ```y
@@ -1026,7 +1023,7 @@ This proposal restores the rule and extends it to every predicate in the languag
 | Precondition, guarantee | `where positive = (amount > 0isk)`, `ensures debited = (...)` |
 | Invariant, constraint | `invariant departs_after_arrival = (...)`, `where positive = (value > 0)` |
 | Assertion | `assert charged_once = (charges.committed().count() == 1)` |
-| Transaction, task | `atomic hold_one_unit: ...`, `task profile = load_profile(id)` |
+| Region, task | `region hold_one_unit is atomic: ...`, `task profile = load_profile(id)` |
 
 **Exemptions and defaults.**
 
@@ -1331,17 +1328,65 @@ needs no annotation because the missing clause is the annotation. Contract expre
 Friction on observability produces programs nobody can observe, and every iteration of Y has treated observability as
 the language's job.
 
-### 3.8 Time and concurrency
+### 3.8 Regions, time and concurrency
+
+**Regions carry execution constraints.** How a piece of code may execute is not what it computes: how long it may
+take, whether it may wait without end, whether it may be cancelled, whether anything else may see it half done,
+whether it may run more than once. Y states these as constraints on a named region, and the backend chooses how to keep
+them:
+
+```y
+region fetch is within 30s or fail:
+    for code in codes:
+        drawing = site.get(path"/data/{code}.svg") or fail
+        pictures.push(drawing)
+```
+
+- `region name is c1, c2, …:` and the block beneath it. The name is the region's identity: traces, fault reports,
+  conflict metrics and the review packet use it (`hold_and_charge#hold_one_unit`), and it must be unique in its
+  function.
+- `or fail` after the constraints passes the region's own failures on, such as a deadline's expiry, as `or fail` after a
+  call does, so the exit is spelled where the reader looks.
+- A region has no value. What it makes is returned from inside it, or assigned with `:=` to a name declared outside it.
+- Regions nest, and an inner region's constraints add to the outer's: a nested `within` can only shorten the deadline,
+  and a nested `atomic` joins the enclosing transaction.
+
+The execution constraints:
+
+| Constraint | Says | Requires |
+|---|---|---|
+| `within d` | It ends by the deadline `d`, which every wait inside it shares. Expiry is the failure `expired` | — |
+| `forever because "…"` | It may wait without bound. A claim (§ 3.15) | the `forever` capability |
+| `uncancellable` | Cancellation is held until it ends | `within`, so the hold is bounded |
+| `atomic` | Nothing else observes it half done, and a failure leaves it without trace (§ 3.9) | access only to `shared` state, `enqueue`, buffered `log` and `metric` |
+| `isolation serializable`, `isolation snapshot` | What an atomic region observes. Serializable is the default | `atomic` |
+| `waits until name = (p)` | It starts only once `p` holds, and waits until then. The condition is named like any decision | a bound above it |
+| `supervise(…)` | The policy for the failures of its tasks | — |
+| `detach because "…"` | Its tasks may outlive the enclosing scope. A claim | the `detach` capability, and `within` |
+
+- **`atomic` implies that the region may run more than once.** It is not written: the runtime may re-run the region
+  after a conflicting commit, and the compiler derives what follows, that nothing in it may have an external effect
+  (§ 3.9).
+- **The constraints are the meaning; how they are kept is the backend's**, as how a value is passed (§ 3.6) and how a
+  collection is stored (§ 3.13) are. A region that touches no shared state is atomic by construction. One that provably
+  touches a single `shared` value may hold that value's lock. One global lock with a condition variable keeps every
+  atomic region serializable and never re-runs one. Multi-version concurrency control re-runs on conflict and lets
+  more run at once. A database keeps them in a transaction at `SERIALIZABLE`. The first backend uses the global lock
+  (§ 3.9); the others are later backends' choices, held to the same constraints.
+- **The compiler checks what it can,** and the rest is checked as any contract is (§ 3.11): a deadline is passed to
+  every wait inside its region, an atomic region's body has no external effect, an `uncancellable` region is bounded.
+  Concurrency explorers (§ 4.6) check that the backend's choice keeps the constraints.
+- **Lowering.** [`../examples/memory`](../examples/memory/) and [`../examples/snake`](../examples/snake/) lower
+  regions to Rust. A region `within` a deadline is a block that starts a `Deadline` and passes it to every wait
+  inside it, and its expiry converts through the failure that carries it; a region that is `forever` passes the
+  `forever` capability to its wait. An atomic region will take the runtime's one lock; no example has one yet.
 
 **Every wait is bounded, and the bound is checked.**
 
-- `within 30s or fail: ...` sets an absolute deadline shared by everything inside it. `queue.receive() within 5s` bounds a
-  single operation.
-- A nested `within` can only shorten the deadline, never extend it.
-- Expiry is a typed failure (`expired`). `within 5s or fail:` passes it on, as `or fail` after a call does, so the
-  exit is spelled where the reader looks.
-- A suspension with no finite bound above it does not compile. A wait that is genuinely indefinite is written
-  `forever because "..."`, which requires the `forever` capability and is a claim (§ 3.15).
+- A suspension with no finite bound above it does not compile. A region `within` a deadline is the bound; a region
+  that waits on purpose without end is `forever because "…"`.
+- One call is bounded by a region around it alone: `region next_frame is forever because "the window waits until it is
+  shown":` and the call beneath it.
 
 **Tasks are structured.**
 
@@ -1350,31 +1395,32 @@ the language's job.
 - A scope does not exit until its tasks finish.
 - A failing task cancels its siblings, and the scope's failure type includes the failures of its tasks.
 - Two tasks may not hold the same value `mutable`, nor one `mutable` while another reads it.
-- Work that outlives its scope is written `detach because "..." within 1h: ...`. It requires the `detach`
+- Work that outlives its scope is in a region that is `detach because "…", within 1h`, which requires the `detach`
   capability and carries an explicit lifetime.
 
 **Cancellation.**
 
 - Cancellation arrives only at suspension points, as a failure.
 - Cleanup during cancellation has its own bound.
-- A short critical region may be protected from cancellation (`uncancellable within 50ms: ...`), and only with a
-  bound.
+- A short critical region may be protected from cancellation, `region flush is uncancellable, within 50ms:`, and only
+  with a bound.
 - Cancellation never undoes a committed transaction or withdraws a command that committed with it.
 
-**Supervision is a policy on a scope, not a new kind of thing.** A plain scope is already a supervisor whose policy is
-"fail on the first failure". Other policies are written on the scope:
+**Supervision is a policy on a region, not a new kind of thing.** A plain region is already a supervisor whose policy is
+"fail on the first failure". Other policies are its constraints:
 
 ```y
-within 24h supervise(restart: restart_policy.each_failed, at_most: 5, per: 10min):
+region ingestion is within 24h, supervise(restart: restart_policy.each_failed, at_most: 5, per: 10min):
     task ingest = run_ingest()
     task compaction = run_compaction()
 ```
 
 - A restarted task starts from its declared initial state. Shared state it committed survives, so restart is never a
   recovery mechanism for transactional data.
-- Exceeding the policy fails the scope, and the failure escalates to the enclosing scope.
+- Exceeding the policy fails the region, and the failure escalates to the enclosing scope.
 
-This settles September's overlap between task scopes and supervisors by making them one construct.
+This settles September's overlap between task scopes and supervisors by making them one construct, and the region makes
+deadlines, cancellation and transactions the same construct as well.
 
 **What the language does not have.**
 
@@ -1386,17 +1432,16 @@ This settles September's overlap between task scopes and supervisors by making t
 
 ### 3.9 Shared state
 
-**Shared mutable state exists only as `shared<value_type=t>`**, a capability created with `shared.new(initial)`, normally by the
-entry point, and passed down. September's module-level `shared inventory: inventory` becomes a value someone had to
-hand you. There is no global state to reach.
+**Shared mutable state exists only as `shared<value_type=t>`**, a capability created with `shared.new(initial)`,
+normally by the entry point, and passed down. September's module-level `shared inventory: inventory` becomes a value
+someone had to hand you. There is no global state to reach.
 
-- A `shared<value_type=t>` is read and written only inside `atomic`, where it behaves as a `mutable` value and the runtime tracks what
-  was read and written.
+- A `shared<value_type=t>` is read and written only inside an `atomic` region, where it behaves as a `mutable` value.
 - `snapshot()` outside a transaction returns an immutable, consistent copy. It is a read-only transaction, and exists
   so that tests and reports need not open one.
 - State that is not shared is owned by one task, is not transactional, and costs nothing.
 
-**Transactions are named blocks**, because the name shows up in conflict metrics, in fault injection
+**A transaction is an atomic region**, named because the name shows up in conflict metrics, in fault injection
 (`conflict at hold_and_charge#hold_one_unit`), and in the review packet ("transacts hold_one_unit — writes …"):
 
 ```y
@@ -1408,34 +1453,27 @@ job: The job to run, as job.
 jobs: The queues, as shared<value_type=job_queues>.
 ------------------------------------------------------------
 function take_job(injected jobs) returns job:
-    atomic take_next_job:
-        pending = jobs.pending.pop_front()
-
-        if nothing_pending = (pending == optional.none):
-            retry
-        else got_pending:
-            return job = pending
-    orelse atomic take_retried_job:
-        retried = jobs.retried.pop_front()
-
-        if nothing_retried = (retried == optional.none):
-            retry
-        else got_retried:
-            return job = retried
+    region take_pending is atomic, waits until has_pending = (jobs.pending.count() > 0):
+        return job = jobs.pending.take_front()
+    orelse region take_retried is atomic, waits until has_retried = (jobs.retried.count() > 0):
+        return job = jobs.retried.take_front()
 ```
 
 **Semantics:**
 
-- An `atomic` block has no value. What it makes is assigned to names declared outside it.
-- Its reads observe one snapshot, and its writes become visible together at commit.
-- A conflicting commit re-runs it from the start.
-- A failure leaving it aborts it without trace.
-- A nested `atomic` joins the enclosing one.
-- `retry` abandons the attempt and waits until something it read changes. That wait is bounded like any other.
-- `orelse` tries alternatives left to right and waits on the union of their read sets.
+- An atomic region is serializable unless it says `isolation snapshot`: its effect is as if no other transaction ran
+  while it did. A snapshot region reads one consistent snapshot and may suffer write skew; it is for reports and other
+  regions that read much and write little, and the review packet lists each one.
+- Its writes become visible together when it ends, and a failure leaving it aborts it without trace.
+- It may run more than once (§ 3.8). Nothing in it may depend on how often it runs.
+- `waits until name = (p)` starts the region only once `p` holds, and the condition's facts hold in its body: above,
+  `take_front()` needs a queue that is not empty, and the condition says so. `retry`, in the body, is the same wait
+  decided by what the body has read: it abandons the run and waits until something it read changes. Either wait is
+  bounded like any other.
+- `orelse` tries alternatives left to right, and waits on all of their conditions at once.
 
-**The load-bearing rule is unchanged: no external effect inside a transaction.** The body of an `atomic` block may
-contain only:
+**The load-bearing rule is unchanged: no external effect inside a transaction.** It now follows from the region's
+constraints: an atomic region may run more than once, so it may contain only
 
 - pure computation;
 - `shared` access;
@@ -1446,8 +1484,11 @@ contain only:
 Anything else is rejected, and the diagnostic names the capability, the call path, and the durable mechanism to use
 instead. Values from the clock or randomness are drawn before the transaction and passed in.
 
-The implementation is multi-version concurrency control with first-committer-wins, as the July 2026 C spike built it.
-The difference is scope: the YAPL-era runtime put *every* variable under MVCC, and Y puts only what is shared there.
+**The first backend keeps it with one lock.** Every atomic region takes one global lock and a `waits until` or `retry`
+waits on its condition variable, so every region is serializable by construction and none is ever re-run. Multi-version
+concurrency control with first-committer-wins, as the July 2026 C spike built it, is a later backend's optimisation,
+held to the same constraints; it is the first to re-run a region. The difference from the YAPL-era runtime is scope:
+that runtime put *every* variable under MVCC, and Y puts only what is shared under any of them.
 
 ### 3.10 External effects
 
@@ -1484,7 +1525,7 @@ gateway: The payment gateway, as http<service=payment_gateway>.
 fails charge_error.declined: The gateway refused the charge.
 --------------------------------------------------------------------------------------------------------------------------------
 handler charge_card(command, injected gateway) returns charged fails charge_error:
-    within 30s or fail:
+    region charge is within 30s or fail:
         return charged = gateway.charge(idempotency_key: command.id, method: command.method, amount: command.amount) or fail
 ```
 
@@ -1534,12 +1575,12 @@ workflow fulfil(hold, injected orders, injected charges, injected shipments) ret
 - `submit` suspends the workflow durably until the command's outcome is recorded.
 - It succeeds with the handler's result, or fails with `undelivered<failure_type=e>`, whose two failure cases are `undelivered.failed(e)` and `undelivered.abandoned(...)`. Abandonment is
   therefore an ordinary failure that must be matched or propagated, and cannot be ignored.
-- A workflow may open `atomic` blocks.
+- A workflow may open atomic regions.
 - A workflow's determinism is enforced by its capability set. It may hold `store`, `shared`, `submit` and `enqueue`,
   and not `clock`, `random` or any I/O capability. Time inside a workflow is the recorded time of its last durable step.
 - A workflow persists its logical identity and continuation version, never an address. It resumes under a version whose
   compatibility signature matches (§ 4.4).
-- **An external query from transactional logic is a workflow.** Submit the query, wait durably, then open `atomic` with
+- **An external query from transactional logic is a workflow.** Submit the query, wait durably, then open an atomic region with
   the answer. September's four-step request pattern (§ 10 of the working design) becomes this one construct.
 
 ### 3.11 Specification in the program
@@ -1908,7 +1949,7 @@ Some things the compiler cannot check. Y does not pretend otherwise; it makes ea
 | --- | --- | --- |
 | `native because "..."`, in place of a body | The backend's implementation keeps the promises of this declaration (§ 3.18) | — |
 | `forever because "..."` | This wait is meant to be unbounded | `forever` |
-| `detach because "..." within 1h: ...` | This work may outlive its scope | `detach` |
+| `region name is detach because "...", within 1h:` | This work may outlive its scope | `detach` |
 | `reveal(secret) because "..."` | This sensitive value may be seen here | `reveal` |
 | `assume name = predicate because "..."` | The prover may take this as true without proof | — |
 | `allow(Y2031) because "..."` | This lint does not apply here | — |
@@ -2051,7 +2092,7 @@ same either way.
 
 - The Rust signature of a native function is the one the compiler would give a Y function with the same declaration.
   The same rules decide it: parameters are borrowed or taken, `fails e` becomes a `Result`, injected capabilities come
-  last, and a function that may suspend is an `async fn` that receives the deadline of the `within` it runs in. There is
+  last, and a function that may suspend is an `async fn` that receives the deadline of the region it runs in. There is
   no second type mapping to learn or keep in step.
 - `y native --backend rust` writes those signatures out as a skeleton for the implementation to fill:
 
@@ -2135,7 +2176,7 @@ the levels below it:
 | `data` | Declarations: scalars, structures, sums, constants, collections, refined types and their restrictions, invariants, schemas and migrations. This is what the constraint language can say | Every backend, SQL's tables and the constraint language |
 | `calculations` | Functions of values: no `mutable` name, no loop and no recursion. Named decisions, `conditional`, failures, `where` and `ensures`, rules, derived values, pipelines, `compile` | Every imperative backend; SQL, as expressions and queries |
 | `structured` | `mutable` names and parameters, `:=`, `for` and `while`, recursion | Every imperative backend; SQL's procedural dialects |
-| `shared` | `shared<value_type=t>` and `atomic`, arenas and their `index<unit_type=t>`, resources | Backends with a runtime for transactions |
+| `shared` | `shared<value_type=t>` and atomic regions, arenas and their `index<unit_type=t>`, resources | Backends with a runtime for transactions |
 | `effects` | `injected` capabilities, `within` and `forever`, suspension, external effects (§ 3.10) | Backends with Y's runtime |
 
 - **A module's level is the highest level of anything it declares or imports.** A function from a `structured`
@@ -2483,7 +2524,7 @@ The process has to prevent all four.
 | M1 | Names, types, sum types, named decisions, documentation roles, no-shadowing, refined types | Conformance corpus; `y explain` for types |
 | M2 | Value semantics and `mutable`; the choice of borrows, moves and copies; Rust backend for the pure subset | `rustc` projection agrees on the corpus |
 | M3 | Capabilities, effects, `y fix` pinning; tests, `covers`, the coverage gate | The § 2 tour runs end to end without `shared` |
-| M4 | `shared`, `atomic`, `retry`, `orelse`; `within`, `task`, supervision; controllable scheduler, fault injection | The § 2 tour runs end to end |
+| M4 | `shared`, regions with `atomic`, `waits until`, `retry`, `orelse`; `within`, `task`, supervision; controllable scheduler, fault injection | The § 2 tour runs end to end |
 | M5 | Commands, handlers, workflows; schemas, migrations, `store` | Crash-injection suite |
 | M6 | Semantic diff, review packet, claims, approvals ledger | A week of agent-written changes reviewed only through packets |
 | Later | Contract and typestate provers, more backends, runtime generations (§ 5) | Oracles (§ 4.6) |
@@ -2502,7 +2543,7 @@ declarations   module from import public facet function returns fails structure 
 contracts      where ensures invariant old assert
 control        if else conditional condition compare with for in while break continue return fail
 bindings       mutable lambda nested captures injected inject arena compile
-concurrency    within task supervise detach forever uncancellable
+concurrency    region within task supervise detach forever uncancellable waits until
 transactions   atomic retry orelse enqueue submit
 claims, gaps   native assume allow reveal because
 tests          covers given inject faults when then fake
@@ -2510,7 +2551,8 @@ observability  log metric
 operators      and or not
 values         true false
 contextual     as key reads reverse policy compensate park on, less equal greater (in `compare`), not_reachable
-               not_implemented (after `fail`), ordered by unordered unique count offers costs values (in a
+               not_implemented (after `fail`), isolation serializable snapshot (in a region's constraints), ordered by unordered
+               unique count offers costs values (in a
                collection's declaration), and the field names of
                `policy`, `supervise` and `faults` clauses (reserved only inside those clauses)
 ```

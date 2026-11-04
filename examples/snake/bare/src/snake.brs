@@ -325,7 +325,7 @@ mod window_play {
                 highest = highest.max(game.eaten);
             }
             draw(&game, highest, window);
-            window.next_frame(forever).await; // y: forever because "a hidden window shows no frames, and the game waits until it is shown"
+            window.next_frame(forever).await; // y: region frame_shown is forever because "a hidden window shows no frames, and the game waits until it is shown"
         }
         highest
     }

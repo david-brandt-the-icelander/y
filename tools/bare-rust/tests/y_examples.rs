@@ -277,11 +277,13 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
         assert!(at(s["y"].as_str().unwrap()).contains(point), "suspension at {point}: not at {}", s["y"]);
         assert!(at(s["bare"].as_str().unwrap()).contains(".await"), "suspension at {point}: not awaited at {}", s["bare"]);
     }
-    // each `within` scope is where the facts say, and the bare body starts its deadline there and passes it to each
-    // wait inside the scope (Y § 3.8); a file without one has no `deadlines` fact
+    // each region `within` a deadline is where the facts say, and the bare body starts its deadline there and passes it
+    // to each wait inside the region (Y § 3.8); a file without one has no `deadlines` fact
     for d in facts["deadlines"].as_array().map_or(&[][..], |v| v) {
         let bound = d["bound"].as_str().unwrap();
-        assert!(at(d["y"].as_str().unwrap()).trim() == format!("within {bound} or fail:"), "deadline {bound}: not at {}", d["y"]);
+        let header = at(d["y"].as_str().unwrap());
+        let header = header.trim();
+        assert!(header.starts_with("region ") && header.ends_with(&format!(" is within {bound} or fail:")), "deadline {bound}: not at {}", d["y"]);
         assert!(at(d["bare"].as_str().unwrap()).contains("Deadline::after("), "deadline {bound}: not started at {}", d["bare"]);
         let (file, line) = d["bare"].as_str().unwrap().rsplit_once(':').unwrap();
         let rest: Vec<String> = read(&dir.join(file)).lines().skip(line.parse().unwrap()).map(str::to_string).collect();
@@ -346,7 +348,7 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
     }
     // a blank line before every flow-control statement that is not the first of its block; comments about the
     // statement may come between (a lint rule of Y § 3.1)
-    let flow = ["if ", "while ", "for ", "conditional ", "break", "continue", "retry", "atomic ", "within ", "arena ", "uncancellable", "supervise"];
+    let flow = ["if ", "while ", "for ", "conditional ", "break", "continue", "retry", "region ", "arena "];
     for y in &all {
         let lines: Vec<String> = read(&dir.join(y)).lines().map(str::to_string).collect();
         let mut inside = false;

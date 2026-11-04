@@ -446,11 +446,11 @@
         }
       ],
       "clauses": [
-        { "kind": "effects", "text": "no io", "source": "y/src/snake.y:372" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/snake.y:372" },
-        { "kind": "effects", "text": "no randomness", "source": "y/src/snake.y:372" },
-        { "kind": "effects", "text": "no suspension", "source": "y/src/snake.y:372" },
-        { "kind": "access", "text": "mutates only game", "source": "y/src/snake.y:372" }
+        { "kind": "effects", "text": "no io", "source": "y/src/snake.y:374" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/snake.y:374" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/snake.y:374" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/snake.y:374" },
+        { "kind": "access", "text": "mutates only game", "source": "y/src/snake.y:374" }
       ]
     },
     {
@@ -472,11 +472,11 @@
       ],
       "result": { "type": "Instant" },
       "clauses": [
-        { "kind": "effects", "text": "effects only random", "source": "y/src/snake.y:390" },
-        { "kind": "effects", "text": "no io", "source": "y/src/snake.y:390" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/snake.y:390" },
-        { "kind": "effects", "text": "no suspension", "source": "y/src/snake.y:390" },
-        { "kind": "access", "text": "mutates only game", "source": "y/src/snake.y:390" }
+        { "kind": "effects", "text": "effects only random", "source": "y/src/snake.y:392" },
+        { "kind": "effects", "text": "no io", "source": "y/src/snake.y:392" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/snake.y:392" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/snake.y:392" },
+        { "kind": "access", "text": "mutates only game", "source": "y/src/snake.y:392" }
       ]
     }
   ]

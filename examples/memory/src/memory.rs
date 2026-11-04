@@ -141,7 +141,7 @@ pub mod setup {
         let codes = random.chosen(&faces::CODES, board::PAIRS);
         let mut pictures = Vec::new();
         {
-            // y: within game_rules.fetch_time or fail
+            // y: region fetch is within game_rules.fetch_time or fail
             let deadline = Deadline::after(game_rules::FETCH_TIME);
             for code in codes { // y: #code
                 let drawing = site.get(&format!("/data/color/svg/{code}.svg"), &deadline).await?;
@@ -433,7 +433,7 @@ async fn show_fetching(window: &mut Window, forever: &Forever) {
     window.clear(palette::BACKGROUND);
     let message = "Fetching pictures from OpenMoji...";
     window.write(message, layout::GAP, layout::HEIGHT / 2, layout::TEXT_SIZE, palette::TEXT);
-    window.next_frame(forever).await; // y: forever because "a hidden window shows no frames, and the game waits until it is shown"
+    window.next_frame(forever).await; // y: region frame_shown is forever because "a hidden window shows no frames, and the game waits until it is shown"
 }
 
 /// The Y facet `window_play`: playing in a window, one game after another, until the window is closed.
@@ -468,7 +468,7 @@ pub mod window_play {
                 highest = highest.max(score(&game));
             }
             draw(&game, highest, window);
-            window.next_frame(forever).await; // y: forever because "a hidden window shows no frames, and the game waits until it is shown"
+            window.next_frame(forever).await; // y: region frame_shown is forever because "a hidden window shows no frames, and the game waits until it is shown"
         }
         Ok(highest)
     }

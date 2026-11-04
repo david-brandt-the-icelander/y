@@ -629,7 +629,7 @@ def walk(items):
 
 
 def failing_name(text):
-    if not re.search(r" or fail(:)?$", text) or text.startswith(("within ", "if ", "while ")):
+    if not re.search(r" or fail(:)?$", text) or text.startswith(("region ", "within ", "if ", "while ")):
         return None
     m = re.match(r"(?:mutable )?(\w+) :?= ", text)
     if m:
@@ -806,7 +806,7 @@ class Function:
             return [(text, [], facts)]
 
         outs = [("next", [], facts)]
-        if kids and re.match(r"(within |inject\(|inject:)", text):
+        if kids and re.match(r"(region |within |inject\(|inject:)", text):
             outs = self.seq(kids, facts)
         n = failing_name(text)
         if n:

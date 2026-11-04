@@ -74,7 +74,7 @@
       "facet": "window_play",
       "path": "memory.window_play",
       "visible": "public",
-      "y": "y/src/memory.y:458",
+      "y": "y/src/memory.y:460",
       "rust": "memory_example::memory::window_play",
       "members": [
         "play"
@@ -166,7 +166,7 @@
         "forever as forever"
       ],
       "lowered": "as the last five parameters, in order",
-      "y": "y/src/memory.y:475"
+      "y": "y/src/memory.y:477"
     },
     {
       "subject": "memory_example::main",
@@ -182,14 +182,14 @@
       "claim": "forever",
       "because": "a hidden window shows no frames, and the game waits until it is shown",
       "requires": "Forever",
-      "y": "y/src/memory.y:454",
+      "y": "y/src/memory.y:455",
       "bare": "bare/src/memory.brs:436"
     },
     {
       "claim": "forever",
       "because": "a hidden window shows no frames, and the game waits until it is shown",
       "requires": "Forever",
-      "y": "y/src/memory.y:499",
+      "y": "y/src/memory.y:502",
       "bare": "bare/src/memory.brs:471"
     }
   ],
@@ -207,7 +207,7 @@
       "point": "window.next_frame()",
       "because": "the window capability may suspend (Y \u00a7 3.7)",
       "lowered": "async fn, and .await at the point",
-      "y": "y/src/memory.y:454",
+      "y": "y/src/memory.y:456",
       "bare": "bare/src/memory.brs:436"
     },
     {
@@ -215,7 +215,7 @@
       "point": "show_fetching()",
       "because": "show_fetching may suspend",
       "lowered": ".await at the call",
-      "y": "y/src/memory.y:476",
+      "y": "y/src/memory.y:478",
       "bare": "bare/src/memory.brs:450"
     },
     {
@@ -223,7 +223,7 @@
       "point": "new_game()",
       "because": "new_game may suspend",
       "lowered": ".await at the call",
-      "y": "y/src/memory.y:477",
+      "y": "y/src/memory.y:479",
       "bare": "bare/src/memory.brs:451"
     },
     {
@@ -231,7 +231,7 @@
       "point": "show_fetching()",
       "because": "show_fetching may suspend",
       "lowered": ".await at the call",
-      "y": "y/src/memory.y:489",
+      "y": "y/src/memory.y:491",
       "bare": "bare/src/memory.brs:460"
     },
     {
@@ -239,7 +239,7 @@
       "point": "new_game()",
       "because": "new_game may suspend",
       "lowered": ".await at the call",
-      "y": "y/src/memory.y:490",
+      "y": "y/src/memory.y:492",
       "bare": "bare/src/memory.brs:461"
     },
     {
@@ -247,7 +247,7 @@
       "point": "window.next_frame()",
       "because": "the window capability may suspend (Y \u00a7 3.7)",
       "lowered": ".await at the point",
-      "y": "y/src/memory.y:499",
+      "y": "y/src/memory.y:503",
       "bare": "bare/src/memory.brs:471"
     },
     {
@@ -533,12 +533,12 @@
         "branches": [
           {
             "name": "open",
-            "y": "y/src/memory.y:481",
+            "y": "y/src/memory.y:483",
             "bare": "bare/src/memory.brs:454"
           },
           {
             "name": "closed_at_once",
-            "y": "y/src/memory.y:500",
+            "y": "y/src/memory.y:504",
             "bare": "bare/src/memory.brs:454"
           }
         ]
@@ -546,26 +546,26 @@
       {
         "kind": "conditional",
         "label": "moment",
-        "y": "y/src/memory.y:487",
+        "y": "y/src/memory.y:489",
         "branches": [
           {
             "name": "moment.again",
-            "y": "y/src/memory.y:488",
+            "y": "y/src/memory.y:490",
             "bare": "bare/src/memory.brs:459"
           },
           {
             "name": "moment.hiding",
-            "y": "y/src/memory.y:491",
+            "y": "y/src/memory.y:493",
             "bare": "bare/src/memory.brs:462"
           },
           {
             "name": "moment.picking",
-            "y": "y/src/memory.y:493",
+            "y": "y/src/memory.y:495",
             "bare": "bare/src/memory.brs:464"
           },
           {
             "name": "moment.over",
-            "y": "y/src/memory.y:496",
+            "y": "y/src/memory.y:498",
             "bare": "bare/src/memory.brs:467"
           }
         ]
@@ -577,12 +577,12 @@
         "branches": [
           {
             "name": "place",
-            "y": "y/src/memory.y:512",
+            "y": "y/src/memory.y:516",
             "bare": "bare/src/memory.brs:483"
           },
           {
             "name": "no_clicks",
-            "y": "y/src/memory.y:519",
+            "y": "y/src/memory.y:523",
             "bare": "bare/src/memory.brs:483"
           }
         ]
@@ -592,12 +592,12 @@
         "branches": [
           {
             "name": "chosen",
-            "y": "y/src/memory.y:515",
+            "y": "y/src/memory.y:519",
             "bare": "bare/src/memory.brs:486"
           },
           {
             "name": "ignored",
-            "y": "y/src/memory.y:517",
+            "y": "y/src/memory.y:521",
             "bare": "bare/src/memory.brs:487"
           }
         ]
