@@ -144,7 +144,7 @@
         "random as random"
       ],
       "lowered": "as the last parameter",
-      "y": "y/src/snake.y:390"
+      "y": "y/src/snake.y:392"
     },
     {
       "subject": "snake_example::main",
@@ -160,7 +160,7 @@
       "claim": "forever",
       "because": "a hidden window shows no frames, and the game waits until it is shown",
       "requires": "Forever",
-      "y": "y/src/snake.y:361",
+      "y": "y/src/snake.y:362",
       "bare": "bare/src/snake.brs:328"
     }
   ],
@@ -170,7 +170,7 @@
       "point": "window.next_frame()",
       "because": "the window capability may suspend (Y \u00a7 3.7)",
       "lowered": "async fn, and .await at the point",
-      "y": "y/src/snake.y:361",
+      "y": "y/src/snake.y:363",
       "bare": "bare/src/snake.brs:328"
     },
     {
@@ -434,7 +434,7 @@
           },
           {
             "name": "closed_at_once",
-            "y": "y/src/snake.y:362",
+            "y": "y/src/snake.y:364",
             "bare": "bare/src/snake.brs:315"
           }
         ]
@@ -461,12 +461,12 @@
         "branches": [
           {
             "name": "pressed",
-            "y": "y/src/snake.y:373",
+            "y": "y/src/snake.y:375",
             "bare": "bare/src/snake.brs:339"
           },
           {
             "name": "no_keys",
-            "y": "y/src/snake.y:375",
+            "y": "y/src/snake.y:377",
             "bare": "bare/src/snake.brs:339"
           }
         ]
@@ -478,12 +478,12 @@
         "branches": [
           {
             "name": "due",
-            "y": "y/src/snake.y:393",
+            "y": "y/src/snake.y:395",
             "bare": "bare/src/snake.brs:354"
           },
           {
             "name": "not_due",
-            "y": "y/src/snake.y:396",
+            "y": "y/src/snake.y:398",
             "bare": "bare/src/snake.brs:354"
           }
         ]

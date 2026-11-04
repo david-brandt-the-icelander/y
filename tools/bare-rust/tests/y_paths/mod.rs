@@ -873,7 +873,7 @@ fn widen(facts: &mut Facts, names: &BTreeSet<String>, grown: &BTreeSet<String>) 
 }
 
 fn failing_name(text: &str) -> Option<String> {
-    if !re!(r" or fail(:)?$").is_match(text) || ["within ", "if ", "while "].iter().any(|p| text.starts_with(p)) {
+    if !re!(r" or fail(:)?$").is_match(text) || ["region ", "within ", "if ", "while "].iter().any(|p| text.starts_with(p)) {
         return None;
     }
     if let Some(c) = re!(r"^(?:mutable )?(\w+) :?= ").captures(text) {
@@ -1132,7 +1132,7 @@ impl<'m> Function<'m> {
             return vec![(text.to_string(), vec![], facts)];
         }
 
-        let mut outs = if !kids.is_empty() && re!(r"^(within |inject\(|inject:)").is_match(text) {
+        let mut outs = if !kids.is_empty() && re!(r"^(region |within |inject\(|inject:)").is_match(text) {
             self.seq(kids, facts.clone())
         } else {
             vec![(say("next"), vec![], facts.clone())]

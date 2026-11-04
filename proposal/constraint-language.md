@@ -164,6 +164,7 @@ use economy                   -- quantities: Isk, ItemQuantity
 | `block` | A named sequence of preconditions | `block in_space(s: space.Ships)` |
 | `label` | An information-flow label | `label pii` |
 | `scope` | A named span of time that lifetimes can be stated against | `scope fight : from begin(Fight) to end(Fight)` |
+| `region` | A callable, or a named part of one, and how it may execute (§ 6.23) | `region 'shop.checkout.hold_and_charge#hold_one_unit'` |
 
 **Stable names.** A host subject binds by the stable name its code gives it, through the host's own attribute,
 annotation or decorator (`#[stable("eve.cache.get")]` in Rust, `[Stable("…")]` in C#, `@stable("…")` in Python), or,
@@ -469,6 +470,7 @@ Clauses are of two sorts, and the difference decides how they are checked.
 | Expectations | `expect` | What usually happens: sizes, frequencies, likelihoods, rare failures; never correctness | Watched only | 6.20 |
 | Platforms | `platform`, with `pointer width`, `endian`, `target features`, `atomics up to`, `panic`, `build`, `features` | What every subject of a build may assume | Checked at build, against the toolchain | 3.6 |
 | Levels | `level` on a module: `data`, `calculations`, `structured`, `shared`, `effects` | How much of its language a module may use | Checked at build | 6.22 |
+| Regions | `region`, with `within`, `forever because`, `uncancellable`, `atomic`, `isolation`, `may run again`, `waits until`, `on failure unchanged` | How a callable, or a named part of one, may execute | Property | 6.23 |
 | Profiles | `profile`, with `calls`, `branch`, `size`, `fails`, `access`, `index`, `lookup` | What a build's traffic was measured to do | Measured; never enforced | 3.7 |
 
 ---
@@ -1847,6 +1849,48 @@ prints it under the file's `module` line:
 - **Harvested:** from the Y compiler's inferred level, and for other hosts from the effect manifests and the bodies:
   the level a module was seen to need is proposed as its ceiling, for a person to pin.
 
+### 6.23 Regions: how a piece of code may execute
+
+**Meaning.** How code may execute is not what it computes: how long it may take, whether it may wait without end,
+whether it may be cancelled, whether anything else may see it half done, whether it may run more than once. These are
+execution constraints, stated on a region: a whole callable, or a named part of one. They are Y's regions (Y § 3.8),
+and they gather clauses that other sections already have for whole subjects: `atomic` and `cancellation safe` (§ 6.8),
+`on failure unchanged` (§ 6.21) and budgets of time (§ 6.7). A constraint says what must hold, never how: a lock, a
+transaction, multi-version concurrency control or a proof that nothing is shared may each keep `atomic`, and the host or
+the backend chooses.
+
+```text
+region 'shop.checkout.hold_and_charge#hold_one_unit'
+    atomic                                 -- nothing else observes it half done
+    isolation serializable                 -- the default for atomic
+    may run again                          -- the runtime may re-run it after a conflict
+    within 5 s
+    on failure unchanged
+
+region 'memory.setup.new_game#fetch'
+    within game_rules.fetch_time           -- every wait inside it shares the deadline
+```
+
+- **Subject:** `region 'function#name'`, by the stable name of the callable and the region's name in it. A host with no
+  named regions states them on the whole callable, its `function` subject, or names a block by its own means (a label,
+  an attribute, a marker comment the profile names).
+- **The constraints:** `within d`, a deadline every wait in the region shares; `forever because "…"`, a wait without
+  bound, assumed (§ 10.2); `uncancellable`, cancellation held until it ends, with `within`; `atomic`; `isolation
+  serializable` or `isolation snapshot`, what an atomic region observes, serializable unless it says otherwise;
+  `may run again`, which permits the host to run it more than once; `waits until p`, it starts only once `p` holds;
+  `on failure unchanged`.
+- **What follows:** `may run again` requires that the region have no effect but on the state the run's commit makes
+  visible, which is `effects only` (§ 6.3) over that state, so a region that may run again and calls the network
+  breaks it at build. Y's atomic regions imply it.
+- **Fails:** a region that a run shows half done to another, that reads two states a serializable order cannot
+  explain, that outlives its deadline, or that is cancelled while uncancellable.
+- **Checked:** by the Y compiler for Y; by host analyses where they exist (a transaction's isolation level in T-SQL, a
+  lock held across the region in Rust); by concurrency explorers and replays in CI, which run the region's interleavings
+  and compare them with a serial order (Loom, Shuttle, Y's own explorer); watched in production from conflict metrics
+  and deadline expiries.
+- **Harvested:** from a host's transactions and their isolation levels, its locks, its timeouts and the blocks it
+  shields from cancellation.
+
 ---
 
 ## 7. Lifetime
@@ -2570,6 +2614,7 @@ meaning, its miner and its compilation into every place that enforces it.
 | 14 | Compatibility and visibility | Releases | The catalog's history | `edb review` |
 | 15 | Laws and statistics | CI; economy and loot | — | CI; replicas |
 | 16 | Levels of modules | Y's backends, and hosts that carry only some levels | The Y compiler's inferred levels; effect manifests | Y builds; CI |
+| 17 | Regions and execution constraints | Y's regions; transactions and timeouts in the hosts | Isolation levels, locks and timeouts in the hosts | Y builds; CI explorers |
 
 **Derived languages arrive host by host.** A host's bare form is usable once the kinds its own annotations need are
 enabled: for Python, kinds 1 to 3; for T-SQL, kinds 1 to 6; for Rust, C#, Java and Kotlin, also kinds 11, 12 and 14,

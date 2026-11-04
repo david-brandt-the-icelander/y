@@ -37,6 +37,12 @@ def moved(place):
     if not hits and "function " in text:
         head = text.split("(")[0] + "("
         hits = [i for i, l in enumerate(lines(path), 1) if l.startswith(head)]
+    if not hits and text.strip():
+        # a line taken into a region's header keeps its text there: `within d or fail:` in `region r is within d or
+        # fail:`, or a claim's `because "…"`
+        because = re.search(r'because ".*"', text)
+        key = because.group(0) if because else text.strip()
+        hits = [i for i, l in enumerate(lines(path), 1) if "region " in l and key in l]
     if not hits and len(lines(path)) == len(old[path]):
         # a line edited in place, in a file that neither gained nor lost lines, keeps its number
         hits = [int(n)]

@@ -358,7 +358,9 @@ public facet window_play:
                 last_step := catch_up(mutable game, last_step, now)
                 highest := highest.max(game.eaten)
             draw(game, highest)
-            window.next_frame() forever because "a hidden window shows no frames, and the game waits until it is shown"
+
+            region frame_shown is forever because "a hidden window shows no frames, and the game waits until it is shown":
+                window.next_frame()
         else closed_at_once
         return best = highest
 

@@ -631,7 +631,7 @@
         {
           "kind": "effects",
           "text": "effects only window, clock, random, site",
-          "source": "y/src/memory.y:475"
+          "source": "y/src/memory.y:477"
         }
       ]
     },
@@ -652,11 +652,11 @@
         { "name": "now", "type": "Instant" }
       ],
       "clauses": [
-        { "kind": "effects", "text": "no io", "source": "y/src/memory.y:511" },
-        { "kind": "effects", "text": "no clock", "source": "y/src/memory.y:511" },
-        { "kind": "effects", "text": "no randomness", "source": "y/src/memory.y:511" },
-        { "kind": "effects", "text": "no suspension", "source": "y/src/memory.y:511" },
-        { "kind": "access", "text": "mutates only game", "source": "y/src/memory.y:511" }
+        { "kind": "effects", "text": "no io", "source": "y/src/memory.y:515" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/memory.y:515" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/memory.y:515" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/memory.y:515" },
+        { "kind": "access", "text": "mutates only game", "source": "y/src/memory.y:515" }
       ]
     }
   ]
