@@ -1,4 +1,5 @@
-//! Y's decimals, rationals and rounding modes (Y § 3.3): the native implementation of the standard library's
+//! Y's constrained integers, decimals, rationals and rounding modes (Y § 3.3): the native implementation of the standard library's
+//! `integer<minimum=a, maximum=b>` and unbounded `integer`,
 //! `decimal16` to `decimal256`, `decimal<precision=p, scale=s>`, `rational16` to `rational256`, `rational<precision=p>`
 //! and `rounding`.
 //!
@@ -65,7 +66,7 @@ fn divide_rounding(numerator: &Big, denominator: &Big, mode: Rounding) -> Big {
     // The exact quotient lies strictly between `quotient` and `quotient + away`, `away` being one step from zero.
     let away = if numerator.negative != denominator.negative { Big::from_i128(-1) } else { Big::from_i128(1) };
     let positive = !away.negative;
-    let further = quotient.add(&away);
+    let further = quotient.plus(&away);
     let half = remainder.magnitude_doubled().compare_magnitude(denominator);
     let toward_positive = if positive { further.clone() } else { quotient.clone() };
     let toward_negative = if positive { quotient.clone() } else { further.clone() };
@@ -132,6 +133,7 @@ macro_rules! digits {
     };
 }
 
+digits!(i8, 2);
 digits!(i16, 4);
 digits!(i32, 9);
 digits!(i64, 18);
@@ -386,7 +388,7 @@ impl<D: Digits, const P: u32, const S: u32> std::ops::Add for Decimal<D, P, S> {
     type Output = Self;
     /// Y's `+` on two decimals of one type. An overflow is a fault.
     fn add(self, other: Self) -> Self {
-        Self::from_units_or_fault(&self.units().add(&other.units()))
+        Self::from_units_or_fault(&self.units().plus(&other.units()))
     }
 }
 
@@ -394,7 +396,7 @@ impl<D: Digits, const P: u32, const S: u32> std::ops::Sub for Decimal<D, P, S> {
     type Output = Self;
     /// Y's `-` on two decimals of one type. An overflow is a fault.
     fn sub(self, other: Self) -> Self {
-        Self::from_units_or_fault(&self.units().subtract(&other.units()))
+        Self::from_units_or_fault(&self.units().minus(&other.units()))
     }
 }
 
@@ -423,6 +425,40 @@ impl<D: Digits, const P: u32, const S: u32> fmt::Display for Decimal<D, P, S> {
 impl<D: Digits, const P: u32, const S: u32> fmt::Debug for Decimal<D, P, S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{self}")
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Integers
+
+/// Y's `integer<minimum=MIN, maximum=MAX>`, stored in `D`, which the lowering chose as the smallest integer that holds
+/// the range (Y § 3.3). An unbounded `integer` is a [`Big`].
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct Integer<D: Digits, const MIN: i128, const MAX: i128>(D);
+
+impl<D: Digits, const MIN: i128, const MAX: i128> Integer<D, MIN, MAX> {
+    /// The value where it meets its constraints. One outside them is an overflow: a fault.
+    pub fn new(value: &Big) -> Self {
+        let inside = value.compare(&Big::from_i128(MIN)) != Ordering::Less && value.compare(&Big::from_i128(MAX)) != Ordering::Greater;
+        match D::from_big(value) {
+            Some(stored) if inside => Integer(stored),
+            _ => fault("y_runtime::integer", "overflow"),
+        }
+    }
+
+    /// The same, from a fixed-width value: Y's `to_integer()`.
+    pub fn from_i128(value: i128) -> Self {
+        Self::new(&Big::from_i128(value))
+    }
+
+    /// The value, exactly, for arithmetic, whose result the lowering stores where it meets its next constraint.
+    pub fn value(&self) -> Big {
+        self.0.to_big()
+    }
+
+    /// Y's `to_int64()` and the like: the value at a fixed width, which faults where it does not fit.
+    pub fn to_i128(&self) -> i128 {
+        self.value().to_i128().unwrap_or_else(|| fault("y_runtime::integer", "overflow"))
     }
 }
 
@@ -519,7 +555,7 @@ impl<D: Digits, const P: u32> Ord for Rational<D, P> {
 impl<D: Digits, const P: u32> std::ops::Add for Rational<D, P> {
     type Output = Self;
     fn add(self, other: Self) -> Self {
-        let numerator = self.numerator().multiply(&other.denominator()).add(&other.numerator().multiply(&self.denominator()));
+        let numerator = self.numerator().multiply(&other.denominator()).plus(&other.numerator().multiply(&self.denominator()));
         Self::from_fraction(&numerator, &self.denominator().multiply(&other.denominator()))
     }
 }
@@ -638,7 +674,7 @@ impl Big {
         let ten = Big::from_i128(10);
         let mut value = Big::zero();
         for c in digits.chars() {
-            value = value.multiply(&ten).add(&Big::from_i128(c.to_digit(10)? as i128));
+            value = value.multiply(&ten).plus(&Big::from_i128(c.to_digit(10)? as i128));
         }
         Some(value)
     }
@@ -671,7 +707,7 @@ impl Big {
         Some((if negative { numerator.negate() } else { numerator }, denominator))
     }
 
-    fn is_zero(&self) -> bool {
+    pub fn is_zero(&self) -> bool {
         self.magnitude.is_empty()
     }
 
@@ -679,11 +715,11 @@ impl Big {
         self.magnitude.first().is_none_or(|limb| limb % 2 == 0)
     }
 
-    fn negate(&self) -> Big {
+    pub fn negate(&self) -> Big {
         Big::new(!self.negative, self.magnitude.clone())
     }
 
-    fn add(&self, other: &Big) -> Big {
+    pub fn plus(&self, other: &Big) -> Big {
         if self.negative == other.negative {
             return Big::new(self.negative, add_magnitudes(&self.magnitude, &other.magnitude));
         }
@@ -693,11 +729,11 @@ impl Big {
         }
     }
 
-    fn subtract(&self, other: &Big) -> Big {
-        self.add(&other.negate())
+    pub fn minus(&self, other: &Big) -> Big {
+        self.plus(&other.negate())
     }
 
-    fn multiply(&self, other: &Big) -> Big {
+    pub fn multiply(&self, other: &Big) -> Big {
         let mut product = vec![0u32; self.magnitude.len() + other.magnitude.len()];
         for (i, a) in self.magnitude.iter().enumerate() {
             let mut carry = 0u64;
@@ -712,7 +748,7 @@ impl Big {
     }
 
     /// The quotient rounded toward zero, and the remainder, which has the dividend's sign. The divisor is not zero.
-    fn divide_truncated(&self, divisor: &Big) -> (Big, Big) {
+    pub fn divide_truncated(&self, divisor: &Big) -> (Big, Big) {
         assert!(!divisor.is_zero(), "division by zero");
         let bits = self.magnitude.len() * 32;
         let mut quotient = vec![0u32; self.magnitude.len()];
@@ -749,7 +785,7 @@ impl Big {
         compare_magnitudes(&self.magnitude, &other.magnitude)
     }
 
-    fn compare(&self, other: &Big) -> Ordering {
+    pub fn compare(&self, other: &Big) -> Ordering {
         match (self.negative, other.negative) {
             (false, true) => Ordering::Greater,
             (true, false) => Ordering::Less,
@@ -777,6 +813,29 @@ impl Big {
         text
     }
 }
+
+impl Big {
+    /// Y's `divide_rounded(b, mode)` on unbounded integers. The divisor is not zero: its precondition.
+    pub fn divide_rounded(&self, divisor: &Big, mode: Rounding) -> Big {
+        require(!divisor.is_zero(), "y_runtime::integer::divide#nonzero_divisor");
+        divide_rounding(self, divisor, mode)
+    }
+}
+
+macro_rules! big_op {
+    ($trait:ident, $method:ident, $via:ident) => {
+        impl std::ops::$trait for Big {
+            type Output = Big;
+            fn $method(self, other: Big) -> Big {
+                Big::$via(&self, &other)
+            }
+        }
+    };
+}
+
+big_op!(Add, add, plus);
+big_op!(Sub, sub, minus);
+big_op!(Mul, mul, multiply);
 
 impl PartialOrd for Big {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -973,6 +1032,17 @@ mod tests {
         let small = Decimal16::<2>::literal("12.50");
         let large = Decimal128::<2>::literal("1000000000000.25");
         assert_eq!((small.to_decimal::<i128, 38, 2>() + large).to_string(), "1000000000012.75");
+    }
+
+    #[test]
+    fn integers_are_checked_where_they_meet_their_constraints() {
+        type Percent = Integer<i8, 0, 100>;
+        let half = Percent::from_i128(50);
+        let sum = half.value() + half.value();
+        assert_eq!(Percent::new(&sum).to_i128(), 100);
+        assert!(std::panic::catch_unwind(|| Percent::new(&(sum.clone() + Big::from_i128(1)))).is_err());
+        let huge = Big::from_i128(i128::MAX) * Big::from_i128(i128::MAX);
+        assert_eq!(huge.divide_rounded(&Big::from_i128(i128::MAX), Rounding::HalfEven), Big::from_i128(i128::MAX));
     }
 
     #[test]

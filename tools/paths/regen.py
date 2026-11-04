@@ -1,6 +1,6 @@
 """Remake an example's bare files from a fresh strip: the clauses of the committed constraint files carry over by
-subject, each re-pointed at its line in the Y source; `extra` adds clauses for subjects that have none yet, placed at
-the function, rule or derived value of the subject's name.
+subject, each re-pointed at its line in the Y source, and so does a module's `level`; `extra` adds clauses for subjects
+that have none yet, placed at the function, rule or derived value of the subject's name.
 
     python3 tools/paths/regen.py <example folder> <strip output> ['{"crate::module::function": [clause, ...]}']
 
@@ -55,9 +55,12 @@ for dirpath, _, files in os.walk(f"{stripped}/src"):
         out = f"{root}/bare/src/{rel}"
         old = json.load(open(out)) if os.path.exists(out) else {"subjects": []}
         before = {s["name"]: s.get("clauses") for s in old["subjects"]}
+        levels = {s["name"]: s["level"] for s in old["subjects"] if "level" in s}
         js = json.load(open(os.path.join(dirpath, f)))
         js["status"] = old["status"]
         for s in js["subjects"]:
+            if s["name"] in levels:
+                s["level"] = levels[s["name"]]
             cs = (before.get(s["name"]) or []) + extra.pop(s["name"], [])
             cs.sort(key=lambda c: c["kind"] not in ("require", "ensure"))
             if cs:

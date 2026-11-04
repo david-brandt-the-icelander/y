@@ -13,7 +13,7 @@ public facet setup:
         word_list is string = "gallows noose scaffold hangman trapdoor verdict alphabet puzzle riddle lantern"
 
         -- How many wrong guesses a player may make. The last of them hangs the man.
-        allowed_misses is count<of=rune> = 6
+        allowed_misses is count<unit_type=rune> = 6
 
 
     ------------------------------------------------------------------------------------------------------------
@@ -37,7 +37,7 @@ public facet setup:
 
     text: The words, separated by spaces, as string.
 
-    words: Every word of the list, in order, as list<element=word>.
+    words: Every word of the list, in order, as list<element_type=word>.
 
     fails word_list_error.empty: The list has no words.
     fails word_list_error.not_a_word: A piece of the list is not a `word`: it has a character other than `a` to `z`, or
@@ -67,10 +67,10 @@ public facet rounds:
     -- One game: the secret word, and every letter guessed so far.
     structure game:
         word is word
-        hits is set<element=rune>
-        misses is list<element=rune>
+        hits is set<element_type=rune>
+        misses is list<element_type=rune>
 
-        derived miss_count is count<of=rune> = misses.count()
+        derived miss_count is count<unit_type=rune> = misses.count()
 
         invariant within_allowance = (misses.count() <= game_rules.allowed_misses)
 
@@ -196,7 +196,7 @@ public facet display:
     ------------------------------------------------------------------------------------------------------------
     Draws the gallows, with one more part of the man for each miss.
 
-    misses: How many wrong guesses the player has made, as count<of=rune>.
+    misses: How many wrong guesses the player has made, as count<unit_type=rune>.
 
     picture: The drawing, seven lines high, as string.
     ------------------------------------------------------------------------------------------------------------
@@ -224,7 +224,7 @@ public facet display:
 Shows one letter of the word: the letter once it is found, and an underscore until then.
 
 letter: The letter of the word, as rune.
-hits: The letters found so far, as set<element=rune>.
+hits: The letters found so far, as set<element_type=rune>.
 
 shown: What the player sees in its place, as rune.
 ----------------------------------------------------------------------------------------------------------------
@@ -238,8 +238,8 @@ function shown_rune(letter, hits) returns shown:
 ----------------------------------------------------------------------------------------------------------------
 One part of the man, drawn once the player has missed often enough.
 
-misses: How many wrong guesses the player has made, as count<of=rune>.
-needed: How many misses draw this part, as count<of=rune>.
+misses: How many wrong guesses the player has made, as count<unit_type=rune>.
+needed: How many misses draw this part, as count<unit_type=rune>.
 mark: The character that draws it, as string.
 
 drawn: The mark, or a space while the part is not drawn yet, as string.
@@ -262,7 +262,7 @@ public facet console_play:
     ------------------------------------------------------------------------------------------------------------
     Plays one game at the console, with a word chosen at random, until it is won or lost.
 
-    words: The words to choose from, as list<element=word>.
+    words: The words to choose from, as list<element_type=word>.
 
     console: Where the game is shown and the guesses are read, as console.
     random: What chooses the word, as random.
@@ -313,7 +313,7 @@ function show_turn(game, injected console) fails console_error:
 ----------------------------------------------------------------------------------------------------------------
 What the game says to a guess.
 
-guessed: What the guess did, as result<value=verdict, failure=guess_error>.
+guessed: What the guess did, as result<value_type=verdict, failure_type=guess_error>.
 typed: What the player typed, as string.
 
 answer: The line to write, as string.

@@ -341,7 +341,7 @@ mod tests {
                 c("callback", "callback g : called exactly once, returning r"),
                 c("panics", "fails panic in result.next when n > 3"),
                 c("panics", "fails panic when n > 3 and old(count(self)) in x"),
-                c("ensure", "ensure a : final(yields(self)) == skip(size(y), old(yields(self)))"),
+                c("ensure", "ensure a : final(yields(self)) == skip(count(y), old(yields(self)))"),
                 c("ensure", "ensure b : same(current(e), v) and present(xs, 0) and yields(result) == flatten(map(yields, y))"),
                 c("access", "mutates only owner(self)[key(self)]"),
                 c("hold", "lifetime every item of yields(self) ends with self"),

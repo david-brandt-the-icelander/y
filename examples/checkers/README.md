@@ -92,7 +92,7 @@ The window, which now also draws circles, comes from [`../y-window`](../y-window
 
 | Y | Bare body | Constraint file or `y-facts.json` | Rust |
 |---|---|---|---|
-| `structure level:` with `name is string`, and `levels.all is list<element=level> = [level(name: "Beginner", …), …]` | `const ALL: [Level; 5] = [Level { name: "Beginner", … }, …];` | the field's type, `&'static str` | a constant array of structures |
+| `structure level:` with `name is string`, and `levels.all is list<element_type=level> = [level(name: "Beginner", …), …]` | `const ALL: [Level; 5] = [Level { name: "Beginner", … }, …];` | the field's type, `&'static str` | a constant array of structures |
 | `chains(…)`, which calls itself through `chains_after` for each further jump | the same | `effects pure` | two mutually recursive `fn`s. A piece can jump at most twelve times, so the recursion is shallow |
 | `searched(game, owner, depth, mutable left)`, a recursive minimax that spends a budget it is given | `left: &mut u32` | `access mutates only left` | the budget is shared by every call of the search |
 | `mutable longer = path`, a copy of a list parameter to go on with | `path.to_vec()`, marked `// y: a copy` | `y-facts.json` `copies` | the same |
@@ -106,7 +106,7 @@ The window, which now also draws circles, comes from [`../y-window`](../y-window
 | `compare ranked = values.at_number(option) with best:` with `condition ranked.top = equal:`, `condition ranked.lower = less:` and `condition ranked.above = greater:` (Y § 3.5) | `match a.cmp(&b)`, an arm per `Ordering`, each marked `// y: #ranked.…` | `decisions`, kind `compare` | the same |
 | `fail not_reachable` under `ranked.above` and `ties.none`, orders the values cannot stand in | `not_reachable("checkers::best_sampled#ranked.above")` | — | a fault |
 | `for placed in own_pieces(game):` with a bare `else no_pieces`, the case in which the loop never runs | the loop, marked `// y: #placed, else #no_pieces` | `decisions`, kind `for` | the same |
-| `function directions_of(piece) returns ways ensures several = (ways.count() >= 2):` | `ensure(list::count(ways) >= 2, "checkers::directions_of#several")` before the return | `ensure several : size(result) >= 2`, status `lifted` | a run-time check whose failure is a fault; the path enumeration knows from it that a loop over the directions runs more than once |
+| `function directions_of(piece) returns ways ensures several = (ways.count() >= 2):` | `ensure(list::count(ways) >= 2, "checkers::directions_of#several")` before the return | `ensure several : count(result) >= 2`, status `lifted` | a run-time check whose failure is a fault; the path enumeration knows from it that a loop over the directions runs more than once |
 | `window.circle(x:, y:, radius:, colour:)` | the same, on `Window` | — | Macroquad's `draw_circle`, or nothing in a fake window |
 
 ## What had to be assumed

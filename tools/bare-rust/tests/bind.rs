@@ -146,7 +146,7 @@ fn every_cast_target_a_compound_left_a_let_else_and_a_let_chain_are_bound() {
     let (bare, json) = bare_rust::strip(LEFTOVERS, "demo 0.1.0", "src/lib.rs").unwrap();
     let locals = &json["holes"]["demo::f"]["locals"];
     assert_eq!(locals["x_word"], serde_json::json!({"type": "Word", "cast": true}));
-    assert_eq!(locals["d"], serde_json::json!({"type": "ref<any std::fmt::Display>", "cast": true}));
+    assert_eq!(locals["d"], serde_json::json!({"type": "ref<target_type=any std::fmt::Display>", "cast": true}));
     assert_eq!(locals["g"]["type"]["host"], "fn(u8) -> u8");
     assert_eq!(locals["_k0_u8 @ 0"], serde_json::json!({"literal": "u8"}));
     assert!(json["holes"]["demo::f"]["hints"].is_null(), "{json}");
@@ -434,7 +434,7 @@ fn closures_with_typed_parameters_get_a_name_and_return_types_go_onto_a_local() 
     assert!(b.contains("let retain_fn = |s: &String| s.len() > n;\n    v.retain(retain_fn);"), "{b}");
     assert!(b.contains("map(|s| { let out: usize = { s.len() * 2 }; out })"), "{b}");
     let (bare, json) = bare_rust::strip(src, "demo 0.1.0", "src/lib.rs").unwrap();
-    assert_eq!(json["holes"]["demo::f"]["locals"]["retain_fn.s"], "ref<text as 'String'>", "{bare}");
+    assert_eq!(json["holes"]["demo::f"]["locals"]["retain_fn.s"], "ref<target_type=string as 'String'>", "{bare}");
     assert_eq!(json["holes"]["demo::f"]["locals"]["out"], "u64 as 'usize'");
 }
 

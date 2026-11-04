@@ -353,7 +353,7 @@ pub fn validate_with(file: &Value, text: Option<&str>, builds: &BTreeSet<String>
         for p in sub["params"].as_array().into_iter().flatten() {
             let (n, ty) = (p["name"].as_str().unwrap_or(""), p["type"].as_str().unwrap_or(""));
             scope.events.insert(n.to_string());
-            let g = ty.strip_prefix("ref<").and_then(|r| r.strip_suffix('>')).unwrap_or(ty);
+            let g = ty.strip_prefix("ref<target_type=").and_then(|r| r.strip_suffix('>')).unwrap_or(ty);
             if let Some(ms) = generics_known.get(g) {
                 scope.event_methods.insert(n.to_string(), ms.clone());
             }
@@ -1153,9 +1153,9 @@ mod tests {
             r#"{"kind":"function","name":"std::collections::HashMap::get",
             "generics":[{"name":"K","bounds":["std::cmp::Eq","std::hash::Hash","std::borrow::Borrow<Q>"]},{"name":"V","bounds":[]},
                         {"name":"S","bounds":["std::hash::BuildHasher"]},{"name":"Q","bounds":["?Sized","std::hash::Hash","std::cmp::Eq"]}],
-            "params":[{"name":"self","type":"ref<map<K, V, S> as 'std::collections::HashMap'>","access":{"rights":"read","guarantee":"readers"}},
-                      {"name":"k","type":"ref<Q>","access":{"rights":"read","guarantee":"readers"}}],
-            "result":{"type":"ref<V>?","hold":{"kind":"borrows","from":"self"}}}"#,
+            "params":[{"name":"self","type":"ref<target_type=map<key_type=K, value_type=V, hasher_type=S> as 'std::collections::HashMap'>","access":{"rights":"read","guarantee":"readers"}},
+                      {"name":"k","type":"ref<target_type=Q>","access":{"rights":"read","guarantee":"readers"}}],
+            "result":{"type":"ref<target_type=V>?","hold":{"kind":"borrows","from":"self"}}}"#,
         );
         let Gen::Checked(c) = generate(&s) else { panic!() };
         assert!(c.contains("for<'p0, 'p1> fn(&'p0 std::collections::HashMap<K, V, S>, &'p1 Q) -> Option<&'p0 V> = std::collections::HashMap::get;"), "{c}");
@@ -1164,7 +1164,7 @@ mod tests {
 
     #[test]
     fn primitives_and_slices_have_paths_rustc_accepts() {
-        let chars = sub(r#"{"kind":"function","name":"std::primitive::str::chars","params":[{"name":"self","type":"ref<text>","access":{"rights":"read","guarantee":"readers"}}],"result":{"type":"std::str::Chars","hold":{"kind":"borrows","from":"self"}}}"#);
+        let chars = sub(r#"{"kind":"function","name":"std::primitive::str::chars","params":[{"name":"self","type":"ref<target_type=string>","access":{"rights":"read","guarantee":"readers"}}],"result":{"type":"std::str::Chars","hold":{"kind":"borrows","from":"self"}}}"#);
         let Gen::Checked(c) = generate(&chars) else { panic!() };
         assert!(c.contains("for<'p0> fn(&'p0 str) -> std::str::Chars = std::primitive::str::chars;"), "{c}");
         let iter = sub(r#"{"kind":"function","name":"std::primitive::slice::iter","generics":[{"name":"T","bounds":[]}],"params":[{"name":"self","type":{"host":"&[T]"}}],"result":{"type":{"host":"std::slice::Iter<'_, T>"},"hold":{"kind":"borrows","from":"self"}}}"#);
@@ -1183,9 +1183,9 @@ mod tests {
     fn what_the_generator_cannot_handle_is_unchecked_with_a_reason() {
         let bang = sub(r#"{"kind":"macro","name":"std::vec!","form":"bang"}"#);
         assert_eq!(generate(&bang), Gen::Unchecked("macro".into()));
-        let no_from = sub(r#"{"kind":"function","name":"std::x::f","params":[{"name":"a","type":"ref<u8>","access":{"rights":"read","guarantee":"readers"}},{"name":"b","type":"ref<u8>","access":{"rights":"read","guarantee":"readers"}}],"result":{"type":"ref<u8>"}}"#);
+        let no_from = sub(r#"{"kind":"function","name":"std::x::f","params":[{"name":"a","type":"ref<target_type=u8>","access":{"rights":"read","guarantee":"readers"}},{"name":"b","type":"ref<target_type=u8>","access":{"rights":"read","guarantee":"readers"}}],"result":{"type":"ref<target_type=u8>"}}"#);
         assert_eq!(generate(&no_from), Gen::Unchecked("result lifetime is not stated".into()));
-        let coll = sub(r#"{"kind":"function","name":"std::x::g","params":[{"name":"a","type":"list<u8>"}]}"#);
+        let coll = sub(r#"{"kind":"function","name":"std::x::g","params":[{"name":"a","type":"list<element_type=u8>"}]}"#);
         assert!(matches!(generate(&coll), Gen::Unchecked(m) if m.contains("host type name")));
         let derive = sub(r#"{"kind":"macro","name":"std::hash::Hash!","form":"derive"}"#);
         assert_eq!(generate(&derive), Gen::Checked("#[derive(std::hash::Hash)] struct {id};".into()));

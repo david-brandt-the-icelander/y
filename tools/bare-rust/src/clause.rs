@@ -38,7 +38,7 @@ pub struct Flow {
     pub run: bool,
 }
 
-/// The pure functions the language itself names (language 6.15): `scalars(text)`, `deref(ref)` and `yields(it)`.
+/// The pure functions the language itself names (language 6.15): `scalars(string)`, `deref(ref)` and `yields(it)`.
 pub const PURE_BUILTINS: &[&str] = &["scalars", "deref", "yields"];
 
 /// The operators of language 6.15 that take parentheses, and how many arguments each takes.
@@ -48,7 +48,7 @@ pub const SEQUENCE_OPS: &[(&str, usize)] = &[("yields", 1), ("reverse", 1), ("en
 /// Words of language 4 and 6, and of the clause forms that carry no expression.
 const WORDS: &[&str] = &[
     "and", "or", "not", "implies", "iff", "if", "then", "else", "exists", "is", "in", "matches", "fits", "finite", "all", "any", "old",
-    "result", "self", "true", "false", "none", "value", "size", "count", "length", "byte_length", "utf16_length", "utf8", "sum", "min",
+    "result", "self", "true", "false", "none", "value", "count", "scalars", "code_units", "utf8", "utf16", "sum", "min",
     "max", "same", "approx", "total_order", "distinct", "sorted", "by", "subset", "view", "called", "exactly", "at", "most", "least",
     "once", "before", "return", "only", "on", "when", "sign_bit", "is_nan", "payload", "caller", "some", "implements", "borrows",
     "owns", "shares", "from", "for", "as", "moved", "yields", "reverse", "enumerate", "scalars", "deref", "take", "skip", "zip", "map", "filter",
@@ -68,7 +68,7 @@ fn kind_words(kind: &str) -> &'static [&'static str] {
 }
 
 /// Type words of language 3.4, which an associated type or a bound may use.
-const TYPE_WORDS: &[&str] = &["int", "char", "text", "bytes", "decimal", "time", "instant", "duration", "list", "set", "map", "ref"];
+const TYPE_WORDS: &[&str] = &["int", "scalar", "string", "bytes", "decimal", "rational", "integer", "time", "instant", "duration", "list", "set", "map", "ref"];
 
 #[derive(Debug, PartialEq)]
 enum Tok {
@@ -567,6 +567,8 @@ pub fn lint(kind: &str, text: &str, heads: &[&str], scope: &Scope) -> Vec<String
             Tok::Word(_) if lets.contains(&i) => {}
             Tok::Word(w) if w == "_" => {}
             Tok::Word(_) if assoc_clause && i > 0 && matches!(toks[i - 1], Tok::Punct('{' | ',')) && toks.get(i + 1) == Some(&Tok::Punct('=')) && toks.get(i + 2) != Some(&Tok::Punct('=')) => {}
+            // the name of a type argument: `list<element_type=u8>`, `ref<target_type=T>`
+            Tok::Word(w) if is_arg_name(&toks, i, w) => {}
             Tok::Quoted(p) if !is_host_path(p) => errs.push(format!("`'{p}'` is not a quoted host path (`'std::…'`)")),
             Tok::Word(w) => {
                 // `all x : T : p` and `any x in c : p` bind x; `v is Variant(x)` binds x
@@ -589,6 +591,12 @@ pub fn lint(kind: &str, text: &str, heads: &[&str], scope: &Scope) -> Vec<String
         }
     }
     errs
+}
+
+/// Whether the word at `i` names a type argument (`element_type=`, after `<` or `,`), which names no value.
+fn is_arg_name(toks: &[Tok], i: usize, _w: &str) -> bool {
+    let assigns = toks.get(i + 1) == Some(&Tok::Punct('=')) && toks.get(i + 2) != Some(&Tok::Punct('='));
+    assigns && i > 0 && matches!(toks[i - 1], Tok::Punct('<' | ','))
 }
 
 /// What a `given` item may name, for one subject: the generics with the methods their bounds are known to have, the
@@ -697,8 +705,8 @@ mod tests {
         let mut sc = scope();
         sc.names.extend(["a", "b", "Item"].map(String::from));
         let ok = |kind: &str, head: &str, t: &str| assert_eq!(lint(kind, t, &[head], &sc), Vec::<String>::new(), "{t}");
-        ok("implements", "implements", "implements 'std::iter::Iterator' { Item = char }, 'std::clone::Clone'");
-        ok("implements", "implements", "implements 'std::convert::From<u8>' { Item = 'std::string::String', Other = list<u8> }");
+        ok("implements", "implements", "implements 'std::iter::Iterator' { Item = scalar }, 'std::clone::Clone'");
+        ok("implements", "implements", "implements 'std::convert::From<u8>' { Item = 'std::string::String', Other = list<element_type=u8> }");
         ok("hold", "hold", "hold : borrows for 'a");
         ok("hold", "hold", "hold : borrows for 'a, 'b");
         ok("hold", "hold", "hold result : borrows from self");
@@ -707,8 +715,8 @@ mod tests {
         let bad = |kind: &str, head: &str, t: &str| lint(kind, t, &[head], &sc).join("; ");
         assert!(bad("hold", "hold", "hold : borrows for 'zz").contains("unknown lifetime `'zz`"));
         assert!(bad("implements", "implements", "implements 'std::iter::Iterator' { Item = nope }").contains("unknown name `nope`"));
-        assert!(bad("implements", "implements", "implements std::iter::Iterator { Item = char }").contains("not quoted"));
-        assert!(bad("implements", "implements", "implements 'x' { Item = char }").contains("not a quoted host path"));
+        assert!(bad("implements", "implements", "implements std::iter::Iterator { Item = scalar }").contains("not quoted"));
+        assert!(bad("implements", "implements", "implements 'x' { Item = scalar }").contains("not a quoted host path"));
         assert!(bad("ensure", "ensure", "ensure x : result == 'v1").contains("unterminated"), "a quote that is not after `for` is not a lifetime");
     }
 
@@ -776,9 +784,9 @@ mod tests {
         assert!(!lint("never panics", "never panics except broke", &["never panics except exhausted", "never panics"], &sc).is_empty());
         assert_eq!(lint("budget", "budget work expected amortised O(1)", &["budget"], &sc), Vec::<String>::new());
         let ens = |t: &str| lint("ensure", t, &["ensure"], &sc).join("; ");
-        assert_eq!(ens("ensure p : size(result.0) == mid and result.1 == src"), "");
-        assert_eq!(ens("ensure p : result is (a, _) implies size(a) == mid"), "");
-        assert!(ens("ensure p : result is (a, b) implies size(c) == mid").contains("unknown name `c`"));
+        assert_eq!(ens("ensure p : count(result.0) == mid and result.1 == src"), "");
+        assert_eq!(ens("ensure p : result is (a, _) implies count(a) == mid"), "");
+        assert!(ens("ensure p : result is (a, b) implies count(c) == mid").contains("unknown name `c`"));
         assert_eq!(ens("ensure p : result moved from src"), "");
     }
 
@@ -836,7 +844,7 @@ mod tests {
         let ens = |s: &Scope, t: &str| lint("ensure", t, &["ensure"], s).join("; ");
         assert!(ens(&sc2, "ensure e : final(yields(self)) == []").contains("names it"));
         lint("callback", "callback f : called by result.next, with x", &["callback"], &sc2.clone());
-        assert_eq!(ens(&sc2, "ensure e : final(yields(self)) == skip(size(y), old(yields(self)))"), "");
+        assert_eq!(ens(&sc2, "ensure e : final(yields(self)) == skip(count(y), old(yields(self)))"), "");
         assert_eq!(ens(&fresh(), "ensure e : present(old(yields(self)), 0) implies yields(self) == old(yields(self))[1..]"), "");
         // the new operators of the sequences
         let mut sc3 = fresh();
@@ -863,10 +871,10 @@ mod tests {
         sc.names.extend(["self", "mid"].map(String::from));
         let l = |s: &Scope, t: &str| lint("let", t, &[], s).join("; ");
         let ens = |s: &Scope, t: &str| lint("ensure", t, &["ensure"], s).join("; ");
-        assert!(ens(&sc, "ensure a : size(head) == mid").contains("unknown name `head`"));
+        assert!(ens(&sc, "ensure a : count(head) == mid").contains("unknown name `head`"));
         assert_eq!(l(&sc, "let (head, tail) = result"), "");
-        assert_eq!(ens(&sc, "ensure a : size(head) == mid and size(tail) == 0"), "");
-        assert_eq!(l(&sc, "let n = size(head)"), "");
+        assert_eq!(ens(&sc, "ensure a : count(head) == mid and count(tail) == 0"), "");
+        assert_eq!(l(&sc, "let n = count(head)"), "");
         assert_eq!(l(&sc, "let (_, m) = result"), "");
         assert_eq!(ens(&sc, "ensure b : n == m"), "");
         // a name is bound once, a pattern is names and `_`, and the expression is checked

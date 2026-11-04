@@ -11,14 +11,14 @@
       "kind": "const",
       "name": "memory_example::memory::tests::stand_in::DRAWING",
       "visible": "public",
-      "type": "ref<text>",
+      "type": "ref<target_type=string>",
       "access": { "rights": "read", "guarantee": "readers" }
     },
     {
       "kind": "const",
       "name": "memory_example::memory::tests::stand_in::SIDE_BY_SIDE",
       "visible": "public",
-      "type": "list<u32> where size(value) == 20 as 'std::primitive::array'"
+      "type": "list<element_type=u32> where count(value) == 20 as 'std::primitive::array'"
     },
     {
       "kind": "function",
@@ -26,7 +26,7 @@
       "params": [
         {
           "name": "pairs",
-          "type": "ref<list<u32> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=u32> as 'std::primitive::slice'>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "at", "type": "Instant" }
@@ -43,7 +43,7 @@
       "kind": "function",
       "name": "memory_example::memory::tests::every_pair_clicked",
       "params": [],
-      "result": { "type": "list<Frame> as 'Vec'" }
+      "result": { "type": "list<element_type=Frame> as 'Vec'" }
     },
     {
       "kind": "function",

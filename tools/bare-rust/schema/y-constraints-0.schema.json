@@ -113,7 +113,7 @@
   },
   "$defs": {
     "type": {
-      "description": "A type string (`u64 as 'usize'`, `ref<Entry>?`, `ptr<u8>`, `map<K, V> as 'std::collections::HashMap'`, `Chars<'a>`, `some std::iter::Iterator { Item = u8 }`, `any std::error::Error as 'std::boxed::Box'`), or host text for a type the language has no form for.",
+      "description": "A type string (`u64 as 'usize'`, `ref<target_type=Entry>?`, `ptr<target_type=u8>`, `map<key_type=K, value_type=V> as 'std::collections::HashMap'`, `Chars<'a>`, `some std::iter::Iterator { Item = u8 }`, `any std::error::Error as 'std::boxed::Box'`), or host text for a type the language has no form for.",
       "oneOf": [
         {
           "type": "string",
@@ -144,7 +144,7 @@
         "rights"
       ],
       "additionalProperties": false,
-      "description": "The access of a slot's references (`ref<T>`: rights and a guarantee, always both) or of its pointers (`ptr<T>`: `rights: read` for `*const`, and never a guarantee; a pointer without an access is `*mut`).",
+      "description": "The access of a slot's references (`ref<target_type=T>`: rights and a guarantee, always both) or of its pointers (`ptr<target_type=T>`: `rights: read` for `*const`, and never a guarantee; a pointer without an access is `*mut`).",
       "properties": {
         "rights": {
           "enum": [
@@ -360,6 +360,16 @@
         "visible_path": {
           "type": "string"
         },
+        "level": {
+          "enum": [
+            "data",
+            "calculations",
+            "structured",
+            "shared",
+            "effects"
+          ],
+          "description": "On a `module`: the most of its language the module may use (language 6.22, Y § 3.19). `data` is declarations only; `calculations`, functions of values with no mutable name, loop or recursion; `structured`, with them; `shared`, with transactional shared state, arenas and resources; `effects`, with capabilities, waits and external effects. Each contains the ones below it. It is a ceiling: a construct above it fails the build."
+        },
         "generics": {
           "type": "array",
           "items": {
@@ -486,6 +496,20 @@
       },
       "additionalProperties": false,
       "allOf": [
+        {
+          "if": {
+            "required": [
+              "level"
+            ]
+          },
+          "then": {
+            "properties": {
+              "kind": {
+                "const": "module"
+              }
+            }
+          }
+        },
         {
           "if": {
             "properties": {
@@ -634,7 +658,7 @@
         "source"
       ],
       "additionalProperties": false,
-      "description": "A clause the signature slots cannot say. `kind` names the family and `text` is the clause in the syntax of language 15, keyword included (`ensure found : result == self[k]`); `panics` is `fails panic when p`, `panic` being the Rust host's runtime failure. A `callback` clause may name the call's arguments and result (`callback f : called exactly once when exists self, with self, returning r`; the names `with` gives and `returning` binds are in scope in the subject's other clauses, language 6.13), and a `protocol` is a regular expression over the subject's calls (`protocol self.next+`). Language 6.14 adds clauses to existing kinds: `effects` `evaluable at compile time`, `result must be used` with `must be used` on a type or trait, `hold` `hold result : moved from v` and `lifetime v ends in call when p` and `lifetime a, b survive call`, `never panics except exhausted`, `budget work expected amortised O(1)`, `access` `mutates only self[key]`, and `result.0` and `is (a, b)` in expressions; and the kind `obliges`, `obliges caller : p because \"…\"`. Language 6.13 and 6.15 add the calls a result makes later and the sequences of a callback: `callback f : called by result.next, at most once per call, with x, returning y` (`x` and `y` are the lists of the arguments and results of the calls of f in the run), `fails panic in result.next when p`, `final(e)`, and `present`, `select`, `while_true`, `flatten`; language 4 adds `current(h)`, `owner(h)` and `stored_key(m, k)`, and 7.3 `lifetime every item of yields(self) ends with self`. The kind `let` binds a name or a pattern for the clauses after it: `let (head, tail) = result`. `unexpressed` is a promise the language cannot state: `text` is free text and `reason` says why the language cannot say it. Those are the gaps that feed proposal 12.",
+      "description": "A clause the signature slots cannot say. `kind` names the family and `string` is the clause in the syntax of language 15, keyword included (`ensure found : result == self[k]`); `panics` is `fails panic when p`, `panic` being the Rust host's runtime failure. A `callback` clause may name the call's arguments and result (`callback f : called exactly once when exists self, with self, returning r`; the names `with` gives and `returning` binds are in scope in the subject's other clauses, language 6.13), and a `protocol` is a regular expression over the subject's calls (`protocol self.next+`). Language 6.14 adds clauses to existing kinds: `effects` `evaluable at compile time`, `result must be used` with `must be used` on a type or trait, `hold` `hold result : moved from v` and `lifetime v ends in call when p` and `lifetime a, b survive call`, `never panics except exhausted`, `budget work expected amortised O(1)`, `access` `mutates only self[key]`, and `result.0` and `is (a, b)` in expressions; and the kind `obliges`, `obliges caller : p because \"…\"`. Language 6.13 and 6.15 add the calls a result makes later and the sequences of a callback: `callback f : called by result.next, at most once per call, with x, returning y` (`x` and `y` are the lists of the arguments and results of the calls of f in the run), `fails panic in result.next when p`, `final(e)`, and `present`, `select`, `while_true`, `flatten`; language 4 adds `current(h)`, `owner(h)` and `stored_key(m, k)`, and 7.3 `lifetime every item of yields(self) ends with self`. The kind `let` binds a name or a pattern for the clauses after it: `let (head, tail) = result`. `unexpressed` is a promise the language cannot state: `string` is free text and `reason` says why the language cannot say it. Those are the gaps that feed proposal 12.",
       "properties": {
         "kind": {
           "enum": [
@@ -674,7 +698,7 @@
             "type": "string",
             "minLength": 1
           },
-          "description": "Conditions the promise relies on (language 6.12): the clause holds whenever all of them hold, and says nothing otherwise. Each is `default` (the default body of a trait method is not overridden), `build SETTING` (a setting of the host profile: overflow_checks, debug_assertions, panic=unwind, panic=abort), or `P.m, P.n never panic | terminate | effects none` (the named methods of the bound implementations of the generic parameter `P`). The clause `text` stays the unconditional form; the language form is `text given item and item`. Allowed on never panics, effects, ensure, fails and panics clauses."
+          "description": "Conditions the promise relies on (language 6.12): the clause holds whenever all of them hold, and says nothing otherwise. Each is `default` (the default body of a trait method is not overridden), `build SETTING` (a setting of the host profile: overflow_checks, debug_assertions, panic=unwind, panic=abort), or `P.m, P.n never panic | terminate | effects none` (the named methods of the bound implementations of the generic parameter `P`). The clause `string` stays the unconditional form; the language form is `text given item and item`. Allowed on never panics, effects, ensure, fails and panics clauses."
         },
         "source": {
           "type": "string",

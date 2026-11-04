@@ -49,7 +49,7 @@ public facet setup:
     -- The pictures the cards may show.
     constants faces:
         -- The OpenMoji codes of twenty animals' faces, from which each game chooses its pictures.
-        codes is list<element=string> = [
+        codes is list<element_type=string> = [
             "1F436", "1F431", "1F42D", "1F439", "1F430", "1F98A", "1F43B", "1F43C", "1F428", "1F42F", "1F981", "1F42E",
             "1F437", "1F438", "1F435", "1F414", "1F427", "1F426", "1F989", "1F984",
         ]
@@ -78,16 +78,16 @@ public facet setup:
     -- One game.
     structure game:
         -- For each card, in the order they are numbered, the number of the picture it shows.
-        pairs is list<element=uint32>
+        pairs is list<element_type=uint32>
 
         -- For each card, in the same order, which side is up.
-        sides is list<element=side>
+        sides is list<element_type=side>
 
         -- The pictures, numbered from 1.
-        pictures is list<element=picture>
+        pictures is list<element_type=picture>
 
         -- The cards turned face up this turn, and not yet matched: none, one or two.
-        turned is list<element=uint32>
+        turned is list<element_type=uint32>
 
         -- When the second card of the turn was turned, or when the game started.
         turned_at is instant
@@ -165,7 +165,7 @@ public facet rules:
     place: The point clicked, as point.
 
     choice: The card's number, or none when the point is not on a card, the card is face up, or two cards are already
-      face up, as optional<value=uint32>.
+      face up, as optional<value_type=uint32>.
     ------------------------------------------------------------------------------------------------------------------------------------
     function choosable(game, place) returns choice:
         number = card_at(place)
@@ -272,7 +272,7 @@ The card under a point, if there is one.
 
 place: The point, as point.
 
-found: The card's number, or none when the point is between the cards or off the board, as optional<value=uint32>.
+found: The card's number, or none when the point is between the cards or off the board, as optional<value_type=uint32>.
 ----------------------------------------------------------------------------------------------------------------------------------------
 function card_at(place) returns found:
     mutable number = 0
@@ -347,7 +347,7 @@ public facet drawing:
     game: The game, as game.
     highest: The best score so far, as uint32.
 
-    lines: The two lines, as list<element=string>.
+    lines: The two lines, as list<element_type=string>.
     ------------------------------------------------------------------------------------------------------------------------------------
     function banner(game, highest) returns lines:
         seconds = game.elapsed.whole_seconds()
@@ -505,7 +505,7 @@ public facet window_play:
 Turns over the cards the player clicked, in the order clicked. A click that turns no card is ignored.
 
 game: The game, which changes, as game.
-clicks: The points clicked, as list<element=point>.
+clicks: The points clicked, as list<element_type=point>.
 now: The time now, as instant.
 ----------------------------------------------------------------------------------------------------------------------------------------
 function pick(mutable game, clicks, now):

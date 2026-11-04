@@ -4,13 +4,13 @@ constants stand_in:
     drawing = "<svg viewBox='0 0 72 72' xmlns='http://www.w3.org/2000/svg'><circle cx='36' cy='36' r='30' fill='red'/></svg>"
 
     -- The order of the cards for the rules: each picture's two cards side by side.
-    side_by_side is list<element=uint32> = [1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10]
+    side_by_side is list<element_type=uint32> = [1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10]
 
 
 --------------------------------------------------------------------------------------------------------------------------------
 A game dealt with its cards in a given order, all face down, with no pictures: for the rules, which draw nothing.
 
-pairs: For each card, the number of the picture it shows, as list<element=uint32>.
+pairs: For each card, the number of the picture it shows, as list<element_type=uint32>.
 at: When the game started, as instant.
 
 made: The game, as game.
@@ -47,7 +47,7 @@ function clicking(row, column) returns made:
 The frames of a fake window in which the player turns over every pair, with the seed 7: the first card of each pair is
 clicked, then the second.
 
-made: The frames, as list<element=frame>.
+made: The frames, as list<element_type=frame>.
 --------------------------------------------------------------------------------------------------------------------------------
 function every_pair_clicked() returns made:
     return made = [

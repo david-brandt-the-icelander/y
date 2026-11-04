@@ -20,7 +20,11 @@
         { "for": "F", "bounds": ["FnOnce(&Self::Item) -> bool"] }
       ],
       "params": [
-        { "name": "self", "type": "ref<Self>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        {
+          "name": "self",
+          "type": "ref<target_type=Self>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
         { "name": "accept", "type": "F" }
       ],
       "result": { "type": "Self::Item?" }
@@ -36,7 +40,11 @@
       "name": "peeking_take_while::I as PeekingNext::peeking_next",
       "generics": [{ "name": "F", "bounds": [], "where": ["FnOnce(&Self::Item) -> bool"] }],
       "params": [
-        { "name": "self", "type": "ref<Self>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        {
+          "name": "self",
+          "type": "ref<target_type=Self>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
         { "name": "accept", "type": "F" }
       ],
       "result": { "type": "Self::Item?" }
@@ -54,7 +62,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<Peekable<I>>",
+          "type": "ref<target_type=Peekable<I>>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         { "name": "accept", "type": "F" }
@@ -74,7 +82,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<::std::vec::IntoIter<T>>",
+          "type": "ref<target_type=::std::vec::IntoIter<T>>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         { "name": "accept", "type": "F" }
@@ -93,7 +101,7 @@
       "fields": [
         {
           "name": "iter",
-          "type": "ref<I>",
+          "type": "ref<target_type=I>",
           "access": { "rights": "write", "guarantee": "exclusive" },
           "hold": { "kind": "borrows", "lifetime": "'a" }
         },
@@ -122,7 +130,11 @@
       "visible": "public",
       "generics": [{ "name": "I", "bounds": [], "where": ["Iterator"] }, { "name": "F", "bounds": [] }],
       "params": [
-        { "name": "iter", "type": "ref<I>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        {
+          "name": "iter",
+          "type": "ref<target_type=I>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
         { "name": "f", "type": "F" }
       ],
       "result": { "type": "PeekingTakeWhile<'_, I, F>" }
@@ -143,7 +155,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<PeekingTakeWhile<'_, I, F>>",
+          "type": "ref<target_type=PeekingTakeWhile<'_, I, F>>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -155,7 +167,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<PeekingTakeWhile<'_, I, F>>",
+          "type": "ref<target_type=PeekingTakeWhile<'_, I, F>>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -177,7 +189,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<PeekingTakeWhile<'_, I, F>>",
+          "type": "ref<target_type=PeekingTakeWhile<'_, I, F>>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         { "name": "g", "type": "G" }

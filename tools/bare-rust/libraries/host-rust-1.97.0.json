@@ -13,16 +13,19 @@
       "arms": [
         {
           "pattern": "assert_eq!(left, right)",
-          "params": [{ "name": "left", "type": "ref<T>" }, { "name": "right", "type": "ref<U>" }],
+          "params": [
+            { "name": "left", "type": "ref<target_type=T>" },
+            { "name": "right", "type": "ref<target_type=U>" }
+          ],
           "result": "()",
           "source": "1.97.0 core/src/macros/mod.rs:23-24, doc: \"On panic, this macro will print the values of the expressions with their debug representations.\""
         },
         {
           "pattern": "assert_eq!(left, right, msg, args...)",
           "params": [
-            { "name": "left", "type": "ref<T>" },
-            { "name": "right", "type": "ref<U>" },
-            { "name": "msg", "type": "ref<text>" }
+            { "name": "left", "type": "ref<target_type=T>" },
+            { "name": "right", "type": "ref<target_type=U>" },
+            { "name": "msg", "type": "ref<target_type=string>" }
           ],
           "result": "()",
           "source": "1.97.0 core/src/macros/mod.rs:26-27, doc: \"Like [`assert!`], this macro has a second form, where a custom panic message can be provided.\""
@@ -39,13 +42,13 @@
         },
         {
           "pattern": "panic!(msg)",
-          "params": [{ "name": "msg", "type": "ref<text>" }],
+          "params": [{ "name": "msg", "type": "ref<target_type=string>" }],
           "result": "never",
           "source": "1.97.0 core/src/macros/panic.md:11-12, doc: \"When using `panic!()` you can specify a string payload that is built using [formatting syntax].\""
         },
         {
           "pattern": "panic!(fmt, args...)",
-          "params": [{ "name": "fmt", "type": "ref<text>" }],
+          "params": [{ "name": "fmt", "type": "ref<target_type=string>" }],
           "result": "never",
           "source": "1.97.0 core/src/macros/panic.md:11-12, doc: \"When using `panic!()` you can specify a string payload that is built using [formatting syntax].\""
         }
@@ -56,20 +59,20 @@
         {
           "pattern": "vec![]",
           "params": [],
-          "result": "list<T> as 'std::vec::Vec'",
+          "result": "list<element_type=T> as 'std::vec::Vec'",
           "source": "1.97.0 alloc/src/macros.rs:4, doc: \"There are two forms of this macro:\""
         },
         {
           "pattern": "vec![a, b, c]",
           "params": [{ "name": "a", "type": "T" }],
-          "result": "list<T> as 'std::vec::Vec'",
+          "result": "list<element_type=T> as 'std::vec::Vec'",
           "source": "1.97.0 alloc/src/macros.rs:4, doc: \"There are two forms of this macro:\""
         },
         {
           "pattern": "vec![elem; n]",
           "when": "T: std::clone::Clone",
           "params": [{ "name": "elem", "type": "T" }, { "name": "n", "type": "u64 as 'usize'" }],
-          "result": "list<T> as 'std::vec::Vec'",
+          "result": "list<element_type=T> as 'std::vec::Vec'",
           "source": "1.97.0 alloc/src/macros.rs:4, doc: \"There are two forms of this macro:\""
         }
       ]
@@ -79,7 +82,7 @@
         {
           "pattern": "write!(dst, args...)",
           "when": "dst: std::fmt::Write",
-          "params": [{ "name": "dst", "type": "ref<Self>" }],
+          "params": [{ "name": "dst", "type": "ref<target_type=Self>" }],
           "result": "()",
           "fails": "std::fmt::Error",
           "source": "1.97.0 core/src/macros/mod.rs:519-521, doc: \"The macro returns whatever the `write_fmt` method returns; commonly a [`fmt::Result`], or an [`io::Result`].\""
@@ -87,7 +90,7 @@
         {
           "pattern": "write!(dst, args...)",
           "when": "dst: std::io::Write",
-          "params": [{ "name": "dst", "type": "ref<Self>" }],
+          "params": [{ "name": "dst", "type": "ref<target_type=Self>" }],
           "result": "()",
           "fails": "std::io::Error",
           "source": "1.97.0 core/src/macros/mod.rs:519-521, doc: \"The macro returns whatever the `write_fmt` method returns; commonly a [`fmt::Result`], or an [`io::Result`].\""

@@ -13,7 +13,7 @@
       "kind": "const",
       "name": "nim_example::nim::setup::game_rules::STARTING_HEAPS",
       "visible": "public",
-      "type": "list<u32> where size(value) == 3 as 'std::primitive::array'"
+      "type": "list<element_type=u32> where count(value) == 3 as 'std::primitive::array'"
     },
     {
       "kind": "type",
@@ -24,7 +24,7 @@
           "name": "heaps",
           "visible": "path",
           "visible_path": "super",
-          "type": "list<u32> as 'Vec'",
+          "type": "list<element_type=u32> as 'Vec'",
           "hold": { "kind": "owns" }
         }
       ]
@@ -81,7 +81,11 @@
       "name": "nim_example::nim::moves::parse_move",
       "visible": "public",
       "params": [
-        { "name": "line", "type": "ref<text>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "line",
+          "type": "ref<target_type=string>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
       "result": { "type": "Move", "fails": "MoveError" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/nim.y:60" }]
@@ -91,8 +95,16 @@
       "name": "nim_example::nim::moves::check",
       "visible": "public",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
-        { "name": "chosen", "type": "ref<Move>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        {
+          "name": "chosen",
+          "type": "ref<target_type=Move>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
       "result": { "type": "Move", "fails": "MoveError" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/nim.y:87" }]
@@ -102,8 +114,16 @@
       "name": "nim_example::nim::moves::read_move",
       "visible": "public",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } },
-        { "name": "line", "type": "ref<text>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        {
+          "name": "line",
+          "type": "ref<target_type=string>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
       "result": { "type": "Move", "fails": "MoveError" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/nim.y:115" }]
@@ -113,8 +133,16 @@
       "name": "nim_example::nim::moves::remove",
       "visible": "public",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "write", "guarantee": "exclusive" } },
-        { "name": "chosen", "type": "ref<Move>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        {
+          "name": "chosen",
+          "type": "ref<target_type=Move>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
       "clauses": [
         {
@@ -134,7 +162,11 @@
       "name": "nim_example::nim::moves::computer_move",
       "visible": "public",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
       "result": { "type": "Move" },
       "clauses": [
@@ -151,7 +183,11 @@
       "kind": "function",
       "name": "nim_example::nim::counters_left",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
       "result": { "type": "u32" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/nim.y:169" }]
@@ -162,7 +198,7 @@
       "params": [
         {
           "name": "heaps",
-          "type": "ref<list<u32> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=u32> as 'std::primitive::slice'>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -173,9 +209,13 @@
       "kind": "function",
       "name": "nim_example::nim::shown",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
-      "result": { "type": "text" },
+      "result": { "type": "string" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/nim.y:201" }]
     },
     { "kind": "module", "name": "nim_example::nim::console_play", "visible": "public" },
@@ -213,10 +253,14 @@
         { "name": "started", "type": "Game" },
         {
           "name": "console",
-          "type": "ref<Console>",
+          "type": "ref<target_type=Console>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
-        { "name": "forever", "type": "ref<Forever>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "forever",
+          "type": "ref<target_type=Forever>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
       "result": { "type": "()", "fails": "PlayError" },
       "clauses": [
@@ -229,13 +273,21 @@
       "kind": "function",
       "name": "nim_example::nim::persons_move",
       "params": [
-        { "name": "game", "type": "ref<Game>", "access": { "rights": "write", "guarantee": "exclusive" } },
         {
-          "name": "console",
-          "type": "ref<Console>",
+          "name": "game",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
-        { "name": "forever", "type": "ref<Forever>", "access": { "rights": "read", "guarantee": "readers" } }
+        {
+          "name": "console",
+          "type": "ref<target_type=Console>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        {
+          "name": "forever",
+          "type": "ref<target_type=Forever>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
       ],
       "result": { "type": "Player", "fails": "PlayError" },
       "clauses": [
@@ -248,7 +300,7 @@
       "kind": "function",
       "name": "nim_example::nim::complaint",
       "params": [{ "name": "error", "type": "MoveError" }],
-      "result": { "type": "ref<text>", "hold": { "kind": "borrows", "lifetime": "'static" } },
+      "result": { "type": "ref<target_type=string>", "hold": { "kind": "borrows", "lifetime": "'static" } },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/nim.y:289" }]
     },
     {
@@ -258,7 +310,7 @@
         { "name": "turn", "type": "Player" },
         {
           "name": "console",
-          "type": "ref<Console>",
+          "type": "ref<target_type=Console>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -272,7 +324,11 @@
   ],
   "holes": {
     "nim_example::nim::moves::parse_move": {
-      "locals": { "pieces": "list<ref<text>> as 'Vec'", "heap": "u32?", "take": "u32?" }
+      "locals": {
+        "pieces": "list<element_type=ref<target_type=string>> as 'Vec'",
+        "heap": "u32?",
+        "take": "u32?"
+      }
     }
   }
 }

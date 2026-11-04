@@ -125,8 +125,8 @@ fn function(name: &str, selfk: Option<(SelfKind, &str)>, params: &[String], type
     let mut ps = vec![];
     if let Some((k, ty)) = selfk {
         ps.push(match k {
-            SelfKind::Ref => json!({ "name": "self", "type": format!("ref<{ty}>"), "access": { "rights": "read", "guarantee": "readers" } }),
-            SelfKind::Mut => json!({ "name": "self", "type": format!("ref<{ty}>"), "access": { "rights": "write", "guarantee": "exclusive" } }),
+            SelfKind::Ref => json!({ "name": "self", "type": format!("ref<target_type={ty}>"), "access": { "rights": "read", "guarantee": "readers" } }),
+            SelfKind::Mut => json!({ "name": "self", "type": format!("ref<target_type={ty}>"), "access": { "rights": "write", "guarantee": "exclusive" } }),
             SelfKind::Owned => json!({ "name": "self", "type": ty }),
         });
     }
@@ -134,7 +134,7 @@ fn function(name: &str, selfk: Option<(SelfKind, &str)>, params: &[String], type
         ident_ok(p)?;
         let t = types.get(i).map(String::as_str).unwrap_or(TODO);
         let mut e = json!({ "name": p, "type": t });
-        if t.starts_with("ref<") {
+        if t.starts_with("ref<target_type=") {
             e["access"] = json!({ "rights": "read", "guarantee": "readers" });
         }
         ps.push(e);

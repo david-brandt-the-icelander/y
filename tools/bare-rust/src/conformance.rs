@@ -186,7 +186,7 @@ fn ops_suite() -> Vec<Json> {
             cs.push(op(format!("slice {}[..{}]", name(&l), j.map_or("".into(), |j| j.to_string())), "slice", vec![ints(&l), Json::Null, json!(j)]));
         }
         cs.push(op(format!("reverse {}", name(&l)), "reverse", vec![ints(&l)]));
-        cs.push(op(format!("size {}", name(&l)), "size", vec![ints(&l)]));
+        cs.push(op(format!("count {}", name(&l)), "count", vec![ints(&l)]));
         cs.push(op(format!("enumerate {}", name(&l)), "enumerate", vec![ints(&l)]));
         cs.push(op(format!("next {}", name(&l)), "next", vec![ints(&l)]));
         cs.push(op(format!("next_back {}", name(&l)), "next_back", vec![ints(&l)]));
@@ -222,7 +222,7 @@ fn ops_suite() -> Vec<Json> {
         cs.push(op(format!("slice {nm}[2..]"), "slice", vec![c.clone(), json!(2), Json::Null]));
         cs.push(op(format!("slice {nm}[..3]"), "slice", vec![c.clone(), Json::Null, json!(3)]));
         cs.push(op(format!("reverse {nm}"), "reverse", vec![c.clone()]));
-        cs.push(op(format!("size {nm}"), "size", vec![c.clone()]));
+        cs.push(op(format!("count {nm}"), "count", vec![c.clone()]));
         cs.push(op(format!("enumerate {nm}"), "enumerate", vec![c.clone()]));
         cs.push(op(format!("next {nm}"), "next", vec![c.clone()]));
         cs.push(op(format!("next_back {nm}"), "next_back", vec![c.clone()]));
@@ -294,9 +294,9 @@ fn expressions_suite() -> Vec<Json> {
     let tup = |a: Json, b: Json| json!({ "tuple": [a, b] });
     vec![
         // 6.14.7, the example of the text
-        expr("split_at_mut sizes", "size(result.0) == mid and size(result.1) == old(size(self)) - mid", &[("result", tup(json!([1, 2]), json!([3]))), ("mid", json!(2))], &[("self", json!([1, 2, 3]))]),
-        expr("split_at_mut sizes, wrong", "size(result.0) == mid and size(result.1) == old(size(self)) - mid", &[("result", tup(json!([1]), json!([2, 3]))), ("mid", json!(2))], &[("self", json!([1, 2, 3]))]),
-        expr("split_at_mut pattern", "result is (head, tail) implies size(head) + size(tail) == old(size(self))", &[("result", tup(json!([1, 2]), json!([3])))], &[("self", json!([1, 2, 3]))]),
+        expr("split_at_mut sizes", "count(result.0) == mid and count(result.1) == old(count(self)) - mid", &[("result", tup(json!([1, 2]), json!([3]))), ("mid", json!(2))], &[("self", json!([1, 2, 3]))]),
+        expr("split_at_mut sizes, wrong", "count(result.0) == mid and count(result.1) == old(count(self)) - mid", &[("result", tup(json!([1]), json!([2, 3]))), ("mid", json!(2))], &[("self", json!([1, 2, 3]))]),
+        expr("split_at_mut pattern", "result is (head, tail) implies count(head) + count(tail) == old(count(self))", &[("result", tup(json!([1, 2]), json!([3])))], &[("self", json!([1, 2, 3]))]),
         expr("split_at_mut part elements", "result.0 == old(self)[..mid] and result.1 == old(self)[mid..]", &[("result", tup(json!([1, 2]), json!([3]))), ("mid", json!(2))], &[("self", json!([1, 2, 3]))]),
         expr("split_at_mut part elements, mid past the end", "result.0 == old(self)[..mid] and result.1 == old(self)[mid..]", &[("result", tup(json!([1, 2, 3]), json!([]))), ("mid", json!(9))], &[("self", json!([1, 2, 3]))]),
         expr("component the tuple lacks", "result.2 == 1", &[("result", tup(json!(1), json!(2)))], &[]),
@@ -313,20 +313,20 @@ fn expressions_suite() -> Vec<Json> {
         expr("copied", "yields(result) == map(deref, old(yields(self)))", &[("result", json!([1, 2]))], &[("self", json!([1, 2]))]),
         expr("counts of a counter", "take(3, yields(result)) == [0, 1, 2]", &[("result", counter(0, 1))], &[]),
         expr("equality of infinite sequences is undecided", "yields(result) == yields(result)", &[("result", counter(0, 1))], &[]),
-        expr("size of an infinite sequence has no value", "size(result) == 3", &[("result", counter(0, 1))], &[]),
+        expr("size of an infinite sequence has no value", "count(result) == 3", &[("result", counter(0, 1))], &[]),
         expr("zip as many as the shorter", "yields(result) == zip(old(yields(self)), old(yields(other)))", &[("result", json!([{"tuple": [1, 4]}]))], &[("self", json!([1, 2])), ("other", json!([4]))]),
         expr("enumerate", "yields(result) == enumerate(old(yields(self)))", &[("result", json!([{"tuple": [0, 5]}, {"tuple": [1, 6]}]))], &[("self", json!([5, 6]))]),
         expr("skip", "yields(result) == skip(n, old(yields(self)))", &[("result", json!([3])), ("n", json!(2))], &[("self", json!([1, 2, 3]))]),
-        expr("slice never fails", "size(self[2..9]) == 1", &[("self", json!([1, 2, 3]))], &[]),
+        expr("slice never fails", "count(self[2..9]) == 1", &[("self", json!([1, 2, 3]))], &[]),
         expr("index never fails", "self[3] == none and self[-1] == none", &[("self", json!([1, 2, 3]))], &[]),
         expr("++ is associative", "(xs ++ ys) ++ zs == xs ++ (ys ++ zs)", &[("xs", json!([1])), ("ys", json!([2])), ("zs", json!([3]))], &[]),
         expr("present tells an absent position from a none element", "present(xs, 1) and not present(xs, 2) and xs[1] == none", &[("xs", json!([1, null]))], &[]),
         expr("select by verdicts", "yields(result) == select(keep, old(yields(self)))", &[("result", json!([3])), ("keep", json!([false, false, true]))], &[("self", json!([1, 2, 3]))]),
         expr("while_true stops at the first false", "yields(result) == while_true(keep, old(yields(self)))", &[("result", json!([1, 2])), ("keep", json!([true, true, false]))], &[("self", json!([1, 2, 3, 4]))]),
         expr("flat_map", "yields(result) == flatten(map(yields, y))", &[("result", json!([1, 11, 2, 12])), ("y", json!([[1, 11], [2, 12]]))], &[]),
-        expr("take_while not put back", "final(yields(self)) == skip(size(keep), old(yields(self)))", &[("keep", json!([true, true, false]))], &[("self", json!([1, 2, 3, 4]))]),
-        expr("final without a run value is the current one", "final(size(xs)) == 2", &[("xs", json!([1, 2]))], &[]),
-        expr("reverse", "reverse(xs)[0] == xs[size(xs) - 1]", &[("xs", json!([1, 2, 3]))], &[]),
+        expr("take_while not put back", "final(yields(self)) == skip(count(keep), old(yields(self)))", &[("keep", json!([true, true, false]))], &[("self", json!([1, 2, 3, 4]))]),
+        expr("final without a run value is the current one", "final(count(xs)) == 2", &[("xs", json!([1, 2]))], &[]),
+        expr("reverse", "reverse(xs)[0] == xs[count(xs) - 1]", &[("xs", json!([1, 2, 3]))], &[]),
         // 6.14.3, moves: the key is what `==` sees, the second number is the identity
         expr("max tie takes the second", "(v1 <= v2 and v1 >= v2) implies result moved from v2", &[("v1", json!({"ent": [1, 10]})), ("v2", json!({"ent": [1, 20]})), ("result", json!({"ent": [1, 20]}))], &[]),
         expr("max tie takes the first, wrong", "(v1 <= v2 and v1 >= v2) implies result moved from v2", &[("v1", json!({"ent": [1, 10]})), ("v2", json!({"ent": [1, 20]})), ("result", json!({"ent": [1, 10]}))], &[]),
@@ -395,8 +395,8 @@ fn runs_suite() -> Vec<Json> {
         run_case("map: two calls in one next", map, &[], &[], &[], vec![json!([c1(1, 2), c1(1, 2)])], &[]),
         run_case("map: no calls at all", map, &[("result", json!([]))], &[("self", json!([]))], &[], vec![json!([])], &["yields(result) == y", "x == old(yields(self))"]),
         run_case("filter: many calls per next are allowed", filt, &[("result", json!([1, 3]))], &[("self", json!([1, 2, 3]))], &[], vec![json!([call(vec![json!(1)], json!(true))]), json!([call(vec![json!(2)], json!(false)), call(vec![json!(3)], json!(true))]), json!([])], &["yields(result) == select(keep, old(yields(self)))"]),
-        run_case("take_while: items before the first false, the rest not put back", tw, &[("result", json!([1, 2]))], &[("self", json!([1, 2, 3, 4]))], &[("self", json!([4]))], vec![json!([call(vec![json!(1)], json!(true))]), json!([call(vec![json!(2)], json!(true))]), json!([call(vec![json!(3)], json!(false))])], &["yields(result) == while_true(keep, old(yields(self)))", "x == take(size(keep), old(yields(self)))", "final(yields(self)) == skip(size(keep), old(yields(self)))"]),
-        run_case("take_while: the failing item is consumed too", tw, &[], &[("self", json!([1, 2, 3, 4]))], &[("self", json!([3, 4]))], vec![json!([call(vec![json!(1)], json!(true))]), json!([call(vec![json!(2)], json!(false))])], &["final(yields(self)) == skip(size(keep), old(yields(self)))"]),
+        run_case("take_while: items before the first false, the rest not put back", tw, &[("result", json!([1, 2]))], &[("self", json!([1, 2, 3, 4]))], &[("self", json!([4]))], vec![json!([call(vec![json!(1)], json!(true))]), json!([call(vec![json!(2)], json!(true))]), json!([call(vec![json!(3)], json!(false))])], &["yields(result) == while_true(keep, old(yields(self)))", "x == take(count(keep), old(yields(self)))", "final(yields(self)) == skip(count(keep), old(yields(self)))"]),
+        run_case("take_while: the failing item is consumed too", tw, &[], &[("self", json!([1, 2, 3, 4]))], &[("self", json!([3, 4]))], vec![json!([call(vec![json!(1)], json!(true))]), json!([call(vec![json!(2)], json!(false))])], &["final(yields(self)) == skip(count(keep), old(yields(self)))"]),
     ]
 }
 
@@ -411,8 +411,8 @@ fn lets_suite() -> Vec<Json> {
         l("tuple pattern", "let (head, tail) = result", &[("result", pair.clone())]),
         l("wildcard", "let (_, tail) = result", &[("result", pair.clone())]),
         l("pattern of the wrong length", "let (a, b, c) = result", &[("result", pair)]),
-        l("a name", "let n = size(xs)", &[("xs", json!([1, 2]))]),
-        l("a name bound twice", "let xs = size(xs)", &[("xs", json!([1, 2]))]),
+        l("a name", "let n = count(xs)", &[("xs", json!([1, 2]))]),
+        l("a name bound twice", "let xs = count(xs)", &[("xs", json!([1, 2]))]),
     ]
 }
 
@@ -445,25 +445,25 @@ pub fn table() -> Json {
         "prefix": crate::seq::PREFIX,
         "named_functions": NAMED.iter().map(|(n, m)| json!({ "name": n, "meaning": m })).collect::<Vec<_>>(),
         "definitions": {
-            "index": "xs[i]: the element at position i; none when i < 0 or i >= size(xs) (for an infinite xs, when i < 0). Never fails.",
+            "index": "xs[i]: the element at position i; none when i < 0 or i >= count(xs) (for an infinite xs, when i < 0). Never fails.",
             "take": "take(n, xs): the first n elements, or all if fewer; empty when n <= 0.",
-            "skip": "skip(n, xs): xs without its first n elements; xs when n <= 0, empty when n >= size(xs). skip(n, xs)[k] == xs[k + n].",
+            "skip": "skip(n, xs): xs without its first n elements; xs when n <= 0, empty when n >= count(xs). skip(n, xs)[k] == xs[k + n].",
             "slice": "xs[i..j] is take(j - i, skip(i, xs)); xs[i..] is skip(i, xs); xs[..j] is take(j, xs). Never fails. Args: [xs, i|null, j|null]. Not exercised for i < 0, where the equation and the sentence 'positions outside the list are not elements' differ.",
             "concat": "xs ++ ys: for a finite xs, xs then ys; for an infinite xs, xs. Associative, [] is the unit.",
-            "reverse": "reverse(xs)[k] == xs[size(xs) - 1 - k]; no value for an infinite xs.",
+            "reverse": "reverse(xs)[k] == xs[count(xs) - 1 - k]; no value for an infinite xs.",
             "map": "map(f, xs)[k] == f(xs[k]); f a named pure function.",
             "filter": "filter(p, []) == []; filter(p, [x] ++ r) == (if p(x) then [x] else []) ++ filter(p, r).",
             "zip": "zip(xs, ys)[k] == (xs[k], ys[k]) while both exist.",
             "enumerate": "enumerate(xs)[k] == (k, xs[k]).",
             "scalars": "the Unicode scalar values of the text, in order.",
-            "size": "the number of elements; no value for an infinite list.",
+            "count": "the number of elements; no value for an infinite list.",
             "eq": "equal at every position; for infinite lists, of every finite prefix: refuted on a prefix, never confirmed.",
             "part": "e.k: the component k of a tuple; a component the tuple lacks is refused at build.",
             "bind": "a pattern (a, _, b) binds a name to each wanted part; a pattern of the wrong length is refused at build.",
             "next": "yields: next returns xs[0] and leaves xs[1..].",
-            "present": "present(xs, i): i >= 0 and (xs infinite or i < size(xs)): position i holds an element, whatever it is.",
+            "present": "present(xs, i): i >= 0 and (xs infinite or i < count(xs)): position i holds an element, whatever it is.",
             "select": "select(bs, xs): the elements xs[k] where bs[k] is true, for the positions both lists have.",
-            "while_true": "while_true(bs, xs): take(n, xs) with n the position of the first false in bs, or size(bs); xs when bs is infinite and has none.",
+            "while_true": "while_true(bs, xs): take(n, xs) with n the position of the first false in bs, or count(bs); xs when bs is infinite and has none.",
             "flatten": "flatten(xss): flatten([]) == [], flatten([xs] ++ r) == xs ++ flatten(r); no value for an infinite outer list. map(yields, ys) reads a list of collections as lists.",
             "runs": "callback c : called by P.m …: the calls made during each call of P.m (groups); `with` and `returning` bind lists, one item per call; the count per call is checked per group. final(e) is read from the case's `final` environment.",
             "lets": "let name = e / let (a, b) = e binds for the clauses after it, once; a name already bound, or a pattern of the wrong length, is refused at build.",

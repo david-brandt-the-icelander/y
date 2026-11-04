@@ -286,7 +286,7 @@ class Module:
             or re.fullmatch(r"(.+)\[[^\]]*\]", e)
         if m:
             inner = self.type_of(m.group(1), env) or ""
-            mm = re.fullmatch(r"list<element=(.+)>", inner)
+            mm = re.fullmatch(r"list<element_type=(.+)>", inner)
             return mm.group(1) if mm else None
         m = re.fullmatch(r"(\w+)\(.*\)", e)
         if m and m.group(1) in self.results:
@@ -683,7 +683,7 @@ class Function:
         if m:
             src = m.group(2)
             ty = self.module.type_of(src, self.env) or ""
-            mm = re.fullmatch(r"list<element=(.+)>", ty)
+            mm = re.fullmatch(r"list<element_type=(.+)>", ty)
             if mm:
                 self.env[m.group(1)] = mm.group(1)
             elif src.startswith("range("):

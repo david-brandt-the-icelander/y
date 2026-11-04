@@ -14,6 +14,7 @@
 //! To refresh the Rust after editing the bare files, from `tools/bare-rust`:
 //! `cargo run -q -- weave ../../examples/<name>/bare --out ../../examples/.woven --crate ../../examples/<name>`, then
 //! copy `.woven/src` over `examples/<name>/src` and delete `.woven`.
+mod y_lint;
 mod y_paths;
 
 use bare_rust::json::canonical;
@@ -25,6 +26,23 @@ use std::path::{Path, PathBuf};
 
 fn example(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples").join(name)
+}
+
+/// The lint `type_argument_name` (Y § 3.1) over every Y file of every example: an argument that takes a type is named
+/// `…_type`, and one that takes a value is not.
+#[test]
+fn every_example_names_its_type_arguments_by_the_convention() {
+    let mut errors = vec![];
+    for name in ["checkers", "hangman", "memory", "nim", "snake", "tic-tac-toe"] {
+        let dir = example(name).join("y/src");
+        let mut files: Vec<PathBuf> = fs::read_dir(&dir).unwrap().map(|e| e.unwrap().path()).collect();
+        files.sort();
+        for f in files {
+            let shown = format!("examples/{name}/y/src/{}", f.file_name().unwrap().to_string_lossy());
+            errors.extend(y_lint::type_argument_names(&shown, &read(&f)));
+        }
+    }
+    assert!(errors.is_empty(), "{errors:#?}");
 }
 
 /// The bare modules of an example, as paths under `bare/src` and `src` without their extensions.
@@ -49,12 +67,13 @@ fn read(p: &Path) -> String {
     fs::read_to_string(p).unwrap_or_else(|e| panic!("{}: {e}", p.display()))
 }
 
-/// The constraint file as strip writes it: no clauses, and the status strip gives.
+/// The constraint file as strip writes it: no clauses, no module level, and the status strip gives.
 fn without_lowering(js: &Value) -> Value {
     let mut js = js.clone();
     js["status"] = Value::from("lifted");
     for s in js["subjects"].as_array_mut().unwrap() {
         s.as_object_mut().unwrap().remove("clauses");
+        s.as_object_mut().unwrap().remove("level");
     }
     js
 }
@@ -115,7 +134,7 @@ fn hangman_constraint_files_are_valid() {
     let dir = example("hangman");
     // the clauses are really read: a name the module does not have is refused, and so is a function that is not pure
     let js: Value = serde_json::from_str(&read(&dir.join("bare/src/hangman.constraints.json"))).unwrap();
-    for (text, want) in [("require has_words : size(wordz) > 0", "unknown name `wordz`"), ("require has_words : guess(words, words) is Hit", "unknown name `guess`")] {
+    for (text, want) in [("require has_words : count(wordz) > 0", "unknown name `wordz`"), ("require has_words : guess(words, words) is Hit", "unknown name `guess`")] {
         let mut bad = js.clone();
         let play = bad["subjects"].as_array_mut().unwrap().iter_mut().find(|s| s["name"] == "hangman_example::hangman::console_play::play").unwrap();
         play["clauses"][0]["text"] = Value::from(text);
@@ -574,7 +593,7 @@ fn when_of(source: &str, test: &str) -> Vec<String> {
 /// whose `else` covers two orders.
 const FIRST_ABOVE: &str = "\
 ----------------------------------------
-values: The values, as list<element=int32>.
+values: The values, as list<element_type=int32>.
 
 limit: The limit, as int32.
 

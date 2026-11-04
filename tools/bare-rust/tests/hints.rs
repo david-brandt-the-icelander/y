@@ -53,7 +53,7 @@ fn a_typed_local_names_the_holes_entry_and_the_fix_works() {
     let d = &cw.weave_diags[0];
     let text = d.show();
     assert!(text.starts_with("src/lib.brs:2:5: a local's type does not go in the bare body"), "{text}");
-    assert!(text.contains("\"holes\": { \"hint_local::f\": { \"locals\": { \"v\": \"list<u8> as 'Vec'\" } } }"), "{text}");
+    assert!(text.contains("\"holes\": { \"hint_local::f\": { \"locals\": { \"v\": \"list<element_type=u8> as 'Vec'\" } } }"), "{text}");
     assert!(text.contains("without `: Vec<u8>`") && !text.contains("turbofish"), "{text}");
     // in the --json output too
     let j = cw.to_json();
@@ -89,7 +89,7 @@ fn a_type_alias_with_a_right_hand_side_names_the_alias_subject() {
     let cw = weave(&dir, &bare, &out);
     let text = cw.weave_diags[0].show();
     assert!(text.starts_with("src/lib.brs:1:1: a type alias's right-hand side does not go in the bare body; write `type Table;`"), "{text}");
-    assert!(text.contains("\"kind\": \"alias\"") && text.contains("\"name\": \"hint_alias::Table\"") && text.contains("map<K, u32> as 'std::collections::HashMap'") && text.contains("\"generics\""), "{text}");
+    assert!(text.contains("\"kind\": \"alias\"") && text.contains("\"name\": \"hint_alias::Table\"") && text.contains("map<key_type=K, value_type=u32> as 'std::collections::HashMap'") && text.contains("\"generics\""), "{text}");
     assert!(cw.to_json()["errors"][0]["message"].as_str().unwrap().contains("type Table;"));
     // the printed entry is the subject strip wrote for the real alias
     let entry: Value = serde_json::from_str(text.rsplit("constraint file: ").next().unwrap()).unwrap();
@@ -158,7 +158,7 @@ fn a_leftover_todo_is_refused_with_its_place() {
     let cj = bare.join("src/lib.constraints.json");
     let mut js = read_json(&cj);
     js["subjects"][0]["params"][0]["type"] = json!("TODO");
-    js["subjects"][0]["result"]["type"] = json!("list<TODO>");
+    js["subjects"][0]["result"]["type"] = json!("list<element_type=TODO>");
     fs::write(&cj, canonical(&js)).unwrap();
     let cw = weave(&dir, &bare, &out);
     assert!(!cw.ok());

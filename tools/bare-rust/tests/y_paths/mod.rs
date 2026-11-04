@@ -400,7 +400,7 @@ impl Module {
         let element = re!(r"^(.+)\.(?:largest|smallest|last)\(\)$").captures(&e).or_else(|| re!(r"^(.+)\.at_number\(.*\)$").captures(&e)).or_else(|| re!(r"^(.+)\[[^\]]*\]$").captures(&e));
         if let Some(m) = element {
             let inner = self.type_of(&m[1], env).unwrap_or_default();
-            return re!(r"^list<element=(.+)>$").captures(&inner).map(|mm| cap(&mm, 1));
+            return re!(r"^list<element_type=(.+)>$").captures(&inner).map(|mm| cap(&mm, 1));
         }
         if let Some(m) = re!(r"^(\w+)\(.*\)$").captures(&e) {
             if let Some((_, ty)) = self.results.get(&m[1]) {
@@ -972,7 +972,7 @@ impl<'m> Function<'m> {
         if let Some(c) = re!(r"^for (\w+) in (.*):$").captures(text) {
             let src = cap(&c, 2);
             let ty = m.type_of(&src, &self.env.borrow()).unwrap_or_default();
-            if let Some(mm) = re!(r"^list<element=(.+)>$").captures(&ty) {
+            if let Some(mm) = re!(r"^list<element_type=(.+)>$").captures(&ty) {
                 self.env.borrow_mut().insert(cap(&c, 1), cap(&mm, 1));
             } else if src.starts_with("range(") {
                 let from = re!(r"from: ([^,]+)").captures(&src).map(|x| cap(&x, 1)).unwrap_or_default();

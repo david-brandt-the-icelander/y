@@ -189,7 +189,7 @@ impl Release {
     }
 }
 
-/// A cast target that a local can carry: any type written out, `_` aside. A primitive, a pointer (`ptr<T>`, with its
+/// A cast target that a local can carry: any type written out, `_` aside. A primitive, a pointer (`ptr<target_type=T>`, with its
 /// access), a type alias, a `fn` pointer or a reference (`&x as &dyn Display`) alike: the local's type is the target.
 pub fn carried_type(t: &str) -> bool {
     !t.trim().is_empty() && t != "_"
