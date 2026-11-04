@@ -157,7 +157,7 @@ use economy                   -- quantities: Isk, ItemQuantity
 | `resource` | A host type that holds something outside memory: a file, socket, lock, connection or GPU buffer | `resource java 'java.sql.Connection'` |
 | `interface` | A trait, interface, protocol or abstract class; the clauses bind every implementation | `interface rust 'edb::Procedure'` |
 | `impl` | One implementation of an interface for a type; its clauses add to the interface's (§ 6.11) | `impl rust 'std::iter::Iterator' for 'std::str::Chars'` |
-| `quantity` | A conserved or dimensioned quantity | `quantity Isk : decimal(19, 2)` |
+| `quantity` | A conserved or dimensioned quantity | `quantity Isk : decimal<precision=19, scale=2>` |
 | `conserve` | A conservation law over columns | `conserve Isk across wallet.Balances.balance, …` |
 | `failure` | A named failure and its class | `failure NotYours : user` |
 | `predicate` | A named, reusable predicate | `predicate flies(s: space.Ships) = s.pilotID == actor` |
@@ -198,13 +198,22 @@ cannot check is reported as such for every subject of that host, never silently 
 ### 3.4 Types
 
 - **Primitive:** `bool`; `int`, the mathematical integers, with `u8` to `u128` and `i8` to `i128` as named refinements
-  of it; `decimal(p, s)`; `f32` and `f64`; `text`; `bytes`; `time`, simulation time at a place in history; `instant`,
+  of it; `decimal`, the exact decimals, with Y's `decimal16<scale=s>` to `decimal256<scale=s>` and
+  `decimal<precision=p, scale=s>` as named refinements of it (Y § 3.3, after ClickHouse); `rational`, the exact
+  fractions, with Y's `rational16` to `rational256` and `rational<precision=p>`; `f32` and `f64`; `text`; `bytes`; `time`, simulation time at a place in history; `instant`,
   wall-clock time, allowed only in watched constraints; `duration`; `id<T>`, the identity of a row or entity of `T`.
 - **Composite:** records `{ name: T, ... }`; tuples; variants `A | B(T)`, closed unless marked `open`; optional `T?`;
-  `list<T>`, `set<T>` and `map<K, V>`; `ref<T>`, a reference to a host entity, used by the memory clauses; `ptr<T>`,
+  collections and mappings (below); `ref<T>`, a reference to a host entity, used by the memory clauses; `ptr<T>`,
   a host pointer: the address of a `T`, with no guarantee that it is valid or about any other path (§ 8.1). The kinds of
   pointer between the two (valid, a cursor, an element, a C string, code) are refinements of `ptr<T>`, and `ref<T>` is
   the most refined of them (§ 7.8).
+- **Collections and mappings.** `collection<T>` is one-dimensional and `mapping<K, V>` two-dimensional, as in Y
+  (Y § 3.13). Lists, arrays, sets, bags, stacks, queues, linked lists and iterators are collections, and maps of every
+  order are mappings, each with the clauses that say how it may be used and what its operations do: `ordered by
+  position | insertion | value | key`, `unordered`, `unique`, `count fixed`, `count at most n`, `offers …`, `costs …`,
+  `values many`. `list<T>`, `set<T>` and `map<K, V>` are Y's declarations of three of them. A host type maps onto one
+  through its profile, by its clauses: Rust's `Vec<T>` onto `list<T>`, `BTreeSet<T>` onto `sorted_set<T>`, `HashMap<K,
+  V>` onto `unordered_map<K, V>`.
 - **Refinements:** `T where p`, in which `value` names the value being refined; shorthands `T in a..b` and `T in {a, b,
   c}`; named refinements: `type Quantity = i64 where value >= 0`. A refinement on an optional type applies to the value
   when it is present. `where` always filters: the values of a type here, the rows of a table in an expression (§ 4).
@@ -343,11 +352,14 @@ profile 'tranquility-2026-10' from replay 'tq-2026-10-14' on platform 'x86_64-un
   present in every later clause of the subject; after `require is_ship : x is Ship(s)`, `s` is bound.
 - **Integers and decimals are exact.** Integers in constraints are unbounded and decimals exact, so a constraint never
   overflows. `fits T` asks whether a value is representable in a host type. Overflow in the host is caught by stating
-  the exact result: `ensure total : result == old(a) + old(b)` fails if the host wrapped. Integer division truncates
-  toward zero and `%` takes the sign of the dividend, as in Rust, C#, Java and T-SQL; `floor_div` and `floor_mod` give
-  Python's flooring, and a check lifted from Python uses them. Division and modulo must be guarded by an earlier
-  conjunct or clause that the divisor is not zero. Decimals round half to even unless a named function says otherwise;
-  `round_half_away` matches T-SQL's `ROUND`, and a check lifted from T-SQL uses it.
+  the exact result: `ensure total : result == old(a) + old(b)` fails if the host wrapped. Division and remainder use
+  Y's names (Y § 3.1), and `/` and `%` do not exist on integers or decimals. `divide_truncated(a, b)` and
+  `remainder_truncated(a, b)` are what `/` and `%` do in Rust, C#, Java and T-SQL; `divide_floor` and `remainder_floor`
+  are Python's `//` and `%`, and a check lifted from Python uses them; `divide_euclidean`, `remainder_euclidean` and
+  `divide_exact` are also Y's. `/` divides rationals and floats. A division or remainder must be guarded by an earlier
+  conjunct or clause that the divisor is not zero. Nothing rounds without naming one of Y's modes (Y § 3.3):
+  `to_decimal_rounded(x, scale: 2, rounding.half_away_from_zero)` is T-SQL's `ROUND`, and a check lifted from T-SQL
+  uses it; `divide_rounded(a, b, rounding.half_even)` divides decimals.
 - **Floats compare as every host compares them.** `==` and the orderings follow IEEE 754 comparison: `-0.0 == 0.0`, and
   every comparison involving `NaN` is false except `!=`. `total_order(a, b)` exists for sorting. Arithmetic is IEEE 754
   binary32 or binary64, rounding to nearest with ties to even, with no fused multiply-add and no reassociation.
@@ -389,7 +401,7 @@ profile 'tranquility-2026-10' from replay 'tq-2026-10-14' on platform 'x86_64-un
   also `result` and `old(e)`, the value of `e` at entry. In temporal clauses `old(e)` is the previous version, and is
   absent at a row's first version.
 - **Connectives:** `not`, `and`, `or`, `implies`, `iff`. `and`, `or` and `implies` guard their right side, and narrow it
-  as an earlier clause would, so `b != 0 and a / b > 1` is well formed. `if c then a else b` is an expression with a
+  as an earlier clause would, so `b != 0 and divide_truncated(a, b) > 1` is well formed. `if c then a else b` is an expression with a
   value.
 - **Functions:** a function used in a constraint is named in the catalog or declared with a reference implementation in
   a host. It must be total, deterministic and free of effects, which is itself checked as a bound (§ 6.3); its generated
@@ -446,6 +458,7 @@ Clauses are of two sorts, and the difference decides how they are checked.
 | Collection contents | `sorted`, `distinct`, `dense`, `heap ordered`, `nonempty` | What holds of a collection's elements | Predicates, in any expression | 6.19 |
 | Expectations | `expect` | What usually happens: sizes, frequencies, likelihoods, rare failures; never correctness | Watched only | 6.20 |
 | Platforms | `platform`, with `pointer width`, `endian`, `target features`, `atomics up to`, `panic`, `build`, `features` | What every subject of a build may assume | Checked at build, against the toolchain | 3.6 |
+| Levels | `level` on a module: `data`, `calculations`, `structured`, `shared`, `effects` | How much of its language a module may use | Checked at build | 6.22 |
 | Profiles | `profile`, with `calls`, `branch`, `size`, `fails`, `access`, `index`, `lookup` | What a build's traffic was measured to do | Measured; never enforced | 3.7 |
 
 ---
@@ -507,7 +520,7 @@ failure NotDocked         : user
 failure InsufficientFunds : user
 failure OutOfRange        : user { distance: Distance, range: Distance }
 
-procedure market.PlaceOrder(typeID: u32, price: decimal(19, 2) where value > 0, quantity: i32 where value > 0)
+procedure market.PlaceOrder(typeID: u32, price: decimal<precision=19, scale=2> where value > 0, quantity: i32 where value > 0)
     -> id<market.Orders>
     from Player
     require docked      : exists session.stationID                          else NotDocked
@@ -583,7 +596,7 @@ function 'eve.dogma.stacking.penalised'(values: list<f64>) -> f64
     depends only on values
     terminates
 
-procedure wallet.Credit(requestID: id<Requests>, amount: decimal(19, 2))
+procedure wallet.Credit(requestID: id<Requests>, amount: decimal<precision=19, scale=2>)
     idempotent by requestID        -- the same request twice changes the world once
 
 -- economy/bounds.constraints: a rule, not a description
@@ -672,7 +685,7 @@ type kotlin 'studio.match.Score'
 conserve Isk across wallet.Balances.balance, market.Orders.escrow, contract.Contracts.collateral, chain.Escrow.balance
 conserve ItemQuantity across inv.Items.quantity
 
-procedure bounty.Pay(characterID: u64, amount: decimal(19, 2))
+procedure bounty.Pay(characterID: u64, amount: decimal<precision=19, scale=2>)
     faucet Isk at most bounty.cap(characterID, now)
 ```
 
@@ -1645,7 +1658,7 @@ function rust 'eve::dogma::stack'(a: Modifier, b: Modifier) -> Modifier
 function rust 'eve::text::normalise'(s: text) -> text
     idempotent
 
-function rust 'eve::market::price_after_tax'(p: decimal(19, 2), rate: decimal(5, 4)) -> decimal(19, 2)
+function rust 'eve::market::price_after_tax'(p: decimal<precision=19, scale=2>, rate: decimal<precision=5, scale=4>) -> decimal<precision=19, scale=2>
     monotone increasing in p
 
 function rust 'eve::dogma::falloff_fast'(range: f64, optimal: f64, falloff: f64) -> f64
@@ -1721,7 +1734,7 @@ function rust 'eve::dogma::Fitting::modules_of'(self: ref<Fitting>, group: u32) 
     expect size(result) <= 8  usually 0.99
     expect hot
 
-procedure 'wallet.Credit'(requestID: id<Requests>, amount: decimal(19, 2))
+procedure 'wallet.Credit'(requestID: id<Requests>, amount: decimal<precision=19, scale=2>)
     expect fails InsufficientFunds  rarely
 
 type rust 'eve::market::Book'
@@ -1797,6 +1810,32 @@ function rust 'eve_client::net::Session::send'(self: ref<Session>, m: Message) -
   `never panics`; cancellation from the suspension points of the body. Watched on replays for hosts that cannot be
   analysed (Python), from the exits each call was seen to take.
 - **Harvested:** from the manifests at exit, as failures are (§ 6.2), and from the bodies.
+
+### 6.22 Levels: how much of its language a module uses
+
+**Meaning.** A module is written at a level: the most of its language that anything in it, or in what it imports, uses.
+The levels are Y's (Y § 3.19), after LCD's levels of common denominator, and each contains the ones below it: `data`,
+declarations only, which is what this language can say; `calculations`, functions of values, with no mutable name, loop
+or recursion; `structured`, with mutable names, loops and recursion; `shared`, with transactional shared state, arenas
+and resources; and `effects`, with capabilities, waits and external effects. A `level` clause on a module is a ceiling
+that nothing in the module may rise above, so that the module can be carried by every backend and host that carries
+that level.
+
+```text
+-- pricing.constraints
+module pricing
+    level calculations
+```
+
+- **Subject:** the module, in the clause under the file's `module` line; for a woven host, the module subject of the
+  constraint data (bare Rust § 4).
+- **Fails:** a construct above the level, at build, naming the construct, where it is and the level it needs; and an
+  import of a module whose level is higher.
+- **Checked:** by the Y compiler, which infers every module's level, for Y; for another host, by the analysis its
+  profile names (§ 3.3), which looks for mutation, loops and recursion, shared state and effects, or by the bounds on
+  effects of § 6.3 that a lower level implies (`pure`, `no io`, `effects none`), which are checked as those are.
+- **Harvested:** from the Y compiler's inferred level, and for other hosts from the effect manifests and the bodies:
+  the level a module was seen to need is proposed as its ceiling, for a person to pin.
 
 ---
 
@@ -2444,7 +2483,7 @@ the file's, so the body reads as if the host had no generics at the place of use
 | TypeScript | Types; `readonly`; optional markers; access modifiers; `as`, `satisfies` and `!` | JavaScript | TypeScript |
 
 **Inside bodies.** Hosts infer most local types, so a bare body rarely needs one. Where a woven host needs the type of a
-local and cannot infer it, the file gives it: `local total : decimal(19, 2)` under the function's subject, binding the
+local and cannot infer it, the file gives it: `local total : decimal<precision=19, scale=2>` under the function's subject, binding the
 local by its name in the body. It is the one place a constraint file names something inside a body, and it states a
 type, never a condition on a value (principle 5).
 
@@ -2520,6 +2559,7 @@ meaning, its miner and its compilation into every place that enforces it.
 | 13 | Information flow | Ledgers, chains, visibility | Visibility filters and existing rules | Proxies; stream boundaries; CI |
 | 14 | Compatibility and visibility | Releases | The catalog's history | `edb review` |
 | 15 | Laws and statistics | CI; economy and loot | — | CI; replicas |
+| 16 | Levels of modules | Y's backends, and hosts that carry only some levels | The Y compiler's inferred levels; effect manifests | Y builds; CI |
 
 **Derived languages arrive host by host.** A host's bare form is usable once the kinds its own annotations need are
 enabled: for Python, kinds 1 to 3; for T-SQL, kinds 1 to 6; for Rust, C#, Java and Kotlin, also kinds 11, 12 and 14,

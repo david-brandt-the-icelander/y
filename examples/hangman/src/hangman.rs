@@ -98,6 +98,13 @@ pub mod rounds {
         pub(super) misses: Vec<Rune>,
     }
 
+    impl Game {
+        /// How many wrong guesses the player has made: the derived value `miss_count`, recomputed on every read.
+        pub fn miss_count(&self) -> usize {
+            self.misses.len()
+        }
+    }
+
     /// Where a game stands.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum Outcome {
@@ -129,15 +136,29 @@ pub mod rounds {
         Game { word, hits: BTreeSet::new(), misses: Vec::new() }
     }
 
+    /// The player has used up the misses allowed: the rule `hanged`.
+    ///
+    /// - `game`: the game to judge.
+    pub fn hanged(game: &Game) -> bool {
+        game.miss_count() == game_rules::ALLOWED_MISSES
+    }
+
+    /// Every letter of the word has been found: the rule `solved`.
+    ///
+    /// - `game`: the game to judge.
+    pub fn solved(game: &Game) -> bool {
+        runes(game.word.as_text()).all(|letter| game.hits.contains(&letter))
+    }
+
     /// Says whether a game is won, lost or still going.
     ///
     /// - `game`: the game to judge.
     /// - Returns `Lost` once the player has used up the misses allowed, `Won` once every letter of the word is found, and
     ///   `Playing` otherwise.
     pub fn outcome_of(game: &Game) -> Outcome {
-        if game.misses.len() == game_rules::ALLOWED_MISSES { // y: #judged.hanged
+        if hanged(game) { // y: #judged.hanged
             Outcome::Lost
-        } else if runes(game.word.as_text()).all(|letter| game.hits.contains(&letter)) { // y: #judged.solved
+        } else if solved(game) { // y: #judged.solved
             Outcome::Won
         } else { // y: #judged.undecided
             Outcome::Playing
@@ -301,7 +322,7 @@ pub mod console_play {
 /// - `console`: the Y `injected` parameter.
 /// - Fails with a `ConsoleError`: the console could not be written.
 fn show_turn(game: &Game, console: &mut Console) -> Result<(), ConsoleError> {
-    let picture = gallows(game.misses.len());
+    let picture = gallows(game.miss_count());
     let shown = masked(game);
     let missed = join_runes(&game.misses, " ");
     console.write_line(&picture)?;
@@ -332,7 +353,7 @@ fn reply(guessed: &Result<Verdict, GuessError>, typed: &str) -> String {
 /// - `console`: the Y `injected` parameter.
 /// - Fails with a `ConsoleError`: the console could not be written.
 fn show_end(game: &Game, console: &mut Console) -> Result<(), ConsoleError> {
-    let final_picture = gallows(game.misses.len());
+    let final_picture = gallows(game.miss_count());
     console.write_line(&final_picture)?;
     if outcome_of(game) == Outcome::Won { // y: #won
         console.write_line(&format!("You win! The word was {}.", game.word))?;

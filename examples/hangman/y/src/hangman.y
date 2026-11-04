@@ -70,6 +70,8 @@ public facet rounds:
         hits is set<rune>
         misses is list<rune>
 
+        derived miss_count is count<rune> = misses.count()
+
         invariant within_allowance = (misses.count() <= game_rules.allowed_misses)
 
 
@@ -105,6 +107,22 @@ public facet rounds:
 
 
     ------------------------------------------------------------------------------------------------------------
+    The player has used up the misses allowed.
+
+    game: The game to judge, as game.
+    ------------------------------------------------------------------------------------------------------------
+    rule hanged(game) = (game.miss_count == game_rules.allowed_misses)
+
+
+    ------------------------------------------------------------------------------------------------------------
+    Every letter of the word has been found.
+
+    game: The game to judge, as game.
+    ------------------------------------------------------------------------------------------------------------
+    rule solved(game) = game.word.runes().to_set().is_subset_of(game.hits)
+
+
+    ------------------------------------------------------------------------------------------------------------
     Says whether a game is won, lost or still going.
 
     game: The game to judge, as game.
@@ -114,9 +132,9 @@ public facet rounds:
     ------------------------------------------------------------------------------------------------------------
     function outcome_of(game) returns standing:
         conditional judged:
-            condition judged.hanged = (game.misses.count() == game_rules.allowed_misses):
+            condition judged.hanged = hanged(game):
                 return standing = outcome.lost
-            condition judged.solved = game.word.runes().to_set().is_subset_of(game.hits):
+            condition judged.solved = solved(game):
                 return standing = outcome.won
             else judged.undecided:
                 return standing = outcome.playing
@@ -283,7 +301,7 @@ console: Where the game is shown, as console.
 fails console_error: The console could not be written.
 ----------------------------------------------------------------------------------------------------------------
 function show_turn(game, injected console) fails console_error:
-    picture = gallows(game.misses.count())
+    picture = gallows(game.miss_count)
     shown = masked(game)
     missed = game.misses.join(separator: " ")
     console.write_line(picture) or fail
@@ -324,7 +342,7 @@ console: Where the end is shown, as console.
 fails console_error: The console could not be written.
 ----------------------------------------------------------------------------------------------------------------
 function show_end(game, injected console) fails console_error:
-    final_picture = gallows(game.misses.count())
+    final_picture = gallows(game.miss_count)
     console.write_line(final_picture) or fail
 
     if won = (outcome_of(game) == outcome.won):

@@ -1,8 +1,11 @@
 //! A small stand-in for the Y runtime, written by hand.
 //!
 //! Rust lowered from Y calls this crate for what Y has and Rust does not: capabilities (`System`, `Console`, `Random`,
-//! `Clock`, `Forever`), deadlines (`Deadline`, `Expired`), the standard library's text operations on runes and list operations by number, refined types' constraint violations, and faults.
+//! `Clock`, `Forever`), deadlines (`Deadline`, `Expired`), the standard library's text operations on runes and list operations by number, refined types' constraint violations, and faults;
+//! and, in [`decimal`], the decimals, rationals and rounding modes of Y § 3.3.
 //! It is only as large as the examples need. Where it is simpler than Y's semantics, the item says so.
+pub mod decimal;
+
 use std::collections::VecDeque;
 use std::fmt;
 use std::io::{BufRead, Write};

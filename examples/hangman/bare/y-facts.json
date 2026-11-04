@@ -58,7 +58,7 @@
       "facet": "display",
       "path": "hangman.display",
       "visible": "public",
-      "y": "y/src/hangman.y:162",
+      "y": "y/src/hangman.y:180",
       "rust": "hangman_example::hangman::display",
       "members": [
         "masked",
@@ -70,7 +70,7 @@
       "facet": "console_play",
       "path": "hangman.console_play",
       "visible": "public",
-      "y": "y/src/hangman.y:237",
+      "y": "y/src/hangman.y:255",
       "rust": "hangman_example::hangman::console_play",
       "members": [
         "play_error",
@@ -88,7 +88,7 @@
       "subject": "hangman_example::hangman::display::gallows",
       "param": "misses",
       "unit": "count<rune>",
-      "y": "y/src/hangman.y:185"
+      "y": "y/src/hangman.y:203"
     },
     {
       "subject": "hangman_example::hangman::setup::Word",
@@ -106,7 +106,7 @@
         "forever as forever"
       ],
       "lowered": "as the last three parameters, in order",
-      "y": "y/src/hangman.y:256"
+      "y": "y/src/hangman.y:274"
     },
     {
       "subject": "hangman_example::hangman::show_turn",
@@ -114,7 +114,7 @@
         "console as console"
       ],
       "lowered": "as the last parameter",
-      "y": "y/src/hangman.y:285"
+      "y": "y/src/hangman.y:303"
     },
     {
       "subject": "hangman_example::hangman::show_end",
@@ -122,7 +122,7 @@
         "console as console"
       ],
       "lowered": "as the last parameter",
-      "y": "y/src/hangman.y:326"
+      "y": "y/src/hangman.y:344"
     },
     {
       "subject": "hangman_example::main",
@@ -138,8 +138,8 @@
       "claim": "forever",
       "because": "a player may think for as long as they like",
       "requires": "Forever",
-      "y": "y/src/hangman.y:264",
-      "bare": "bare/src/hangman.brs:283"
+      "y": "y/src/hangman.y:282",
+      "bare": "bare/src/hangman.brs:304"
     }
   ],
   "suspensions": [],
@@ -156,8 +156,8 @@
     {
       "what": "words[chosen]",
       "why": "new_game keeps its word, and words is still read",
-      "y": "y/src/hangman.y:259",
-      "bare": "bare/src/hangman.brs:277"
+      "y": "y/src/hangman.y:277",
+      "bare": "bare/src/hangman.brs:298"
     }
   ],
   "decisions": {
@@ -224,22 +224,22 @@
       {
         "kind": "conditional",
         "label": "judged",
-        "y": "y/src/hangman.y:116",
+        "y": "y/src/hangman.y:134",
         "branches": [
           {
             "name": "judged.hanged",
-            "y": "y/src/hangman.y:117",
-            "bare": "bare/src/hangman.brs:138"
+            "y": "y/src/hangman.y:135",
+            "bare": "bare/src/hangman.brs:159"
           },
           {
             "name": "judged.solved",
-            "y": "y/src/hangman.y:119",
-            "bare": "bare/src/hangman.brs:140"
+            "y": "y/src/hangman.y:137",
+            "bare": "bare/src/hangman.brs:161"
           },
           {
             "name": "judged.undecided",
-            "y": "y/src/hangman.y:121",
-            "bare": "bare/src/hangman.brs:142"
+            "y": "y/src/hangman.y:139",
+            "bare": "bare/src/hangman.brs:163"
           }
         ]
       }
@@ -248,37 +248,37 @@
       {
         "kind": "conditional",
         "label": "judged",
-        "y": "y/src/hangman.y:142",
+        "y": "y/src/hangman.y:160",
         "branches": [
           {
             "name": "judged.nothing_typed",
-            "y": "y/src/hangman.y:143",
-            "bare": "bare/src/hangman.brs:160"
+            "y": "y/src/hangman.y:161",
+            "bare": "bare/src/hangman.brs:181"
           },
           {
             "name": "judged.not_one_rune",
-            "y": "y/src/hangman.y:145",
-            "bare": "bare/src/hangman.brs:163"
+            "y": "y/src/hangman.y:163",
+            "bare": "bare/src/hangman.brs:184"
           },
           {
             "name": "judged.not_a_letter",
-            "y": "y/src/hangman.y:149",
-            "bare": "bare/src/hangman.brs:166"
+            "y": "y/src/hangman.y:167",
+            "bare": "bare/src/hangman.brs:187"
           },
           {
             "name": "judged.repeated",
-            "y": "y/src/hangman.y:151",
-            "bare": "bare/src/hangman.brs:168"
+            "y": "y/src/hangman.y:169",
+            "bare": "bare/src/hangman.brs:189"
           },
           {
             "name": "judged.in_word",
-            "y": "y/src/hangman.y:153",
-            "bare": "bare/src/hangman.brs:170"
+            "y": "y/src/hangman.y:171",
+            "bare": "bare/src/hangman.brs:191"
           },
           {
             "name": "judged.not_in_word",
-            "y": "y/src/hangman.y:156",
-            "bare": "bare/src/hangman.brs:173"
+            "y": "y/src/hangman.y:174",
+            "bare": "bare/src/hangman.brs:194"
           }
         ]
       }
@@ -289,8 +289,8 @@
         "branches": [
           {
             "name": "letter",
-            "y": "y/src/hangman.y:173",
-            "bare": "bare/src/hangman.brs:191"
+            "y": "y/src/hangman.y:191",
+            "bare": "bare/src/hangman.brs:212"
           }
         ]
       }
@@ -301,13 +301,13 @@
         "branches": [
           {
             "name": "known",
-            "y": "y/src/hangman.y:214",
-            "bare": "bare/src/hangman.brs:228"
+            "y": "y/src/hangman.y:232",
+            "bare": "bare/src/hangman.brs:249"
           },
           {
             "name": "unknown",
-            "y": "y/src/hangman.y:216",
-            "bare": "bare/src/hangman.brs:230"
+            "y": "y/src/hangman.y:234",
+            "bare": "bare/src/hangman.brs:251"
           }
         ]
       }
@@ -318,13 +318,13 @@
         "branches": [
           {
             "name": "reached",
-            "y": "y/src/hangman.y:230",
-            "bare": "bare/src/hangman.brs:242"
+            "y": "y/src/hangman.y:248",
+            "bare": "bare/src/hangman.brs:263"
           },
           {
             "name": "not_yet",
-            "y": "y/src/hangman.y:232",
-            "bare": "bare/src/hangman.brs:244"
+            "y": "y/src/hangman.y:250",
+            "bare": "bare/src/hangman.brs:265"
           }
         ]
       }
@@ -335,13 +335,13 @@
         "branches": [
           {
             "name": "playing",
-            "y": "y/src/hangman.y:262",
-            "bare": "bare/src/hangman.brs:280"
+            "y": "y/src/hangman.y:280",
+            "bare": "bare/src/hangman.brs:301"
           },
           {
             "name": "over_at_once",
-            "y": "y/src/hangman.y:271",
-            "bare": "bare/src/hangman.brs:290"
+            "y": "y/src/hangman.y:289",
+            "bare": "bare/src/hangman.brs:311"
           }
         ]
       },
@@ -350,13 +350,13 @@
         "branches": [
           {
             "name": "closed",
-            "y": "y/src/hangman.y:266",
-            "bare": "bare/src/hangman.brs:284"
+            "y": "y/src/hangman.y:284",
+            "bare": "bare/src/hangman.brs:305"
           },
           {
             "name": "line_read",
-            "y": "y/src/hangman.y:268",
-            "bare": "bare/src/hangman.brs:284"
+            "y": "y/src/hangman.y:286",
+            "bare": "bare/src/hangman.brs:305"
           }
         ]
       }
@@ -365,32 +365,32 @@
       {
         "kind": "conditional",
         "label": "said",
-        "y": "y/src/hangman.y:304",
+        "y": "y/src/hangman.y:322",
         "branches": [
           {
             "name": "said.hit",
-            "y": "y/src/hangman.y:305",
-            "bare": "bare/src/hangman.brs:321"
+            "y": "y/src/hangman.y:323",
+            "bare": "bare/src/hangman.brs:342"
           },
           {
             "name": "said.miss",
-            "y": "y/src/hangman.y:307",
-            "bare": "bare/src/hangman.brs:322"
+            "y": "y/src/hangman.y:325",
+            "bare": "bare/src/hangman.brs:343"
           },
           {
             "name": "said.typed_nothing",
-            "y": "y/src/hangman.y:309",
-            "bare": "bare/src/hangman.brs:323"
+            "y": "y/src/hangman.y:327",
+            "bare": "bare/src/hangman.brs:344"
           },
           {
             "name": "said.typed_other",
-            "y": "y/src/hangman.y:311",
-            "bare": "bare/src/hangman.brs:324"
+            "y": "y/src/hangman.y:329",
+            "bare": "bare/src/hangman.brs:345"
           },
           {
             "name": "said.typed_again",
-            "y": "y/src/hangman.y:313",
-            "bare": "bare/src/hangman.brs:325"
+            "y": "y/src/hangman.y:331",
+            "bare": "bare/src/hangman.brs:346"
           }
         ]
       }
@@ -401,13 +401,13 @@
         "branches": [
           {
             "name": "won",
-            "y": "y/src/hangman.y:330",
-            "bare": "bare/src/hangman.brs:337"
+            "y": "y/src/hangman.y:348",
+            "bare": "bare/src/hangman.brs:358"
           },
           {
             "name": "hanged",
-            "y": "y/src/hangman.y:332",
-            "bare": "bare/src/hangman.brs:339"
+            "y": "y/src/hangman.y:350",
+            "bare": "bare/src/hangman.brs:360"
           }
         ]
       }
