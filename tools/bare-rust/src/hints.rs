@@ -115,7 +115,7 @@ pub fn missing_entry(n: Node, src: &str, name: &str, self_ty: Option<&str>) -> V
                 .filter(|c| matches!(c.kind(), "parameter" | "self_parameter" | "_"))
                 .map(|p| {
                     if p.kind() == "self_parameter" {
-                        json!({ "name": "self", "type": format!("ref<target type={}>", self_ty.unwrap_or("Self")), "access": { "rights": "read", "guarantee": "readers" } })
+                        json!({ "name": "self", "type": format!("ref<target_type={}>", self_ty.unwrap_or("Self")), "access": { "rights": "read", "guarantee": "readers" } })
                     } else {
                         json!({ "name": collapse(text(p, src)), "type": TODO })
                     }

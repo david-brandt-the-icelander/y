@@ -36,7 +36,7 @@
       "params": [
         {
           "name": "original",
-          "type": "ref<target type=string>",
+          "type": "ref<target_type=string>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -48,7 +48,7 @@
       "params": [
         {
           "name": "original",
-          "type": "ref<target type=string>",
+          "type": "ref<target_type=string>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "err", "type": "std::num::ParseIntError" }
@@ -61,7 +61,7 @@
       "params": [
         {
           "name": "original",
-          "type": "ref<target type=string>",
+          "type": "ref<target_type=string>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -75,12 +75,12 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=ParseSizeError>",
+          "type": "ref<target_type=ParseSizeError>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "f",
-          "type": "ref<target type=std::fmt::Formatter<'_>>",
+          "type": "ref<target_type=std::fmt::Formatter<'_>>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -100,7 +100,7 @@
       "params": [
         {
           "name": "size",
-          "type": "ref<target type=string>",
+          "type": "ref<target_type=string>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],

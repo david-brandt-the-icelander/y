@@ -119,7 +119,7 @@ language § 7.3: a lock guard, a file) keeps its end where the source has it: `b
 block that ends where the statement did. A turbofish is a realization of a template (language § 3.5), named in the body:
 `s.parse_u16()` for `s.parse::<u16>()`, with `"parse_u16": {"template": "<_>::parse", "args": ["u16"]}` in the
 crate's table of realizations, in the root module's file; the same template with the same arguments has one name across
-the crate. A cast local carries any target, a pointer as `ptr<target type=T>` with its access. A constant context gets a block in
+the crate. A cast local carries any target, a pointer as `ptr<target_type=T>` with its access. A constant context gets a block in
 its place, and a `const` whose whole value is a cast carries it on its subject. A suffixed literal in a pattern loses
 its suffix where the value it matches is a name declared with that type, and otherwise is named, `_k1_u8 @ 1`, with
 the type keyed by that pattern. What cannot be bound yet (a cast in a macro argument that runs only sometimes, a value
@@ -156,7 +156,7 @@ The Rust profile lists every kind of hole (§ 2.2's table is its first version).
 The constraint file is JSON, with a published JSON Schema and one canonical form (fixed key order, two-space indent) so
 that diffs show meaning. JSON rather than YAML, because YAML's implicit typing (`no`, `1.10`, `on`) turns values into
 other values, and because every agent and tool emits and validates JSON reliably. Types are strings in the language's
-own type syntax (language § 3.4: `u64?`, `ref<target type=Entry>?`, `map<key type=Key, value type=Entry> as 'std::collections::HashMap'`): compact,
+own type syntax (language § 3.4: `u64?`, `ref<target_type=Entry>?`, `map<key_type=Key, value_type=Entry> as 'std::collections::HashMap'`): compact,
 readable, and parsed by a small type parser. Access, holding and visibility are JSON structure, not strings.
 
 ### 2.6 Tree-sitter on both sides
@@ -275,14 +275,14 @@ Every emptied production is a slot, and every slot maps to a clause:
 | --- | --- | --- |
 | `bool`, `u8` to `u128`, `i8` to `i128`, `f32`, `f64` | The same | |
 | `usize`, `isize` | `u64 as 'usize'`, `i64 as 'isize'` | Width is the target's (§ 12) |
-| `String`, `&str` | `string`, `ref<target type=string>` with `access : read readers` | |
+| `String`, `&str` | `string`, `ref<target_type=string>` with `access : read readers` | |
 | `char` | `scalar as 'char'` | |
 | `Option<T>` | `T?` | |
 | `Result<T, E>` as a result | `T`, with `fails only` the variants of `E` | |
-| `Vec<T>`, `HashMap<K, V>`, `BTreeMap<K, V>`, `HashSet<T>` | `list<element type=T>`, `map<key type=K, value type=V>`, `set<element type=T>`, with `as` naming the host type as written | |
+| `Vec<T>`, `HashMap<K, V>`, `BTreeMap<K, V>`, `HashSet<T>` | `list<element_type=T>`, `map<key_type=K, value_type=V>`, `set<element_type=T>`, with `as` naming the host type as written | |
 | `(A, B)` | `(A, B)` | |
-| `&T`, `&mut T` | `ref<target type=T>`, with `access : read readers` or `write exclusive` | |
-| `*const T`, `*mut T` | `ptr<target type=T>`, with `access : read` or no access | A pointer has no guarantee and no lifetime (language § 8.1) |
+| `&T`, `&mut T` | `ref<target_type=T>`, with `access : read readers` or `write exclusive` | |
+| `*const T`, `*mut T` | `ptr<target_type=T>`, with `access : read` or no access | A pointer has no guarantee and no lifetime (language § 8.1) |
 | A lifetime | `hold … : borrows from p`, `outlives` | Elided lifetimes are expanded by Rust's rules before mapping |
 | `Box<T>`, `Rc<T>`, `Arc<T>` | `T`, with `as` naming the wrapper, and `hold : owns` or `shares` | The choice stays named until the trial opens the hole (§ 2.2) |
 | `[T; N]`, `impl Trait`, `dyn Trait`, function pointers, associated types | Host text only: `{ "host": "<string>" }` | Counted per form (§ 10, E1) |
@@ -304,17 +304,17 @@ The constraint file of language § 14.9, in the form the trial uses:
   "subjects": [
     { "kind": "type", "name": "eve_cache::Cache", "visible": "crate",
       "fields": [
-        { "name": "entries", "type": "map<key type=Key, value type=Entry> as 'std::collections::HashMap'", "hold": { "kind": "owns" } }
+        { "name": "entries", "type": "map<key_type=Key, value_type=Entry> as 'std::collections::HashMap'", "hold": { "kind": "owns" } }
       ] },
     { "kind": "function", "name": "eve_cache::Cache::get", "visible": "public",
       "params": [
-        { "name": "self", "type": "ref<target type=Cache>", "access": { "rights": "read", "guarantee": "readers" } },
-        { "name": "key", "type": "ref<target type=Key>", "access": { "rights": "read", "guarantee": "readers" } }
+        { "name": "self", "type": "ref<target_type=Cache>", "access": { "rights": "read", "guarantee": "readers" } },
+        { "name": "key", "type": "ref<target_type=Key>", "access": { "rights": "read", "guarantee": "readers" } }
       ],
-      "result": { "type": "ref<target type=Entry>?", "hold": { "kind": "borrows", "from": "self" } } },
+      "result": { "type": "ref<target_type=Entry>?", "hold": { "kind": "borrows", "from": "self" } } },
     { "kind": "function", "name": "eve_cache::Cache::insert", "visible": "public",
       "params": [
-        { "name": "self", "type": "ref<target type=Cache>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        { "name": "self", "type": "ref<target_type=Cache>", "access": { "rights": "write", "guarantee": "exclusive" } },
         { "name": "key", "type": "Key" },
         { "name": "entry", "type": "Entry" }
       ] }

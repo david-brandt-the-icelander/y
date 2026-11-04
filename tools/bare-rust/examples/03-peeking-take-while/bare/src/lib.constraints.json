@@ -22,7 +22,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=Self>",
+          "type": "ref<target_type=Self>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         { "name": "accept", "type": "F" }
@@ -42,7 +42,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=Self>",
+          "type": "ref<target_type=Self>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         { "name": "accept", "type": "F" }
@@ -62,7 +62,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=Peekable<I>>",
+          "type": "ref<target_type=Peekable<I>>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         { "name": "accept", "type": "F" }
@@ -82,7 +82,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=::std::vec::IntoIter<T>>",
+          "type": "ref<target_type=::std::vec::IntoIter<T>>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         { "name": "accept", "type": "F" }
@@ -101,7 +101,7 @@
       "fields": [
         {
           "name": "iter",
-          "type": "ref<target type=I>",
+          "type": "ref<target_type=I>",
           "access": { "rights": "write", "guarantee": "exclusive" },
           "hold": { "kind": "borrows", "lifetime": "'a" }
         },
@@ -132,7 +132,7 @@
       "params": [
         {
           "name": "iter",
-          "type": "ref<target type=I>",
+          "type": "ref<target_type=I>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         { "name": "f", "type": "F" }
@@ -155,7 +155,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=PeekingTakeWhile<'_, I, F>>",
+          "type": "ref<target_type=PeekingTakeWhile<'_, I, F>>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -167,7 +167,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=PeekingTakeWhile<'_, I, F>>",
+          "type": "ref<target_type=PeekingTakeWhile<'_, I, F>>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -189,7 +189,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=PeekingTakeWhile<'_, I, F>>",
+          "type": "ref<target_type=PeekingTakeWhile<'_, I, F>>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         { "name": "g", "type": "G" }

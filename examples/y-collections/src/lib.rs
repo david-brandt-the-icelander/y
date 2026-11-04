@@ -22,7 +22,7 @@
 //!
 //! An unordered kind has no iterator: it offers membership, counting, `all`, `any`, set operations and `sorted()`,
 //! whose results cannot depend on hash order, so replay never sees it (Y § 4.7). A count is a `usize` and a position is
-//! from 0, as the lowering's `count<of=t>` and `index<of=t>` are. Reading a position that does not exist is `None`;
+//! from 0, as the lowering's `count<unit_type=t>` and `index<unit_type=t>` are. Reading a position that does not exist is `None`;
 //! writing one is a fault, since the position is the caller's precondition.
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::hash::Hash;

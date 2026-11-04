@@ -81,19 +81,19 @@
   "units": [
     {
       "subject": "hangman_example::hangman::setup::game_rules::ALLOWED_MISSES",
-      "unit": "count<of=rune>",
+      "unit": "count<unit_type=rune>",
       "y": "y/src/hangman.y:16"
     },
     {
       "subject": "hangman_example::hangman::display::gallows",
       "param": "misses",
-      "unit": "count<of=rune>",
+      "unit": "count<unit_type=rune>",
       "y": "y/src/hangman.y:203"
     },
     {
       "subject": "hangman_example::hangman::setup::Word",
       "constraint": "long_enough",
-      "unit": "count<of=rune>",
+      "unit": "count<unit_type=rune>",
       "y": "y/src/hangman.y:26"
     }
   ],

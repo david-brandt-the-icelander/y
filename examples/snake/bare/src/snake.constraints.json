@@ -77,7 +77,7 @@
           "name": "tail",
           "visible": "path",
           "visible_path": "super",
-          "type": "list<element type=Cell> as 'Vec'",
+          "type": "list<element_type=Cell> as 'Vec'",
           "hold": { "kind": "owns" }
         },
         {
@@ -124,7 +124,7 @@
       "params": [
         {
           "name": "random",
-          "type": "ref<target type=Random>",
+          "type": "ref<target_type=Random>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -150,7 +150,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "pressed", "type": "Key" }
@@ -165,12 +165,12 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         {
           "name": "random",
-          "type": "ref<target type=Random>",
+          "type": "ref<target_type=Random>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -194,7 +194,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "toward", "type": "Direction" }
@@ -215,7 +215,7 @@
       "params": [
         {
           "name": "here",
-          "type": "ref<target type=Cell>",
+          "type": "ref<target_type=Cell>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "heading", "type": "Direction" }
@@ -229,7 +229,7 @@
       "params": [
         {
           "name": "place",
-          "type": "ref<target type=Cell>",
+          "type": "ref<target_type=Cell>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -242,11 +242,11 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "list<element type=Cell> as 'Vec'" },
+      "result": { "type": "list<element_type=Cell> as 'Vec'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/snake.y:220" }]
     },
     {
@@ -255,12 +255,12 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         {
           "name": "random",
-          "type": "ref<target type=Random>",
+          "type": "ref<target_type=Random>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -342,7 +342,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "highest", "type": "u32" }
@@ -357,13 +357,13 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "highest", "type": "u32" },
         {
           "name": "window",
-          "type": "ref<target type=Window>",
+          "type": "ref<target_type=Window>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -380,13 +380,13 @@
       "params": [
         {
           "name": "place",
-          "type": "ref<target type=Cell>",
+          "type": "ref<target_type=Cell>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "shade", "type": "Colour" },
         {
           "name": "window",
-          "type": "ref<target type=Window>",
+          "type": "ref<target_type=Window>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -405,22 +405,22 @@
       "params": [
         {
           "name": "window",
-          "type": "ref<target type=Window>",
+          "type": "ref<target_type=Window>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         {
           "name": "clock",
-          "type": "ref<target type=Clock>",
+          "type": "ref<target_type=Clock>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         {
           "name": "random",
-          "type": "ref<target type=Random>",
+          "type": "ref<target_type=Random>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         {
           "name": "forever",
-          "type": "ref<target type=Forever>",
+          "type": "ref<target_type=Forever>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -436,12 +436,12 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         {
           "name": "keys",
-          "type": "ref<target type=list<element type=Key> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=Key> as 'std::primitive::slice'>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -459,14 +459,14 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         { "name": "last_step", "type": "Instant" },
         { "name": "now", "type": "Instant" },
         {
           "name": "random",
-          "type": "ref<target type=Random>",
+          "type": "ref<target_type=Random>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],

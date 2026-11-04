@@ -1,7 +1,7 @@
 --------------------------------------------------------------------------------------------------------------------------------
 A game with only the given pieces on the board, at the Club level.
 
-pieces: The pieces and their squares, as list<element type=placed>.
+pieces: The pieces and their squares, as list<element_type=placed>.
 to_move: Whose turn it is, as side.
 
 made: The game, as game.

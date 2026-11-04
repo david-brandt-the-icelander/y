@@ -2,7 +2,7 @@
 name = "y-string"
 version = "0.0.0"
 edition = "2021"
-description = "Y's standard.string (y-string): strings of runes, normalised to NFC, and ASCII strings for the constraint character set=ascii."
+description = "Y's standard.string (y-string): strings of runes, normalised to NFC, and ASCII strings for the constraint character_set=ascii."
 
 [dependencies]
 unicode-normalization = "0.1"

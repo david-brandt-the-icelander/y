@@ -5,11 +5,11 @@
 //! | `string` | [`YString`]: a sequence of runes, normalised to NFC when it is made |
 //! | `rune` | [`Rune`]: one extended grapheme cluster |
 //! | `scalar` | `char`: one Unicode scalar value |
-//! | `string<character set=ascii>` | [`AsciiString`]: one byte per rune, counted and indexed in constant time |
+//! | `string<character_set=ascii>` | [`AsciiString`]: one byte per rune, counted and indexed in constant time |
 //! | `bytes` | `Vec<u8>` |
 //!
 //! Counting and indexing a [`YString`] walk its grapheme boundaries; an [`AsciiString`] needs no walk, which is the
-//! optimisation the `character set` constraint allows. A position is from 0, as the lowering's `index<of=rune>` is.
+//! optimisation the `character_set` constraint allows. A position is from 0, as the lowering's `index<unit_type=rune>` is.
 use std::fmt;
 use unicode_normalization::UnicodeNormalization;
 use unicode_segmentation::UnicodeSegmentation;
@@ -109,7 +109,7 @@ impl YString {
         self.0.as_bytes().to_vec()
     }
 
-    /// The string where it meets `character set=ascii`, or the constraint it breaks.
+    /// The string where it meets `character_set=ascii`, or the constraint it breaks.
     pub fn to_ascii(&self) -> Result<AsciiString, ConstraintViolation> {
         AsciiString::new(&self.0)
     }
@@ -126,7 +126,7 @@ impl fmt::Display for YString {
     }
 }
 
-/// Y's `string<character set=ascii>`: every rune is one ASCII scalar and one byte, so counting and indexing take
+/// Y's `string<character_set=ascii>`: every rune is one ASCII scalar and one byte, so counting and indexing take
 /// constant time. ASCII text is already in NFC.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AsciiString(String);
@@ -137,7 +137,7 @@ impl AsciiString {
         if text.is_ascii() {
             Ok(AsciiString(text.to_string()))
         } else {
-            Err(ConstraintViolation { constraint: "character set=ascii" })
+            Err(ConstraintViolation { constraint: "character_set=ascii" })
         }
     }
 
@@ -200,7 +200,7 @@ mod tests {
         let word = YString::new("hangman").to_ascii().expect("ASCII");
         assert_eq!((word.count(), word.rune_at(4).map(|r| r.to_string())), (7, Some("m".to_string())));
         assert_eq!(word.to_string_of_runes(), YString::new("hangman"));
-        assert_eq!(YString::new("café").to_ascii(), Err(ConstraintViolation { constraint: "character set=ascii" }));
+        assert_eq!(YString::new("café").to_ascii(), Err(ConstraintViolation { constraint: "character_set=ascii" }));
     }
 
     #[test]

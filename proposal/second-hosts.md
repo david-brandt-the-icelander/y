@@ -86,7 +86,7 @@ empty, and an emptied parameter keeps its name. The grammar delta is expected to
 | `number` | `f64`, or an integer type with `as 'number'` when the file states a range | `weave` prints `number` either way; the range is checked at run time where stated |
 | `bigint` | `i128 as 'bigint'`, or unbounded integer | |
 | `T \| null`, `T \| undefined`, `T?` | `T?` | `null` and `undefined` are distinguished only by `as` |
-| `T[]`, `Map<K, V>`, `Set<T>` | `list<element type=T>`, `map<key type=K, value type=V>`, `set<element type=T>` | |
+| `T[]`, `Map<K, V>`, `Set<T>` | `list<element_type=T>`, `map<key_type=K, value_type=V>`, `set<element_type=T>` | |
 | `[A, B]` | `(A, B)` | |
 | A discriminated union of object types | A variant type | |
 | Object types, intersections, mapped and conditional types, `keyof` | Host text | Counted per form, as in E1 |
@@ -167,8 +167,8 @@ gaps are found by check 1 over the corpora and refused with their reason, as § 
 | `bool`, `byte` to `ulong`, `sbyte` to `long`, `float`, `double`, `decimal` | `bool`, `u8` to `u64`, `i8` to `i64`, `f32`, `f64`, `decimal` | `int` overflow is unchecked unless `checked`, so `weave` prints `checked(…)` where the file says `overflow fails` |
 | `string`, `char` | `string`, `scalar as 'char'` | UTF-16 code unit, named by `as` |
 | `T?` (value types), `T?` (reference types, nullable enabled) | `T?` | |
-| `List<T>`, `Dictionary<K, V>`, `HashSet<T>`, `T[]`, `ImmutableArray<T>` | `list<element type=T>`, `map<key type=K, value type=V>`, `set<element type=T>`, with `as` | `ImmutableArray` and `IReadOnlyList` also give `access : read` |
-| `Span<T>`, `ReadOnlySpan<T>` | `ref<target type=list<element type=T>>` with `access` | A borrow: it is checked by the compiler |
+| `List<T>`, `Dictionary<K, V>`, `HashSet<T>`, `T[]`, `ImmutableArray<T>` | `list<element_type=T>`, `map<key_type=K, value_type=V>`, `set<element_type=T>`, with `as` | `ImmutableArray` and `IReadOnlyList` also give `access : read` |
+| `Span<T>`, `ReadOnlySpan<T>` | `ref<target_type=list<element_type=T>>` with `access` | A borrow: it is checked by the compiler |
 | `Task<T>`, `ValueTask<T>` | `T`, with `async` | |
 | Tuples `(A, B)` | `(A, B)` | |
 | Delegates, `Func<…>`, dynamic, pointers | Host text | |
@@ -238,9 +238,9 @@ tree-sitter-python if LibCST's round trip is not needed. LibCST's round trip is 
 
 | Python | Constraint language | Note |
 | --- | --- | --- |
-| `bool`, `int`, `float`, `str`, `bytes` | `bool`, unbounded integer, `f64`, `string`, `list<element type=u8>` | `int` maps to a bounded type only when the file states a range |
+| `bool`, `int`, `float`, `str`, `bytes` | `bool`, unbounded integer, `f64`, `string`, `list<element_type=u8>` | `int` maps to a bounded type only when the file states a range |
 | `X \| None`, `Optional[X]` | `X?` | |
-| `list[T]`, `dict[K, V]`, `set[T]`, `tuple[A, B]`, `Sequence[T]`, `Mapping[K, V]` | `list<element type=T>`, `map<key type=K, value type=V>`, `set<element type=T>`, `(A, B)`; `Sequence` and `Mapping` give `access : read` | |
+| `list[T]`, `dict[K, V]`, `set[T]`, `tuple[A, B]`, `Sequence[T]`, `Mapping[K, V]` | `list<element_type=T>`, `map<key_type=K, value_type=V>`, `set<element_type=T>`, `(A, B)`; `Sequence` and `Mapping` give `access : read` | |
 | `TypedDict`, `@dataclass` | A record type | |
 | `Callable`, `Any`, `ParamSpec`, `TypeGuard` | Host text | |
 

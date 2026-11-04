@@ -12,7 +12,7 @@
       "generics": [{ "name": "I", "bounds": ["Iterator"] }],
       "fields": [
         { "name": "it", "type": "Fuse<I>", "hold": { "kind": "owns" } },
-        { "name": "buffer", "type": "list<element type=I::Item> as 'Vec'", "hold": { "kind": "owns" } }
+        { "name": "buffer", "type": "list<element_type=I::Item> as 'Vec'", "hold": { "kind": "owns" } }
       ],
       "implements": [
         {
@@ -42,7 +42,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=LazyBuffer<I>>",
+          "type": "ref<target_type=LazyBuffer<I>>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -55,7 +55,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=LazyBuffer<I>>",
+          "type": "ref<target_type=LazyBuffer<I>>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -75,7 +75,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=LazyBuffer<I>>",
+          "type": "ref<target_type=LazyBuffer<I>>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -88,7 +88,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=LazyBuffer<I>>",
+          "type": "ref<target_type=LazyBuffer<I>>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         { "name": "len", "type": "u64 as 'usize'" }
@@ -108,16 +108,16 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=LazyBuffer<I>>",
+          "type": "ref<target_type=LazyBuffer<I>>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "indices",
-          "type": "ref<target type=list<element type=u64 as 'usize'> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=u64 as 'usize'> as 'std::primitive::slice'>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "list<element type=I::Item> as 'Vec'" }
+      "result": { "type": "list<element_type=I::Item> as 'Vec'" }
     },
     {
       "kind": "function",
@@ -127,15 +127,15 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=LazyBuffer<I>>",
+          "type": "ref<target_type=LazyBuffer<I>>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "indices",
-          "type": "list<element type=u64 as 'usize'> where count(value) == K as 'std::primitive::array'"
+          "type": "list<element_type=u64 as 'usize'> where count(value) == K as 'std::primitive::array'"
         }
       ],
-      "result": { "type": "list<element type=I::Item> where count(value) == K as 'std::primitive::array'" }
+      "result": { "type": "list<element_type=I::Item> where count(value) == K as 'std::primitive::array'" }
     },
     {
       "kind": "impl",
@@ -156,12 +156,12 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=LazyBuffer<I>>",
+          "type": "ref<target_type=LazyBuffer<I>>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "index", "type": "J" }
       ],
-      "result": { "type": "ref<target type=Self::Output>", "hold": { "kind": "borrows", "from": "self" } }
+      "result": { "type": "ref<target_type=Self::Output>", "hold": { "kind": "borrows", "from": "self" } }
     },
     {
       "kind": "alias",

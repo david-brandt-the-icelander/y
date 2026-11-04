@@ -567,7 +567,7 @@ pub fn lint(kind: &str, text: &str, heads: &[&str], scope: &Scope) -> Vec<String
             Tok::Word(_) if lets.contains(&i) => {}
             Tok::Word(w) if w == "_" => {}
             Tok::Word(_) if assoc_clause && i > 0 && matches!(toks[i - 1], Tok::Punct('{' | ',')) && toks.get(i + 1) == Some(&Tok::Punct('=')) && toks.get(i + 2) != Some(&Tok::Punct('=')) => {}
-            // the name of a type argument: `list<element type=u8>`, `ref<target type=T>`
+            // the name of a type argument: `list<element_type=u8>`, `ref<target_type=T>`
             Tok::Word(w) if is_arg_name(&toks, i, w) => {}
             Tok::Quoted(p) if !is_host_path(p) => errs.push(format!("`'{p}'` is not a quoted host path (`'std::…'`)")),
             Tok::Word(w) => {
@@ -593,12 +593,10 @@ pub fn lint(kind: &str, text: &str, heads: &[&str], scope: &Scope) -> Vec<String
     errs
 }
 
-/// Whether the word at `i` is part of the name of a named type argument (`element type=`), which names no value.
-fn is_arg_name(toks: &[Tok], i: usize, w: &str) -> bool {
-    const FIRST: [&str; 5] = ["element", "key", "value", "hasher", "target"];
-    let is = |j: usize, s: &str| matches!(toks.get(j), Some(Tok::Word(x)) if x == s);
-    let assigns = |j: usize| toks.get(j) == Some(&Tok::Punct('=')) && toks.get(j + 1) != Some(&Tok::Punct('='));
-    (FIRST.contains(&w) && is(i + 1, "type") && assigns(i + 2)) || (w == "type" && i > 0 && FIRST.iter().any(|f| is(i - 1, f)) && assigns(i + 1))
+/// Whether the word at `i` names a type argument (`element_type=`, after `<` or `,`), which names no value.
+fn is_arg_name(toks: &[Tok], i: usize, _w: &str) -> bool {
+    let assigns = toks.get(i + 1) == Some(&Tok::Punct('=')) && toks.get(i + 2) != Some(&Tok::Punct('='));
+    assigns && i > 0 && matches!(toks[i - 1], Tok::Punct('<' | ','))
 }
 
 /// What a `given` item may name, for one subject: the generics with the methods their bounds are known to have, the
@@ -708,7 +706,7 @@ mod tests {
         sc.names.extend(["a", "b", "Item"].map(String::from));
         let ok = |kind: &str, head: &str, t: &str| assert_eq!(lint(kind, t, &[head], &sc), Vec::<String>::new(), "{t}");
         ok("implements", "implements", "implements 'std::iter::Iterator' { Item = scalar }, 'std::clone::Clone'");
-        ok("implements", "implements", "implements 'std::convert::From<u8>' { Item = 'std::string::String', Other = list<element type=u8> }");
+        ok("implements", "implements", "implements 'std::convert::From<u8>' { Item = 'std::string::String', Other = list<element_type=u8> }");
         ok("hold", "hold", "hold : borrows for 'a");
         ok("hold", "hold", "hold : borrows for 'a, 'b");
         ok("hold", "hold", "hold result : borrows from self");

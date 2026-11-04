@@ -14,6 +14,7 @@
 //! To refresh the Rust after editing the bare files, from `tools/bare-rust`:
 //! `cargo run -q -- weave ../../examples/<name>/bare --out ../../examples/.woven --crate ../../examples/<name>`, then
 //! copy `.woven/src` over `examples/<name>/src` and delete `.woven`.
+mod y_lint;
 mod y_paths;
 
 use bare_rust::json::canonical;
@@ -25,6 +26,23 @@ use std::path::{Path, PathBuf};
 
 fn example(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples").join(name)
+}
+
+/// The lint `type_argument_name` (Y § 3.1) over every Y file of every example: an argument that takes a type is named
+/// `…_type`, and one that takes a value is not.
+#[test]
+fn every_example_names_its_type_arguments_by_the_convention() {
+    let mut errors = vec![];
+    for name in ["checkers", "hangman", "memory", "nim", "snake", "tic-tac-toe"] {
+        let dir = example(name).join("y/src");
+        let mut files: Vec<PathBuf> = fs::read_dir(&dir).unwrap().map(|e| e.unwrap().path()).collect();
+        files.sort();
+        for f in files {
+            let shown = format!("examples/{name}/y/src/{}", f.file_name().unwrap().to_string_lossy());
+            errors.extend(y_lint::type_argument_names(&shown, &read(&f)));
+        }
+    }
+    assert!(errors.is_empty(), "{errors:#?}");
 }
 
 /// The bare modules of an example, as paths under `bare/src` and `src` without their extensions.
@@ -575,7 +593,7 @@ fn when_of(source: &str, test: &str) -> Vec<String> {
 /// whose `else` covers two orders.
 const FIRST_ABOVE: &str = "\
 ----------------------------------------
-values: The values, as list<element type=int32>.
+values: The values, as list<element_type=int32>.
 
 limit: The limit, as int32.
 

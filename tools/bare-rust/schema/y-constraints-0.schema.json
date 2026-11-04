@@ -113,7 +113,7 @@
   },
   "$defs": {
     "type": {
-      "description": "A type string (`u64 as 'usize'`, `ref<target type=Entry>?`, `ptr<target type=u8>`, `map<key type=K, value type=V> as 'std::collections::HashMap'`, `Chars<'a>`, `some std::iter::Iterator { Item = u8 }`, `any std::error::Error as 'std::boxed::Box'`), or host text for a type the language has no form for.",
+      "description": "A type string (`u64 as 'usize'`, `ref<target_type=Entry>?`, `ptr<target_type=u8>`, `map<key_type=K, value_type=V> as 'std::collections::HashMap'`, `Chars<'a>`, `some std::iter::Iterator { Item = u8 }`, `any std::error::Error as 'std::boxed::Box'`), or host text for a type the language has no form for.",
       "oneOf": [
         {
           "type": "string",
@@ -144,7 +144,7 @@
         "rights"
       ],
       "additionalProperties": false,
-      "description": "The access of a slot's references (`ref<target type=T>`: rights and a guarantee, always both) or of its pointers (`ptr<target type=T>`: `rights: read` for `*const`, and never a guarantee; a pointer without an access is `*mut`).",
+      "description": "The access of a slot's references (`ref<target_type=T>`: rights and a guarantee, always both) or of its pointers (`ptr<target_type=T>`: `rights: read` for `*const`, and never a guarantee; a pointer without an access is `*mut`).",
       "properties": {
         "rights": {
           "enum": [

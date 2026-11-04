@@ -17,7 +17,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=Self>",
+          "type": "ref<target_type=Self>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -49,7 +49,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=IntersperseElementSimple<Item>>",
+          "type": "ref<target_type=IntersperseElementSimple<Item>>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -85,7 +85,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=F>",
+          "type": "ref<target_type=F>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -134,7 +134,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=IntersperseWith<I, ElemF>>",
+          "type": "ref<target_type=IntersperseWith<I, ElemF>>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -146,7 +146,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=IntersperseWith<I, ElemF>>",
+          "type": "ref<target_type=IntersperseWith<I, ElemF>>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],

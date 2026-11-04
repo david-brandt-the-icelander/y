@@ -30,12 +30,12 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=map<key type=K, value type=V, hasher type=S> as 'std::collections::HashMap'>",
+          "type": "ref<target_type=map<key_type=K, value_type=V, hasher_type=S> as 'std::collections::HashMap'>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
-        { "name": "k", "type": "ref<target type=Q>", "access": { "rights": "read", "guarantee": "readers" } }
+        { "name": "k", "type": "ref<target_type=Q>", "access": { "rights": "read", "guarantee": "readers" } }
       ],
-      "result": { "type": "ref<target type=V>?", "hold": { "kind": "borrows", "from": "self" } },
+      "result": { "type": "ref<target_type=V>?", "hold": { "kind": "borrows", "from": "self" } },
       "clauses": [
         {
           "kind": "ensure",
@@ -136,7 +136,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=string>",
+          "type": "ref<target_type=string>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -296,12 +296,12 @@
       "params": [
         {
           "name": "x",
-          "type": "ref<target type=T>",
+          "type": "ref<target_type=T>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         {
           "name": "y",
-          "type": "ref<target type=T>",
+          "type": "ref<target_type=T>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -348,7 +348,7 @@
       "params": [
         {
           "name": "dest",
-          "type": "ref<target type=T>",
+          "type": "ref<target_type=T>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         { "name": "src", "type": "T" }
@@ -415,11 +415,11 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=T?>",
+          "type": "ref<target_type=T?>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "ref<target type=T>?", "hold": { "kind": "borrows", "from": "self" } },
+      "result": { "type": "ref<target_type=T>?", "hold": { "kind": "borrows", "from": "self" } },
       "clauses": [
         {
           "kind": "ensure",
@@ -461,12 +461,12 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=T?>",
+          "type": "ref<target_type=T?>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
       "result": {
-        "type": "ref<target type=T>?",
+        "type": "ref<target_type=T>?",
         "access": { "rights": "write", "guarantee": "exclusive" },
         "hold": { "kind": "borrows", "from": "self" }
       },
@@ -514,7 +514,7 @@
         { "name": "self", "type": "T?" },
         {
           "name": "msg",
-          "type": "ref<target type=string>",
+          "type": "ref<target_type=string>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -548,7 +548,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=T?>",
+          "type": "ref<target_type=T?>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -638,7 +638,7 @@
         { "name": "self", "type": "std::result::Result<T, E>" },
         {
           "name": "msg",
-          "type": "ref<target type=string>",
+          "type": "ref<target_type=string>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -678,7 +678,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=list<element type=T> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=T> as 'std::primitive::slice'>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -724,7 +724,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=list<element type=T> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=T> as 'std::primitive::slice'>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -764,13 +764,13 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=list<element type=T> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=T> as 'std::primitive::slice'>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         { "name": "mid", "type": "u64 as 'usize'" }
       ],
       "result": {
-        "type": "(ref<target type=list<element type=T> as 'std::primitive::slice'>, ref<target type=list<element type=T> as 'std::primitive::slice'>)",
+        "type": "(ref<target_type=list<element_type=T> as 'std::primitive::slice'>, ref<target_type=list<element_type=T> as 'std::primitive::slice'>)",
         "access": { "rights": "write", "guarantee": "exclusive" },
         "hold": { "kind": "borrows", "from": "self" }
       },
@@ -826,7 +826,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=string>",
+          "type": "ref<target_type=string>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -871,7 +871,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=string as 'String'>",
+          "type": "ref<target_type=string as 'String'>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -1084,7 +1084,7 @@
       "visible": "public",
       "generics": [{ "name": "K", "bounds": [] }, { "name": "V", "bounds": [] }],
       "params": [],
-      "result": { "type": "map<key type=K, value type=V> as 'std::collections::HashMap'" },
+      "result": { "type": "map<key_type=K, value_type=V> as 'std::collections::HashMap'" },
       "clauses": [
         {
           "kind": "ensure",
@@ -1118,7 +1118,7 @@
       "visible": "public",
       "generics": [{ "name": "K", "bounds": [] }, { "name": "V", "bounds": [] }],
       "params": [{ "name": "capacity", "type": "u64 as 'usize'" }],
-      "result": { "type": "map<key type=K, value type=V> as 'std::collections::HashMap'" },
+      "result": { "type": "map<key_type=K, value_type=V> as 'std::collections::HashMap'" },
       "clauses": [
         {
           "kind": "ensure",
@@ -1164,7 +1164,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=map<key type=K, value type=V, hasher type=S> as 'std::collections::HashMap'>",
+          "type": "ref<target_type=map<key_type=K, value_type=V, hasher_type=S> as 'std::collections::HashMap'>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         { "name": "k", "type": "K" },
@@ -1255,7 +1255,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=map<key type=K, value type=V, hasher type=S> as 'std::collections::HashMap'>",
+          "type": "ref<target_type=map<key_type=K, value_type=V, hasher_type=S> as 'std::collections::HashMap'>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         { "name": "key", "type": "K" }
@@ -1350,7 +1350,7 @@
         { "name": "default", "type": "V" }
       ],
       "result": {
-        "type": "ref<target type=V>",
+        "type": "ref<target_type=V>",
         "access": { "rights": "write", "guarantee": "exclusive" },
         "hold": { "kind": "borrows", "lifetime": "'a" }
       },
@@ -1451,7 +1451,7 @@
           "kind": "unexpressed",
           "text": "HashMap<K, V, S> implements Index<&Q> with Output = V, for K: Borrow<Q>, Q: Eq + Hash and S: BuildHasher.",
           "source": "1.97.0 std/src/collections/hash/map.rs:1501, impls: Index 1501",
-          "reason": "no elided lifetime in a trait argument: `Index<&Q>` takes a reference of an anonymous lifetime, which a bound cannot name, so `ref<target type=Q>` as an interface argument does not compile"
+          "reason": "no elided lifetime in a trait argument: `Index<&Q>` takes a reference of an anonymous lifetime, which a bound cannot name, so `ref<target_type=Q>` as an interface argument does not compile"
         },
         {
           "kind": "unexpressed",
@@ -1507,7 +1507,7 @@
           "kind": "unexpressed",
           "text": "HashSet<T, S> implements Extend<&'a T> for T: 'a + Eq + Hash + Copy and S: BuildHasher.",
           "source": "1.97.0 std/src/collections/hash/set.rs:1255, impls: Extend<&T> 1255",
-          "reason": "no elided lifetime in a trait argument: `Extend<&'a T>` takes a reference, which a bound cannot name, so `ref<target type=T>` as an interface argument does not compile"
+          "reason": "no elided lifetime in a trait argument: `Extend<&'a T>` takes a reference, which a bound cannot name, so `ref<target_type=T>` as an interface argument does not compile"
         },
         {
           "kind": "implements",
@@ -1706,17 +1706,17 @@
       "visible": "public",
       "generics": [{ "name": "'a", "bounds": [] }, { "name": "T", "bounds": ["'a"] }],
       "implements": [
-        { "trait": "std::iter::Iterator", "assoc": { "Item": "ref<target type=T>" } },
+        { "trait": "std::iter::Iterator", "assoc": { "Item": "ref<target_type=T>" } },
         { "trait": "std::iter::DoubleEndedIterator" },
         { "trait": "std::iter::ExactSizeIterator" },
         { "trait": "std::iter::FusedIterator" },
         { "trait": "std::clone::Clone" },
-        { "trait": "std::convert::AsRef<list<element type=T> as 'std::primitive::slice'>" }
+        { "trait": "std::convert::AsRef<list<element_type=T> as 'std::primitive::slice'>" }
       ],
       "clauses": [
         {
           "kind": "implements",
-          "text": "implements 'std::iter::Iterator' { Item = ref<target type=T> }, 'std::iter::DoubleEndedIterator', 'std::iter::ExactSizeIterator', 'std::iter::FusedIterator', 'std::clone::Clone', 'std::convert::AsRef<list<element type=T>>'",
+          "text": "implements 'std::iter::Iterator' { Item = ref<target_type=T> }, 'std::iter::DoubleEndedIterator', 'std::iter::ExactSizeIterator', 'std::iter::FusedIterator', 'std::clone::Clone', 'std::convert::AsRef<list<element_type=T>>'",
           "source": "1.97.0 core/src/slice/iter.rs:67, impls: the iterator! macro of core/src/slice/iter/macros.rs for Iterator, DoubleEndedIterator, ExactSizeIterator, FusedIterator; Clone 151, AsRef 159",
           "status": { "observed": "from the impl blocks" }
         },
@@ -1746,13 +1746,13 @@
         { "trait": "std::iter::ExactSizeIterator" },
         { "trait": "std::iter::FusedIterator" },
         { "trait": "std::default::Default" },
-        { "trait": "std::convert::AsRef<list<element type=T> as 'std::primitive::slice'>" },
+        { "trait": "std::convert::AsRef<list<element_type=T> as 'std::primitive::slice'>" },
         { "trait": "std::ops::Drop" }
       ],
       "clauses": [
         {
           "kind": "implements",
-          "text": "implements 'std::iter::Iterator' { Item = T }, 'std::iter::DoubleEndedIterator', 'std::iter::ExactSizeIterator', 'std::iter::FusedIterator', 'std::default::Default', 'std::convert::AsRef<list<element type=T>>', 'std::ops::Drop'",
+          "text": "implements 'std::iter::Iterator' { Item = T }, 'std::iter::DoubleEndedIterator', 'std::iter::ExactSizeIterator', 'std::iter::FusedIterator', 'std::default::Default', 'std::convert::AsRef<list<element_type=T>>', 'std::ops::Drop'",
           "source": "1.97.0 alloc/src/vec/into_iter.rs:248, impls: Iterator 248, DoubleEndedIterator 424, ExactSizeIterator 473, FusedIterator 484, AsRef 236, Default 494, Drop 541",
           "status": { "observed": "from the impl blocks" }
         },
@@ -1993,7 +1993,7 @@
           "kind": "unexpressed",
           "text": "String implements From<&str>, FromIterator<&str>, Extend<&str> and Add<&str> (with Output = String).",
           "source": "1.97.0 alloc/src/string.rs:3121, impls: From<&str> 3121, FromIterator<&str>, Extend<&str>, Add 2784",
-          "reason": "no elided lifetime in a trait argument: an interface argument that is a reference (`From<&str>`) takes an anonymous lifetime a bound cannot name, so `ref<target type=string>` there does not compile"
+          "reason": "no elided lifetime in a trait argument: an interface argument that is a reference (`From<&str>`) takes an anonymous lifetime a bound cannot name, so `ref<target_type=string>` there does not compile"
         },
         {
           "kind": "implements",
@@ -2017,7 +2017,7 @@
       "implements": [
         {
           "trait": "std::ops::Deref",
-          "assoc": { "Target": "list<element type=T> as 'std::primitive::slice'" }
+          "assoc": { "Target": "list<element_type=T> as 'std::primitive::slice'" }
         },
         { "trait": "std::ops::DerefMut" },
         {
@@ -2053,7 +2053,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=Self>",
+          "type": "ref<target_type=Self>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -2653,7 +2653,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=Self>",
+          "type": "ref<target_type=Self>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -2737,7 +2737,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=Self>",
+          "type": "ref<target_type=Self>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
@@ -2771,7 +2771,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=Self>",
+          "type": "ref<target_type=Self>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -2800,12 +2800,12 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=Self>",
+          "type": "ref<target_type=Self>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         {
           "name": "bytes",
-          "type": "ref<target type=list<element type=u8> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=u8> as 'std::primitive::slice'>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -2868,12 +2868,12 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=Self>",
+          "type": "ref<target_type=Self>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "other",
-          "type": "ref<target type=Rhs>",
+          "type": "ref<target_type=Rhs>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -2947,12 +2947,12 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=Self>",
+          "type": "ref<target_type=Self>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "other",
-          "type": "ref<target type=Self>",
+          "type": "ref<target_type=Self>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -2989,12 +2989,12 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=Self>",
+          "type": "ref<target_type=Self>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "other",
-          "type": "ref<target type=Rhs>",
+          "type": "ref<target_type=Rhs>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -3032,12 +3032,12 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=Self>",
+          "type": "ref<target_type=Self>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "state",
-          "type": "ref<target type=H>",
+          "type": "ref<target_type=H>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -3319,12 +3319,12 @@
       "params": [
         {
           "name": "left",
-          "type": "ref<target type=T>",
+          "type": "ref<target_type=T>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "right",
-          "type": "ref<target type=U>",
+          "type": "ref<target_type=U>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -3377,7 +3377,7 @@
       "generics": [{ "name": "T", "bounds": [] }],
       "form": "bang",
       "params": [],
-      "result": { "type": "list<element type=T> as 'std::vec::Vec'" },
+      "result": { "type": "list<element_type=T> as 'std::vec::Vec'" },
       "clauses": [
         {
           "kind": "unexpressed",
@@ -4660,7 +4660,7 @@
         { "name": "S", "bounds": ["std::default::Default"] }
       ],
       "trait": "std::default::Default",
-      "self": "map<key type=K, value type=V, hasher type=S> as 'std::collections::HashMap'",
+      "self": "map<key_type=K, value_type=V, hasher_type=S> as 'std::collections::HashMap'",
       "clauses": [
         {
           "kind": "implements",
@@ -4680,7 +4680,7 @@
         { "name": "S", "bounds": ["std::clone::Clone"] }
       ],
       "trait": "std::clone::Clone",
-      "self": "map<key type=K, value type=V, hasher type=S> as 'std::collections::HashMap'",
+      "self": "map<key_type=K, value_type=V, hasher_type=S> as 'std::collections::HashMap'",
       "clauses": [
         {
           "kind": "implements",
@@ -4700,7 +4700,7 @@
         { "name": "S", "bounds": ["std::hash::BuildHasher"] }
       ],
       "trait": "std::cmp::PartialEq",
-      "self": "map<key type=K, value type=V, hasher type=S> as 'std::collections::HashMap'",
+      "self": "map<key_type=K, value_type=V, hasher_type=S> as 'std::collections::HashMap'",
       "clauses": [
         {
           "kind": "implements",
@@ -4720,7 +4720,7 @@
         { "name": "S", "bounds": ["std::hash::BuildHasher"] }
       ],
       "trait": "std::cmp::Eq",
-      "self": "map<key type=K, value type=V, hasher type=S> as 'std::collections::HashMap'",
+      "self": "map<key_type=K, value_type=V, hasher_type=S> as 'std::collections::HashMap'",
       "clauses": [
         {
           "kind": "implements",
@@ -4740,7 +4740,7 @@
         { "name": "S", "bounds": [] }
       ],
       "trait": "std::fmt::Debug",
-      "self": "map<key type=K, value type=V, hasher type=S> as 'std::collections::HashMap'",
+      "self": "map<key_type=K, value_type=V, hasher_type=S> as 'std::collections::HashMap'",
       "clauses": [
         {
           "kind": "implements",
@@ -4760,7 +4760,7 @@
         { "name": "S", "bounds": ["std::hash::BuildHasher", "std::default::Default"] }
       ],
       "trait": "std::iter::FromIterator<(K, V)>",
-      "self": "map<key type=K, value type=V, hasher type=S> as 'std::collections::HashMap'",
+      "self": "map<key_type=K, value_type=V, hasher_type=S> as 'std::collections::HashMap'",
       "clauses": [
         {
           "kind": "implements",
@@ -4780,7 +4780,7 @@
         { "name": "S", "bounds": ["std::hash::BuildHasher"] }
       ],
       "trait": "std::iter::Extend<(K, V)>",
-      "self": "map<key type=K, value type=V, hasher type=S> as 'std::collections::HashMap'",
+      "self": "map<key_type=K, value_type=V, hasher_type=S> as 'std::collections::HashMap'",
       "clauses": [
         {
           "kind": "implements",
@@ -4801,10 +4801,10 @@
         { "name": "S", "bounds": ["'a"] }
       ],
       "trait": "std::iter::IntoIterator",
-      "self": "ref<target type=map<key type=K, value type=V, hasher type=S> as 'std::collections::HashMap'>",
+      "self": "ref<target_type=map<key_type=K, value_type=V, hasher_type=S> as 'std::collections::HashMap'>",
       "assoc": {
         "IntoIter": "std::collections::hash_map::Iter<'a, K, V>",
-        "Item": "(ref<target type=K>, ref<target type=V>)"
+        "Item": "(ref<target_type=K>, ref<target_type=V>)"
       },
       "clauses": [
         {
@@ -4821,7 +4821,7 @@
       "visible": "public",
       "generics": [{ "name": "T", "bounds": [] }, { "name": "S", "bounds": ["std::default::Default"] }],
       "trait": "std::default::Default",
-      "self": "set<element type=T, hasher type=S> as 'std::collections::HashSet'",
+      "self": "set<element_type=T, hasher_type=S> as 'std::collections::HashSet'",
       "clauses": [
         {
           "kind": "implements",
@@ -4840,7 +4840,7 @@
         { "name": "S", "bounds": ["std::clone::Clone"] }
       ],
       "trait": "std::clone::Clone",
-      "self": "set<element type=T, hasher type=S> as 'std::collections::HashSet'",
+      "self": "set<element_type=T, hasher_type=S> as 'std::collections::HashSet'",
       "clauses": [
         {
           "kind": "implements",
@@ -4859,7 +4859,7 @@
         { "name": "S", "bounds": ["std::hash::BuildHasher"] }
       ],
       "trait": "std::cmp::PartialEq",
-      "self": "set<element type=T, hasher type=S> as 'std::collections::HashSet'",
+      "self": "set<element_type=T, hasher_type=S> as 'std::collections::HashSet'",
       "clauses": [
         {
           "kind": "implements",
@@ -4878,7 +4878,7 @@
         { "name": "S", "bounds": ["std::hash::BuildHasher"] }
       ],
       "trait": "std::cmp::Eq",
-      "self": "set<element type=T, hasher type=S> as 'std::collections::HashSet'",
+      "self": "set<element_type=T, hasher_type=S> as 'std::collections::HashSet'",
       "clauses": [
         {
           "kind": "implements",
@@ -4894,7 +4894,7 @@
       "visible": "public",
       "generics": [{ "name": "T", "bounds": ["std::fmt::Debug"] }, { "name": "S", "bounds": [] }],
       "trait": "std::fmt::Debug",
-      "self": "set<element type=T, hasher type=S> as 'std::collections::HashSet'",
+      "self": "set<element_type=T, hasher_type=S> as 'std::collections::HashSet'",
       "clauses": [
         {
           "kind": "implements",
@@ -4913,7 +4913,7 @@
         { "name": "S", "bounds": ["std::hash::BuildHasher", "std::default::Default"] }
       ],
       "trait": "std::iter::FromIterator<T>",
-      "self": "set<element type=T, hasher type=S> as 'std::collections::HashSet'",
+      "self": "set<element_type=T, hasher_type=S> as 'std::collections::HashSet'",
       "clauses": [
         {
           "kind": "implements",
@@ -4932,7 +4932,7 @@
         { "name": "S", "bounds": ["std::hash::BuildHasher"] }
       ],
       "trait": "std::iter::Extend<T>",
-      "self": "set<element type=T, hasher type=S> as 'std::collections::HashSet'",
+      "self": "set<element_type=T, hasher_type=S> as 'std::collections::HashSet'",
       "clauses": [
         {
           "kind": "implements",
@@ -4952,8 +4952,8 @@
         { "name": "S", "bounds": ["'a"] }
       ],
       "trait": "std::iter::IntoIterator",
-      "self": "ref<target type=set<element type=T, hasher type=S> as 'std::collections::HashSet'>",
-      "assoc": { "IntoIter": "std::collections::hash_set::Iter<'a, T>", "Item": "ref<target type=T>" },
+      "self": "ref<target_type=set<element_type=T, hasher_type=S> as 'std::collections::HashSet'>",
+      "assoc": { "IntoIter": "std::collections::hash_set::Iter<'a, T>", "Item": "ref<target_type=T>" },
       "clauses": [
         {
           "kind": "implements",
@@ -5306,7 +5306,7 @@
       "visible": "public",
       "generics": [{ "name": "T", "bounds": ["std::clone::Clone"] }],
       "trait": "std::clone::Clone",
-      "self": "list<element type=T> as 'std::vec::Vec'",
+      "self": "list<element_type=T> as 'std::vec::Vec'",
       "clauses": [
         {
           "kind": "implements",
@@ -5322,7 +5322,7 @@
       "visible": "public",
       "generics": [{ "name": "T", "bounds": ["std::hash::Hash"] }],
       "trait": "std::hash::Hash",
-      "self": "list<element type=T> as 'std::vec::Vec'",
+      "self": "list<element_type=T> as 'std::vec::Vec'",
       "clauses": [
         {
           "kind": "implements",
@@ -5338,7 +5338,7 @@
       "visible": "public",
       "generics": [{ "name": "T", "bounds": ["std::cmp::Eq"] }],
       "trait": "std::cmp::Eq",
-      "self": "list<element type=T> as 'std::vec::Vec'",
+      "self": "list<element_type=T> as 'std::vec::Vec'",
       "clauses": [
         {
           "kind": "implements",
@@ -5354,7 +5354,7 @@
       "visible": "public",
       "generics": [{ "name": "T", "bounds": ["std::cmp::Ord"] }],
       "trait": "std::cmp::Ord",
-      "self": "list<element type=T> as 'std::vec::Vec'",
+      "self": "list<element_type=T> as 'std::vec::Vec'",
       "clauses": [
         {
           "kind": "implements",
@@ -5370,7 +5370,7 @@
       "visible": "public",
       "generics": [{ "name": "T", "bounds": ["std::fmt::Debug"] }],
       "trait": "std::fmt::Debug",
-      "self": "list<element type=T> as 'std::vec::Vec'",
+      "self": "list<element_type=T> as 'std::vec::Vec'",
       "clauses": [
         {
           "kind": "implements",
@@ -5386,7 +5386,7 @@
       "visible": "public",
       "generics": [{ "name": "T", "bounds": [] }, { "name": "I", "bounds": ["std::slice::SliceIndex<[T]>"] }],
       "trait": "std::ops::Index<I>",
-      "self": "list<element type=T> as 'std::vec::Vec'",
+      "self": "list<element_type=T> as 'std::vec::Vec'",
       "assoc": { "Output": "I::Output" },
       "clauses": [
         {
@@ -5403,7 +5403,7 @@
       "visible": "public",
       "generics": [{ "name": "T", "bounds": [] }, { "name": "I", "bounds": ["std::slice::SliceIndex<[T]>"] }],
       "trait": "std::ops::IndexMut<I>",
-      "self": "list<element type=T> as 'std::vec::Vec'",
+      "self": "list<element_type=T> as 'std::vec::Vec'",
       "clauses": [
         {
           "kind": "implements",
@@ -5419,7 +5419,7 @@
       "visible": "public",
       "generics": [{ "name": "T", "bounds": [] }],
       "trait": "std::ops::Index<u64 as 'usize'>",
-      "self": "list<element type=T> as 'std::vec::Vec'",
+      "self": "list<element_type=T> as 'std::vec::Vec'",
       "assoc": { "Output": "T" },
       "clauses": []
     },
@@ -5431,12 +5431,12 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=list<element type=T> as 'std::vec::Vec'>",
+          "type": "ref<target_type=list<element_type=T> as 'std::vec::Vec'>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "index", "type": "u64 as 'usize'" }
       ],
-      "result": { "type": "ref<target type=T>", "hold": { "kind": "borrows", "from": "self" } },
+      "result": { "type": "ref<target_type=T>", "hold": { "kind": "borrows", "from": "self" } },
       "clauses": [
         {
           "kind": "panics",
@@ -5452,7 +5452,7 @@
       "visible": "public",
       "generics": [{ "name": "T", "bounds": [] }],
       "trait": "std::ops::IndexMut<u64 as 'usize'>",
-      "self": "list<element type=T> as 'std::vec::Vec'",
+      "self": "list<element_type=T> as 'std::vec::Vec'",
       "clauses": []
     },
     {
@@ -5463,13 +5463,13 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=list<element type=T> as 'std::vec::Vec'>",
+          "type": "ref<target_type=list<element_type=T> as 'std::vec::Vec'>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         { "name": "index", "type": "u64 as 'usize'" }
       ],
       "result": {
-        "type": "ref<target type=T>",
+        "type": "ref<target_type=T>",
         "access": { "rights": "write", "guarantee": "exclusive" },
         "hold": { "kind": "borrows", "from": "self" }
       },
@@ -5488,7 +5488,7 @@
       "visible": "public",
       "generics": [{ "name": "T", "bounds": [] }],
       "trait": "std::ops::Index<u64 as 'usize'>",
-      "self": "list<element type=T> as 'std::primitive::slice'",
+      "self": "list<element_type=T> as 'std::primitive::slice'",
       "assoc": { "Output": "T" },
       "clauses": []
     },
@@ -5500,12 +5500,12 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=list<element type=T> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=T> as 'std::primitive::slice'>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "index", "type": "u64 as 'usize'" }
       ],
-      "result": { "type": "ref<target type=T>", "hold": { "kind": "borrows", "from": "self" } },
+      "result": { "type": "ref<target_type=T>", "hold": { "kind": "borrows", "from": "self" } },
       "clauses": [
         {
           "kind": "panics",
@@ -5521,7 +5521,7 @@
       "visible": "public",
       "generics": [{ "name": "T", "bounds": [] }],
       "trait": "std::ops::IndexMut<u64 as 'usize'>",
-      "self": "list<element type=T> as 'std::primitive::slice'",
+      "self": "list<element_type=T> as 'std::primitive::slice'",
       "clauses": []
     },
     {
@@ -5532,13 +5532,13 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=list<element type=T> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=T> as 'std::primitive::slice'>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         { "name": "index", "type": "u64 as 'usize'" }
       ],
       "result": {
-        "type": "ref<target type=T>",
+        "type": "ref<target_type=T>",
         "access": { "rights": "write", "guarantee": "exclusive" },
         "hold": { "kind": "borrows", "from": "self" }
       },
@@ -5557,7 +5557,7 @@
       "visible": "public",
       "generics": [{ "name": "T", "bounds": [] }],
       "trait": "std::iter::IntoIterator",
-      "self": "list<element type=T> as 'std::vec::Vec'",
+      "self": "list<element_type=T> as 'std::vec::Vec'",
       "assoc": { "IntoIter": "std::vec::IntoIter<T>", "Item": "T" },
       "clauses": [
         {
@@ -5573,7 +5573,7 @@
       "name": "std::vec::Vec as std::iter::IntoIterator::into_iter",
       "visible": "public",
       "impl": "std::vec::Vec as std::iter::IntoIterator",
-      "params": [{ "name": "self", "type": "list<element type=T> as 'std::vec::Vec'" }],
+      "params": [{ "name": "self", "type": "list<element_type=T> as 'std::vec::Vec'" }],
       "result": { "type": "std::vec::IntoIter<T>" },
       "clauses": [
         {
@@ -5729,7 +5729,7 @@
       "visible": "public",
       "generics": [{ "name": "T", "bounds": [] }],
       "trait": "std::default::Default",
-      "self": "list<element type=T> as 'std::vec::Vec'",
+      "self": "list<element_type=T> as 'std::vec::Vec'",
       "clauses": [
         {
           "kind": "implements",
@@ -5745,7 +5745,7 @@
       "visible": "public",
       "impl": "std::vec::Vec as std::default::Default",
       "params": [],
-      "result": { "type": "list<element type=T> as 'std::vec::Vec'" },
+      "result": { "type": "list<element_type=T> as 'std::vec::Vec'" },
       "clauses": [
         {
           "kind": "ensure",
@@ -5793,7 +5793,7 @@
       "visible": "public",
       "impl": "std::collections::HashMap as std::default::Default",
       "params": [],
-      "result": { "type": "map<key type=K, value type=V, hasher type=S> as 'std::collections::HashMap'" },
+      "result": { "type": "map<key_type=K, value_type=V, hasher_type=S> as 'std::collections::HashMap'" },
       "clauses": [
         {
           "kind": "ensure",
@@ -6334,7 +6334,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=std::sync::Mutex<T>>",
+          "type": "ref<target_type=std::sync::Mutex<T>>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -6352,7 +6352,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=std::sync::Mutex<T>>",
+          "type": "ref<target_type=std::sync::Mutex<T>>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -6370,7 +6370,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=std::sync::RwLock<T>>",
+          "type": "ref<target_type=std::sync::RwLock<T>>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -6388,7 +6388,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=std::sync::RwLock<T>>",
+          "type": "ref<target_type=std::sync::RwLock<T>>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -6406,7 +6406,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=std::cell::RefCell<T>>",
+          "type": "ref<target_type=std::cell::RefCell<T>>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -6421,7 +6421,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=std::cell::RefCell<T>>",
+          "type": "ref<target_type=std::cell::RefCell<T>>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -6462,7 +6462,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=std::io::Stdout>",
+          "type": "ref<target_type=std::io::Stdout>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -6476,7 +6476,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=std::io::Stderr>",
+          "type": "ref<target_type=std::io::Stderr>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -6490,7 +6490,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=std::io::Stdin>",
+          "type": "ref<target_type=std::io::Stdin>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],

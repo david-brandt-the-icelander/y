@@ -462,7 +462,7 @@ fn a_wrong_signature_is_reported_against_its_subject() {
     // no such item
     f["subjects"].as_array_mut().unwrap().push(json!({
         "kind": "function", "name": "std::collections::HashMap::fetch",
-        "params": [{"name": "self", "type": "ref<target type=string>", "access": {"rights": "read", "guarantee": "readers"}}]
+        "params": [{"name": "self", "type": "ref<target_type=string>", "access": {"rights": "read", "guarantee": "readers"}}]
     }));
     let r = check_signatures(&f, &work("sig-wrong"), &target()).unwrap();
     let by: std::collections::BTreeMap<&str, &str> = r.mismatches.iter().map(|(n, m)| (n.as_str(), m.as_str())).collect();
@@ -612,7 +612,7 @@ fn chars_with_its_impl() -> Value {
     }));
     subjects.push(json!({
         "kind": "function", "name": "std::str::Chars as std::iter::Iterator::next", "impl": "std::str::Chars as std::iter::Iterator",
-        "params": [{"name": "self", "type": "ref<target type=std::str::Chars<'a>>", "access": {"rights": "write", "guarantee": "exclusive"}}],
+        "params": [{"name": "self", "type": "ref<target_type=std::str::Chars<'a>>", "access": {"rights": "write", "guarantee": "exclusive"}}],
         "result": {"type": format!("{CHAR}?")}
     }));
     f
@@ -697,7 +697,7 @@ fn some_and_any_are_checked_as_the_real_function_takes_and_returns_them() {
     subjects.push(json!({
         "kind": "function", "name": "std::fs::write",
         "params": [{"name": "path", "type": "some std::convert::AsRef<std::path::Path>"},
-                   {"name": "contents", "type": "some std::convert::AsRef<list<element type=u8> as 'std::primitive::slice'>"}],
+                   {"name": "contents", "type": "some std::convert::AsRef<list<element_type=u8> as 'std::primitive::slice'>"}],
         "result": {"type": "()", "fails": "std::io::Error"}
     }));
     subjects.push(json!({
@@ -715,8 +715,8 @@ fn some_and_any_are_checked_as_the_real_function_takes_and_returns_them() {
     // a borrow inside a bound is shared and unnamed, and the result borrows from the one reference it is given
     subjects.push(json!({
         "kind": "function", "name": "std::primitive::str::split_whitespace",
-        "params": [{"name": "self", "type": "ref<target type=string>", "access": {"rights": "read", "guarantee": "readers"}}],
-        "result": {"type": "some std::iter::Iterator { Item = ref<target type=string> }", "hold": {"kind": "borrows", "from": "self"}}
+        "params": [{"name": "self", "type": "ref<target_type=string>", "access": {"rights": "read", "guarantee": "readers"}}],
+        "result": {"type": "some std::iter::Iterator { Item = ref<target_type=string> }", "hold": {"kind": "borrows", "from": "self"}}
     }));
     assert_eq!(errors(&f), "");
     let r = check_signatures(&f, &work("sig-exist"), &target()).unwrap();
@@ -751,15 +751,15 @@ fn generics_and_lifetimes_on_host_subjects_are_checked() {
     subjects.push(json!({
         "kind": "type", "name": "std::slice::Iter", "generics": [{"name": "'a", "bounds": []}, {"name": "T", "bounds": ["'a"]}],
         "hold": {"kind": "borrows", "for": ["'a"]},
-        "implements": [{"trait": "std::iter::Iterator", "assoc": {"Item": "ref<target type=T>"}}]
+        "implements": [{"trait": "std::iter::Iterator", "assoc": {"Item": "ref<target_type=T>"}}]
     }));
     subjects.push(json!({
         "kind": "impl", "name": "std::vec::Vec as std::clone::Clone", "generics": [{"name": "T", "bounds": ["std::clone::Clone"]}],
-        "self": "list<element type=T> as 'std::vec::Vec'", "trait": "std::clone::Clone"
+        "self": "list<element_type=T> as 'std::vec::Vec'", "trait": "std::clone::Clone"
     }));
     subjects.push(json!({
         "kind": "impl", "name": "std::vec::Vec as std::iter::IntoIterator", "generics": [{"name": "T", "bounds": []}],
-        "self": "list<element type=T> as 'std::vec::Vec'", "trait": "std::iter::IntoIterator", "assoc": {"Item": "T"}
+        "self": "list<element_type=T> as 'std::vec::Vec'", "trait": "std::iter::IntoIterator", "assoc": {"Item": "T"}
     }));
     assert_eq!(errors(&f), "");
     let r = check_signatures(&f, &work("sig-generics"), &target()).unwrap();
@@ -995,7 +995,7 @@ fn b3_closed_the_callback_promises_and_relabelled_what_stays() {
 fn small_additions() -> Value {
     let mut f = exemplars_only();
     f.as_object_mut().unwrap().remove("views");
-    let slice = "ref<target type=list<element type=T> as 'std::primitive::slice'>";
+    let slice = "ref<target_type=list<element_type=T> as 'std::primitive::slice'>";
     let subjects = f["subjects"].as_array_mut().unwrap();
     subjects.push(json!({
         "kind": "function", "name": "std::primitive::slice::len", "generics": [{"name": "T", "bounds": []}],
@@ -1004,7 +1004,7 @@ fn small_additions() -> Value {
     }));
     subjects.push(json!({
         "kind": "function", "name": "std::mem::replace", "generics": [{"name": "T", "bounds": []}],
-        "params": [{"name": "dest", "type": "ref<target type=T>", "access": {"rights": "write", "guarantee": "exclusive"}}, {"name": "src", "type": "T"}], "result": {"type": "T"},
+        "params": [{"name": "dest", "type": "ref<target_type=T>", "access": {"rights": "write", "guarantee": "exclusive"}}, {"name": "src", "type": "T"}], "result": {"type": "T"},
         "clauses": [
             {"kind": "hold", "text": "lifetime dest, src survive call", "source": "s", "status": {"assumed": "documentation"}},
             {"kind": "hold", "text": "hold dest : moved from src", "source": "s", "status": {"assumed": "documentation"}},

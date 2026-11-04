@@ -19,7 +19,7 @@
       "kind": "const",
       "name": "tic_tac_toe_example::tic_tac_toe::setup::board::LINES",
       "visible": "public",
-      "type": "list<element type=list<element type=u32> where count(value) == 3 as 'std::primitive::array'> where count(value) == 8 as 'std::primitive::array'"
+      "type": "list<element_type=list<element_type=u32> where count(value) == 3 as 'std::primitive::array'> where count(value) == 8 as 'std::primitive::array'"
     },
     {
       "kind": "type",
@@ -37,12 +37,12 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=Mark>",
+          "type": "ref<target_type=Mark>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "f",
-          "type": "ref<target type=std::fmt::Formatter<'_>>",
+          "type": "ref<target_type=std::fmt::Formatter<'_>>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -57,7 +57,7 @@
           "name": "squares",
           "visible": "path",
           "visible_path": "super",
-          "type": "list<element type=Mark?> as 'Vec'",
+          "type": "list<element_type=Mark?> as 'Vec'",
           "hold": { "kind": "owns" }
         },
         {
@@ -91,12 +91,12 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "line",
-          "type": "ref<target type=string>",
+          "type": "ref<target_type=string>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -110,7 +110,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         { "name": "square", "type": "u32" }
@@ -135,7 +135,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -156,7 +156,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -169,7 +169,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -189,11 +189,11 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "list<element type=u32> as 'Vec'" },
+      "result": { "type": "list<element_type=u32> as 'Vec'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:175" }]
     },
     {
@@ -202,7 +202,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -223,7 +223,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -236,7 +236,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "number", "type": "u32" }
@@ -282,12 +282,12 @@
         { "name": "started", "type": "Game" },
         {
           "name": "console",
-          "type": "ref<target type=Console>",
+          "type": "ref<target_type=Console>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         {
           "name": "forever",
-          "type": "ref<target type=Forever>",
+          "type": "ref<target_type=Forever>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -304,17 +304,17 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         {
           "name": "console",
-          "type": "ref<target type=Console>",
+          "type": "ref<target_type=Console>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         {
           "name": "forever",
-          "type": "ref<target type=Forever>",
+          "type": "ref<target_type=Forever>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -329,7 +329,7 @@
       "kind": "function",
       "name": "tic_tac_toe_example::tic_tac_toe::complaint",
       "params": [{ "name": "error", "type": "MoveError" }],
-      "result": { "type": "ref<target type=string>", "hold": { "kind": "borrows", "lifetime": "'static" } },
+      "result": { "type": "ref<target_type=string>", "hold": { "kind": "borrows", "lifetime": "'static" } },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:319" }]
     },
     {
@@ -338,12 +338,12 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "console",
-          "type": "ref<target type=Console>",
+          "type": "ref<target_type=Console>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],

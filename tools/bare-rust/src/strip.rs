@@ -1273,7 +1273,7 @@ impl<'a> Stripper<'a> {
                         let mutable = named_children(p).iter().any(|c| c.kind() == "mutable_specifier");
                         let lt = named_children(p).into_iter().find(|c| c.kind() == "lifetime").map(|l| text(l, src).to_string());
                         let lt = lt.filter(|l| l != "'_");
-                        o.insert("type".into(), json!(format!("ref<target type={}>", sc.self_ty)));
+                        o.insert("type".into(), json!(format!("ref<target_type={}>", sc.self_ty)));
                         o.insert("access".into(), access(mutable));
                         if let Some(l) = lt.as_ref().filter(|l| !life.elide.contains(*l)) {
                             o.insert("hold".into(), json!({"kind": "borrows", "lifetime": l}));

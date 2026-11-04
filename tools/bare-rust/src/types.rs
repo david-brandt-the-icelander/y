@@ -45,10 +45,10 @@ pub const RESERVED: [&str; 9] = ["string", "scalar", "list", "map", "set", "ref"
 /// arguments (`Node<'a>`) are the host's, and positional.
 pub fn arg_names(ctor: &str) -> &'static [&'static str] {
     match ctor {
-        "ref" | "ptr" => &["target type"],
-        "list" => &["element type"],
-        "set" => &["element type", "hasher type"],
-        "map" => &["key type", "value type", "hasher type"],
+        "ref" | "ptr" => &["target_type"],
+        "list" => &["element_type"],
+        "set" => &["element_type", "hasher_type"],
+        "map" => &["key_type", "value_type", "hasher_type"],
         _ => &[],
     }
 }
@@ -126,8 +126,8 @@ impl Ty {
             Ty::Char => "scalar".into(),
             Ty::Name(n) => n.clone(),
             Ty::App(n, a) => format!("{n}<{}>", join(a)),
-            Ty::Ref(t) => format!("ref<target type={}>", t.show()),
-            Ty::Ptr(t) => format!("ptr<target type={}>", t.show()),
+            Ty::Ref(t) => format!("ref<target_type={}>", t.show()),
+            Ty::Ptr(t) => format!("ptr<target_type={}>", t.show()),
             Ty::Opt(t) => format!("{}?", t.show()),
             Ty::Tuple(v) if v.len() == 1 => format!("({},)", v[0].show()),
             Ty::Tuple(v) => format!("({})", join(v)),
@@ -172,7 +172,7 @@ impl Ty {
         }
     }
 
-    /// Whether a reference hides inside the bounds of a `some` or `any`: `some Iterator { Item = ref<target type=string> }`.
+    /// Whether a reference hides inside the bounds of a `some` or `any`: `some Iterator { Item = ref<target_type=string> }`.
     /// Such a reference is not a slot's `ref`, yet the value still borrows.
     pub fn bound_borrows(&self) -> bool {
         let inside = |b: &[Bound]| {
@@ -406,7 +406,7 @@ impl P<'_> {
             p => Ok(p.to_string()),
         }
     }
-    /// The named arguments of one of the language's own generic types: `list<element type=u8>`. Each name is required,
+    /// The named arguments of one of the language's own generic types: `list<element_type=u8>`. Each name is required,
     /// in the order `arg_names` gives; a positional argument is refused with the form it should take.
     fn named_args(&mut self, ctor: &str) -> R<Vec<Ty>> {
         let names = arg_names(ctor);
@@ -414,13 +414,13 @@ impl P<'_> {
         loop {
             self.ws();
             let st = self.i;
-            while self.s.get(self.i).is_some_and(|c| c.is_ascii_lowercase() || *c == b' ') {
+            while self.s.get(self.i).is_some_and(|c| c.is_ascii_lowercase() || *c == b'_') {
                 self.i += 1;
             }
             let name = String::from_utf8_lossy(&self.s[st..self.i]).trim().to_string();
             let want = names.get(v.len()).copied();
             if self.s.get(self.i) != Some(&b'=') || self.s.get(self.i + 1) == Some(&b'=') || want != Some(name.as_str()) {
-                let shown: Vec<&&str> = names.iter().filter(|n| **n != "hasher type").collect();
+                let shown: Vec<&&str> = names.iter().filter(|n| **n != "hasher_type").collect();
                 let form: Vec<String> = shown.iter().map(|n| format!("{n}=…")).collect();
                 return Err(format!("bad type: the arguments of `{ctor}` are named, `{ctor}<{}>`, at {st}", form.join(", ")));
             }
@@ -614,28 +614,28 @@ mod tests {
 
     #[test]
     fn a_slice_is_a_list_whose_host_form_is_unsized() {
-        let t = Ty::parse("ref<target type=list<element type=T> as 'std::primitive::slice'>").unwrap();
+        let t = Ty::parse("ref<target_type=list<element_type=T> as 'std::primitive::slice'>").unwrap();
         assert_eq!(t.rust(false, Some("'p0")).unwrap(), "&'p0 [T]");
         assert_eq!(t.rust(true, Some("'p0")).unwrap(), "&'p0 mut [T]");
-        assert_eq!(t.show(), "ref<target type=list<element type=T> as 'std::primitive::slice'>");
+        assert_eq!(t.show(), "ref<target_type=list<element_type=T> as 'std::primitive::slice'>");
         assert!(t.has_ref());
         // a Vec is the same `list` with another host form
-        assert_eq!(Ty::parse("list<element type=u8> as 'std::vec::Vec'").unwrap().rust(false, None).unwrap(), "std::vec::Vec<u8>");
+        assert_eq!(Ty::parse("list<element_type=u8> as 'std::vec::Vec'").unwrap().rust(false, None).unwrap(), "std::vec::Vec<u8>");
     }
 
     #[test]
     fn a_pointer_reads_or_writes_by_its_access() {
-        let t = Ty::parse("ptr<target type=u8>").unwrap();
-        assert_eq!(t.show(), "ptr<target type=u8>");
+        let t = Ty::parse("ptr<target_type=u8>").unwrap();
+        assert_eq!(t.show(), "ptr<target_type=u8>");
         assert!(!t.has_ref() && t.has_ptr());
         // `*const` is `rights: read`; `*mut` is no access at all, where a reference without one reads.
         assert!(!t.writes(Some("read")) && t.writes(None) && t.writes(Some("write")));
-        assert!(!Ty::parse("ref<target type=u8>").unwrap().writes(None));
+        assert!(!Ty::parse("ref<target_type=u8>").unwrap().writes(None));
         assert_eq!(t.rust(false, None).unwrap(), "*const u8");
         assert_eq!(t.rust(true, None).unwrap(), "*mut u8");
-        assert_eq!(Ty::parse("ptr<target type=string>").unwrap().rust(false, None).unwrap(), "*const str");
-        assert_eq!(Ty::parse("ptr<target type=list<element type=u8> as 'std::primitive::slice'>").unwrap().rust(true, None).unwrap(), "*mut [u8]");
-        assert_eq!(Ty::parse("list<element type=ptr<target type=Node>> as 'Vec'").unwrap().rust(false, None).unwrap(), "Vec<*const Node>");
+        assert_eq!(Ty::parse("ptr<target_type=string>").unwrap().rust(false, None).unwrap(), "*const str");
+        assert_eq!(Ty::parse("ptr<target_type=list<element_type=u8> as 'std::primitive::slice'>").unwrap().rust(true, None).unwrap(), "*mut [u8]");
+        assert_eq!(Ty::parse("list<element_type=ptr<target_type=Node>> as 'Vec'").unwrap().rust(false, None).unwrap(), "Vec<*const Node>");
     }
 
     #[test]
@@ -655,16 +655,16 @@ mod tests {
         for t in [
             "some Display",
             "some Into<string>",
-            "some Iterator { Item = (u8, ref<target type=string>) } + Clone + '_",
+            "some Iterator { Item = (u8, ref<target_type=string>) } + Clone + '_",
             "any std::error::Error + Send + Sync as 'std::boxed::Box'",
-            "ref<target type=any Fn(ref<target type=u8>) -> bool>",
-            "any FnMut(ref<target type=string>) -> (u64 as 'usize')? + 'static as 'Box'",
+            "ref<target_type=any Fn(ref<target_type=u8>) -> bool>",
+            "any FnMut(ref<target_type=string>) -> (u64 as 'usize')? + 'static as 'Box'",
             "(u8,)",
-            "ref<target type=any Iterator { Item = u8 }>",
+            "ref<target_type=any Iterator { Item = u8 }>",
             "Chars<'a>",
-            "ref<target type=list<element type=Node<'_>> as 'Vec'>",
+            "ref<target_type=list<element_type=Node<'_>> as 'Vec'>",
             "Self::Item",
-            "some Foo<'a, u8> { A = u8, B = list<element type=u8> as 'Vec' }",
+            "some Foo<'a, u8> { A = u8, B = list<element_type=u8> as 'Vec' }",
         ] {
             assert_eq!(Ty::parse(t).unwrap().show(), t, "{t}");
         }
@@ -679,23 +679,23 @@ mod tests {
     #[test]
     fn existentials_print_as_rust_and_lower_to_generics() {
         let rust = |t: &str| Ty::parse(t).unwrap().rust(false, None).unwrap();
-        assert_eq!(rust("some Iterator { Item = (u8, ref<target type=string>) } + Clone + '_"), "impl Iterator<Item = (u8, &str)> + Clone + '_");
+        assert_eq!(rust("some Iterator { Item = (u8, ref<target_type=string>) } + Clone + '_"), "impl Iterator<Item = (u8, &str)> + Clone + '_");
         assert_eq!(rust("some Into<string>"), "impl Into<String>");
-        assert_eq!(rust("ref<target type=any Fn(ref<target type=u8>) -> bool>"), "&dyn Fn(&u8) -> bool");
+        assert_eq!(rust("ref<target_type=any Fn(ref<target_type=u8>) -> bool>"), "&dyn Fn(&u8) -> bool");
         assert_eq!(rust("any Error + Send + Sync as 'std::boxed::Box'"), "std::boxed::Box<dyn Error + Send + Sync>");
-        assert_eq!(rust("ref<target type=any Error + Send>"), "&(dyn Error + Send)");
+        assert_eq!(rust("ref<target_type=any Error + Send>"), "&(dyn Error + Send)");
         // the references of a bound are shared whatever the slot's access is; the slot's own are not
-        assert_eq!(Ty::parse("ref<target type=any Iterator { Item = ref<target type=u8> }>").unwrap().rust(true, Some("'p0")).unwrap(), "&'p0 mut dyn Iterator<Item = &u8>");
-        let t = Ty::parse("ref<target type=some Iterator { Item = ref<target type=u8> }>").unwrap();
+        assert_eq!(Ty::parse("ref<target_type=any Iterator { Item = ref<target_type=u8> }>").unwrap().rust(true, Some("'p0")).unwrap(), "&'p0 mut dyn Iterator<Item = &u8>");
+        let t = Ty::parse("ref<target_type=some Iterator { Item = ref<target_type=u8> }>").unwrap();
         assert!(t.has_ref() && t.bound_borrows());
-        assert!(!Ty::parse("some Iterator { Item = ref<target type=u8> }").unwrap().has_ref());
-        assert!(!Ty::parse("some Fn(ref<target type=u8>) -> bool").unwrap().bound_borrows(), "the arguments of call sugar are higher-ranked");
+        assert!(!Ty::parse("some Iterator { Item = ref<target_type=u8> }").unwrap().has_ref());
+        assert!(!Ty::parse("some Fn(ref<target_type=u8>) -> bool").unwrap().bound_borrows(), "the arguments of call sugar are higher-ranked");
         let mut lower = Lower { inner: "'__e".into(), params: vec![] };
-        let t = Ty::parse("(some Iterator { Item = ref<target type=u8> }, some Clone)").unwrap();
+        let t = Ty::parse("(some Iterator { Item = ref<target_type=u8> }, some Clone)").unwrap();
         assert_eq!(t.rust_lowered(false, None, &mut lower).unwrap(), "(__S0, __S1)");
         assert_eq!(lower.params, vec!["__S0: Iterator<Item = &'__e u8>".to_string(), "__S1: Clone".to_string()]);
         assert_eq!(Ty::parse("some Iterator { Item = u8 }").unwrap().bounds_rust("'e").unwrap().unwrap(), "Iterator<Item = u8>");
         assert!(Ty::parse("u8").unwrap().bounds_rust("'e").is_none());
-        assert!(Ty::parse("list<element type=some Clone> as 'Vec'").unwrap().has_some());
+        assert!(Ty::parse("list<element_type=some Clone> as 'Vec'").unwrap().has_some());
     }
 }

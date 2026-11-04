@@ -13,7 +13,7 @@
       "kind": "const",
       "name": "hangman_example::hangman::setup::game_rules::WORD_LIST",
       "visible": "public",
-      "type": "ref<target type=string>",
+      "type": "ref<target_type=string>",
       "access": { "rights": "read", "guarantee": "readers" }
     },
     {
@@ -60,11 +60,11 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=Word>",
+          "type": "ref<target_type=Word>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "ref<target type=string>", "hold": { "kind": "borrows", "from": "self" } }
+      "result": { "type": "ref<target_type=string>", "hold": { "kind": "borrows", "from": "self" } }
     },
     { "kind": "impl", "name": "hangman_example::hangman::setup::Word as fmt::Display" },
     {
@@ -73,12 +73,12 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=Word>",
+          "type": "ref<target_type=Word>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "f",
-          "type": "ref<target type=std::fmt::Formatter<'_>>",
+          "type": "ref<target_type=std::fmt::Formatter<'_>>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -97,11 +97,11 @@
       "params": [
         {
           "name": "text",
-          "type": "ref<target type=string>",
+          "type": "ref<target_type=string>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "list<element type=Word> as 'Vec'", "fails": "WordListError" },
+      "result": { "type": "list<element_type=Word> as 'Vec'", "fails": "WordListError" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:46" }]
     },
     { "kind": "module", "name": "hangman_example::hangman::rounds", "visible": "public" },
@@ -121,14 +121,14 @@
           "name": "hits",
           "visible": "path",
           "visible_path": "super",
-          "type": "set<element type=Rune> as 'BTreeSet'",
+          "type": "set<element_type=Rune> as 'BTreeSet'",
           "hold": { "kind": "owns" }
         },
         {
           "name": "misses",
           "visible": "path",
           "visible_path": "super",
-          "type": "list<element type=Rune> as 'Vec'",
+          "type": "list<element_type=Rune> as 'Vec'",
           "hold": { "kind": "owns" }
         }
       ],
@@ -148,7 +148,7 @@
       "params": [
         {
           "name": "self",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -188,7 +188,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -202,7 +202,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -216,7 +216,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -230,12 +230,12 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         {
           "name": "line",
-          "type": "ref<target type=string>",
+          "type": "ref<target_type=string>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -261,7 +261,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -291,7 +291,7 @@
         { "name": "letter", "type": "Rune" },
         {
           "name": "hits",
-          "type": "ref<target type=set<element type=Rune> as 'BTreeSet'>",
+          "type": "ref<target_type=set<element_type=Rune> as 'BTreeSet'>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -306,7 +306,7 @@
         { "name": "needed", "type": "u64 as 'usize'" },
         {
           "name": "mark",
-          "type": "ref<target type=string>",
+          "type": "ref<target_type=string>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -350,22 +350,22 @@
       "params": [
         {
           "name": "words",
-          "type": "ref<target type=list<element type=Word> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=Word> as 'std::primitive::slice'>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "console",
-          "type": "ref<target type=Console>",
+          "type": "ref<target_type=Console>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         {
           "name": "random",
-          "type": "ref<target type=Random>",
+          "type": "ref<target_type=Random>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         {
           "name": "forever",
-          "type": "ref<target type=Forever>",
+          "type": "ref<target_type=Forever>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -387,12 +387,12 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "console",
-          "type": "ref<target type=Console>",
+          "type": "ref<target_type=Console>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -409,12 +409,12 @@
       "params": [
         {
           "name": "guessed",
-          "type": "ref<target type=Result<Verdict, GuessError>>",
+          "type": "ref<target_type=Result<Verdict, GuessError>>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "typed",
-          "type": "ref<target type=string>",
+          "type": "ref<target_type=string>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -427,12 +427,12 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "console",
-          "type": "ref<target type=Console>",
+          "type": "ref<target_type=Console>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],

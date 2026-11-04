@@ -142,19 +142,19 @@
       "kind": "const",
       "name": "checkers_example::checkers::setup::directions::UP",
       "visible": "public",
-      "type": "list<element type=Direction> where count(value) == 2 as 'std::primitive::array'"
+      "type": "list<element_type=Direction> where count(value) == 2 as 'std::primitive::array'"
     },
     {
       "kind": "const",
       "name": "checkers_example::checkers::setup::directions::DOWN",
       "visible": "public",
-      "type": "list<element type=Direction> where count(value) == 2 as 'std::primitive::array'"
+      "type": "list<element_type=Direction> where count(value) == 2 as 'std::primitive::array'"
     },
     {
       "kind": "const",
       "name": "checkers_example::checkers::setup::directions::ALL",
       "visible": "public",
-      "type": "list<element type=Direction> where count(value) == 4 as 'std::primitive::array'"
+      "type": "list<element_type=Direction> where count(value) == 4 as 'std::primitive::array'"
     },
     {
       "kind": "type",
@@ -179,14 +179,14 @@
           "name": "path",
           "visible": "path",
           "visible_path": "super",
-          "type": "list<element type=Square> as 'Vec'",
+          "type": "list<element_type=Square> as 'Vec'",
           "hold": { "kind": "owns" }
         },
         {
           "name": "captures",
           "visible": "path",
           "visible_path": "super",
-          "type": "list<element type=Square> as 'Vec'",
+          "type": "list<element_type=Square> as 'Vec'",
           "hold": { "kind": "owns" }
         }
       ]
@@ -200,7 +200,7 @@
           "name": "name",
           "visible": "path",
           "visible_path": "super",
-          "type": "ref<target type=string>",
+          "type": "ref<target_type=string>",
           "access": { "rights": "read", "guarantee": "readers" },
           "hold": { "kind": "borrows", "lifetime": "'static" }
         },
@@ -225,7 +225,7 @@
       "kind": "const",
       "name": "checkers_example::checkers::setup::levels::ALL",
       "visible": "public",
-      "type": "list<element type=Level> where count(value) == 5 as 'std::primitive::array'"
+      "type": "list<element_type=Level> where count(value) == 5 as 'std::primitive::array'"
     },
     {
       "kind": "type",
@@ -242,7 +242,7 @@
           "name": "squares",
           "visible": "path",
           "visible_path": "super",
-          "type": "list<element type=Piece?> as 'Vec'",
+          "type": "list<element_type=Piece?> as 'Vec'",
           "hold": { "kind": "owns" }
         },
         {
@@ -305,11 +305,11 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "list<element type=Move> as 'Vec'" },
+      "result": { "type": "list<element_type=Move> as 'Vec'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:200" }]
     },
     {
@@ -319,7 +319,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         { "name": "chosen", "type": "Move" }
@@ -345,7 +345,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -359,7 +359,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -373,7 +373,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -394,11 +394,11 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "list<element type=Move> as 'Vec'" },
+      "result": { "type": "list<element_type=Move> as 'Vec'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:304" }]
     },
     {
@@ -407,11 +407,11 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "list<element type=Move> as 'Vec'" },
+      "result": { "type": "list<element_type=Move> as 'Vec'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:326" }]
     },
     {
@@ -420,7 +420,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "piece", "type": "Piece" },
@@ -428,16 +428,16 @@
         { "name": "at", "type": "Square" },
         {
           "name": "path",
-          "type": "ref<target type=list<element type=Square> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=Square> as 'std::primitive::slice'>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "captured",
-          "type": "ref<target type=list<element type=Square> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=Square> as 'std::primitive::slice'>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "list<element type=Move> as 'Vec'" },
+      "result": { "type": "list<element_type=Move> as 'Vec'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:349" }]
     },
     {
@@ -446,7 +446,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "piece", "type": "Piece" },
@@ -454,16 +454,16 @@
         { "name": "land", "type": "Square" },
         {
           "name": "path",
-          "type": "ref<target type=list<element type=Square> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=Square> as 'std::primitive::slice'>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "captured",
-          "type": "ref<target type=list<element type=Square> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=Square> as 'std::primitive::slice'>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "list<element type=Move> as 'Vec'" },
+      "result": { "type": "list<element_type=Move> as 'Vec'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:384" }]
     },
     {
@@ -472,7 +472,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "piece", "type": "Piece" },
@@ -489,7 +489,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "square", "type": "Square" },
@@ -504,11 +504,11 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "list<element type=Placed> as 'Vec'" },
+      "result": { "type": "list<element_type=Placed> as 'Vec'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:435" }]
     },
     {
@@ -517,11 +517,11 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "list<element type=Placed> as 'Vec'" },
+      "result": { "type": "list<element_type=Placed> as 'Vec'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:457" }]
     },
     {
@@ -529,7 +529,7 @@
       "name": "checkers_example::checkers::directions_of",
       "params": [{ "name": "piece", "type": "Piece" }],
       "result": {
-        "type": "ref<target type=list<element type=Direction> as 'std::primitive::slice'>",
+        "type": "ref<target_type=list<element_type=Direction> as 'std::primitive::slice'>",
         "hold": { "kind": "borrows", "lifetime": "'static" }
       },
       "clauses": [
@@ -555,7 +555,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "square", "type": "Square" }
@@ -638,12 +638,12 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "random",
-          "type": "ref<target type=Random>",
+          "type": "ref<target_type=Random>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -667,14 +667,14 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "owner", "type": "Side" },
         { "name": "depth", "type": "u32" },
         {
           "name": "left",
-          "type": "ref<target type=u32>",
+          "type": "ref<target_type=u32>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -693,23 +693,23 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "options",
-          "type": "ref<target type=list<element type=Move> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=Move> as 'std::primitive::slice'>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "values",
-          "type": "ref<target type=list<element type=i32> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=i32> as 'std::primitive::slice'>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "checks", "type": "u32" },
         {
           "name": "random",
-          "type": "ref<target type=Random>",
+          "type": "ref<target_type=Random>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -733,14 +733,14 @@
       "params": [
         {
           "name": "position",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "owner", "type": "Side" },
         { "name": "share", "type": "u32" },
         {
           "name": "random",
-          "type": "ref<target type=Random>",
+          "type": "ref<target_type=Random>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -758,14 +758,14 @@
       "params": [
         {
           "name": "start",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "owner", "type": "Side" },
         { "name": "length", "type": "u32" },
         {
           "name": "random",
-          "type": "ref<target type=Random>",
+          "type": "ref<target_type=Random>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -783,7 +783,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "owner", "type": "Side" }
@@ -797,7 +797,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "owner", "type": "Side" }
@@ -989,12 +989,12 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "highest", "type": "u32" }
       ],
-      "result": { "type": "list<element type=string> as 'Vec'" },
+      "result": { "type": "list<element_type=string> as 'Vec'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:843" }]
     },
     {
@@ -1004,14 +1004,14 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "selected", "type": "Square?" },
         { "name": "highest", "type": "u32" },
         {
           "name": "window",
-          "type": "ref<target type=Window>",
+          "type": "ref<target_type=Window>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -1030,7 +1030,7 @@
         { "name": "highest", "type": "u32" },
         {
           "name": "window",
-          "type": "ref<target type=Window>",
+          "type": "ref<target_type=Window>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -1077,7 +1077,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "square", "type": "Square" },
@@ -1092,7 +1092,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "square", "type": "Square" }
@@ -1106,12 +1106,12 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "selected", "type": "Square?" }
       ],
-      "result": { "type": "list<element type=Square> as 'Vec'" },
+      "result": { "type": "list<element_type=Square> as 'Vec'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:1026" }]
     },
     {
@@ -1120,13 +1120,13 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "selected", "type": "Square?" },
         {
           "name": "window",
-          "type": "ref<target type=Window>",
+          "type": "ref<target_type=Window>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -1143,12 +1143,12 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "window",
-          "type": "ref<target type=Window>",
+          "type": "ref<target_type=Window>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -1165,13 +1165,13 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "selected", "type": "Square?" },
         {
           "name": "window",
-          "type": "ref<target type=Window>",
+          "type": "ref<target_type=Window>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -1189,7 +1189,7 @@
         { "name": "placed", "type": "Placed" },
         {
           "name": "window",
-          "type": "ref<target type=Window>",
+          "type": "ref<target_type=Window>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         }
       ],
@@ -1204,7 +1204,7 @@
       "kind": "function",
       "name": "checkers_example::checkers::colours_of",
       "params": [{ "name": "piece", "type": "Piece" }],
-      "result": { "type": "list<element type=Colour> as 'Vec'" },
+      "result": { "type": "list<element_type=Colour> as 'Vec'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:1105" }]
     },
     { "kind": "module", "name": "checkers_example::checkers::window_play", "visible": "public" },
@@ -1236,17 +1236,17 @@
       "params": [
         {
           "name": "window",
-          "type": "ref<target type=Window>",
+          "type": "ref<target_type=Window>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         {
           "name": "random",
-          "type": "ref<target type=Random>",
+          "type": "ref<target_type=Random>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         {
           "name": "forever",
-          "type": "ref<target type=Forever>",
+          "type": "ref<target_type=Forever>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -1263,12 +1263,12 @@
         { "name": "highest", "type": "u32" },
         {
           "name": "window",
-          "type": "ref<target type=Window>",
+          "type": "ref<target_type=Window>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         {
           "name": "forever",
-          "type": "ref<target type=Forever>",
+          "type": "ref<target_type=Forever>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -1288,17 +1288,17 @@
         { "name": "highest", "type": "u32" },
         {
           "name": "window",
-          "type": "ref<target type=Window>",
+          "type": "ref<target_type=Window>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         {
           "name": "random",
-          "type": "ref<target type=Random>",
+          "type": "ref<target_type=Random>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         {
           "name": "forever",
-          "type": "ref<target type=Forever>",
+          "type": "ref<target_type=Forever>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -1314,12 +1314,12 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         {
           "name": "selected",
-          "type": "ref<target type=Square?>",
+          "type": "ref<target_type=Square?>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         { "name": "place", "type": "Point" }
@@ -1338,7 +1338,7 @@
       "params": [
         {
           "name": "clicks",
-          "type": "ref<target type=list<element type=Point> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=Point> as 'std::primitive::slice'>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -1351,17 +1351,17 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         {
           "name": "selected",
-          "type": "ref<target type=Square?>",
+          "type": "ref<target_type=Square?>",
           "access": { "rights": "write", "guarantee": "exclusive" }
         },
         {
           "name": "clicks",
-          "type": "ref<target type=list<element type=Point> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=Point> as 'std::primitive::slice'>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -1379,7 +1379,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "from", "type": "Square?" },
@@ -1394,7 +1394,7 @@
       "params": [
         {
           "name": "game",
-          "type": "ref<target type=Game>",
+          "type": "ref<target_type=Game>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "square", "type": "Square?" }

@@ -38,7 +38,7 @@ same Rust again. The checks below hold either way.
 
 | Y | Bare body | Constraint file or `y-facts.json` | Rust |
 |---|---|---|---|
-| `starting_heaps is list<element type=uint32> = [3, 4, 5]` in a constant group | `const STARTING_HEAPS = [3, 4, 5];` | `list<element type=u32> where count(value) == 3 as 'std::primitive::array'` | `[u32; 3]` |
+| `starting_heaps is list<element_type=uint32> = [3, 4, 5]` in a constant group | `const STARTING_HEAPS = [3, 4, 5];` | `list<element_type=u32> where count(value) == 3 as 'std::primitive::array'` | `[u32; 3]` |
 | `uint32` for heap sizes and heap numbers, where no unit is wanted (Y § 3.3) | — | `u32` | `u32` |
 | The list operations by number: `game.heaps.at_number(n)`, `set_number`, `number_of`, `largest`, `count().to_uint32()` | `list::at_number(&game.heaps, n)` and so on | — | calls into `y_runtime::list`, so that the Rust has no `as` casts for `strip` to bind to mechanical names |
 | `heap.xor(sum)` | `heap ^ sum` | — | the same |
@@ -53,7 +53,7 @@ same Rust again. The checks below hold either way.
 
 Beyond what Hangman assumed:
 
-- **Library names:** `string.split_whitespace()`, `string.parse_uint32()` (an `optional<value type=uint32>`), `string.repeated(n)`,
+- **Library names:** `string.split_whitespace()`, `string.parse_uint32()` (an `optional<value_type=uint32>`), `string.repeated(n)`,
   `uint32.xor(other)`, and on lists `at_number`, `set_number`, `number_of` and `largest`, which number elements from 1
   as a player sees them, with `count().to_uint32()`.
 - **Narrowing through `or`:** in the `else numbers:` branch of `if not_numbers = ((heap == optional.none) or (take ==

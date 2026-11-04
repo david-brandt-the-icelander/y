@@ -48,7 +48,7 @@ public facet setup:
         head is cell
 
         -- The cells of the rest of the snake, the one nearest the head first.
-        tail is list<element type=cell>
+        tail is list<element_type=cell>
 
         -- The way the snake moved last.
         heading is direction
@@ -215,7 +215,7 @@ The cells the snake is not in, row by row from the top left.
 
 game: The game, as game.
 
-free: The cells, as list<element type=cell>.
+free: The cells, as list<element_type=cell>.
 --------------------------------------------------------------------------------------------------------------------------------
 function free_cells(game) returns free:
     mutable found = list.new()
@@ -367,7 +367,7 @@ public facet window_play:
 Turns the snake the way each key pressed points, in the order they were pressed.
 
 game: The game, which changes, as game.
-keys: The keys pressed, as list<element type=key>.
+keys: The keys pressed, as list<element_type=key>.
 --------------------------------------------------------------------------------------------------------------------------------
 function steer(mutable game, keys):
     for pressed in keys:
