@@ -182,7 +182,8 @@ mod pricing {
     /// - `payers`: how many pay it.
     /// - Returns what each pays, in order, which add up to the bill.
     fn split(total, payers) {
-        let exact = total.to_rational_big_unbounded() / Rational::new(payers.to_i128(), 1);
+        let fraction = total.to_rational();
+        let exact = fraction / Rational::new(payers.to_i128(), 1);
         let each = exact.to_decimal_rounded(Rounding::TowardNegative);
         let left = total - each.times(payers.to_i128());
         let to_i128_u32 = payers.to_i128();
@@ -227,22 +228,22 @@ mod stock {
     /// - Returns where the units came from.
     fn reserve(wanted, holdings) {
         let quantity = wanted.quantity.to_usize();
-        let take_from_shelf = |tx| { // y: #take_from_shelf
+        let take_from_shelf = |tx| { let out = { // y: #take_from_shelf
             let held = tx.get(holdings);
             // y: waits until enough
             if held.on_shelf.count_of(&wanted.sku) < quantity {
-                return ok_infallible(Step::Retry);
+                return Ok(Step::Retry);
             }
             held.on_shelf.remove_times(&wanted.sku, quantity);
             tx.set(holdings, held);
             Ok(Step::Done(Reservation::FromShelf))
-        };
-        let put_on_backorder = |tx| { // y: #put_on_backorder
+        }; out };
+        let put_on_backorder = |tx| { let out_2 = { // y: #put_on_backorder
             let held = tx.get(holdings);
             held.backordered.add(wanted.clone()); // y: a copy
             tx.set(holdings, held);
-            ok_infallible(Step::Done(Reservation::Backordered))
-        };
+            Ok(Step::Done(Reservation::Backordered))
+        }; out_2 };
         match orelse("warehouse::reserve", None, vec![&mut take_from_shelf, &mut put_on_backorder]) {
             Ok(reserved) => reserved,
             Err(_) => not_reachable("warehouse::reserve#put_on_backorder"),
@@ -286,12 +287,12 @@ mod packing {
             let reserved = reserve(wanted, holdings);
             if reserved == Reservation::FromShelf { // y: #shelved
                 // y: region count_sale is atomic
-                let counted = atomic("warehouse::pack_orders#count_sale", None, |tx| {
+                let counted = atomic("warehouse::pack_orders#count_sale", None, |tx| { let out = {
                     let units = tx.get(sold);
                     units.add_times(wanted.sku.clone(), wanted.quantity.to_usize());
                     tx.set(sold, units);
-                    ok_infallible(Step::Done(()))
-                });
+                    Ok(Step::Done(()))
+                }; out });
                 if counted.is_err() {
                     y_runtime::not_reachable("warehouse::pack_orders#count_sale");
                 }

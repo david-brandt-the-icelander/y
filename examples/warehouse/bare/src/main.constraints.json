@@ -110,7 +110,12 @@
   "holes": {
     "warehouse_example::day::opening_stock": { "locals": { "on_shelf": "Bag<Sku>" } },
     "warehouse_example::main": {
-      "locals": { "items": "Store<Item>", "filed": "Store<Receipt>", "out": "Result<(), ConsoleError>" }
+      "locals": {
+        "items": "Store<Item>",
+        "filed": "Store<Receipt>",
+        "shown": "list<element_type=string> as 'List'",
+        "out": "Result<(), ConsoleError>"
+      }
     }
   }
 }

@@ -8,9 +8,5 @@
   },
   "subjects": [
     { "kind": "module", "name": "warehouse_example::warehouse", "visible": "public", "level": "effects" }
-  ],
-  "realizations": {
-    "to_rational_big_unbounded": { "template": "<_>::to_rational", "args": ["Big", "UNBOUNDED"] },
-    "ok_infallible": { "template": "std::result::Result::Ok", "args": ["_", "Infallible"] }
-  }
+  ]
 }

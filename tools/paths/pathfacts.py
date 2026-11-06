@@ -214,6 +214,8 @@ for k, v in facts.items():
     if k == "decisions":
         out[k] = decisions
         out["paths"] = paths
+    if k == "paths":
+        out[k] = paths
     if k == "tests":
         out[k] = tests
 out["decisions"] = decisions

@@ -156,6 +156,10 @@ impl YString {
     pub fn parse_uint32(&self) -> Option<u32> {
         self.0.parse().ok()
     }
+    /// Strings joined by a separator: Y's `list<element_type=string>.join(separator: s)`.
+    pub fn joined(items: &[YString], separator: &str) -> YString {
+        YString::new(&items.iter().map(YString::as_str).collect::<Vec<_>>().join(separator))
+    }
     /// Runes joined by a separator: Y's `list<element_type=rune>.join(separator: s)`.
     pub fn from_runes(runes: &[Rune], separator: &str) -> YString {
         YString::new(&runes.iter().map(Rune::as_str).collect::<Vec<_>>().join(separator))

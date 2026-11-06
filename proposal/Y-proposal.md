@@ -1217,6 +1217,10 @@ holds values, never references to them. Borrows exist only in the generated code
 allocated there may escape. Arena ownership says *when a resource is destroyed*, never *when an operation may run*.
 A socket owned by an arena is still an external effect (§ 3.9). This is the September distinction, unchanged.
 
+**Lowering.** [`../examples/warehouse`](../examples/warehouse/) lowers an arena to the runtime's `Arena`, whose typed
+`Index` faults in another arena, and a resource to `Held`, which releases it exactly once: by `end()` on a normal exit,
+whose failure is the scope's, and when it is dropped on a failure.
+
 ### 3.7 Authority and effects
 
 **A function can affect nothing outside itself except through a capability it holds.** Capabilities are values, and
@@ -1379,7 +1383,11 @@ The execution constraints:
 - **Lowering.** [`../examples/memory`](../examples/memory/) and [`../examples/snake`](../examples/snake/) lower
   regions to Rust. A region `within` a deadline is a block that starts a `Deadline` and passes it to every wait
   inside it, and its expiry converts through the failure that carries it; a region that is `forever` passes the
-  `forever` capability to its wait. An atomic region will take the runtime's one lock; no example has one yet.
+  `forever` capability to its wait. [`../examples/warehouse`](../examples/warehouse/) lowers the rest: an atomic
+  region is a closure over a transaction that the runtime's one lock runs, `waits until` and `retry` are a run that
+  retries, `orelse` passes its alternatives in order, a region with tasks under `supervise(…)` runs a thread per task,
+  and `uncancellable` and `detach` hold off cancellation and outlive the scope (`../examples/y-runtime`'s `shared` and
+  `task` modules).
 
 **Every wait is bounded, and the bound is checked.**
 
@@ -1707,6 +1715,11 @@ migrate customer v2 to v3:
 
 `store<schema_type=…>` is the capability for persistent data, and its reads and writes inside `atomic` join the transaction.
 
+**Lowering.** A schema lowers to its codec, which the compiler generates and [`../examples/warehouse`](../examples/warehouse/)
+writes by hand: an implementation of the runtime's `Schema`, whose `decode` reads every version still declared and runs
+the migrations to the current one. The runtime's `Store` reads each record alone, so one that fails is reported against
+its key while the others are read.
+
 Live migration (`converge`), and the choice of physical representation, belong to the runtime and come later (§ 5). v1
 must not prevent them, and does not need them.
 
@@ -1782,7 +1795,9 @@ offering only what the kind's constraints allow:
   visit its elements one by one, a program asks for an order first: `for name in names.sorted():`. So no collection exposes hash order, which
   breaks replay (§ 4.7) and which an agent would eventually rely on, while a backend may still hash.
 - **Converting between kinds is explicit:** `to_list()`, `to_set()`, `sorted()`. An operation a kind does not offer
-  does not compile, and the diagnostic names the clause that rules it out.
+  does not compile, and the diagnostic names the clause that rules it out. The lowering keeps this: each kind's Rust
+  type in [`../examples/y-collections`](../examples/y-collections/) has only the operations its constraints offer, so a
+  queue cannot be indexed and an `unordered_set` cannot be iterated, and its `compile_fail` tests show it.
 
 **Pipelines** say what the answer is, which leaves the compiler free to fuse, parallelise or index:
 

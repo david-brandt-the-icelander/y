@@ -20,6 +20,44 @@
 //! | `unordered_map` | unordered | [`UnorderedMap`] | `HashMap` |
 //! | `multimap` | ordered by insertion; values many | [`MultiMap`] | a [`Map`] from each key to a `Vec` |
 //!
+//! **A kind's constraints are enforced by what it offers.** An operation its constraints rule out is not a method of
+//! its type, so lowered code that uses one does not compile, as the Y source does not (Y § 3.13). A queue offers
+//! `back_add` and `front_take`, so it cannot be indexed:
+//!
+//! ```compile_fail
+//! let mut q = y_collections::Queue::new();
+//! q.add(1);
+//! let _ = q[0];
+//! ```
+//!
+//! nor taken from the back:
+//!
+//! ```compile_fail
+//! let mut q = y_collections::Queue::new();
+//! q.add(1);
+//! q.take_back();
+//! ```
+//!
+//! An `unordered_set` has no order to observe, so it cannot be iterated; it can be sorted:
+//!
+//! ```compile_fail
+//! let s: y_collections::UnorderedSet<u8> = [3, 1].into_iter().collect();
+//! for x in s.iter() {}
+//! ```
+//!
+//! ```
+//! let s: y_collections::UnorderedSet<u8> = [3, 1].into_iter().collect();
+//! assert_eq!(s.sorted().iter().copied().collect::<Vec<_>>(), [1, 3]);
+//! ```
+//!
+//! A stack offers its back only:
+//!
+//! ```compile_fail
+//! let mut s = y_collections::Stack::new();
+//! s.push(1);
+//! s.take_front();
+//! ```
+//!
 //! An unordered kind has no iterator: it offers membership, counting, `all`, `any`, set operations and `sorted()`,
 //! whose results cannot depend on hash order, so replay never sees it (Y § 4.7). A count is a `usize` and a position is
 //! from 0, as the lowering's `count<unit_type=t>` and `index<unit_type=t>` are. Reading a position that does not exist is `None`;

@@ -155,7 +155,7 @@
       "because": "the receipts are printed after the day's report",
       "requires": "Detach",
       "y": "y/src/main.y:61",
-      "bare": "bare/src/main.brs:107"
+      "bare": "bare/src/main.brs:108"
     }
   ],
   "suspensions": [],
@@ -165,13 +165,13 @@
       "what": "wanted",
       "why": "the backorder keeps the line, and the caller still reads it",
       "y": "y/src/warehouse.y:175",
-      "bare": "bare/src/warehouse.brs:242"
+      "bare": "bare/src/warehouse.brs:243"
     },
     {
       "what": "order.lines",
       "why": "the order still holds its lines",
       "y": "y/src/warehouse.y:194",
-      "bare": "bare/src/warehouse.brs:276"
+      "bare": "bare/src/warehouse.brs:277"
     }
   ],
   "decisions": {
@@ -216,12 +216,12 @@
           {
             "name": "even",
             "y": "y/src/warehouse.y:139",
-            "bare": "bare/src/warehouse.brs:190"
+            "bare": "bare/src/warehouse.brs:191"
           },
           {
             "name": "uneven",
             "y": "y/src/warehouse.y:141",
-            "bare": "bare/src/warehouse.brs:192"
+            "bare": "bare/src/warehouse.brs:193"
           }
         ]
       }
@@ -233,12 +233,12 @@
           {
             "name": "take_from_shelf",
             "y": "y/src/warehouse.y:171",
-            "bare": "bare/src/warehouse.brs:230"
+            "bare": "bare/src/warehouse.brs:231"
           },
           {
             "name": "put_on_backorder",
             "y": "y/src/warehouse.y:174",
-            "bare": "bare/src/warehouse.brs:240"
+            "bare": "bare/src/warehouse.brs:241"
           }
         ]
       }
@@ -250,12 +250,12 @@
           {
             "name": "wanted",
             "y": "y/src/warehouse.y:208",
-            "bare": "bare/src/warehouse.brs:285"
+            "bare": "bare/src/warehouse.brs:286"
           },
           {
             "name": "no_lines",
             "y": "y/src/warehouse.y:216",
-            "bare": "bare/src/warehouse.brs:285"
+            "bare": "bare/src/warehouse.brs:286"
           }
         ]
       },
@@ -265,12 +265,12 @@
           {
             "name": "shelved",
             "y": "y/src/warehouse.y:211",
-            "bare": "bare/src/warehouse.brs:287"
+            "bare": "bare/src/warehouse.brs:288"
           },
           {
             "name": "backordered",
             "y": "y/src/warehouse.y:214",
-            "bare": "bare/src/warehouse.brs:298"
+            "bare": "bare/src/warehouse.brs:299"
           }
         ]
       }
@@ -282,12 +282,12 @@
           {
             "name": "wanted",
             "y": "y/src/warehouse.y:265",
-            "bare": "bare/src/warehouse.brs:395"
+            "bare": "bare/src/warehouse.brs:396"
           },
           {
             "name": "no_lines",
             "y": "y/src/warehouse.y:267",
-            "bare": "bare/src/warehouse.brs:395"
+            "bare": "bare/src/warehouse.brs:396"
           }
         ]
       }
@@ -299,12 +299,12 @@
           {
             "name": "order",
             "y": "y/src/warehouse.y:285",
-            "bare": "bare/src/warehouse.brs:412"
+            "bare": "bare/src/warehouse.brs:413"
           },
           {
             "name": "no_orders",
             "y": "y/src/warehouse.y:287",
-            "bare": "bare/src/warehouse.brs:412"
+            "bare": "bare/src/warehouse.brs:413"
           }
         ]
       }
@@ -317,11 +317,6 @@
             "name": "order",
             "y": "y/src/main.y:54",
             "bare": "bare/src/main.brs:101"
-          },
-          {
-            "name": "no_orders",
-            "y": "y/src/main.y:58",
-            "bare": "bare/src/main.brs:101"
           }
         ]
       },
@@ -330,19 +325,115 @@
         "branches": [
           {
             "name": "order",
-            "y": "y/src/main.y:62",
-            "bare": "bare/src/main.brs:109"
-          },
-          {
-            "name": "nothing_to_print",
-            "y": "y/src/main.y:65",
-            "bare": "bare/src/main.brs:109"
+            "y": "y/src/main.y:61",
+            "bare": "bare/src/main.brs:110"
           }
         ]
       }
     ]
   },
-  "paths": [],
+  "paths": [
+    {
+      "path": "load_catalogue > nothing_stored",
+      "ends": "fails"
+    },
+    {
+      "path": "load_catalogue > record > stored.unreadable",
+      "ends": "fails"
+    },
+    {
+      "path": "load_catalogue > record'many > stored.unreadable",
+      "ends": "fails"
+    },
+    {
+      "path": "load_catalogue > record > stored.readable",
+      "ends": "returns"
+    },
+    {
+      "path": "load_catalogue > record'many > stored.readable",
+      "ends": "returns"
+    },
+    {
+      "path": "net_of",
+      "ends": "returns"
+    },
+    {
+      "path": "vat_of",
+      "ends": "returns"
+    },
+    {
+      "path": "order_total",
+      "ends": "returns"
+    },
+    {
+      "path": "split > even",
+      "ends": "returns"
+    },
+    {
+      "path": "split > uneven",
+      "ends": "returns"
+    },
+    {
+      "path": "reserve > take_from_shelf",
+      "ends": "returns"
+    },
+    {
+      "path": "reserve > put_on_backorder",
+      "ends": "returns"
+    },
+    {
+      "path": "lines_of",
+      "ends": "returns"
+    },
+    {
+      "path": "pack_orders > no_lines",
+      "ends": "returns"
+    },
+    {
+      "path": "pack_orders > wanted > shelved",
+      "ends": "returns"
+    },
+    {
+      "path": "pack_orders > wanted > backordered",
+      "ends": "returns"
+    },
+    {
+      "path": "pack_orders > wanted'many > shelved",
+      "ends": "returns"
+    },
+    {
+      "path": "pack_orders > wanted'many > backordered",
+      "ends": "returns"
+    },
+    {
+      "path": "pack_day",
+      "ends": "returns"
+    },
+    {
+      "path": "receipt_text > no_lines",
+      "ends": "returns"
+    },
+    {
+      "path": "receipt_text > wanted",
+      "ends": "returns"
+    },
+    {
+      "path": "receipt_text > wanted'many",
+      "ends": "returns"
+    },
+    {
+      "path": "file_receipts > no_orders",
+      "ends": "returns"
+    },
+    {
+      "path": "file_receipts > order",
+      "ends": "returns"
+    },
+    {
+      "path": "file_receipts > order'many",
+      "ends": "returns"
+    }
+  ],
   "tests": {
     "an_empty_store_is_no_catalogue": {
       "y": "y/src/warehouse.test.y:2",

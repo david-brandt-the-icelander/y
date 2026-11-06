@@ -536,8 +536,21 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
     // a name is changed, by `:=` or as a `mutable` argument, only when it was declared `mutable` (Y § 3.1, § 3.6)
     for y in &all {
         let mut declared: BTreeSet<String> = BTreeSet::new();
+        // a migration's body gives each new field its value with `:=` (Y § 3.12), which changes no name
+        let mut migration: Option<usize> = None;
         for (n, line) in read(&dir.join(y)).lines().enumerate() {
             let t = line.trim();
+            let indent = line.len() - line.trim_start().len();
+            if migration.is_some_and(|at| !t.is_empty() && indent <= at) {
+                migration = None;
+            }
+            if t.starts_with("migrate ") {
+                migration = Some(indent);
+                continue;
+            }
+            if migration.is_some() {
+                continue;
+            }
             if t.starts_with("function ") || t.starts_with("test ") {
                 declared.clear();
                 if let Some((_, params)) = t.split_once('(') {

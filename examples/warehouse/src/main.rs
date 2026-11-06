@@ -101,7 +101,8 @@ fn main() -> Result<(), MainError> {
         for order in &orders { // y: #order
             let total = order_total(order);
             let shares = split(total, order.payers);
-            console.write_line(&format!("Order {}: {total}, paid as {shares:?}.", order.number))?;
+            let shown: List<String> = shares.iter().map(Price::to_string).collect();
+            console.write_line(&format!("Order {}: {total}, paid as [{}].", order.number, shown.join(", ")))?;
         }
         file_receipts(&orders, &mut filed)?;
         // y: region printing is detach because "the receipts are printed after the day's report", within 1min

@@ -98,15 +98,16 @@ fn main() {
         console.write_line(&format!("The catalogue holds {known} items."))?;
         pack_day(&day::orders(), &holdings, &sold)?;
         let orders = day::orders();
-        for order in &orders { // y: #order, else #no_orders
+        for order in &orders { // y: #order
             let total = order_total(order);
             let shares = split(total, order.payers);
-            console.write_line(&format!("Order {}: {total}, paid as {shares:?}.", order.number))?;
+            let shown = shares.iter().map(Price::to_string).collect();
+            console.write_line(&format!("Order {}: {total}, paid as [{}].", order.number, shown.join(", ")))?;
         }
         file_receipts(&orders, &mut filed)?;
         // y: region printing is detach because "the receipts are printed after the day's report", within 1min
         let printing = detach(Duration::from_secs(60), move || { let out = {
-            for order in &orders { // y: #order, else #nothing_to_print
+            for order in &orders { // y: #order
                 let printed = receipt_text(order);
                 console.write_line(printed.as_str())?;
             }
