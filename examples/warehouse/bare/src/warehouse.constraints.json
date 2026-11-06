@@ -1,0 +1,509 @@
+{
+  "format": "y-constraints/0",
+  "host": "rust",
+  "crate": "warehouse-example 0.0.0",
+  "module": "src/warehouse.rs",
+  "status": {
+    "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
+  },
+  "subjects": [
+    { "kind": "module", "name": "warehouse_example::warehouse::catalogue", "visible": "public" },
+    {
+      "kind": "alias",
+      "name": "warehouse_example::warehouse::catalogue::Sku",
+      "visible": "public",
+      "type": "AsciiString"
+    },
+    {
+      "kind": "alias",
+      "name": "warehouse_example::warehouse::catalogue::Price",
+      "visible": "public",
+      "type": { "host": "Decimal<i64, 12, 2>", "form": "const_args" }
+    },
+    {
+      "kind": "alias",
+      "name": "warehouse_example::warehouse::catalogue::Rate",
+      "visible": "public",
+      "type": { "host": "Decimal<i32, 5, 4>", "form": "const_args" }
+    },
+    { "kind": "module", "name": "warehouse_example::warehouse::catalogue::tax", "visible": "public" },
+    {
+      "kind": "const",
+      "name": "warehouse_example::warehouse::catalogue::tax::STANDARD_RATE",
+      "visible": "public",
+      "type": "super::Rate"
+    },
+    {
+      "kind": "type",
+      "name": "warehouse_example::warehouse::catalogue::Item",
+      "visible": "public",
+      "fields": [
+        { "name": "sku", "visible": "public", "type": "Sku", "hold": { "kind": "owns" } },
+        { "name": "name", "visible": "public", "type": "string as 'YString'", "hold": { "kind": "owns" } },
+        { "name": "price", "visible": "public", "type": "Price", "hold": { "kind": "owns" } },
+        { "name": "vat_rate", "visible": "public", "type": "Rate", "hold": { "kind": "owns" } }
+      ],
+      "implements": [
+        { "trait": "Schema", "impl": "warehouse_example::warehouse::catalogue::Item as Schema" }
+      ]
+    },
+    { "kind": "impl", "name": "warehouse_example::warehouse::catalogue::Item as Schema" },
+    {
+      "kind": "const",
+      "name": "warehouse_example::warehouse::catalogue::Item as Schema::NAME",
+      "type": "ref<target_type=string>",
+      "access": { "rights": "read", "guarantee": "readers" },
+      "hold": { "kind": "borrows", "lifetime": "'static" }
+    },
+    {
+      "kind": "const",
+      "name": "warehouse_example::warehouse::catalogue::Item as Schema::VERSION",
+      "type": "u32"
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::catalogue::Item as Schema::key",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<target_type=Item>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "string" }
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::catalogue::Item as Schema::encode",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<target_type=Item>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "string" }
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::catalogue::Item as Schema::decode",
+      "params": [
+        {
+          "name": "key",
+          "type": "ref<target_type=string>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "version", "type": "u32" },
+        {
+          "name": "text",
+          "type": "ref<target_type=string>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "Self", "fails": "string" }
+    },
+    {
+      "kind": "type",
+      "name": "warehouse_example::warehouse::catalogue::CatalogueError",
+      "visible": "public",
+      "variants": [
+        { "name": "Empty" },
+        { "name": "Unreadable", "fields": [{ "name": "sku", "type": "Sku", "hold": { "kind": "owns" } }] }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::catalogue::load_catalogue",
+      "visible": "public",
+      "params": [
+        {
+          "name": "items",
+          "type": "ref<target_type=Store<Item>>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "map<key_type=Sku, value_type=Item> as 'SortedMap'", "fails": "CatalogueError" }
+    },
+    { "kind": "module", "name": "warehouse_example::warehouse::pricing", "visible": "public" },
+    {
+      "kind": "alias",
+      "name": "warehouse_example::warehouse::pricing::Quantity",
+      "visible": "public",
+      "type": { "host": "Integer<i16, 1, 1000>", "form": "const_args" }
+    },
+    {
+      "kind": "alias",
+      "name": "warehouse_example::warehouse::pricing::Payers",
+      "visible": "public",
+      "type": { "host": "Integer<i8, 1, 10>", "form": "const_args" }
+    },
+    {
+      "kind": "alias",
+      "name": "warehouse_example::warehouse::pricing::Net",
+      "visible": "public",
+      "type": { "host": "Decimal<i128, 38, 2>", "form": "const_args" }
+    },
+    {
+      "kind": "alias",
+      "name": "warehouse_example::warehouse::pricing::Vat",
+      "visible": "public",
+      "type": { "host": "Decimal<i128, 38, 6>", "form": "const_args" }
+    },
+    {
+      "kind": "type",
+      "name": "warehouse_example::warehouse::pricing::Line",
+      "visible": "public",
+      "fields": [
+        { "name": "sku", "visible": "public", "type": "Sku", "hold": { "kind": "owns" } },
+        { "name": "quantity", "visible": "public", "type": "Quantity", "hold": { "kind": "owns" } },
+        { "name": "unit_price", "visible": "public", "type": "Price", "hold": { "kind": "owns" } },
+        { "name": "vat_rate", "visible": "public", "type": "Rate", "hold": { "kind": "owns" } }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "warehouse_example::warehouse::pricing::Order",
+      "visible": "public",
+      "fields": [
+        { "name": "number", "visible": "public", "type": "u32", "hold": { "kind": "owns" } },
+        {
+          "name": "lines",
+          "visible": "public",
+          "type": "list<element_type=Line> as 'List'",
+          "hold": { "kind": "owns" }
+        },
+        { "name": "payers", "visible": "public", "type": "Payers", "hold": { "kind": "owns" } }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::pricing::taxed",
+      "visible": "public",
+      "params": [
+        {
+          "name": "line",
+          "type": "ref<target_type=Line>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "bool" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/warehouse.y:86" }]
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::pricing::net_of",
+      "visible": "public",
+      "params": [
+        {
+          "name": "line",
+          "type": "ref<target_type=Line>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "Net" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/warehouse.y:96" }]
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::pricing::vat_of",
+      "visible": "public",
+      "params": [
+        {
+          "name": "line",
+          "type": "ref<target_type=Line>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "Vat" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/warehouse.y:107" }]
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::pricing::order_total",
+      "visible": "public",
+      "params": [
+        {
+          "name": "order",
+          "type": "ref<target_type=Order>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "Price" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/warehouse.y:119" }]
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::pricing::split",
+      "visible": "public",
+      "params": [{ "name": "total", "type": "Price" }, { "name": "payers", "type": "Payers" }],
+      "result": { "type": "list<element_type=Price> as 'List'" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/warehouse.y:134" }]
+    },
+    { "kind": "module", "name": "warehouse_example::warehouse::stock", "visible": "public" },
+    {
+      "kind": "type",
+      "name": "warehouse_example::warehouse::stock::Holdings",
+      "visible": "public",
+      "fields": [
+        { "name": "on_shelf", "visible": "public", "type": "Bag<Sku>", "hold": { "kind": "owns" } },
+        { "name": "backordered", "visible": "public", "type": "Queue<Line>", "hold": { "kind": "owns" } }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "warehouse_example::warehouse::stock::Reservation",
+      "visible": "public",
+      "variants": [{ "name": "FromShelf" }, { "name": "Backordered" }]
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::stock::reserve",
+      "visible": "public",
+      "params": [
+        {
+          "name": "wanted",
+          "type": "ref<target_type=Line>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        {
+          "name": "holdings",
+          "type": "ref<target_type=Shared<Holdings>>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "Reservation" }
+    },
+    { "kind": "module", "name": "warehouse_example::warehouse::packing", "visible": "public" },
+    {
+      "kind": "type",
+      "name": "warehouse_example::warehouse::packing::PackingError",
+      "visible": "public",
+      "variants": [
+        {
+          "name": "Expired",
+          "fields": [{ "name": "deadline", "type": "Expired", "hold": { "kind": "owns" } }]
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::packing::lines_of",
+      "visible": "public",
+      "params": [
+        {
+          "name": "order",
+          "type": "ref<target_type=Order>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "list<element_type=Line> as 'List'" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/warehouse.y:193" }]
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::packing::pack_orders",
+      "visible": "public",
+      "params": [
+        {
+          "name": "orders",
+          "type": "ref<target_type=list<element_type=Order> as 'List'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        {
+          "name": "holdings",
+          "type": "ref<target_type=Shared<Holdings>>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        {
+          "name": "sold",
+          "type": "ref<target_type=Shared<Bag<Sku>>>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::packing::pack_day",
+      "visible": "public",
+      "params": [
+        {
+          "name": "orders",
+          "type": "ref<target_type=list<element_type=Order> as 'List'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        {
+          "name": "holdings",
+          "type": "ref<target_type=Shared<Holdings>>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        {
+          "name": "sold",
+          "type": "ref<target_type=Shared<Bag<Sku>>>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "()", "fails": "PackingError" }
+    },
+    { "kind": "module", "name": "warehouse_example::warehouse::receipts", "visible": "public" },
+    {
+      "kind": "type",
+      "name": "warehouse_example::warehouse::receipts::Receipt",
+      "visible": "public",
+      "fields": [
+        { "name": "order", "visible": "public", "type": "u32", "hold": { "kind": "owns" } },
+        { "name": "text", "visible": "public", "type": "string as 'YString'", "hold": { "kind": "owns" } }
+      ],
+      "implements": [
+        { "trait": "Schema", "impl": "warehouse_example::warehouse::receipts::Receipt as Schema" }
+      ]
+    },
+    { "kind": "impl", "name": "warehouse_example::warehouse::receipts::Receipt as Schema" },
+    {
+      "kind": "const",
+      "name": "warehouse_example::warehouse::receipts::Receipt as Schema::NAME",
+      "type": "ref<target_type=string>",
+      "access": { "rights": "read", "guarantee": "readers" },
+      "hold": { "kind": "borrows", "lifetime": "'static" }
+    },
+    {
+      "kind": "const",
+      "name": "warehouse_example::warehouse::receipts::Receipt as Schema::VERSION",
+      "type": "u32"
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::receipts::Receipt as Schema::key",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<target_type=Receipt>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "string" }
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::receipts::Receipt as Schema::encode",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<target_type=Receipt>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "string" }
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::receipts::Receipt as Schema::decode",
+      "params": [
+        {
+          "name": "key",
+          "type": "ref<target_type=string>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "version", "type": "u32" },
+        {
+          "name": "text",
+          "type": "ref<target_type=string>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "Self", "fails": "string" }
+    },
+    {
+      "kind": "type",
+      "name": "warehouse_example::warehouse::receipts::Entry",
+      "visible": "public",
+      "fields": [
+        { "name": "text", "visible": "public", "type": "string as 'YString'", "hold": { "kind": "owns" } },
+        { "name": "under", "visible": "public", "type": "Index<Entry>?", "hold": { "kind": "owns" } }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::receipts::rendered",
+      "params": [
+        {
+          "name": "scratch",
+          "type": "ref<target_type=Arena<Entry>>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "string as 'YString'" }
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::receipts::receipt_text",
+      "visible": "public",
+      "params": [
+        {
+          "name": "order",
+          "type": "ref<target_type=Order>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "string as 'YString'" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/warehouse.y:260" }]
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::receipts::file_receipts",
+      "visible": "public",
+      "params": [
+        {
+          "name": "orders",
+          "type": "ref<target_type=list<element_type=Order> as 'List'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        {
+          "name": "filed",
+          "type": "ref<target_type=Store<Receipt>>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "result": { "type": "()", "fails": "StoreError" }
+    }
+  ],
+  "holes": {
+    "warehouse_example::warehouse::catalogue::Item as Schema::decode": {
+      "locals": {
+        "fields": "list<element_type=ref<target_type=string>> as 'Vec'",
+        "price.t": "ref<target_type=string>"
+      }
+    },
+    "warehouse_example::warehouse::pricing::net_of": {
+      "hints": [{ "kind": "targ", "n": 0, "type": "i128" }]
+    },
+    "warehouse_example::warehouse::pricing::vat_of": {
+      "hints": [{ "kind": "targ", "n": 0, "type": "i128" }]
+    },
+    "warehouse_example::warehouse::pricing::order_total": {
+      "hints": [{ "kind": "targ", "n": 0, "type": "i128" }]
+    },
+    "warehouse_example::warehouse::pricing::split": {
+      "locals": { "each": "Price", "to_i128_u32": { "type": "u32", "cast": true } }
+    },
+    "warehouse_example::warehouse::stock::reserve": {
+      "locals": {
+        "take_from_shelf.tx": { "host": "&mut Tx", "form": "ref_hole" },
+        "put_on_backorder.tx": { "host": "&mut Tx", "form": "ref_hole" }
+      }
+    },
+    "warehouse_example::warehouse::packing::pack_orders": {
+      "locals": { "lines": "list<element_type=Line> as 'List'" }
+    },
+    "warehouse_example::warehouse::packing::pack_day": {
+      "locals": {
+        "first_half": "list<element_type=Order> as 'List'",
+        "second_half": "list<element_type=Order> as 'List'",
+        "first": "TaskBody<'_, Infallible>",
+        "second": "TaskBody<'_, Infallible>"
+      }
+    },
+    "warehouse_example::warehouse::receipts::rendered": {
+      "locals": { "lines": "list<element_type=string> as 'List'" }
+    }
+  }
+}

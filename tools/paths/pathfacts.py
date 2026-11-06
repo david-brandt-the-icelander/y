@@ -28,8 +28,9 @@ old = {}
 def moved(place):
     path, n = place.rsplit(":", 1)
     if path not in old:
-        old[path] = subprocess.run(["git", "show", f"HEAD:examples/{ex}/{path}"], capture_output=True, text=True,
-                                   check=True, cwd=root).stdout.split("\n")
+        shown = subprocess.run(["git", "show", f"HEAD:examples/{ex}/{path}"], capture_output=True, text=True, cwd=root)
+        # a file not committed yet, in a new example, has not moved
+        old[path] = shown.stdout.split("\n") if shown.returncode == 0 else lines(path)
     text = old[path][int(n) - 1]
     hits = [i for i, l in enumerate(lines(path), 1) if l == text]
     if not hits:

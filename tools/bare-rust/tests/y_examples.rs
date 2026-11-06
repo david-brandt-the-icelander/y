@@ -33,7 +33,7 @@ fn example(name: &str) -> PathBuf {
 #[test]
 fn every_example_names_its_type_arguments_by_the_convention() {
     let mut errors = vec![];
-    for name in ["checkers", "hangman", "memory", "nim", "snake", "tic-tac-toe"] {
+    for name in ["checkers", "hangman", "memory", "nim", "snake", "tic-tac-toe", "warehouse"] {
         let dir = example(name).join("y/src");
         let mut files: Vec<PathBuf> = fs::read_dir(&dir).unwrap().map(|e| e.unwrap().path()).collect();
         files.sort();
@@ -81,6 +81,11 @@ fn without_lowering(js: &Value) -> Value {
 #[test]
 fn hangman_bare_files_weave_to_the_committed_rust_and_strip_back() {
     weaves_and_strips_back("hangman", &["hangman", "hangman/tests", "lib", "main"]);
+}
+
+#[test]
+fn warehouse_bare_files_weave_to_the_committed_rust_and_strip_back() {
+    weaves_and_strips_back("warehouse", &["lib", "main", "warehouse", "warehouse/tests"]);
 }
 
 #[test]
@@ -144,6 +149,11 @@ fn hangman_constraint_files_are_valid() {
 }
 
 #[test]
+fn warehouse_constraint_files_are_valid() {
+    constraint_files_are_valid("warehouse");
+}
+
+#[test]
 fn nim_constraint_files_are_valid() {
     constraint_files_are_valid("nim");
 }
@@ -188,6 +198,11 @@ fn constraint_files_are_valid(name: &str) {
 #[test]
 fn hangman_facts_match_the_y_source_and_the_bare_bodies() {
     facts_match_the_y_source_and_the_bare_bodies("hangman");
+}
+
+#[test]
+fn warehouse_facts_match_the_y_source_and_the_bare_bodies() {
+    facts_match_the_y_source_and_the_bare_bodies("warehouse");
 }
 
 #[test]

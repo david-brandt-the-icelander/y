@@ -680,6 +680,26 @@ impl<T: Hash + Eq> Bag<T> {
     pub fn count(&self) -> usize {
         self.count
     }
+    /// Adds `times` elements equal to `value`.
+    pub fn add_times(&mut self, value: T, times: usize) {
+        if times > 0 {
+            *self.counts.entry(value).or_insert(0) += times;
+            self.count += times;
+        }
+    }
+    /// Removes `times` elements equal to `value`; the bag must hold that many, or it is a fault.
+    pub fn remove_times(&mut self, value: &T, times: usize) {
+        let held = self.count_of(value);
+        if held < times {
+            y_runtime::fault("y_collections::bag", "removes more than the bag holds");
+        }
+        if held == times {
+            self.counts.remove(value);
+        } else if let Some(n) = self.counts.get_mut(value) {
+            *n -= times;
+        }
+        self.count -= times;
+    }
     /// How many of the bag's elements equal `value`.
     pub fn count_of(&self, value: &T) -> usize {
         self.counts.get(value).copied().unwrap_or(0)
@@ -707,6 +727,16 @@ impl<T: Hash + Eq> Bag<T> {
         T: Ord + Clone,
     {
         self.counts.iter().flat_map(|(x, n)| std::iter::repeat_n(x.clone(), *n)).collect()
+    }
+}
+
+impl<T: Hash + Eq> FromIterator<T> for Bag<T> {
+    fn from_iter<I: IntoIterator<Item = T>>(items: I) -> Self {
+        let mut bag = Bag::new();
+        for x in items {
+            bag.add(x);
+        }
+        bag
     }
 }
 

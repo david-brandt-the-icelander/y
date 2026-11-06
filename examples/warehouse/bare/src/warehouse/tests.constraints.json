@@ -1,0 +1,199 @@
+{
+  "format": "y-constraints/0",
+  "host": "rust",
+  "crate": "warehouse-example 0.0.0",
+  "module": "src/warehouse/tests.rs",
+  "status": {
+    "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
+  },
+  "subjects": [
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::tests::sku",
+      "params": [
+        {
+          "name": "text",
+          "type": "ref<target_type=string>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "Sku" }
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::tests::line",
+      "params": [
+        {
+          "name": "code",
+          "type": "ref<target_type=string>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "quantity", "type": "i128" },
+        {
+          "name": "unit_price",
+          "type": "ref<target_type=string>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        {
+          "name": "vat_rate",
+          "type": "ref<target_type=string>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "Line" }
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::tests::order",
+      "params": [
+        { "name": "number", "type": "u32" },
+        { "name": "payers", "type": "i128" },
+        { "name": "lines", "type": "list<element_type=Line> as 'List'" }
+      ],
+      "result": { "type": "Order" }
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::tests::shelf",
+      "params": [
+        {
+          "name": "units",
+          "type": "ref<target_type=list<element_type=ref<target_type=string>> as 'std::primitive::slice'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "Shared<Holdings>" }
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::tests::an_empty_store_is_no_catalogue",
+      "params": []
+    },
+    { "kind": "function", "name": "warehouse_example::warehouse::tests::one_item_is_read", "params": [] },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::tests::an_item_of_version_1_is_migrated",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::tests::an_unreadable_item_fails_the_catalogue",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::tests::an_unreadable_item_after_a_good_one_fails_the_catalogue",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::tests::a_line_costs_its_price_times_its_quantity",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::tests::vat_is_exact_until_the_total",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::tests::an_order_is_rounded_once",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::tests::an_even_bill_is_shared_evenly",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::tests::the_first_payer_pays_the_odd_cents",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::tests::a_line_is_taken_from_the_shelf",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::tests::a_line_the_shelf_cannot_fill_is_backordered",
+      "params": []
+    },
+    { "kind": "function", "name": "warehouse_example::warehouse::tests::an_orders_lines", "params": [] },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::tests::no_orders_sell_nothing",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::tests::a_shelved_line_is_sold",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::tests::a_backordered_line_is_not_sold",
+      "params": []
+    },
+    { "kind": "function", "name": "warehouse_example::warehouse::tests::every_line_is_packed", "params": [] },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::tests::the_last_line_waits_when_the_shelf_runs_out",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::tests::two_tasks_pack_the_day",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::tests::a_receipt_of_no_lines",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::tests::a_receipt_of_one_line",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::tests::a_receipt_of_two_lines",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::tests::no_orders_file_no_receipts",
+      "params": []
+    },
+    { "kind": "function", "name": "warehouse_example::warehouse::tests::a_receipt_is_filed", "params": [] },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::tests::every_receipt_is_filed",
+      "params": []
+    }
+  ],
+  "holes": {
+    "warehouse_example::warehouse::tests::an_empty_store_is_no_catalogue": {
+      "locals": { "items": "Store<Item>" }
+    },
+    "warehouse_example::warehouse::tests::one_item_is_read": { "locals": { "items": "Store<Item>" } },
+    "warehouse_example::warehouse::tests::an_item_of_version_1_is_migrated": {
+      "locals": { "items": "Store<Item>" }
+    },
+    "warehouse_example::warehouse::tests::an_unreadable_item_fails_the_catalogue": {
+      "locals": { "items": "Store<Item>" }
+    },
+    "warehouse_example::warehouse::tests::an_unreadable_item_after_a_good_one_fails_the_catalogue": {
+      "locals": { "items": "Store<Item>" }
+    },
+    "warehouse_example::warehouse::tests::no_orders_file_no_receipts": {
+      "locals": { "filed": "Store<Receipt>" }
+    },
+    "warehouse_example::warehouse::tests::a_receipt_is_filed": { "locals": { "filed": "Store<Receipt>" } },
+    "warehouse_example::warehouse::tests::every_receipt_is_filed": {
+      "locals": { "filed": "Store<Receipt>" }
+    }
+  }
+}
