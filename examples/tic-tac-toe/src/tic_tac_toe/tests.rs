@@ -3,6 +3,7 @@
 
 use super::console_play::*;
 use super::*;
+use y_collections::list;
 
 /// A game with crosses and noughts in the given squares.
 ///
@@ -10,8 +11,8 @@ use super::*;
 /// - `noughts`: the squares that hold a nought.
 /// - `to_move`: whose turn it is.
 /// - Returns the game.
-fn marked(crosses: &[u32], noughts: &[u32], to_move: Mark) -> Game {
-    let mut squares = list::repeated(None, board::SQUARES);
+fn marked(crosses: &List<u32>, noughts: &List<u32>, to_move: Mark) -> Game {
+    let mut squares = List::from(list::repeated(None, board::SQUARES));
     for square in crosses { // y: #square, else #no_crosses
         list::set_number(&mut squares, *square, Some(Mark::Cross));
     }
@@ -25,7 +26,7 @@ fn marked(crosses: &[u32], noughts: &[u32], to_move: Mark) -> Game {
 fn a_game_starts_with_an_empty_board_and_crosses_to_move() {
     // y: covers new_game
     let started = new_game();
-    assert!(started.squares == list::repeated(None, board::SQUARES), "empty");
+    assert!(started.squares == List::from(list::repeated(None, board::SQUARES)), "empty");
     assert!(started.to_move == Mark::Cross, "crosses_to_move");
 }
 
@@ -33,7 +34,7 @@ fn a_game_starts_with_an_empty_board_and_crosses_to_move() {
 fn a_move_is_read() {
     // y: covers read_move > a_number > judged.empty
     let game = new_game();
-    let chosen = read_move(&game, " 5 ").expect("when");
+    let chosen = read_move(&game, &YString::new(" 5 ")).expect("when");
     assert!(chosen == 5, "the_middle");
 }
 
@@ -41,7 +42,7 @@ fn a_move_is_read() {
 fn a_word_is_not_a_move() {
     // y: covers read_move > not_a_number
     let game = new_game();
-    let refused = read_move(&game, "five");
+    let refused = read_move(&game, &YString::new("five"));
     assert!(refused == Err(MoveError::NotANumber), "refused_as_not_a_number");
 }
 
@@ -49,7 +50,7 @@ fn a_word_is_not_a_move() {
 fn square_zero_is_not_on_the_board() {
     // y: covers read_move > a_number > judged.off_board'1
     let game = new_game();
-    let refused = read_move(&game, "0");
+    let refused = read_move(&game, &YString::new("0"));
     assert!(refused == Err(MoveError::NoSuchSquare), "no_such_square");
 }
 
@@ -57,15 +58,15 @@ fn square_zero_is_not_on_the_board() {
 fn there_is_no_tenth_square() {
     // y: covers read_move > a_number > judged.off_board'2
     let game = new_game();
-    let refused = read_move(&game, "10");
+    let refused = read_move(&game, &YString::new("10"));
     assert!(refused == Err(MoveError::NoSuchSquare), "refused_as_no_square");
 }
 
 #[test]
 fn a_marked_square_is_taken() {
     // y: covers read_move > a_number > judged.taken
-    let game = marked(&[5], &[], Mark::Nought);
-    let refused = read_move(&game, "5");
+    let game = marked(&list![5], &List::new(), Mark::Nought);
+    let refused = read_move(&game, &YString::new("5"));
     assert!(refused == Err(MoveError::Taken), "refused_as_taken");
 }
 
@@ -81,7 +82,7 @@ fn a_move_puts_a_mark_and_passes_the_turn() {
 #[test]
 fn the_computer_takes_the_last_square() {
     // y: covers computer_move > square > better
-    let game = marked(&[1, 3, 4, 8], &[2, 5, 6, 7], Mark::Nought);
+    let game = marked(&list![1, 3, 4, 8], &list![2, 5, 6, 7], Mark::Nought);
     let chosen = computer_move(&game);
     assert!(chosen == 9, "the_ninth");
 }
@@ -89,7 +90,7 @@ fn the_computer_takes_the_last_square() {
 #[test]
 fn the_computer_wins_rather_than_blocks() {
     // y: covers computer_move > square'many > better
-    let game = marked(&[1, 2], &[4, 5], Mark::Nought);
+    let game = marked(&list![1, 2], &list![4, 5], Mark::Nought);
     let chosen = computer_move(&game);
     assert!(chosen == 6, "completes_its_row");
 }
@@ -97,7 +98,7 @@ fn the_computer_wins_rather_than_blocks() {
 #[test]
 fn the_computer_blocks_a_line() {
     // y: covers computer_move > square'many > no_better'lt
-    let game = marked(&[1, 2], &[5], Mark::Nought);
+    let game = marked(&list![1, 2], &list![5], Mark::Nought);
     let chosen = computer_move(&game);
     assert!(chosen == 3, "blocks_the_top_row");
 }
@@ -105,7 +106,7 @@ fn the_computer_blocks_a_line() {
 #[test]
 fn of_squares_as_good_the_computer_takes_the_first() {
     // y: covers computer_move > square'many > no_better'eq
-    let game = marked(&[1, 9], &[5], Mark::Nought);
+    let game = marked(&list![1, 9], &list![5], Mark::Nought);
     let chosen = computer_move(&game);
     assert!(chosen == 2, "the_first_of_the_edges");
 }
@@ -113,7 +114,7 @@ fn of_squares_as_good_the_computer_takes_the_first() {
 #[test]
 fn a_line_of_three_ends_the_game() {
     // y: covers over
-    let game = marked(&[3, 5, 7], &[1, 2], Mark::Nought);
+    let game = marked(&list![3, 5, 7], &list![1, 2], Mark::Nought);
     let ended = over(&game);
     assert!(ended, "won");
 }
@@ -121,7 +122,7 @@ fn a_line_of_three_ends_the_game() {
 #[test]
 fn a_full_board_ends_the_game() {
     // y: covers over
-    let game = marked(&[1, 3, 4, 8, 9], &[2, 5, 6, 7], Mark::Cross);
+    let game = marked(&list![1, 3, 4, 8, 9], &list![2, 5, 6, 7], Mark::Cross);
     let ended = over(&game);
     assert!(ended, "full");
 }
@@ -137,7 +138,7 @@ fn a_new_game_is_not_over() {
 #[test]
 fn a_line_along_the_top_row_is_found_first() {
     // y: covers winner > line > three
-    let game = marked(&[1, 2, 3], &[4, 5], Mark::Nought);
+    let game = marked(&list![1, 2, 3], &list![4, 5], Mark::Nought);
     let found = winner(&game);
     assert!(found == Some(Mark::Cross), "crosses_won");
 }
@@ -145,7 +146,7 @@ fn a_line_along_the_top_row_is_found_first() {
 #[test]
 fn three_in_a_row_wins() {
     // y: covers winner > line'many > three
-    let game = marked(&[3, 5, 7], &[1, 2], Mark::Nought);
+    let game = marked(&list![3, 5, 7], &list![1, 2], Mark::Nought);
     let found = winner(&game);
     assert!(found == Some(Mark::Cross), "crosses_won: Expected the diagonal, the last line looked at, to be found.");
 }
@@ -161,7 +162,7 @@ fn an_empty_board_has_no_winner() {
 #[test]
 fn a_line_with_two_marks_that_differ_is_not_three() {
     // y: covers winner > line'many > not_three'2
-    let game = marked(&[1], &[2], Mark::Cross);
+    let game = marked(&list![1], &list![2], Mark::Cross);
     let found = winner(&game);
     assert!(found.is_none(), "no_winner");
 }
@@ -169,7 +170,7 @@ fn a_line_with_two_marks_that_differ_is_not_three() {
 #[test]
 fn two_in_a_row_are_not_three() {
     // y: covers winner > line'many > not_three'3
-    let game = marked(&[1, 2], &[4], Mark::Nought);
+    let game = marked(&list![1, 2], &list![4], Mark::Nought);
     let found = winner(&game);
     assert!(found.is_none(), "no_winner");
 }
@@ -193,13 +194,13 @@ fn every_square_of_a_new_game_is_open() {
     // y: covers open_squares > number'many > empty
     let game = new_game();
     let open = open_squares(&game);
-    assert!(open == [1, 2, 3, 4, 5, 6, 7, 8, 9], "all_nine");
+    assert!(open == list![1, 2, 3, 4, 5, 6, 7, 8, 9], "all_nine");
 }
 
 #[test]
 fn a_full_board_has_no_open_square() {
     // y: covers open_squares > number'many > marked
-    let game = marked(&[1, 3, 4, 8, 9], &[2, 5, 6, 7], Mark::Cross);
+    let game = marked(&list![1, 3, 4, 8, 9], &list![2, 5, 6, 7], Mark::Cross);
     let open = open_squares(&game);
     assert!(list::count(&open) == 0, "none_open");
 }
@@ -207,7 +208,7 @@ fn a_full_board_has_no_open_square() {
 #[test]
 fn a_lost_game_costs_more_the_more_squares_are_left() {
     // y: covers value_of > now.lost
-    let game = marked(&[3, 5, 7], &[1, 2], Mark::Nought);
+    let game = marked(&list![3, 5, 7], &list![1, 2], Mark::Nought);
     let value = value_of(&game);
     assert!(value == -5, "lost_with_four_left");
 }
@@ -215,7 +216,7 @@ fn a_lost_game_costs_more_the_more_squares_are_left() {
 #[test]
 fn a_full_board_with_no_line_is_a_draw() {
     // y: covers value_of > now.drawn
-    let game = marked(&[1, 2, 6, 7, 9], &[3, 4, 5, 8], Mark::Nought);
+    let game = marked(&list![1, 2, 6, 7, 9], &list![3, 4, 5, 8], Mark::Nought);
     let value = value_of(&game);
     assert!(value == 0, "drawn");
 }
@@ -223,7 +224,7 @@ fn a_full_board_with_no_line_is_a_draw() {
 #[test]
 fn a_last_square_that_makes_no_line_is_worth_nothing() {
     // y: covers value_of > now.open > square
-    let game = marked(&[1, 3, 4, 8], &[2, 5, 6, 7], Mark::Cross);
+    let game = marked(&list![1, 3, 4, 8], &list![2, 5, 6, 7], Mark::Cross);
     let value = value_of(&game);
     assert!(value == 0, "drawn");
 }
@@ -231,7 +232,7 @@ fn a_last_square_that_makes_no_line_is_worth_nothing() {
 #[test]
 fn a_line_that_can_be_made_at_once_is_worth_most() {
     // y: covers value_of > now.open > square'many
-    let game = marked(&[1, 2], &[4, 5], Mark::Cross);
+    let game = marked(&list![1, 2], &list![4, 5], Mark::Cross);
     let value = value_of(&game);
     assert!(value == 5, "wins_at_once");
 }
@@ -239,7 +240,7 @@ fn a_line_that_can_be_made_at_once_is_worth_most() {
 #[test]
 fn the_board_shows_marks_and_numbers() {
     // y: covers shown > first'many > number'many
-    let game = marked(&[5], &[1], Mark::Cross);
+    let game = marked(&list![5], &list![1], Mark::Cross);
     let picture = shown(&game);
     assert!(picture == " O | 2 | 3\n---+---+---\n 4 | X | 6\n---+---+---\n 7 | 8 | 9", "drawn");
 }
@@ -255,7 +256,7 @@ fn an_empty_square_shows_its_number() {
 #[test]
 fn a_marked_square_shows_its_mark() {
     // y: covers square_shown > held.marked
-    let game = marked(&[5], &[1], Mark::Cross);
+    let game = marked(&list![5], &list![1], Mark::Cross);
     let drawn = square_shown(&game, 1);
     assert!(drawn == "O", "its_mark");
 }
@@ -265,7 +266,7 @@ fn a_full_board_is_over_at_once() {
     // y: covers play > over_at_once
     let mut console = Console::fake(&[], false);
     let forever = Forever::fake();
-    play(marked(&[1, 3, 4, 8, 9], &[2, 5, 6, 7], Mark::Cross), &mut console, &forever).expect("when");
+    play(marked(&list![1, 3, 4, 8, 9], &list![2, 5, 6, 7], Mark::Cross), &mut console, &forever).expect("when");
     assert!(console.written().last().map(String::as_str) == Some("The board is full. A draw."), "drawn");
 }
 
@@ -274,7 +275,7 @@ fn the_player_fills_the_last_square() {
     // y: covers play > playing > persons_turn
     let mut console = Console::fake(&["9"], false);
     let forever = Forever::fake();
-    play(marked(&[1, 3, 4, 8], &[2, 5, 6, 7], Mark::Cross), &mut console, &forever).expect("when");
+    play(marked(&list![1, 3, 4, 8], &list![2, 5, 6, 7], Mark::Cross), &mut console, &forever).expect("when");
     assert!(console.written().last().map(String::as_str) == Some("The board is full. A draw."), "drawn");
 }
 
@@ -283,7 +284,7 @@ fn the_computer_fills_the_last_square() {
     // y: covers play > playing > computers_turn
     let mut console = Console::fake(&[], false);
     let forever = Forever::fake();
-    play(marked(&[1, 3, 4, 8], &[2, 5, 6, 7], Mark::Nought), &mut console, &forever).expect("when");
+    play(marked(&list![1, 3, 4, 8], &list![2, 5, 6, 7], Mark::Nought), &mut console, &forever).expect("when");
     assert!(console.written().last().map(String::as_str) == Some("The board is full. A draw."), "drawn");
 }
 
@@ -337,7 +338,7 @@ fn a_console_that_cannot_tell_the_computers_last_move_ends_play() {
     // y: covers play > playing > computers_turn > write_line'2'fails
     let mut console = Console::fake_failing_writes(&[], 1);
     let forever = Forever::fake();
-    let ended = play(marked(&[1, 3, 4, 8], &[2, 5, 6, 7], Mark::Nought), &mut console, &forever);
+    let ended = play(marked(&list![1, 3, 4, 8], &list![2, 5, 6, 7], Mark::Nought), &mut console, &forever);
     assert!(ended == Err(PlayError::Console { error: ConsoleError::fake_write_failure() }), "failed_writing");
 }
 
@@ -346,7 +347,7 @@ fn a_console_that_cannot_tell_the_computers_move_ends_play() {
     // y: covers play > playing'many > computers_turn > write_line'2'fails
     let mut console = Console::fake_failing_writes(&["8"], 3);
     let forever = Forever::fake();
-    let ended = play(marked(&[1, 3, 4], &[2, 5, 6, 7], Mark::Cross), &mut console, &forever);
+    let ended = play(marked(&list![1, 3, 4], &list![2, 5, 6, 7], Mark::Cross), &mut console, &forever);
     assert!(ended == Err(PlayError::Console { error: ConsoleError::fake_write_failure() }), "failed_writing");
 }
 
@@ -355,7 +356,7 @@ fn a_console_that_cannot_announce_at_once_ends_play() {
     // y: covers play > over_at_once > announce'fails
     let mut console = Console::fake_failing_writes(&[], 1);
     let forever = Forever::fake();
-    let ended = play(marked(&[1, 3, 4, 8, 9], &[2, 5, 6, 7], Mark::Cross), &mut console, &forever);
+    let ended = play(marked(&list![1, 3, 4, 8, 9], &list![2, 5, 6, 7], Mark::Cross), &mut console, &forever);
     assert!(ended == Err(PlayError::Console { error: ConsoleError::fake_write_failure() }), "failed_writing");
 }
 
@@ -364,7 +365,7 @@ fn a_console_that_cannot_announce_the_players_last_move_ends_play() {
     // y: covers play > playing > persons_turn > announce'fails
     let mut console = Console::fake_failing_writes(&["9"], 3);
     let forever = Forever::fake();
-    let ended = play(marked(&[1, 3, 4, 8], &[2, 5, 6, 7], Mark::Cross), &mut console, &forever);
+    let ended = play(marked(&list![1, 3, 4, 8], &list![2, 5, 6, 7], Mark::Cross), &mut console, &forever);
     assert!(ended == Err(PlayError::Console { error: ConsoleError::fake_write_failure() }), "failed_writing");
 }
 
@@ -373,7 +374,7 @@ fn a_console_that_cannot_announce_the_computers_last_move_ends_play() {
     // y: covers play > playing > computers_turn > announce'fails
     let mut console = Console::fake_failing_writes(&[], 2);
     let forever = Forever::fake();
-    let ended = play(marked(&[1, 3, 4, 8], &[2, 5, 6, 7], Mark::Nought), &mut console, &forever);
+    let ended = play(marked(&list![1, 3, 4, 8], &list![2, 5, 6, 7], Mark::Nought), &mut console, &forever);
     assert!(ended == Err(PlayError::Console { error: ConsoleError::fake_write_failure() }), "failed_writing");
 }
 
@@ -382,7 +383,7 @@ fn a_console_that_cannot_announce_after_a_retyped_last_move_ends_play() {
     // y: covers play > playing'many > persons_turn > announce'fails
     let mut console = Console::fake_failing_writes(&["0", "9"], 6);
     let forever = Forever::fake();
-    let ended = play(marked(&[1, 3, 4, 8], &[2, 5, 6, 7], Mark::Cross), &mut console, &forever);
+    let ended = play(marked(&list![1, 3, 4, 8], &list![2, 5, 6, 7], Mark::Cross), &mut console, &forever);
     assert!(ended == Err(PlayError::Console { error: ConsoleError::fake_write_failure() }), "failed_writing");
 }
 
@@ -391,7 +392,7 @@ fn a_console_that_cannot_announce_after_both_have_moved_ends_play() {
     // y: covers play > playing'many > computers_turn > announce'fails
     let mut console = Console::fake_failing_writes(&["8"], 4);
     let forever = Forever::fake();
-    let ended = play(marked(&[1, 3, 4], &[2, 5, 6, 7], Mark::Cross), &mut console, &forever);
+    let ended = play(marked(&list![1, 3, 4], &list![2, 5, 6, 7], Mark::Cross), &mut console, &forever);
     assert!(ended == Err(PlayError::Console { error: ConsoleError::fake_write_failure() }), "failed_writing");
 }
 
@@ -491,7 +492,7 @@ fn a_player_who_names_a_taken_square_is_told_so() {
 #[test]
 fn a_draw_is_announced() {
     // y: covers announce > drawn
-    let game = marked(&[1, 3, 4, 8, 9], &[2, 5, 6, 7], Mark::Cross);
+    let game = marked(&list![1, 3, 4, 8, 9], &list![2, 5, 6, 7], Mark::Cross);
     let mut console = Console::fake(&[], false);
     announce(&game, &mut console).expect("when");
     assert!(console.written().last().map(String::as_str) == Some("The board is full. A draw."), "drawn");
@@ -500,7 +501,7 @@ fn a_draw_is_announced() {
 #[test]
 fn a_win_is_announced() {
     // y: covers announce > won
-    let game = marked(&[3, 5, 7], &[1, 2], Mark::Nought);
+    let game = marked(&list![3, 5, 7], &list![1, 2], Mark::Nought);
     let mut console = Console::fake(&[], false);
     announce(&game, &mut console).expect("when");
     assert!(console.written().last().map(String::as_str) == Some("X has three in a row, and wins."), "crosses_won");
@@ -509,7 +510,7 @@ fn a_win_is_announced() {
 #[test]
 fn an_end_cannot_be_shown_without_the_board() {
     // y: covers announce > write_line'1'fails
-    let game = marked(&[1, 3, 4, 8, 9], &[2, 5, 6, 7], Mark::Cross);
+    let game = marked(&list![1, 3, 4, 8, 9], &list![2, 5, 6, 7], Mark::Cross);
     let mut console = Console::fake_failing_writes(&[], 0);
     let said = announce(&game, &mut console);
     assert!(said == Err(ConsoleError::fake_write_failure()), "failed_writing");
@@ -518,7 +519,7 @@ fn an_end_cannot_be_shown_without_the_board() {
 #[test]
 fn a_draw_cannot_be_announced() {
     // y: covers announce > drawn > write_line'2'fails
-    let game = marked(&[1, 3, 4, 8, 9], &[2, 5, 6, 7], Mark::Cross);
+    let game = marked(&list![1, 3, 4, 8, 9], &list![2, 5, 6, 7], Mark::Cross);
     let mut console = Console::fake_failing_writes(&[], 1);
     let said = announce(&game, &mut console);
     assert!(said == Err(ConsoleError::fake_write_failure()), "failed_writing");
@@ -527,7 +528,7 @@ fn a_draw_cannot_be_announced() {
 #[test]
 fn a_win_cannot_be_announced() {
     // y: covers announce > won > write_line'3'fails
-    let game = marked(&[3, 5, 7], &[1, 2], Mark::Nought);
+    let game = marked(&list![3, 5, 7], &list![1, 2], Mark::Nought);
     let mut console = Console::fake_failing_writes(&[], 1);
     let said = announce(&game, &mut console);
     assert!(said == Err(ConsoleError::fake_write_failure()), "failed_writing");

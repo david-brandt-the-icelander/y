@@ -3,7 +3,9 @@
 //! Each named decision of the Y source is marked `// y: #name` where its condition is tested, and each named `condition`
 //! of a `conditional` on its `match` arm.
 
-use y_runtime::{list, not_reachable, require, text, ConsoleError, Console, Forever};
+use y_collections::List;
+use y_runtime::{list, not_reachable, require, ConsoleError, Console, Forever};
+use y_string::YString;
 use self::{console_play::*, moves::*, setup::*};
 
 #[cfg(test)]
@@ -11,6 +13,8 @@ mod tests;
 
 /// The Y facet `setup`: a game, and how it starts.
 mod setup {
+    use y_collections::List;
+
     /// The rules every game is played by: the Y constant group `game_rules`.
     mod game_rules {
         /// How many counters each heap holds at the start, from the first heap to the last.
@@ -34,7 +38,7 @@ mod setup {
     ///
     /// - Returns a game with every heap full.
     fn new_game() {
-        Game { heaps: game_rules::STARTING_HEAPS.to_vec() }
+        Game { heaps: List::from(game_rules::STARTING_HEAPS) }
     }
 }
 
@@ -64,12 +68,12 @@ mod moves {
     /// - Returns the move, not yet checked against a game.
     /// - Fails `NotTwoNumbers`: the line does not hold exactly two whole numbers.
     fn parse_move(line) {
-        let pieces = line.split_whitespace().collect();
-        if pieces.len() != 2 { // y: #not_two, else #two
+        let pieces = List::from(line.split_whitespace());
+        if pieces.count() != 2 { // y: #not_two, else #two
             return Err(MoveError::NotTwoNumbers);
         }
-        let heap = pieces[0].parse().ok();
-        let take = pieces[1].parse().ok();
+        let heap = pieces[0].parse_uint32();
+        let take = pieces[1].parse_uint32();
         // y: the `or` of the Y source's `if not_numbers` narrows both names; a `match` tests its operands in order
         match (heap, take) {
             (None, _) => Err(MoveError::NotTwoNumbers), // y: #not_numbers'1
@@ -180,14 +184,15 @@ fn nim_sum(heaps) {
 /// - `game`: the game.
 /// - Returns the drawing.
 fn shown(game) {
-    let lines = Vec::new();
+    let lines = List::new();
     let number = 0;
     for heap in &game.heaps { // y: #heap, else #no_heaps
         number += 1;
-        let counters = text::repeated("|", *heap);
-        lines.push(format!("  {number}: {counters}"));
+        let counters = YString::from(list::repeated("|", *heap).concat());
+        lines.push(YString::from(format!("  {number}: {counters}")));
     }
-    lines.join("\n")
+    let pieces = lines.iter().map(YString::as_str).collect();
+    YString::from(pieces.join("\n"))
 }
 
 /// The Y facet `console_play`: playing a whole game at the console.
@@ -222,7 +227,7 @@ mod console_play {
         console.write_line("Nim: take any number of counters from one heap. Whoever takes the last counter wins.")?;
         while counters_left(&game) > 0 { // y: #playing, else #nothing_to_play
             let picture = shown(&game);
-            console.write_line(&picture)?;
+            console.write_line(picture.as_str())?;
             if turn == Player::Person { // y: #persons_turn
                 turn = persons_move(&mut game, console, forever)?;
             } else { // y: #computers_turn
@@ -250,13 +255,13 @@ fn persons_move(game, console, forever) {
     let Some(typed) = typed else { // y: #closed, else #line_read, which narrows `typed` to a `string`
         return Err(PlayError::InputClosed);
     };
-    match read_move(game, &typed) {
+    match read_move(game, &YString::from(typed)) {
         Ok(chosen) => { // y: #attempted.valid
             remove(game, &chosen);
             Ok(Player::Computer)
         }
         Err(error) => { // y: #attempted.invalid
-            console.write_line(complaint(error))?;
+            console.write_line(complaint(error).as_str())?;
             Ok(Player::Person)
         }
     }
@@ -267,12 +272,12 @@ fn persons_move(game, console, forever) {
 /// - `error`: why it is not.
 /// - Returns the line to write.
 fn complaint(error) {
-    match error {
+    YString::new(match error {
         MoveError::NotTwoNumbers => "Type a heap's number and how many to take, such as 2 3.", // y: #wrong.not_a_move
         MoveError::NoSuchHeap => "There is no such heap.", // y: #wrong.no_heap
         MoveError::NothingTaken => "Take at least one counter.", // y: #wrong.none_taken
         MoveError::TooMany => "That heap does not hold that many.", // y: #wrong.too_many
-    }
+    })
 }
 
 /// Says who won.

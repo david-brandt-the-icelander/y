@@ -34,10 +34,10 @@ it takes a win at once rather than later. Against it, the best you can do is dra
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
 | Y source | `y/src/tic_tac_toe.y`, `y/src/tic_tac_toe.test.y`, `y/src/main.y` | 346, 719, 16 | hand |
-| Bare bodies | `bare/src/tic_tac_toe.brs`, `bare/src/tic_tac_toe/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 332, 534, 21, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
-| Constraint files | `bare/src/*.constraints.json` (92 subjects, 27 clauses) | 651 | `strip`, plus the clauses and status the Y lowering adds, then `bare-rust libfmt` |
+| Bare bodies | `bare/src/tic_tac_toe.brs`, `bare/src/tic_tac_toe/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 332, 535, 21, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
+| Constraint files | `bare/src/*.constraints.json` (92 subjects, 27 clauses) | 724 | `strip`, plus the clauses and status the Y lowering adds, then `bare-rust libfmt` |
 | Y facts | `bare/y-facts.json` | 1116 | the same, from the Y source and the bare bodies |
-| Rust | `src/tic_tac_toe.rs`, `src/tic_tac_toe/tests.rs`, `src/main.rs`, `src/lib.rs` | 332, 534, 21, 3 | `bare-rust weave`, which gives back the hand-written Rust exactly |
+| Rust | `src/tic_tac_toe.rs`, `src/tic_tac_toe/tests.rs`, `src/main.rs`, `src/lib.rs` | 332, 535, 21, 3 | `bare-rust weave`, which gives back the hand-written Rust exactly |
 
 ## What Tic-tac-toe adds to the earlier lowerings
 
@@ -46,7 +46,7 @@ it takes a win at once rather than later. Against it, the best you can do is dra
 | `value_of(game)`, which calls itself once for each empty square | the same | `effects pure` | a recursive `fn`. The board has nine squares, so the recursion is at most nine calls deep |
 | `mutable after = game`, a copy to try a move on while `game` is still read | `game.clone()`, marked `// y: a copy` | `y-facts.json` `copies` | the same |
 | `constants mark:` with `cross = "X"` and `nought = "O"`, and `"{held}"` | `impl fmt::Display for Mark` | — | the enum shows as the constant's value |
-| `squares is list<element_type=optional<value_type=mark>>`, made with `list.repeated(optional.none, times: board.squares)` | `list::repeated(None, board::SQUARES)` | the field's type, `list<element_type=Mark?> as 'Vec'` | `Vec<Option<Mark>>` |
+| `squares is list<element_type=optional<value_type=mark>>`, made with `list.repeated(optional.none, times: board.squares)` | `List::from(list::repeated(None, board::SQUARES))` | the field's type, `list<element_type=Mark?> as 'List'` | `y_collections::List<Option<Mark>>`, the facade for Y's `list` |
 | `lines is list<element_type=list<element_type=uint32>> = [[1, 2, 3], …]`, a constant list of lists | `const LINES = [[1, 2, 3], …];` | `list<element_type=list<element_type=u32> where count(value) == 3 as …> where count(value) == 8 as 'std::primitive::array'` | `[[u32; 3]; 8]` |
 | `conditional held = game.squares.at_number(number):` with `condition held.empty = (held == optional.none):` and `else held.marked:`, which narrows `held` to a `mark` | `match`, with `None` and `Some(held)` arms | `decisions`, kind `conditional` | the same |
 | `if drawn = (found == optional.none):` with `else won:`, which narrows `found` | `match found`, with `None` and `Some(found)` arms | `decisions` | the same |

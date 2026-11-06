@@ -13,7 +13,7 @@ use y_window::block_on;
 fn moving(heading: Direction) -> Game {
     Game {
         head: Cell { column: 10, row: 7 },
-        tail: vec![],
+        tail: List::new(),
         heading,
         wanted: heading,
         food: Cell { column: 0, row: 0 },
@@ -27,7 +27,7 @@ fn a_new_game_puts_the_food_in_a_free_cell() {
     // y: covers new_game
     let mut random = Random::seeded(7);
     let started = new_game(&mut random);
-    assert!(started.tail.len() == 2, "three_long");
+    assert!(started.tail.count() == 2, "three_long");
     assert!(started.heading == Direction::Right, "moving_right");
     assert!(started.food != started.head && !started.tail.contains(&started.food), "food_off_the_snake");
 }
@@ -109,11 +109,11 @@ fn a_key_that_is_not_an_arrow_does_not_turn_the_snake() {
 fn the_tail_follows_the_head() {
     // y: covers advance > moved.on
     let mut game = moving(Direction::Right);
-    game.tail = vec![Cell { column: 9, row: 7 }, Cell { column: 8, row: 7 }];
+    game.tail = y_collections::list![Cell { column: 9, row: 7 }, Cell { column: 8, row: 7 }];
     let mut random = Random::seeded(7);
     advance(&mut game, &mut random);
     assert!(game.head == Cell { column: 11, row: 7 }, "moved");
-    assert!(game.tail == vec![Cell { column: 10, row: 7 }, Cell { column: 9, row: 7 }], "followed");
+    assert!(game.tail == y_collections::list![Cell { column: 10, row: 7 }, Cell { column: 9, row: 7 }], "followed");
 }
 
 #[test]
@@ -121,7 +121,7 @@ fn the_snake_may_follow_its_own_tail() {
     // y: covers advance > moved.on
     let mut game = moving(Direction::Left);
     game.head = Cell { column: 5, row: 5 };
-    game.tail = vec![Cell { column: 6, row: 5 }, Cell { column: 6, row: 6 }, Cell { column: 5, row: 6 }];
+    game.tail = y_collections::list![Cell { column: 6, row: 5 }, Cell { column: 6, row: 6 }, Cell { column: 5, row: 6 }];
     game.wanted = Direction::Down;
     let mut random = Random::seeded(7);
     advance(&mut game, &mut random);
@@ -145,7 +145,7 @@ fn the_snake_cannot_bite_itself() {
     // y: covers advance > moved.into_itself
     let mut game = moving(Direction::Left);
     game.head = Cell { column: 5, row: 5 };
-    game.tail = vec![Cell { column: 6, row: 5 }, Cell { column: 6, row: 6 }, Cell { column: 5, row: 6 }, Cell { column: 4, row: 6 }];
+    game.tail = y_collections::list![Cell { column: 6, row: 5 }, Cell { column: 6, row: 6 }, Cell { column: 5, row: 6 }, Cell { column: 4, row: 6 }];
     game.wanted = Direction::Down;
     let mut random = Random::seeded(7);
     advance(&mut game, &mut random);
@@ -160,7 +160,7 @@ fn eating_grows_the_snake() {
     game.food = Cell { column: 9, row: 7 };
     let mut random = Random::seeded(7);
     advance(&mut game, &mut random);
-    assert!(game.tail == vec![Cell { column: 10, row: 7 }], "grown");
+    assert!(game.tail == y_collections::list![Cell { column: 10, row: 7 }], "grown");
     assert!(game.eaten == 1, "scored");
     assert!(game.food != game.head && !game.tail.contains(&game.food), "new_food");
 }
@@ -171,7 +171,7 @@ fn eating_the_last_food_fills_the_board() {
     let corner = Cell { column: 0, row: 0 };
     let mut game = moving(Direction::Left);
     game.head = Cell { column: 1, row: 0 };
-    game.tail = vec![corner];
+    game.tail = y_collections::list![corner];
     let rest = free_cells(&game);
     game.tail = rest;
     game.food = corner;
@@ -272,17 +272,17 @@ fn a_cell_past_the_edge_is_off_the_board() {
 fn cells_the_snake_is_not_in_are_free() {
     // y: covers free_cells > row'many > column'many > vacant
     let mut game = moving(Direction::Right);
-    game.tail = vec![Cell { column: 9, row: 7 }];
+    game.tail = y_collections::list![Cell { column: 9, row: 7 }];
     let free = free_cells(&game);
-    assert!(free.len() == 298, "all_the_others");
-    assert!(free.first() == Some(&Cell { column: 0, row: 0 }), "from_the_top_left");
+    assert!(free.count() == 298, "all_the_others");
+    assert!(free.front() == Some(&Cell { column: 0, row: 0 }), "from_the_top_left");
 }
 
 #[test]
 fn the_cell_of_the_head_is_not_free() {
     // y: covers free_cells > row'many > column'many > taken'1
     let mut game = moving(Direction::Right);
-    game.tail = vec![Cell { column: 9, row: 7 }];
+    game.tail = y_collections::list![Cell { column: 9, row: 7 }];
     let free = free_cells(&game);
     assert!(!free.contains(&game.head), "head_taken");
 }
@@ -291,7 +291,7 @@ fn the_cell_of_the_head_is_not_free() {
 fn the_cells_of_the_tail_are_not_free() {
     // y: covers free_cells > row'many > column'many > taken'2
     let mut game = moving(Direction::Right);
-    game.tail = vec![Cell { column: 9, row: 7 }];
+    game.tail = y_collections::list![Cell { column: 9, row: 7 }];
     let free = free_cells(&game);
     assert!(!free.contains(&Cell { column: 9, row: 7 }), "tail_taken");
 }
@@ -313,7 +313,7 @@ fn food_goes_in_a_free_cell() {
     let mut game = moving(Direction::Left);
     game.head = Cell { column: 0, row: 0 };
     game.tail = free_cells(&game);
-    game.tail.pop();
+    game.tail.take_back();
     let mut random = Random::seeded(7);
     place_food(&mut game, &mut random);
     assert!(game.food == Cell { column: 19, row: 14 }, "in_the_free_cell");
@@ -373,7 +373,7 @@ fn a_snake_with_a_tail_of_one_cell_is_drawn() {
     // y: covers draw > part
     let mut window = Window::fake(&[]);
     let mut game = moving(Direction::Right);
-    game.tail = vec![Cell { column: 9, row: 7 }];
+    game.tail = y_collections::list![Cell { column: 9, row: 7 }];
     draw(&game, 2, &mut window);
     assert!(window.written() == ["Score 0   Best 2   Arrows steer, Escape quits"], "banner_written");
 }
@@ -383,7 +383,7 @@ fn a_snake_with_a_longer_tail_is_drawn() {
     // y: covers draw > part'many
     let mut window = Window::fake(&[]);
     let mut game = moving(Direction::Right);
-    game.tail = vec![Cell { column: 9, row: 7 }, Cell { column: 8, row: 7 }];
+    game.tail = y_collections::list![Cell { column: 9, row: 7 }, Cell { column: 8, row: 7 }];
     draw(&game, 2, &mut window);
     assert!(window.written() == ["Score 0   Best 2   Arrows steer, Escape quits"], "banner_written");
 }
@@ -463,7 +463,7 @@ fn a_finished_game_waits_for_space() {
 fn no_key_leaves_the_way_wanted() {
     // y: covers steer > no_keys
     let mut game = moving(Direction::Right);
-    steer(&mut game, &[]);
+    steer(&mut game, &List::new());
     assert!(game.wanted == Direction::Right, "unchanged");
 }
 
@@ -471,7 +471,7 @@ fn no_key_leaves_the_way_wanted() {
 fn a_key_pressed_steers_the_snake() {
     // y: covers steer > pressed
     let mut game = moving(Direction::Right);
-    steer(&mut game, &[Key::Up]);
+    steer(&mut game, &y_collections::list![Key::Up]);
     assert!(game.wanted == Direction::Up, "up");
 }
 
@@ -479,7 +479,7 @@ fn a_key_pressed_steers_the_snake() {
 fn two_keys_in_a_frame_steer_in_turn() {
     // y: covers steer > pressed'many
     let mut game = moving(Direction::Right);
-    steer(&mut game, &[Key::Up, Key::Left]);
+    steer(&mut game, &y_collections::list![Key::Up, Key::Left]);
     assert!(game.wanted == Direction::Up, "up: Expected up to stand: left, after up, is back the way the snake moved last.");
 }
 

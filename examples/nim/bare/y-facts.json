@@ -109,7 +109,7 @@
       "because": "a player may think for as long as they like",
       "requires": "Forever",
       "y": "y/src/nim.y:268",
-      "bare": "bare/src/nim.brs:249"
+      "bare": "bare/src/nim.brs:254"
     }
   ],
   "suspensions": [],
@@ -123,12 +123,12 @@
           {
             "name": "not_two",
             "y": "y/src/nim.y:63",
-            "bare": "bare/src/nim.brs:68"
+            "bare": "bare/src/nim.brs:72"
           },
           {
             "name": "two",
             "y": "y/src/nim.y:65",
-            "bare": "bare/src/nim.brs:68"
+            "bare": "bare/src/nim.brs:72"
           }
         ]
       },
@@ -138,12 +138,12 @@
           {
             "name": "not_numbers",
             "y": "y/src/nim.y:69",
-            "bare": "bare/src/nim.brs:75"
+            "bare": "bare/src/nim.brs:79"
           },
           {
             "name": "numbers",
             "y": "y/src/nim.y:71",
-            "bare": "bare/src/nim.brs:77"
+            "bare": "bare/src/nim.brs:81"
           }
         ]
       }
@@ -155,12 +155,12 @@
           {
             "name": "no_such_heap",
             "y": "y/src/nim.y:88",
-            "bare": "bare/src/nim.brs:90"
+            "bare": "bare/src/nim.brs:94"
           },
           {
             "name": "heap_exists",
             "y": "y/src/nim.y:90",
-            "bare": "bare/src/nim.brs:90"
+            "bare": "bare/src/nim.brs:94"
           }
         ]
       },
@@ -172,17 +172,17 @@
           {
             "name": "judged.nothing_taken",
             "y": "y/src/nim.y:94",
-            "bare": "bare/src/nim.brs:94"
+            "bare": "bare/src/nim.brs:98"
           },
           {
             "name": "judged.too_many",
             "y": "y/src/nim.y:96",
-            "bare": "bare/src/nim.brs:96"
+            "bare": "bare/src/nim.brs:100"
           },
           {
             "name": "judged.fits",
             "y": "y/src/nim.y:98",
-            "bare": "bare/src/nim.brs:98"
+            "bare": "bare/src/nim.brs:102"
           }
         ]
       }
@@ -194,12 +194,12 @@
           {
             "name": "lost",
             "y": "y/src/nim.y:143",
-            "bare": "bare/src/nim.brs:131"
+            "bare": "bare/src/nim.brs:135"
           },
           {
             "name": "winnable",
             "y": "y/src/nim.y:147",
-            "bare": "bare/src/nim.brs:134"
+            "bare": "bare/src/nim.brs:138"
           }
         ]
       },
@@ -209,12 +209,12 @@
           {
             "name": "number",
             "y": "y/src/nim.y:149",
-            "bare": "bare/src/nim.brs:136"
+            "bare": "bare/src/nim.brs:140"
           },
           {
             "name": "no_heaps",
             "y": "y/src/nim.y:157",
-            "bare": "bare/src/nim.brs:146"
+            "bare": "bare/src/nim.brs:150"
           }
         ]
       },
@@ -224,12 +224,12 @@
           {
             "name": "winning",
             "y": "y/src/nim.y:153",
-            "bare": "bare/src/nim.brs:140"
+            "bare": "bare/src/nim.brs:144"
           },
           {
             "name": "not_this_heap",
             "y": "y/src/nim.y:155",
-            "bare": "bare/src/nim.brs:142"
+            "bare": "bare/src/nim.brs:146"
           }
         ]
       }
@@ -241,12 +241,12 @@
           {
             "name": "heap",
             "y": "y/src/nim.y:172",
-            "bare": "bare/src/nim.brs:160"
+            "bare": "bare/src/nim.brs:164"
           },
           {
             "name": "no_heaps",
             "y": "y/src/nim.y:174",
-            "bare": "bare/src/nim.brs:160"
+            "bare": "bare/src/nim.brs:164"
           }
         ]
       }
@@ -258,12 +258,12 @@
           {
             "name": "heap",
             "y": "y/src/nim.y:188",
-            "bare": "bare/src/nim.brs:172"
+            "bare": "bare/src/nim.brs:176"
           },
           {
             "name": "no_heaps",
             "y": "y/src/nim.y:190",
-            "bare": "bare/src/nim.brs:172"
+            "bare": "bare/src/nim.brs:176"
           }
         ]
       }
@@ -275,12 +275,12 @@
           {
             "name": "heap",
             "y": "y/src/nim.y:205",
-            "bare": "bare/src/nim.brs:185"
+            "bare": "bare/src/nim.brs:189"
           },
           {
             "name": "no_heaps",
             "y": "y/src/nim.y:209",
-            "bare": "bare/src/nim.brs:185"
+            "bare": "bare/src/nim.brs:189"
           }
         ]
       }
@@ -292,12 +292,12 @@
           {
             "name": "playing",
             "y": "y/src/nim.y:238",
-            "bare": "bare/src/nim.brs:223"
+            "bare": "bare/src/nim.brs:228"
           },
           {
             "name": "nothing_to_play",
             "y": "y/src/nim.y:249",
-            "bare": "bare/src/nim.brs:223"
+            "bare": "bare/src/nim.brs:228"
           }
         ]
       },
@@ -307,12 +307,12 @@
           {
             "name": "persons_turn",
             "y": "y/src/nim.y:242",
-            "bare": "bare/src/nim.brs:226"
+            "bare": "bare/src/nim.brs:231"
           },
           {
             "name": "computers_turn",
             "y": "y/src/nim.y:244",
-            "bare": "bare/src/nim.brs:228"
+            "bare": "bare/src/nim.brs:233"
           }
         ]
       }
@@ -324,12 +324,12 @@
           {
             "name": "closed",
             "y": "y/src/nim.y:270",
-            "bare": "bare/src/nim.brs:250"
+            "bare": "bare/src/nim.brs:255"
           },
           {
             "name": "line_read",
             "y": "y/src/nim.y:272",
-            "bare": "bare/src/nim.brs:250"
+            "bare": "bare/src/nim.brs:255"
           }
         ]
       },
@@ -341,12 +341,12 @@
           {
             "name": "attempted.valid",
             "y": "y/src/nim.y:274",
-            "bare": "bare/src/nim.brs:254"
+            "bare": "bare/src/nim.brs:259"
           },
           {
             "name": "attempted.invalid",
             "y": "y/src/nim.y:277",
-            "bare": "bare/src/nim.brs:258"
+            "bare": "bare/src/nim.brs:263"
           }
         ]
       }
@@ -360,22 +360,22 @@
           {
             "name": "wrong.not_a_move",
             "y": "y/src/nim.y:291",
-            "bare": "bare/src/nim.brs:271"
+            "bare": "bare/src/nim.brs:276"
           },
           {
             "name": "wrong.no_heap",
             "y": "y/src/nim.y:293",
-            "bare": "bare/src/nim.brs:272"
+            "bare": "bare/src/nim.brs:277"
           },
           {
             "name": "wrong.none_taken",
             "y": "y/src/nim.y:295",
-            "bare": "bare/src/nim.brs:273"
+            "bare": "bare/src/nim.brs:278"
           },
           {
             "name": "wrong.too_many",
             "y": "y/src/nim.y:297",
-            "bare": "bare/src/nim.brs:274"
+            "bare": "bare/src/nim.brs:279"
           }
         ]
       }
@@ -387,12 +387,12 @@
           {
             "name": "computer_won",
             "y": "y/src/nim.y:311",
-            "bare": "bare/src/nim.brs:284"
+            "bare": "bare/src/nim.brs:289"
           },
           {
             "name": "person_won",
             "y": "y/src/nim.y:313",
-            "bare": "bare/src/nim.brs:286"
+            "bare": "bare/src/nim.brs:291"
           }
         ]
       }

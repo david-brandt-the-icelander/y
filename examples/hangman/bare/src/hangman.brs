@@ -3,10 +3,10 @@
 //! Each named decision of the Y source is marked `// y: #name` where its condition is tested, and each named `condition`
 //! of a `conditional` on its `match` arm.
 
-use std::collections::BTreeSet;
 use std::fmt;
-use y_runtime::text::{count, join_runes, runes, single_rune};
-use y_runtime::{invariant, not_reachable, require, ConsoleError, ConstraintViolation, Console, Forever, Random, Rune};
+use y_collections::{List, Set};
+use y_runtime::{invariant, not_reachable, require, ConsoleError, ConstraintViolation, Console, Forever, Random};
+use y_string::{Rune, YString};
 use self::{display::*, rounds::*, setup::*};
 
 #[cfg(test)]
@@ -34,10 +34,10 @@ mod setup {
     impl Word {
         /// Checks both constraints of `Word`, in the order the Y source names them.
         fn new(value) {
-            if !runes(&value).all(|letter| letter.is_ascii_lowercase()) { // y: Word#letters_only
+            if !value.runes().all(|letter| letter.is_ascii_lowercase()) { // y: Word#letters_only
                 return Err(ConstraintViolation { constraint: "hangman::Word#letters_only" });
             }
-            if !(count(&value) >= 4) { // y: Word#long_enough
+            if !(value.count() >= 4) { // y: Word#long_enough
                 return Err(ConstraintViolation { constraint: "hangman::Word#long_enough" });
             }
             Ok(Word(value))
@@ -51,7 +51,7 @@ mod setup {
 
     impl fmt::Display for Word {
         fn fmt(self, f) {
-            f.write_str(&self.0)
+            f.write_str(self.0.as_str())
         }
     }
 
@@ -69,12 +69,13 @@ mod setup {
     /// - Fails `Empty`: the list has no words.
     /// - Fails `NotAWord`: a piece of the list is not a `Word`: it has a character other than `a` to `z`, or fewer than four.
     fn parse_word_list(text) {
-        let found = Vec::new();
-        for piece in text.split(" ") { // y: #piece
+        let found = List::new();
+        // y_string offers no split by a separator, so the pieces are split as host text and made strings again
+        for piece in text.as_str().split(" ").map(YString::new) { // y: #piece
             if piece.is_empty() { // y: #blank, else #has_text
                 continue;
             }
-            match Word::new(piece.to_string()) {
+            match Word::new(piece) {
                 Ok(parsed) => found.push(parsed), // y: #checked.valid
                 Err(_) => return Err(WordListError::NotAWord), // y: #checked.invalid
             }
@@ -101,7 +102,7 @@ mod rounds {
     impl Game {
         /// How many wrong guesses the player has made: the derived value `miss_count`, recomputed on every read.
         fn miss_count(self) {
-            self.misses.len()
+            self.misses.count()
         }
     }
 
@@ -133,7 +134,7 @@ mod rounds {
     /// - `word`: the word the player must find.
     /// - Returns a game with nothing guessed.
     fn new_game(word) {
-        Game { word, hits: BTreeSet::new(), misses: Vec::new() }
+        Game { word, hits: Set::new(), misses: List::new() }
     }
 
     /// The player has used up the misses allowed: the rule `hanged`.
@@ -147,7 +148,7 @@ mod rounds {
     ///
     /// - `game`: the game to judge.
     fn solved(game) {
-        runes(game.word.as_text()).all(|letter| game.hits.contains(&letter))
+        game.word.as_text().runes().all(|letter| game.hits.contains(&letter))
     }
 
     /// Says whether a game is won, lost or still going.
@@ -175,8 +176,8 @@ mod rounds {
     /// - Fails `AlreadyGuessed`: the letter was guessed before. The game is unchanged.
     fn guess(game, line) {
         require(outcome_of(game) == Outcome::Playing, "hangman::guess#still_playing");
-        let trimmed = line.trim();
-        let letter = single_rune(&trimmed.to_lowercase());
+        let trimmed = line.trimmed();
+        let letter = Rune::single(&YString::from(trimmed.as_str().to_lowercase()));
         // y: the Y source's `conditional judged`; its first two conditions fail, so the narrowing of `letter` is a let-else here
         if trimmed.is_empty() { // y: #judged.nothing_typed
             return Err(GuessError::Empty);
@@ -188,12 +189,12 @@ mod rounds {
             Err(GuessError::NotOneLetter)
         } else if game.hits.contains(&letter) || game.misses.contains(&letter) { // y: #judged.repeated
             Err(GuessError::AlreadyGuessed)
-        } else if runes(game.word.as_text()).any(|each| each == letter) { // y: #judged.in_word
-            game.hits.insert(letter);
+        } else if game.word.as_text().contains(&letter) { // y: #judged.in_word
+            game.hits.add(letter);
             Ok(Verdict::Hit)
         } else { // y: #judged.not_in_word
             game.misses.push(letter);
-            invariant(game.misses.len() <= game_rules::ALLOWED_MISSES, "hangman::Game#within_allowance");
+            invariant(game.misses.count() <= game_rules::ALLOWED_MISSES, "hangman::Game#within_allowance");
             Ok(Verdict::Miss)
         }
     }
@@ -208,11 +209,11 @@ mod display {
     /// - `game`: the game.
     /// - Returns each letter of the word, found or not, separated by spaces: `_ o _ e`.
     fn masked(game) {
-        let letters = Vec::new();
-        for letter in runes(game.word.as_text()) { // y: #letter
+        let letters = List::new();
+        for letter in game.word.as_text().runes() { // y: #letter
             letters.push(shown_rune(letter, &game.hits));
         }
-        join_runes(&letters, " ")
+        YString::from_runes(&letters, " ")
     }
 
     /// Draws the gallows, with one more part of the man for each miss.
@@ -221,22 +222,24 @@ mod display {
     /// - Returns the picture, seven lines high.
     fn gallows(misses) {
         require(misses <= game_rules::ALLOWED_MISSES, "hangman::gallows#within_allowance");
-        let head = part(misses, 1, "O");
-        let body = part(misses, 2, "|");
-        let left_arm = part(misses, 3, "/");
-        let right_arm = part(misses, 4, "\\");
-        let left_leg = part(misses, 5, "/");
-        let right_leg = part(misses, 6, "\\");
-        let rows = [
-            "  +---+".to_string(),
-            "  |   |".to_string(),
-            format!("  {head}   |"),
-            format!(" {left_arm}{body}{right_arm}  |"),
-            format!(" {left_leg} {right_leg}  |"),
-            "      |".to_string(),
-            "=========".to_string(),
-        ];
-        rows.join("\n")
+        let head = part(misses, 1, &YString::new("O"));
+        let body = part(misses, 2, &YString::new("|"));
+        let left_arm = part(misses, 3, &YString::new("/"));
+        let right_arm = part(misses, 4, &YString::new("\\"));
+        let left_leg = part(misses, 5, &YString::new("/"));
+        let right_leg = part(misses, 6, &YString::new("\\"));
+        let rows = List::from([
+            YString::new("  +---+"),
+            YString::new("  |   |"),
+            YString::from(format!("  {head}   |")),
+            YString::from(format!(" {left_arm}{body}{right_arm}  |")),
+            YString::from(format!(" {left_leg} {right_leg}  |")),
+            YString::new("      |"),
+            YString::new("========="),
+        ]);
+        // y_string offers no join of a list of strings, so the rows are joined as host text
+        let texts = rows.iter().map(YString::as_str).collect();
+        YString::from(texts.join("\n"))
     }
 }
 
@@ -249,7 +252,7 @@ fn shown_rune(letter, hits) {
     if hits.contains(&letter) { // y: #known
         letter
     } else { // y: #unknown
-        Rune('_')
+        Rune::from_scalar('_')
     }
 }
 
@@ -261,9 +264,9 @@ fn shown_rune(letter, hits) {
 /// - Returns the mark, or a space while the part is not drawn yet.
 fn part(misses, needed, mark) {
     if misses >= needed { // y: #reached
-        mark.to_string()
+        mark.clone()
     } else { // y: #not_yet
-        " ".to_string()
+        YString::new(" ")
     }
 }
 
@@ -294,7 +297,7 @@ mod console_play {
     /// - Fails `Console`: the console could not be read or written.
     fn play(words, console, random, forever) {
         require(!words.is_empty(), "hangman::play#has_words");
-        let chosen = random.index_below(words.len());
+        let chosen = random.index_below(words.count());
         let game = new_game(words[chosen].clone()); // y: a copy, because new_game keeps its word and `words` is still read
         console.write_line("Hangman: find the word, one letter at a time.")?;
         let ran = false;
@@ -305,8 +308,9 @@ mod console_play {
             let Some(typed) = typed else { // y: #closed, else #line_read, which narrows `typed` to a `string`
                 return Err(PlayError::InputClosed);
             };
+            let typed = YString::from(typed);
             let guessed = guess(&mut game, &typed);
-            console.write_line(&reply(&guessed, &typed))?;
+            console.write_line(reply(&guessed, &typed).as_str())?;
         }
         if !ran { // y: #over_at_once
             not_reachable("hangman::play#over_at_once");
@@ -324,8 +328,8 @@ mod console_play {
 fn show_turn(game, console) {
     let picture = gallows(game.miss_count());
     let shown = masked(game);
-    let missed = join_runes(&game.misses, " ");
-    console.write_line(&picture)?;
+    let missed = YString::from_runes(&game.misses, " ");
+    console.write_line(picture.as_str())?;
     console.write_line(&format!("Word:   {shown}"))?;
     console.write_line(&format!("Missed: {missed}"))?;
     console.write("Guess:  ")?;
@@ -339,11 +343,11 @@ fn show_turn(game, console) {
 /// - Returns the line to write.
 fn reply(guessed, typed) {
     match guessed {
-        Ok(Verdict::Hit) => "Yes.".to_string(), // y: #said.hit
-        Ok(Verdict::Miss) => "No.".to_string(), // y: #said.miss
-        Err(GuessError::Empty) => "Type a letter.".to_string(), // y: #said.typed_nothing
-        Err(GuessError::NotOneLetter) => format!("\"{typed}\" is not one letter."), // y: #said.typed_other
-        Err(GuessError::AlreadyGuessed) => format!("You have already guessed {typed}."), // y: #said.typed_again
+        Ok(Verdict::Hit) => YString::new("Yes."), // y: #said.hit
+        Ok(Verdict::Miss) => YString::new("No."), // y: #said.miss
+        Err(GuessError::Empty) => YString::new("Type a letter."), // y: #said.typed_nothing
+        Err(GuessError::NotOneLetter) => format!("\"{typed}\" is not one letter.").into(), // y: #said.typed_other
+        Err(GuessError::AlreadyGuessed) => format!("You have already guessed {typed}.").into(), // y: #said.typed_again
     }
 }
 
@@ -354,7 +358,7 @@ fn reply(guessed, typed) {
 /// - Fails with a `ConsoleError`: the console could not be written.
 fn show_end(game, console) {
     let final_picture = gallows(game.miss_count());
-    console.write_line(&final_picture)?;
+    console.write_line(final_picture.as_str())?;
     if outcome_of(game) == Outcome::Won { // y: #won
         console.write_line(&format!("You win! The word was {}.", game.word))?;
     } else { // y: #hanged

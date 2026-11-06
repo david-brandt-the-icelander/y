@@ -5,8 +5,10 @@ edition = "2021"
 description = "Memory, the game of matching pairs, written in Y and lowered through bare Rust and its constraint files to Rust."
 
 [dependencies]
+y-collections = { path = "../y-collections" }
 y-http = { path = "../y-http" }
 y-runtime = { path = "../y-runtime" }
+y-string = { path = "../y-string" }
 y-window = { path = "../y-window" }
 
 [workspace]

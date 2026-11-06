@@ -3,18 +3,19 @@
 
 use super::console_play::*;
 use super::*;
+use y_collections::list;
 
 #[test]
 fn a_new_game_has_every_heap_full() {
     // y: covers new_game
     let started = new_game();
-    assert!(started.heaps == [3, 4, 5], "full");
+    assert!(started.heaps == list![3, 4, 5], "full");
 }
 
 #[test]
 fn a_move_is_parsed() {
     // y: covers parse_move > two > numbers
-    let parsed = parse_move(" 2  3 ").expect("when");
+    let parsed = parse_move(&YString::new(" 2  3 ")).expect("when");
     assert!(parsed.heap == 2, "heap_two");
     assert!(parsed.take == 3, "three_counters");
 }
@@ -22,28 +23,28 @@ fn a_move_is_parsed() {
 #[test]
 fn one_number_is_not_a_move() {
     // y: covers parse_move > not_two'lt
-    let refused = parse_move("3");
+    let refused = parse_move(&YString::new("3"));
     assert!(refused == Err(MoveError::NotTwoNumbers), "refused_as_not_a_move");
 }
 
 #[test]
 fn three_numbers_are_not_a_move() {
     // y: covers parse_move > not_two'gt
-    let refused = parse_move("1 2 3");
+    let refused = parse_move(&YString::new("1 2 3"));
     assert!(refused == Err(MoveError::NotTwoNumbers), "refused_as_not_a_move");
 }
 
 #[test]
 fn a_word_for_the_heap_is_not_a_move() {
     // y: covers parse_move > two > not_numbers'1
-    let refused = parse_move("x 2");
+    let refused = parse_move(&YString::new("x 2"));
     assert!(refused == Err(MoveError::NotTwoNumbers), "refused_as_not_a_move");
 }
 
 #[test]
 fn a_word_for_the_count_is_not_a_move() {
     // y: covers parse_move > two > not_numbers'2
-    let refused = parse_move("2 x");
+    let refused = parse_move(&YString::new("2 x"));
     assert!(refused == Err(MoveError::NotTwoNumbers), "refused_as_not_a_move");
 }
 
@@ -115,7 +116,7 @@ fn taking_the_whole_last_heap_is_allowed() {
 fn a_move_is_read() {
     // y: covers read_move
     let game = new_game();
-    let chosen = read_move(&game, " 2  3 ").expect("when");
+    let chosen = read_move(&game, &YString::new(" 2  3 ")).expect("when");
     assert!(chosen.heap == 2, "heap_two");
     assert!(chosen.take == 3, "three_counters");
 }
@@ -124,14 +125,14 @@ fn a_move_is_read() {
 fn a_line_that_is_not_a_move_is_refused() {
     // y: covers read_move > parsed'fails
     let game = new_game();
-    let refused = read_move(&game, "two three");
+    let refused = read_move(&game, &YString::new("two three"));
     assert!(refused == Err(MoveError::NotTwoNumbers), "refused_as_not_a_move");
 }
 
 #[test]
 fn a_move_the_game_does_not_allow_is_refused() {
     let game = new_game();
-    let refused = read_move(&game, "4 1");
+    let refused = read_move(&game, &YString::new("4 1"));
     assert!(refused == Err(MoveError::NoSuchHeap), "refused_as_no_heap");
 }
 
@@ -140,13 +141,13 @@ fn a_move_takes_counters_from_its_heap() {
     // y: covers remove
     let mut game = new_game();
     remove(&mut game, &Move { heap: 2, take: 3 });
-    assert!(game.heaps == [3, 1, 5], "one_left_in_heap_two");
+    assert!(game.heaps == list![3, 1, 5], "one_left_in_heap_two");
 }
 
 #[test]
 fn a_losing_computer_takes_one_from_the_largest_heap() {
     // y: covers computer_move > lost
-    let game = Game { heaps: vec![1, 4, 5] };
+    let game = Game { heaps: list![1, 4, 5] };
     let chosen = computer_move(&game);
     assert!(chosen.heap == 3, "from_the_largest_heap");
     assert!(chosen.take == 1, "takes_one");
@@ -155,7 +156,7 @@ fn a_losing_computer_takes_one_from_the_largest_heap() {
 #[test]
 fn the_computer_takes_a_lone_heap() {
     // y: covers computer_move > winnable > number > winning
-    let game = Game { heaps: vec![3] };
+    let game = Game { heaps: list![3] };
     let chosen = computer_move(&game);
     assert!(chosen == Move { heap: 1, take: 3 }, "all_of_it");
 }
@@ -163,17 +164,17 @@ fn the_computer_takes_a_lone_heap() {
 #[test]
 fn the_computer_finds_the_winning_move() {
     // y: covers computer_move > winnable > number'many > winning
-    let game = Game { heaps: vec![1, 2, 4] };
+    let game = Game { heaps: list![1, 2, 4] };
     let chosen = computer_move(&game);
     assert!(chosen.heap == 3, "from_the_last_heap");
-    assert!(nim_sum(&[1, 2, 3]) == 0, "leaves_zero");
+    assert!(nim_sum(&list![1, 2, 3]) == 0, "leaves_zero");
     assert!(chosen.take == 1, "takes_one");
 }
 
 #[test]
 fn no_heaps_leave_no_counters() {
     // y: covers counters_left > no_heaps
-    let none = Game { heaps: vec![] };
+    let none = Game { heaps: List::new() };
     let left = counters_left(&none);
     assert!(left == 0, "nothing_left");
 }
@@ -181,7 +182,7 @@ fn no_heaps_leave_no_counters() {
 #[test]
 fn a_lone_heap_is_all_that_is_left() {
     // y: covers counters_left > heap
-    let one = Game { heaps: vec![5] };
+    let one = Game { heaps: list![5] };
     let left = counters_left(&one);
     assert!(left == 5, "five_left");
 }
@@ -197,28 +198,28 @@ fn the_counters_of_every_heap_are_counted() {
 #[test]
 fn no_heaps_sum_to_zero() {
     // y: covers nim_sum > no_heaps
-    let sum = nim_sum(&[]);
+    let sum = nim_sum(&List::new());
     assert!(sum == 0, "sum_zero");
 }
 
 #[test]
 fn a_lone_heap_sums_to_its_size() {
     // y: covers nim_sum > heap
-    let sum = nim_sum(&[5]);
+    let sum = nim_sum(&list![5]);
     assert!(sum == 5, "sum_five");
 }
 
 #[test]
 fn heaps_are_summed_with_exclusive_or() {
     // y: covers nim_sum > heap'many
-    let sum = nim_sum(&[3, 4, 5]);
+    let sum = nim_sum(&list![3, 4, 5]);
     assert!(sum == 2, "sum_two");
 }
 
 #[test]
 fn no_heaps_draw_nothing() {
     // y: covers shown > no_heaps
-    let none = Game { heaps: vec![] };
+    let none = Game { heaps: List::new() };
     let picture = shown(&none);
     assert!(picture.is_empty(), "nothing_shown");
 }
@@ -226,7 +227,7 @@ fn no_heaps_draw_nothing() {
 #[test]
 fn a_lone_heap_is_drawn_on_one_line() {
     // y: covers shown > heap
-    let one = Game { heaps: vec![5] };
+    let one = Game { heaps: list![5] };
     let picture = shown(&one);
     assert!(picture == "  1: |||||", "one_line");
 }
@@ -234,7 +235,7 @@ fn a_lone_heap_is_drawn_on_one_line() {
 #[test]
 fn heaps_are_drawn_one_line_each() {
     // y: covers shown > heap'many
-    let game = Game { heaps: vec![1, 2] };
+    let game = Game { heaps: list![1, 2] };
     let picture = shown(&game);
     assert!(picture == "  1: |\n  2: ||", "two_lines");
 }
@@ -285,7 +286,7 @@ fn a_console_that_cannot_greet_ends_play() {
     // y: covers play > write_line'1'fails
     let mut console = Console::fake_failing_writes(&[], 0);
     let forever = Forever::fake();
-    let ended = play(Game { heaps: vec![3, 4, 5] }, &mut console, &forever);
+    let ended = play(Game { heaps: list![3, 4, 5] }, &mut console, &forever);
     assert!(ended == Err(PlayError::Console { error: ConsoleError::fake_write_failure() }), "failed_writing");
 }
 
@@ -294,7 +295,7 @@ fn a_console_that_cannot_draw_the_heaps_ends_play() {
     // y: covers play > playing > write_line'2'fails
     let mut console = Console::fake_failing_writes(&[], 1);
     let forever = Forever::fake();
-    let ended = play(Game { heaps: vec![3, 4, 5] }, &mut console, &forever);
+    let ended = play(Game { heaps: list![3, 4, 5] }, &mut console, &forever);
     assert!(ended == Err(PlayError::Console { error: ConsoleError::fake_write_failure() }), "failed_writing");
 }
 
@@ -303,7 +304,7 @@ fn a_console_that_cannot_draw_the_heaps_again_ends_play() {
     // y: covers play > playing'many > write_line'2'fails
     let mut console = Console::fake_failing_writes(&["1 1"], 3);
     let forever = Forever::fake();
-    let ended = play(Game { heaps: vec![3, 4, 5] }, &mut console, &forever);
+    let ended = play(Game { heaps: list![3, 4, 5] }, &mut console, &forever);
     assert!(ended == Err(PlayError::Console { error: ConsoleError::fake_write_failure() }), "failed_writing");
 }
 
@@ -312,7 +313,7 @@ fn a_console_that_cannot_ask_for_a_move_ends_play() {
     // y: covers play > playing > persons_turn > turn'fails
     let mut console = Console::fake_failing_writes(&[], 2);
     let forever = Forever::fake();
-    let ended = play(Game { heaps: vec![3, 4, 5] }, &mut console, &forever);
+    let ended = play(Game { heaps: list![3, 4, 5] }, &mut console, &forever);
     assert!(ended == Err(PlayError::Console { error: ConsoleError::fake_write_failure() }), "failed_writing");
 }
 
@@ -321,7 +322,7 @@ fn a_console_that_fails_on_a_later_turn_ends_play() {
     // y: covers play > playing'many > persons_turn > turn'fails
     let mut console = Console::fake_failing_writes(&["1 1", "2 1"], 7);
     let forever = Forever::fake();
-    let ended = play(Game { heaps: vec![1, 1, 1] }, &mut console, &forever);
+    let ended = play(Game { heaps: list![1, 1, 1] }, &mut console, &forever);
     assert!(ended == Err(PlayError::Console { error: ConsoleError::fake_write_failure() }), "failed_writing");
 }
 
@@ -330,7 +331,7 @@ fn a_console_that_cannot_tell_the_computers_move_ends_play() {
     // y: covers play > playing'many > computers_turn > write_line'3'fails
     let mut console = Console::fake_failing_writes(&["1 1"], 4);
     let forever = Forever::fake();
-    let ended = play(Game { heaps: vec![1, 1] }, &mut console, &forever);
+    let ended = play(Game { heaps: list![1, 1] }, &mut console, &forever);
     assert!(ended == Err(PlayError::Console { error: ConsoleError::fake_write_failure() }), "failed_writing");
 }
 
@@ -339,7 +340,7 @@ fn a_console_that_cannot_announce_the_computers_win_ends_play() {
     // y: covers play > playing'many > computers_turn > announce'fails
     let mut console = Console::fake_failing_writes(&["1 1"], 5);
     let forever = Forever::fake();
-    let ended = play(Game { heaps: vec![1, 1] }, &mut console, &forever);
+    let ended = play(Game { heaps: list![1, 1] }, &mut console, &forever);
     assert!(ended == Err(PlayError::Console { error: ConsoleError::fake_write_failure() }), "failed_writing");
 }
 
@@ -348,7 +349,7 @@ fn a_console_that_cannot_announce_a_win_ends_play() {
     // y: covers play > playing'many > persons_turn > announce'fails
     let mut console = Console::fake_failing_writes(&["1 1", "3 1"], 7);
     let forever = Forever::fake();
-    let ended = play(Game { heaps: vec![1, 1, 1] }, &mut console, &forever);
+    let ended = play(Game { heaps: list![1, 1, 1] }, &mut console, &forever);
     assert!(ended == Err(PlayError::Console { error: ConsoleError::fake_write_failure() }), "failed_writing");
 }
 
@@ -357,7 +358,7 @@ fn a_console_that_cannot_announce_a_quick_win_ends_play() {
     // y: covers play > playing > persons_turn > announce'fails
     let mut console = Console::fake_failing_writes(&["1 2"], 3);
     let forever = Forever::fake();
-    let ended = play(Game { heaps: vec![2] }, &mut console, &forever);
+    let ended = play(Game { heaps: list![2] }, &mut console, &forever);
     assert!(ended == Err(PlayError::Console { error: ConsoleError::fake_write_failure() }), "failed_writing");
 }
 
@@ -366,7 +367,7 @@ fn a_console_that_cannot_announce_at_once_ends_play() {
     // y: covers play > nothing_to_play > announce'fails
     let mut console = Console::fake_failing_writes(&[], 1);
     let forever = Forever::fake();
-    let ended = play(Game { heaps: vec![0] }, &mut console, &forever);
+    let ended = play(Game { heaps: list![0] }, &mut console, &forever);
     assert!(ended == Err(PlayError::Console { error: ConsoleError::fake_write_failure() }), "failed_writing");
 }
 
@@ -375,7 +376,7 @@ fn a_game_with_no_counters_is_over_at_once() {
     // y: covers play > nothing_to_play
     let mut console = Console::fake(&[], false);
     let forever = Forever::fake();
-    let ended = play(Game { heaps: vec![0] }, &mut console, &forever);
+    let ended = play(Game { heaps: list![0] }, &mut console, &forever);
     assert!(ended.is_ok(), "played");
     assert!(console.written().last().map(String::as_str) == Some("The computer took the last counter. The computer wins."), "announced");
 }
@@ -385,7 +386,7 @@ fn one_move_can_win_a_game() {
     // y: covers play > playing > persons_turn
     let mut console = Console::fake(&["1 2"], false);
     let forever = Forever::fake();
-    let ended = play(Game { heaps: vec![2] }, &mut console, &forever);
+    let ended = play(Game { heaps: list![2] }, &mut console, &forever);
     assert!(ended.is_ok(), "played");
     assert!(console.written().last().map(String::as_str) == Some("You took the last counter. You win!"), "announced");
 }
@@ -428,7 +429,7 @@ fn a_players_move_is_made() {
     let forever = Forever::fake();
     let next = persons_move(&mut game, &mut console, &forever).expect("when");
     assert!(next == Player::Computer, "the_computers_turn");
-    assert!(game.heaps == [3, 1, 5], "one_left_in_heap_two");
+    assert!(game.heaps == list![3, 1, 5], "one_left_in_heap_two");
 }
 
 #[test]
@@ -441,7 +442,7 @@ fn a_player_is_told_what_is_wrong_and_asked_again() {
     let written = console.written();
     assert!(next == Player::Person, "the_players_turn_again");
     assert!(written.iter().any(|line| line == "Type a heap's number and how many to take, such as 2 3."), "told_the_form");
-    assert!(game.heaps == [3, 4, 5], "nothing_taken");
+    assert!(game.heaps == list![3, 4, 5], "nothing_taken");
 }
 
 #[test]

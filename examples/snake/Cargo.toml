@@ -7,5 +7,7 @@ description = "Snake, written in Y and lowered through bare Rust and its constra
 [dependencies]
 y-runtime = { path = "../y-runtime" }
 y-window = { path = "../y-window" }
+y-string = { path = "../y-string" }
+y-collections = { path = "../y-collections" }
 
 [workspace]

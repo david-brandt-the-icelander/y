@@ -248,7 +248,11 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
                 let y = at(b["y"].as_str().unwrap());
                 let t = y.trim();
                 let named_else = t == format!("else {name}:") || ((kind == "for" || kind == "while") && t == format!("else {name}"));
-                let opens = if k > 0 {
+                let opens = if kind == "orelse" {
+                    // alternatives: `region a is …:`, then `orelse region b is …:`
+                    let head = if k == 0 { format!("region {name} is ") } else { format!("orelse region {name} is ") };
+                    t.starts_with(&head) && t.ends_with(':')
+                } else if k > 0 {
                     named_else || (switch && t.starts_with(&format!("condition {name} = ")) && t.ends_with(':'))
                 } else if switch {
                     t.starts_with(&format!("condition {name} = ")) && t.ends_with(':')
@@ -297,8 +301,17 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
     let mut in_source = BTreeSet::new();
     for y in &code {
         let mut function = String::new();
+        let mut last_region = String::new();
         for line in read(&dir.join(y)).lines() {
             let words: Vec<&str> = line.split_whitespace().collect();
+            // `region a is …:` and `orelse region b is …:`: the alternatives of an `orelse` are its outcomes
+            if words.first() == Some(&"region") && words.get(2) == Some(&"is") {
+                last_region = words[1].to_string();
+            }
+            if words.first() == Some(&"orelse") && words.get(1) == Some(&"region") && words.get(3) == Some(&"is") {
+                in_source.insert(format!("{function}#{last_region}"));
+                in_source.insert(format!("{function}#{}", words[2]));
+            }
             if let Some(i) = words.iter().position(|w| *w == "function") {
                 function = words[i + 1].split('(').next().unwrap().to_string();
             }

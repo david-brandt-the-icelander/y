@@ -26,7 +26,7 @@
       "params": [
         {
           "name": "pairs",
-          "type": "ref<target_type=list<element_type=u32> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=u32> as 'List'>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "at", "type": "Instant" }
@@ -43,7 +43,7 @@
       "kind": "function",
       "name": "memory_example::memory::tests::every_pair_clicked",
       "params": [],
-      "result": { "type": "list<element_type=Frame> as 'Vec'" }
+      "result": { "type": "list<element_type=Frame> as 'List'" }
     },
     {
       "kind": "function",
@@ -280,5 +280,22 @@
       "name": "memory_example::memory::tests::a_site_that_fails_for_the_next_game_ends_play",
       "params": []
     }
-  ]
+  ],
+  "holes": {
+    "memory_example::memory::tests::a_game_is_drawn_with_its_banner_and_credit": {
+      "locals": { "written": "list<element_type=string as 'YString'> as 'List'" }
+    },
+    "memory_example::memory::tests::a_window_closed_after_one_frame_ends_play": {
+      "locals": { "written": "list<element_type=string as 'YString'> as 'List'" }
+    },
+    "memory_example::memory::tests::a_pair_that_does_not_match_is_shown_then_turned_back": {
+      "locals": { "written": "list<element_type=string as 'YString'> as 'List'" }
+    },
+    "memory_example::memory::tests::a_won_game_keeps_its_score": {
+      "locals": { "written": "list<element_type=string as 'YString'> as 'List'" }
+    },
+    "memory_example::memory::tests::a_whole_game_is_won_and_another_begun": {
+      "locals": { "written": "list<element_type=string as 'YString'> as 'List'" }
+    }
+  }
 }

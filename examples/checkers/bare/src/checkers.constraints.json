@@ -179,14 +179,14 @@
           "name": "path",
           "visible": "path",
           "visible_path": "super",
-          "type": "list<element_type=Square> as 'Vec'",
+          "type": "list<element_type=Square> as 'List'",
           "hold": { "kind": "owns" }
         },
         {
           "name": "captures",
           "visible": "path",
           "visible_path": "super",
-          "type": "list<element_type=Square> as 'Vec'",
+          "type": "list<element_type=Square> as 'List'",
           "hold": { "kind": "owns" }
         }
       ]
@@ -242,7 +242,7 @@
           "name": "squares",
           "visible": "path",
           "visible_path": "super",
-          "type": "list<element_type=Piece?> as 'Vec'",
+          "type": "list<element_type=Piece?> as 'List'",
           "hold": { "kind": "owns" }
         },
         {
@@ -309,7 +309,7 @@
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "list<element_type=Move> as 'Vec'" },
+      "result": { "type": "list<element_type=Move> as 'List'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:200" }]
     },
     {
@@ -398,7 +398,7 @@
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "list<element_type=Move> as 'Vec'" },
+      "result": { "type": "list<element_type=Move> as 'List'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:304" }]
     },
     {
@@ -411,7 +411,7 @@
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "list<element_type=Move> as 'Vec'" },
+      "result": { "type": "list<element_type=Move> as 'List'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:326" }]
     },
     {
@@ -428,16 +428,16 @@
         { "name": "at", "type": "Square" },
         {
           "name": "path",
-          "type": "ref<target_type=list<element_type=Square> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=Square> as 'List'>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "captured",
-          "type": "ref<target_type=list<element_type=Square> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=Square> as 'List'>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "list<element_type=Move> as 'Vec'" },
+      "result": { "type": "list<element_type=Move> as 'List'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:349" }]
     },
     {
@@ -454,16 +454,16 @@
         { "name": "land", "type": "Square" },
         {
           "name": "path",
-          "type": "ref<target_type=list<element_type=Square> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=Square> as 'List'>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "captured",
-          "type": "ref<target_type=list<element_type=Square> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=Square> as 'List'>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "list<element_type=Move> as 'Vec'" },
+      "result": { "type": "list<element_type=Move> as 'List'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:384" }]
     },
     {
@@ -508,7 +508,7 @@
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "list<element_type=Placed> as 'Vec'" },
+      "result": { "type": "list<element_type=Placed> as 'List'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:435" }]
     },
     {
@@ -521,17 +521,14 @@
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "list<element_type=Placed> as 'Vec'" },
+      "result": { "type": "list<element_type=Placed> as 'List'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:457" }]
     },
     {
       "kind": "function",
       "name": "checkers_example::checkers::directions_of",
       "params": [{ "name": "piece", "type": "Piece" }],
-      "result": {
-        "type": "ref<target_type=list<element_type=Direction> as 'std::primitive::slice'>",
-        "hold": { "kind": "borrows", "lifetime": "'static" }
-      },
+      "result": { "type": "list<element_type=Direction> as 'List'" },
       "clauses": [
         {
           "kind": "ensure",
@@ -698,12 +695,12 @@
         },
         {
           "name": "options",
-          "type": "ref<target_type=list<element_type=Move> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=Move> as 'List'>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
           "name": "values",
-          "type": "ref<target_type=list<element_type=i32> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=i32> as 'List'>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "checks", "type": "u32" },
@@ -994,7 +991,7 @@
         },
         { "name": "highest", "type": "u32" }
       ],
-      "result": { "type": "list<element_type=string> as 'Vec'" },
+      "result": { "type": "list<element_type=string as 'YString'> as 'List'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:843" }]
     },
     {
@@ -1111,7 +1108,7 @@
         },
         { "name": "selected", "type": "Square?" }
       ],
-      "result": { "type": "list<element_type=Square> as 'Vec'" },
+      "result": { "type": "list<element_type=Square> as 'List'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:1026" }]
     },
     {
@@ -1204,7 +1201,7 @@
       "kind": "function",
       "name": "checkers_example::checkers::colours_of",
       "params": [{ "name": "piece", "type": "Piece" }],
-      "result": { "type": "list<element_type=Colour> as 'Vec'" },
+      "result": { "type": "list<element_type=Colour> as 'List'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:1105" }]
     },
     { "kind": "module", "name": "checkers_example::checkers::window_play", "visible": "public" },
@@ -1338,7 +1335,7 @@
       "params": [
         {
           "name": "clicks",
-          "type": "ref<target_type=list<element_type=Point> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=Point> as 'List'>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -1361,7 +1358,7 @@
         },
         {
           "name": "clicks",
-          "type": "ref<target_type=list<element_type=Point> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=Point> as 'List'>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -1402,10 +1399,5 @@
       "result": { "type": "bool" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:1293" }]
     }
-  ],
-  "holes": {
-    "checkers_example::checkers::directions_of": {
-      "locals": { "ways": { "host": "&'static [Direction]", "form": "ref_hole" } }
-    }
-  }
+  ]
 }

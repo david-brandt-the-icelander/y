@@ -5,7 +5,9 @@ edition = "2021"
 description = "Checkers, written in Y and lowered through bare Rust and its constraint files to Rust, drawn with Macroquad."
 
 [dependencies]
+y-collections = { path = "../y-collections" }
 y-runtime = { path = "../y-runtime" }
+y-string = { path = "../y-string" }
 y-window = { path = "../y-window" }
 
 [workspace]

@@ -117,11 +117,11 @@ ydecl = re.compile(r"^\s*(function|test) (\w+)")
 decisions = {}
 for m in code:
     yp_, mod = m["y"], m["module"]
-    cur, open_at = None, {}
+    cur, open_at, regions = None, {}, {}
     for i, l in enumerate(lines(yp_), 1):
         d = ydecl.match(l)
         if d:
-            cur, open_at = d.group(2), {}
+            cur, open_at, regions = d.group(2), {}, {}
         ind = len(l) - len(l.lstrip())
         t = l.strip()
         here = f"{yp_}:{i}"
@@ -131,6 +131,20 @@ for m in code:
             decisions.setdefault(f"{mod}.{cur}", []).append(group)
             open_at[ind] = group
             continue
+        # `region a is …:` then `orelse region b is …:`: alternatives, named by their regions
+        mm = re.match(r"orelse region (\w+) is .*:$", t)
+        if mm:
+            if ind in open_at and open_at[ind]["kind"] == "orelse":
+                open_at[ind]["branches"].append({"name": mm.group(1), "y": here})
+            elif ind in regions:
+                first, at = regions[ind]
+                group = {"kind": "orelse", "branches": [{"name": first, "y": at}, {"name": mm.group(1), "y": here}]}
+                decisions.setdefault(f"{mod}.{cur}", []).append(group)
+                open_at[ind] = group
+            continue
+        mm = re.match(r"region (\w+) is .*:$", t)
+        if mm:
+            regions[ind] = (mm.group(1), here)
         mm = re.match(r"(conditional|compare) (\w+)", t)
         if mm:
             group = {"kind": mm.group(1), "label": mm.group(2), "y": here, "branches": []}

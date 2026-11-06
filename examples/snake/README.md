@@ -25,11 +25,11 @@ On Linux, Macroquad needs the X11 and OpenGL libraries (`libx11-dev`, `libxi-dev
 
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
-| Y source | `y/src/snake.y`, `y/src/snake.test.y`, `y/src/main.y` | 397, 730, 24 | hand |
-| Bare bodies | `bare/src/snake.brs`, `bare/src/snake/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 360, 557, 31, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
+| Y source | `y/src/snake.y`, `y/src/snake.test.y`, `y/src/main.y` | 399, 730, 24 | hand |
+| Bare bodies | `bare/src/snake.brs`, `bare/src/snake/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 362, 557, 31, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
 | Constraint files | `bare/src/*.constraints.json` (99 subjects, 43 clauses) | 671 | `strip`, plus the clauses and status the Y lowering adds, then `bare-rust libfmt` |
 | Y facts | `bare/y-facts.json` | 1090 | the same, from the Y source and the bare bodies |
-| Rust | `src/snake.rs`, `src/snake/tests.rs`, `src/main.rs`, `src/lib.rs` | 360, 557, 31, 3 | `bare-rust weave`, which gives back the hand-written Rust exactly |
+| Rust | `src/snake.rs`, `src/snake/tests.rs`, `src/main.rs`, `src/lib.rs` | 362, 557, 31, 3 | `bare-rust weave`, which gives back the hand-written Rust exactly |
 
 The window is a capability. It comes from [`../y-window`](../y-window/), a stand-in for a Y standard module
 `standard.window` that draws with Macroquad. It is a crate of its own so that the console examples do not build
@@ -49,7 +49,8 @@ Macroquad. The clock comes from [`../y-runtime`](../y-runtime/), as the console 
 | `turned(game, pressed)`'s `condition arrow.up = ((pressed == key.up) or (pressed == key.w)):` | a `match` arm for each operand of the `or`, marked `// y: #arrow.up'1` and `// y: #arrow.up'2`, the names of the two paths | `decisions`, kind `conditional` | the same |
 | `function new_game(injected random) returns started ensures playing = (started.standing == outcome.playing):` | `ensure(…, "snake::new_game#playing")` before the return | `ensure playing : result.standing is Playing`, status `lifted` | a run-time check whose failure is a fault |
 | `int32` cells, which may step off the board, and `on_board(place)` | `i32` | — | `i32` |
-| `game.tail.without_last()`, `insert_first`, `remove_last`, `range(from: 0, below: board.rows)` | `list::without_last(&game.tail)`, `insert(0, …)`, `pop()`, `0..board::ROWS` | — | the same |
+| `game.tail.without_last()`, `insert_first`, `remove_last`, `range(from: 0, below: board.rows)` | `list::without_last(&game.tail)`, `push_front(…)`, `take_back()`, `0..board::ROWS` | — | the same: `game.tail` is a `y_collections::List`, which derefs to the slice `list::without_last` takes |
+| a `list<element_type=…>` (`game.tail`, `free_cells`' result, the keys pressed) and a `string` (`banner`'s line) | `List<Cell>`, `List<Key>`, `YString`; the keys the window gives are wrapped with `List::from(…)`, and the line is passed to `window.write` as `line.as_str()` | — | `y_collections::List` and `y_string::YString`, the facades of Y's `list` and `string` |
 
 ## Suspension: Y has no `async`, Rust does
 

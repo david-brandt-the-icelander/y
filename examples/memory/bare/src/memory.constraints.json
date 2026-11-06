@@ -113,28 +113,28 @@
           "name": "pairs",
           "visible": "path",
           "visible_path": "super",
-          "type": "list<element_type=u32> as 'Vec'",
+          "type": "list<element_type=u32> as 'List'",
           "hold": { "kind": "owns" }
         },
         {
           "name": "sides",
           "visible": "path",
           "visible_path": "super",
-          "type": "list<element_type=Side> as 'Vec'",
+          "type": "list<element_type=Side> as 'List'",
           "hold": { "kind": "owns" }
         },
         {
           "name": "pictures",
           "visible": "path",
           "visible_path": "super",
-          "type": "list<element_type=Picture> as 'Vec'",
+          "type": "list<element_type=Picture> as 'List'",
           "hold": { "kind": "owns" }
         },
         {
           "name": "turned",
           "visible": "path",
           "visible_path": "super",
-          "type": "list<element_type=u32> as 'Vec'",
+          "type": "list<element_type=u32> as 'List'",
           "hold": { "kind": "owns" }
         },
         {
@@ -479,7 +479,7 @@
         },
         { "name": "highest", "type": "u32" }
       ],
-      "result": { "type": "list<element_type=string> as 'Vec'" },
+      "result": { "type": "list<element_type=string as 'YString'> as 'List'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/memory.y:352" }]
     },
     {
@@ -646,7 +646,7 @@
         },
         {
           "name": "clicks",
-          "type": "ref<target_type=list<element_type=Point> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=Point> as 'List'>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "now", "type": "Instant" }

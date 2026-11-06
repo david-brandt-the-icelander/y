@@ -77,7 +77,7 @@
           "name": "tail",
           "visible": "path",
           "visible_path": "super",
-          "type": "list<element_type=Cell> as 'Vec'",
+          "type": "list<element_type=Cell> as 'List'",
           "hold": { "kind": "owns" }
         },
         {
@@ -246,7 +246,7 @@
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "list<element_type=Cell> as 'Vec'" },
+      "result": { "type": "list<element_type=Cell> as 'List'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/snake.y:220" }]
     },
     {
@@ -347,7 +347,7 @@
         },
         { "name": "highest", "type": "u32" }
       ],
-      "result": { "type": "string" },
+      "result": { "type": "string as 'YString'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/snake.y:281" }]
     },
     {
@@ -441,7 +441,7 @@
         },
         {
           "name": "keys",
-          "type": "ref<target_type=list<element_type=Key> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=Key> as 'List'>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],

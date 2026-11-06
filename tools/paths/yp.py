@@ -696,7 +696,7 @@ class Function:
         while k < len(items):
             self.note_type(items[k][0])
             j = k + 1
-            while j < len(items) and items[j][0].startswith("else "):
+            while j < len(items) and items[j][0].startswith(("else ", "orelse ")):
                 j += 1
             nxt = []
             for kind, steps, f in states:
@@ -720,6 +720,20 @@ class Function:
             elses.append(items[j])
             j += 1
         module, env = self.module, self.env
+
+        # `region a is …:` with `orelse region b is …:` after it: a decision whose outcomes are the regions
+        m = re.match(r"region (\w+) is .*:$", text)
+        alternatives = []
+        while m and k + 1 + len(alternatives) < len(items):
+            om = re.match(r"orelse region (\w+) is .*:$", items[k + 1 + len(alternatives)][0])
+            if not om:
+                break
+            alternatives.append((om.group(1), items[k + 1 + len(alternatives)][1]))
+        if alternatives:
+            out = []
+            for name, body in [(m.group(1), kids)] + alternatives:
+                out += [(kind, [name] + steps, f2) for kind, steps, f2 in self.seq(body, facts.copy())]
+            return out
 
         m = re.match(r"if (\w+) = (.*):$", text)
         if m:
@@ -806,7 +820,7 @@ class Function:
             return [(text, [], facts)]
 
         outs = [("next", [], facts)]
-        if kids and re.match(r"(region |within |inject\(|inject:)", text):
+        if kids and re.match(r"(region |arena |within |inject\(|inject:)", text):
             outs = self.seq(kids, facts)
         n = failing_name(text)
         if n:

@@ -13,7 +13,7 @@
       "params": [
         {
           "name": "pieces",
-          "type": "ref<target_type=list<element_type=Placed> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=Placed> as 'List'>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         { "name": "to_move", "type": "Side" }

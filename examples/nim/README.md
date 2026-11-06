@@ -25,10 +25,10 @@ can win, but only by never making a mistake.
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
 | Y source | `y/src/nim.y`, `y/src/nim.test.y`, `y/src/main.y` | 314, 678, 16 | hand |
-| Bare bodies | `bare/src/nim.brs`, `bare/src/nim/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 291, 517, 21, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
-| Constraint files | `bare/src/*.constraints.json` (87 subjects, 24 clauses) | 492 | `strip`, plus the clauses and status the Y lowering adds, then `bare-rust libfmt` |
+| Bare bodies | `bare/src/nim.brs`, `bare/src/nim/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 296, 518, 21, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
+| Constraint files | `bare/src/*.constraints.json` (87 subjects, 24 clauses) | 547 | `strip`, plus the clauses and status the Y lowering adds, then `bare-rust libfmt` |
 | Y facts | `bare/y-facts.json` | 1067 | the same, from the Y source and the bare bodies |
-| Rust | `src/nim.rs`, `src/nim/tests.rs`, `src/main.rs`, `src/lib.rs` | 291, 517, 21, 3 | `bare-rust weave`, which gives back the hand-written Rust exactly |
+| Rust | `src/nim.rs`, `src/nim/tests.rs`, `src/main.rs`, `src/lib.rs` | 296, 518, 21, 3 | `bare-rust weave`, which gives back the hand-written Rust exactly |
 
 Hangman's bare bodies were written first and woven into Rust. Nim went the other way: the Rust was written as the
 lowering of the Y source, `strip` made the bare bodies and the constraint files from it, and `weave` of those gives the
@@ -38,9 +38,11 @@ same Rust again. The checks below hold either way.
 
 | Y | Bare body | Constraint file or `y-facts.json` | Rust |
 |---|---|---|---|
-| `starting_heaps is list<element_type=uint32> = [3, 4, 5]` in a constant group | `const STARTING_HEAPS = [3, 4, 5];` | `list<element_type=u32> where count(value) == 3 as 'std::primitive::array'` | `[u32; 3]` |
+| `starting_heaps is list<element_type=uint32> = [3, 4, 5]` in a constant group | `const STARTING_HEAPS = [3, 4, 5];` | `list<element_type=u32> where count(value) == 3 as 'std::primitive::array'` | `[u32; 3]`, made a `List` by `List::from` where a game starts |
+| `heaps is list<element_type=uint32>` in `game`, and `nim_sum(heaps)`'s parameter | `heaps: List<u32>`, `heaps: &List<u32>` | `list<element_type=u32> as 'List'`, and a `ref` to it | `y_collections::List<u32>`, borrowed where read |
+| A `string`: `parse_move(line)`, `read_move(game, line)`, `shown`'s picture, `complaint`'s line | `&YString`, `YString` | `string as 'YString'`, and a `ref` to it | `y_string::YString`; `line.split_whitespace()` and `parse_uint32()` are its own, and the console's `&str` and `String` are met with `as_str()` and `YString::from` |
 | `uint32` for heap sizes and heap numbers, where no unit is wanted (Y § 3.3) | — | `u32` | `u32` |
-| The list operations by number: `game.heaps.at_number(n)`, `set_number`, `number_of`, `largest`, `count().to_uint32()` | `list::at_number(&game.heaps, n)` and so on | — | calls into `y_runtime::list`, so that the Rust has no `as` casts for `strip` to bind to mechanical names |
+| The list operations by number: `game.heaps.at_number(n)`, `set_number`, `number_of`, `largest`, `count().to_uint32()` | `list::at_number(&game.heaps, n)` and so on | — | calls into `y_runtime::list` on the `List`'s slice, so that the Rust has no `as` casts for `strip` to bind to mechanical names; `"|".repeated(heap)` is `list::repeated("|", heap)` joined, for the same reason |
 | `heap.xor(sum)` | `heap ^ sum` | — | the same |
 | `if lost = (sum == 0):` with the fallback move, and `else winnable:` with a `for` over the heaps that returns the winning move; a `for` with `else no_heaps: fail not_reachable`, and `fail not_reachable` after it, since a nim-sum other than zero always has a heap to take from | the `if`, the loop, `if !ran { // y: #no_heaps`, and `not_reachable("nim::computer_move#winnable")` | `decisions`, kinds `if` and `for` | the same |
 | `if not_numbers = ((heap == optional.none) or (take == optional.none)):` | a `match` arm for each operand of the `or`, marked `// y: #not_numbers'1` and `// y: #not_numbers'2`, the names of the two paths | `decisions` | the same |
