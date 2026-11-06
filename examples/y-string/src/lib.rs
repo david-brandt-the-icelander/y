@@ -120,6 +120,103 @@ impl YString {
     }
 }
 
+impl YString {
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+    /// Y's `trimmed()`: without white space at either end.
+    pub fn trimmed(&self) -> YString {
+        YString(self.0.trim().to_string())
+    }
+    /// Y's `split_whitespace()`: the pieces between runs of white space, in order.
+    pub fn split_whitespace(&self) -> Vec<YString> {
+        self.0.split_whitespace().map(|p| YString(p.to_string())).collect()
+    }
+    /// Y's `lines()`: the lines, without their endings.
+    pub fn lines(&self) -> Vec<YString> {
+        self.0.lines().map(|p| YString(p.to_string())).collect()
+    }
+    /// Y's `starts_with(prefix)`.
+    pub fn starts_with(&self, prefix: &str) -> bool {
+        self.0.starts_with(prefix)
+    }
+    /// Y's `contains(rune)`: whether one of its runes is this one.
+    pub fn contains(&self, rune: &Rune) -> bool {
+        self.runes().any(|r| &r == rune)
+    }
+    /// Y's `+`: the two strings, one after the other, normalised again where they meet.
+    pub fn joined_with(&self, other: &YString) -> YString {
+        YString::new(&format!("{}{}", self.0, other.0))
+    }
+    /// Y's `repeated(times)`.
+    pub fn repeated(&self, times: usize) -> YString {
+        YString(self.0.repeat(times))
+    }
+    /// Y's `parse_uint32()`: the whole number the string holds, if it holds one and nothing else.
+    pub fn parse_uint32(&self) -> Option<u32> {
+        self.0.parse().ok()
+    }
+    /// Runes joined by a separator: Y's `list<element_type=rune>.join(separator: s)`.
+    pub fn from_runes(runes: &[Rune], separator: &str) -> YString {
+        YString::new(&runes.iter().map(Rune::as_str).collect::<Vec<_>>().join(separator))
+    }
+}
+
+impl From<&str> for YString {
+    fn from(text: &str) -> Self {
+        YString::new(text)
+    }
+}
+
+impl From<String> for YString {
+    fn from(text: String) -> Self {
+        YString::new(&text)
+    }
+}
+
+impl PartialEq<str> for YString {
+    fn eq(&self, other: &str) -> bool {
+        *self == YString::new(other)
+    }
+}
+
+impl PartialEq<&str> for YString {
+    fn eq(&self, other: &&str) -> bool {
+        *self == YString::new(other)
+    }
+}
+
+impl Rune {
+    /// The rune a host character is, as a rune of one scalar.
+    pub fn from_scalar(scalar: char) -> Rune {
+        Rune(scalar.to_string())
+    }
+    /// The one rune a string holds, if it holds exactly one.
+    pub fn single(text: &YString) -> Option<Rune> {
+        let mut runes = text.runes();
+        match (runes.next(), runes.next()) {
+            (Some(r), None) => Some(r),
+            _ => None,
+        }
+    }
+    /// Whether the rune is a letter: its first scalar is alphabetic.
+    pub fn is_letter(&self) -> bool {
+        self.0.chars().next().is_some_and(char::is_alphabetic)
+    }
+    /// Whether the rune is one lowercase ASCII letter, `a` to `z`.
+    pub fn is_ascii_lowercase(&self) -> bool {
+        self.0.len() == 1 && self.0.as_bytes()[0].is_ascii_lowercase()
+    }
+    /// The rune in lowercase, by Unicode's locale-free mapping.
+    pub fn lowercased(&self) -> Rune {
+        Rune(self.0.to_lowercase())
+    }
+    /// The rune as a string of one rune.
+    pub fn to_string_of_runes(&self) -> YString {
+        YString(self.0.clone())
+    }
+}
+
 impl fmt::Display for YString {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)

@@ -163,6 +163,8 @@ impl<'a> Stripper<'a> {
             "type_identifier" => match text(n, src) {
                 "_" => Ok(Ty::Prim("_".into())),
                 "String" => Ok(Ty::Text),
+                // y-string's string (Y § 3.3): the language's `string`, held as a `YString`
+                "YString" => Ok(Ty::As(Box::new(Ty::Text), "YString".into())),
                 t if RESERVED.contains(&t) => Err("reserved_name".into()),
                 t => Ok(Ty::Name(t.into())),
             },
@@ -206,9 +208,14 @@ impl<'a> Stripper<'a> {
                 let one = |v: &mut Vec<Ty>| Box::new(v.remove(0));
                 Ok(match (last.as_str(), args.len()) {
                     ("Option", 1) if path == "Option" => Ty::Opt(one(&mut args)),
-                    ("Vec", 1) => Ty::As(Box::new(Ty::Coll("list".into(), args)), path),
-                    ("HashSet" | "BTreeSet", 1) => Ty::As(Box::new(Ty::Coll("set".into(), args)), path),
-                    ("HashMap" | "BTreeMap", 2) => Ty::As(Box::new(Ty::Coll("map".into(), args)), path),
+                    // y-collections' kinds (Y § 3.13) are the language's collections, held as their facade
+                    ("Vec" | "List", 1) => Ty::As(Box::new(Ty::Coll("list".into(), args)), path),
+                    ("HashSet" | "BTreeSet" | "Set" | "SortedSet" | "UnorderedSet", 1) => {
+                        Ty::As(Box::new(Ty::Coll("set".into(), args)), path)
+                    }
+                    ("HashMap" | "BTreeMap" | "Map" | "SortedMap" | "UnorderedMap", 2) => {
+                        Ty::As(Box::new(Ty::Coll("map".into(), args)), path)
+                    }
                     ("Box" | "Rc" | "Arc", 1) => Ty::As(one(&mut args), path),
                     _ => Ty::App(path, args),
                 })

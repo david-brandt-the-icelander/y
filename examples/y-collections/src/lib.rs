@@ -87,6 +87,101 @@ impl<T> FromIterator<T> for List<T> {
     }
 }
 
+impl<T> List<T> {
+    /// Inserts at a position, moving the later elements back. A position past the end is a fault.
+    pub fn insert(&mut self, index: usize, value: T) {
+        if index > self.0.len() {
+            no_such_position("list");
+        }
+        self.0.insert(index, value);
+    }
+    /// Removes the element at a position, moving the later ones forward. A position past the end is a fault.
+    pub fn remove(&mut self, index: usize) -> T {
+        if index >= self.0.len() {
+            no_such_position("list");
+        }
+        self.0.remove(index)
+    }
+    /// Keeps the elements that pass, in order.
+    pub fn retain(&mut self, keep: impl FnMut(&T) -> bool) {
+        self.0.retain(keep);
+    }
+    pub fn extend(&mut self, items: impl IntoIterator<Item = T>) {
+        self.0.extend(items);
+    }
+    pub fn clear(&mut self) {
+        self.0.clear();
+    }
+    /// The Rust form, for a native function whose signature names a `Vec`.
+    pub fn into_vec(self) -> Vec<T> {
+        self.0
+    }
+}
+
+/// A list is read and written by position: its elements as a slice, which is what `offers index` allows.
+impl<T> std::ops::Deref for List<T> {
+    type Target = [T];
+    fn deref(&self) -> &[T] {
+        &self.0
+    }
+}
+
+impl<T> std::ops::DerefMut for List<T> {
+    fn deref_mut(&mut self) -> &mut [T] {
+        &mut self.0
+    }
+}
+
+impl<T> From<Vec<T>> for List<T> {
+    fn from(items: Vec<T>) -> Self {
+        List(items)
+    }
+}
+
+impl<T, const N: usize> From<[T; N]> for List<T> {
+    fn from(items: [T; N]) -> Self {
+        List(items.into())
+    }
+}
+
+impl<T: Clone> From<&[T]> for List<T> {
+    fn from(items: &[T]) -> Self {
+        List(items.to_vec())
+    }
+}
+
+impl<T> IntoIterator for List<T> {
+    type Item = T;
+    type IntoIter = std::vec::IntoIter<T>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a List<T> {
+    type Item = &'a T;
+    type IntoIter = std::slice::Iter<'a, T>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a mut List<T> {
+    type Item = &'a mut T;
+    type IntoIter = std::slice::IterMut<'a, T>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter_mut()
+    }
+}
+
+/// `list![a, b, c]`: a list literal, as `vec!` is a vector's.
+#[macro_export]
+macro_rules! list {
+    () => { $crate::List::new() };
+    ($($x:expr),+ $(,)?) => { $crate::List::from([$($x),+]) };
+    ($x:expr; $n:expr) => { $crate::List::from(vec![$x; $n]) };
+}
+
 /// Y's `array`: ordered by position; count fixed; offers index.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Array<T>(Box<[T]>);
@@ -451,6 +546,23 @@ impl<T: Hash + Eq + Clone> Set<T> {
     }
     pub fn iter(&self) -> std::slice::Iter<'_, T> {
         self.order.iter()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.order.is_empty()
+    }
+}
+
+impl<'a, T: Hash + Eq + Clone> IntoIterator for &'a Set<T> {
+    type Item = &'a T;
+    type IntoIter = std::slice::Iter<'a, T>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.order.iter()
+    }
+}
+
+impl<T: Hash + Eq + Clone> Hash for Set<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.order.hash(state);
     }
 }
 
