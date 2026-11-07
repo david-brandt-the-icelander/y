@@ -1,6 +1,6 @@
 # Concurrency and time
 
-> Status marks: [`../development/knowledge-driven-development/README.md`](../development/knowledge-driven-development/README.md)
+> Status marks: [knowledge-driven development](https://github.com/david-brandt-the-icelander/knowledge-driven-development)
 
 **Written for:** whoever writes Y.
 

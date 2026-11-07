@@ -1,6 +1,6 @@
 # Y
 
-> Status marks: [`development/knowledge-driven-development/README.md`](development/knowledge-driven-development/README.md)
+> Status marks: [knowledge-driven development](https://github.com/david-brandt-the-icelander/knowledge-driven-development)
 
 **Written for:** whoever is deciding what Y is, and whoever implements it.
 
@@ -40,11 +40,11 @@ information, and a uniform wall of gaps has the same problem. What actually vari
 whether a capability is built, but **whether it is decided well enough to build:**
 
 - **A gap mark alone** means the statement is specified. An implementer could start from the paragraph
-  without asking a question, which is the only bar
-  [02](development/knowledge-driven-development/02-annotation-convention.md#what-each-mark-obliges-you-to-write)
+  without asking much, which is the only bar
+  [02](https://github.com/david-brandt-the-icelander/knowledge-driven-development/blob/main/02-annotation-convention.md#what-each-mark-obliges-you-to-write)
   sets for it.
 - **A gap followed by a blocked mark** means the semantics are still open. The blocked mark names the
-  decision and who makes it.
+  decision that would unblock it.
 
 Spelling is not a blocker and never earns the blocked mark — the syntax in every example here is
 illustrative, stated once in [`language/README.md`](language/README.md) and nowhere else. Only
@@ -76,11 +76,11 @@ Two things about the transcript, because it is long and it is load-bearing:
   [`toolchain/runtime-generations.md`](toolchain/runtime-generations.md), which is consequently the
   least settled document in the corpus.
 
-## The five kinds, for a language
+## The document kinds, for a language
 
-The [taxonomy](development/knowledge-driven-development/05-document-taxonomy.md) is written for a
-car-wash SaaS and names its admin tables, its hardware and its receipts. The five kinds survive the
-change of domain; the examples do not.
+The [taxonomy](https://github.com/david-brandt-the-icelander/knowledge-driven-development/blob/main/04-document-taxonomy.md) is written for a running service: features, journeys,
+subsystems, contracts, and any other kind a system needs. The kinds survive the change of domain; the
+examples do not. These are the four this corpus uses.
 
 | Kind | Here | Perspective | Lives in |
 | --- | --- | --- | --- |
@@ -88,7 +88,6 @@ change of domain; the examples do not.
 | **User journey** | A **pass through the toolchain**, start to finish | One actor: an agent, a compiler engineer, an operator | [`journeys/`](journeys/) |
 | **Subsystem** | A **compiler or runtime stage that fails independently** | Whoever implements or debugs that stage | [`toolchain/`](toolchain/) |
 | **Contract** | **Core IR**, and the foreign interface | A backend, an oracle projection, a tool outside the compiler | [`toolchain/core-ir.md`](toolchain/core-ir.md) |
-| **Component** | Source files, annotated in place | The maintainer with the file open | Nothing to annotate yet |
 
 ## The documents
 
@@ -130,7 +129,7 @@ There is no separate backlog for the documentation itself. These are it.
 - ⚠️ Y's capabilities are described here but its **goals and design principles are not** — they stay in
   [`../Y-current-language-design.md`](../Y-current-language-design.md) §§ 1, 2, 32, unmarked, because a
   goal has no build state and marking one invites a tick that means nothing.
-  → [02 § What does not get a mark](development/knowledge-driven-development/02-annotation-convention.md#what-does-not-get-a-mark)
+  → [02 § What doesn't get a mark](https://github.com/david-brandt-the-icelander/knowledge-driven-development/blob/main/02-annotation-convention.md#what-doesnt-get-a-mark)
 - ⚠️ **Y is described in two places and the duplication is not resolved.** Every capability statement
   here restates a section of the working design, so the two will contradict each other on the first
   change that lands in only one. The convention's answer is that a fact belongs in exactly one
@@ -138,24 +137,10 @@ There is no separate backlog for the documentation itself. These are it.
   ⛔ **Unblocked by** the language owner either retiring the working design in favour of this corpus, or
   declaring the corpus a derived view that gets regenerated. Until then, prefer the working design on
   any disagreement and fix this corpus.
-- ⚠️ The **knowledge-driven-development folder still describes the car-wash system it was imported
-  from** — its inventories, waves, gates, `UserJourney` rows, hardware drivers and Asana history are
-  all festi's, and its templates cite paths that do not exist here. The convention itself transfers
-  cleanly; nothing around it does.
-- ⚠️ **No enforcement exists.** All seven gates in
-  [07](development/knowledge-driven-development/07-enforcement.md) are festi's, one of them built there
-  and none of them here, and there is no build in this repository to fail. Every mark in this corpus is
-  therefore unchecked by anything but a reader.
-- ⚠️ **Journeys here have no backing record.** The taxonomy requires a journey document to correspond to
-  a row in an admin database, and calls a journey without one "a feature document wearing a journey's
-  clothes". That database is festi's. A Y journey is rooted in a reproducible toolchain invocation
-  instead, which is a weaker anchor and may turn out to be the wrong one.
-- ⚠️ **The templates contradict the convention they ship with, and this corpus follows the convention.**
-  Every template opens with a four-glyph legend and the feature template asks an unimplemented
-  statement to say "what happens instead today";
-  [02](development/knowledge-driven-development/02-annotation-convention.md) forbids both — a page links
-  to the convention rather than restating it, so the greps stay clean, and the mark is the whole
-  commentary. No page here carries a legend.
-- ⚠️ There is **no component documentation and no coverage vocabulary in use**, because there is no
-  source. The three coverage marks appear nowhere in this corpus and should not appear until something
-  compiles.
+- ⚠️ **No enforcement exists.** The convention's one build gate, against `TODO`, needs a build to
+  fail, and there is no build in this repository. Every mark in this corpus is therefore unchecked by
+  anything but a reader, or an agent asked to check it.
+  → [06](https://github.com/david-brandt-the-icelander/knowledge-driven-development/blob/main/06-enforcement.md#the-deferred-work-gate)
+- ⚠️ **Journeys here are anchored to a toolchain invocation that cannot run yet**, which is a weaker
+  anchor than a running system and may turn out to be the wrong one.
+  → [`journeys/agent-writes-a-function.md`](journeys/agent-writes-a-function.md#what-this-journey-is-anchored-to)

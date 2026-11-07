@@ -1,6 +1,6 @@
 # Journey: an agent writes a function
 
-> Status marks: [`../development/knowledge-driven-development/README.md`](../development/knowledge-driven-development/README.md)
+> Status marks: [knowledge-driven development](https://github.com/david-brandt-the-icelander/knowledge-driven-development)
 
 **Actor:** a coding agent, working from a human's request, with a human reviewing the result.
 **Starts when:** the agent is asked to add a capability to a Y program.
@@ -73,12 +73,11 @@ read anything.
 
 ## What this journey is anchored to
 
-The taxonomy requires a journey document to correspond to a row in an admin database, and calls one
-without a row a feature document wearing a journey's clothes
-→ [taxonomy](../development/knowledge-driven-development/05-document-taxonomy.md#user-journey-documents).
-That database belongs to the system the convention was imported from.
+The taxonomy defines a journey as one actor, start to finish, marked step by step
+→ [taxonomy](https://github.com/david-brandt-the-icelander/knowledge-driven-development/blob/main/04-document-taxonomy.md#the-usual-kinds). For the marks on those steps to mean
+anything, each step needs something it can be checked against.
 
-- ⚠️ This journey is anchored instead to a reproducible toolchain invocation: a committed Y program, a
+- ⚠️ This journey is anchored to a reproducible toolchain invocation: a committed Y program, a
   sequence of compiler runs, and the expected diagnostic at each step. Every row in the steps table above
   is then a test rather than a claim, and the marks on it are computed rather than asserted.
   ⛔ **Unblocked by** anything existing to run. Until then this document is the specification of that test

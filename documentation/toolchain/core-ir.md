@@ -1,6 +1,6 @@
 # Core IR — the contract
 
-> Status marks: [`../development/knowledge-driven-development/README.md`](../development/knowledge-driven-development/README.md)
+> Status marks: [knowledge-driven development](https://github.com/david-brandt-the-icelander/knowledge-driven-development)
 
 **Written for:** whoever consumes Core IR from outside the compiler — a backend, an oracle projection, an
 analysis, a debugger, a physical optimiser.
@@ -11,7 +11,7 @@ Core IR is the semantic centre of Y. It is not an implementation detail of the c
 that may be reshaped for a stage's convenience: it is **the definition of what a Y program means**, and
 everything else in the toolchain is a consumer of it.
 
-This document is a contract in the sense the taxonomy means → [taxonomy § Contract](../development/knowledge-driven-development/05-document-taxonomy.md).
+This document is a contract in the sense the taxonomy means → [taxonomy](https://github.com/david-brandt-the-icelander/knowledge-driven-development/blob/main/04-document-taxonomy.md#the-usual-kinds).
 It says what a consumer may rely on and what it must not. The obligation runs the other way too: a
 consumer that needs a semantic fact Core IR does not carry has found a defect in Core IR, and the fix is
 to add it here rather than to recover it from surface syntax.
