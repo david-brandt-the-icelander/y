@@ -255,6 +255,12 @@ impl<D: Digits, const P: u32, const S: u32> Decimal<D, P, S> {
         Self::from_units(units).unwrap_or_else(|| fault(Self::IDENTITY, "overflow"))
     }
 
+    /// The decimal whose last place holds `units`, for a constant the compiler checked: `0.2400` in a
+    /// `decimal<precision=5, scale=4>` is `of_units(2400)`.
+    pub const fn of_units(units: D) -> Self {
+        Decimal { units }
+    }
+
     /// The units of the last place, exactly.
     pub fn units(&self) -> Big {
         self.units.to_big()
@@ -459,6 +465,17 @@ impl<D: Digits, const MIN: i128, const MAX: i128> Integer<D, MIN, MAX> {
     /// Y's `to_int64()` and the like: the value at a fixed width, which faults where it does not fit.
     pub fn to_i128(&self) -> i128 {
         self.value().to_i128().unwrap_or_else(|| fault("y_runtime::integer", "overflow"))
+    }
+
+    /// The value as a count, for a backend's own sizes: one below zero is a fault.
+    pub fn to_usize(&self) -> usize {
+        usize::try_from(self.to_i128()).unwrap_or_else(|_| fault("y_runtime::integer", "a count below zero"))
+    }
+}
+
+impl<D: Digits, const MIN: i128, const MAX: i128> fmt::Display for Integer<D, MIN, MAX> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.value())
     }
 }
 

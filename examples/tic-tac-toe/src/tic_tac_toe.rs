@@ -3,8 +3,8 @@
 //! Each named decision of the Y source is marked `// y: #name` where its condition is tested, and each named `condition`
 //! of a `conditional` on its `match` arm.
 
-use std::fmt;
 use y_runtime::{ensure, list, not_reachable, require, ConsoleError, Console, Forever};
+use {y_collections::List, y_string::YString};
 use self::{console_play::*, moves::*, setup::*};
 
 #[cfg(test)]
@@ -31,7 +31,7 @@ pub mod setup {
     }
 
     /// A constant of the group `mark` shows as its value (Y § 3.5).
-    impl fmt::Display for Mark {
+    impl std::fmt::Display for Mark {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
                 Mark::Cross => f.write_str("X"),
@@ -44,7 +44,7 @@ pub mod setup {
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct Game {
         /// The squares, in the order they are numbered: the mark in each, or none.
-        pub(super) squares: Vec<Option<Mark>>,
+        pub(super) squares: List<Option<Mark>>,
         /// Whose turn it is.
         pub(super) to_move: Mark,
     }
@@ -53,7 +53,7 @@ pub mod setup {
     ///
     /// - Returns an empty board, with crosses to move.
     pub fn new_game() -> Game {
-        Game { squares: list::repeated(None, board::SQUARES), to_move: Mark::Cross }
+        Game { squares: List::from(list::repeated(None, board::SQUARES)), to_move: Mark::Cross }
     }
 }
 
@@ -77,8 +77,8 @@ pub mod moves {
     /// - Fails `NotANumber`: the line does not hold one whole number.
     /// - Fails `NoSuchSquare`: the number is not that of a square.
     /// - Fails `Taken`: the square already holds a mark.
-    pub fn read_move(game: &Game, line: &str) -> Result<u32, MoveError> {
-        let number: Option<u32> = line.trim().parse().ok();
+    pub fn read_move(game: &Game, line: &YString) -> Result<u32, MoveError> {
+        let number: Option<u32> = line.trimmed().parse_uint32();
         let Some(number) = number else { // y: #not_a_number, else #a_number
             return Err(MoveError::NotANumber);
         };
@@ -172,8 +172,8 @@ fn other(player: Mark) -> Mark {
 ///
 /// - `game`: the game.
 /// - Returns their numbers.
-fn open_squares(game: &Game) -> Vec<u32> {
-    let mut found = Vec::new();
+fn open_squares(game: &Game) -> List<u32> {
+    let mut found = List::new();
     for number in 1..=board::SQUARES { // y: #number
         if list::at_number(&game.squares, number).is_some() { // y: #marked
             continue;
@@ -213,17 +213,17 @@ fn value_of(game: &Game) -> i32 {
 ///
 /// - `game`: the game.
 /// - Returns the drawing.
-fn shown(game: &Game) -> String {
-    let mut rows = Vec::new();
+fn shown(game: &Game) -> YString {
+    let mut rows: List<YString> = List::new();
     for first in [1, 4, 7] { // y: #first
-        let mut row = Vec::new();
+        let mut row: List<YString> = List::new();
         for number in first..=first + 2 { // y: #number
             row.push(square_shown(game, number));
         }
-        let line = row.join(" | ");
-        rows.push(format!(" {line}"));
+        let line = YString::from(row.iter().map(YString::to_string).reduce(|a, b| a + " | " + &b).unwrap_or_default());
+        rows.push(YString::from(format!(" {line}")));
     }
-    rows.join("\n---+---+---\n")
+    YString::from(rows.iter().map(YString::to_string).reduce(|a, b| a + "\n---+---+---\n" + &b).unwrap_or_default())
 }
 
 /// How one square is drawn.
@@ -231,11 +231,11 @@ fn shown(game: &Game) -> String {
 /// - `game`: the game.
 /// - `number`: the square's number.
 /// - Returns its mark, or its number when it has none.
-fn square_shown(game: &Game, number: u32) -> String {
-    match list::at_number(&game.squares, number) {
+fn square_shown(game: &Game, number: u32) -> YString {
+    YString::from(match list::at_number(&game.squares, number) {
         None => number.to_string(), // y: #held.empty
         Some(held) => held.to_string(), // y: #held.marked, which narrows `held` to a `mark`
-    }
+    })
 }
 
 /// The Y facet `console_play`: playing a whole game at the console.
@@ -289,15 +289,15 @@ pub mod console_play {
 /// - Fails `Console`: the console could not be read or written.
 fn persons_move(game: &mut Game, console: &mut Console, forever: &Forever) -> Result<(), PlayError> {
     let picture = shown(game);
-    console.write_line(&picture)?;
+    console.write_line(picture.as_str())?;
     console.write("Your move (a square's number): ")?;
     let typed = console.read_line(forever)?; // y: forever because "a player may think for as long as they like"
     let Some(typed) = typed else { // y: #closed, else #line_read, which narrows `typed` to a `string`
         return Err(PlayError::InputClosed);
     };
-    match read_move(game, &typed) {
+    match read_move(game, &YString::from(typed)) {
         Ok(chosen) => place(game, chosen), // y: #attempted.valid
-        Err(error) => console.write_line(complaint(error))?, // y: #attempted.invalid
+        Err(error) => console.write_line(complaint(error).as_str())?, // y: #attempted.invalid
     }
     Ok(())
 }
@@ -306,12 +306,12 @@ fn persons_move(game: &mut Game, console: &mut Console, forever: &Forever) -> Re
 ///
 /// - `error`: why it is not.
 /// - Returns the line to write.
-fn complaint(error: MoveError) -> &'static str {
-    match error {
+fn complaint(error: MoveError) -> YString {
+    YString::new(match error {
         MoveError::NotANumber => "Type the number of a square, from 1 to 9.", // y: #wrong.not_a_move
         MoveError::NoSuchSquare => "There is no such square.", // y: #wrong.no_square
         MoveError::Taken => "That square is taken.", // y: #wrong.taken
-    }
+    })
 }
 
 /// Shows the board as the game ended, and how it ended.
@@ -321,7 +321,7 @@ fn complaint(error: MoveError) -> &'static str {
 /// - Fails with a `ConsoleError`: the console could not be written.
 fn announce(game: &Game, console: &mut Console) -> Result<(), ConsoleError> {
     let picture = shown(game);
-    console.write_line(&picture)?;
+    console.write_line(picture.as_str())?;
     let found = winner(game);
     match found {
         None => console.write_line("The board is full. A draw.")?, // y: #drawn

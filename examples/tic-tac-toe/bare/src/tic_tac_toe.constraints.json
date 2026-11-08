@@ -27,13 +27,16 @@
       "visible": "public",
       "variants": [{ "name": "Cross" }, { "name": "Nought" }],
       "implements": [
-        { "trait": "fmt::Display", "impl": "tic_tac_toe_example::tic_tac_toe::setup::Mark as fmt::Display" }
+        {
+          "trait": "std::fmt::Display",
+          "impl": "tic_tac_toe_example::tic_tac_toe::setup::Mark as std::fmt::Display"
+        }
       ]
     },
-    { "kind": "impl", "name": "tic_tac_toe_example::tic_tac_toe::setup::Mark as fmt::Display" },
+    { "kind": "impl", "name": "tic_tac_toe_example::tic_tac_toe::setup::Mark as std::fmt::Display" },
     {
       "kind": "function",
-      "name": "tic_tac_toe_example::tic_tac_toe::setup::Mark as fmt::Display::fmt",
+      "name": "tic_tac_toe_example::tic_tac_toe::setup::Mark as std::fmt::Display::fmt",
       "params": [
         {
           "name": "self",
@@ -57,7 +60,7 @@
           "name": "squares",
           "visible": "path",
           "visible_path": "super",
-          "type": "list<element_type=Mark?> as 'Vec'",
+          "type": "list<element_type=Mark?> as 'List'",
           "hold": { "kind": "owns" }
         },
         {
@@ -96,7 +99,7 @@
         },
         {
           "name": "line",
-          "type": "ref<target_type=string>",
+          "type": "ref<target_type=string as 'YString'>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -193,7 +196,7 @@
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "list<element_type=u32> as 'Vec'" },
+      "result": { "type": "list<element_type=u32> as 'List'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:175" }]
     },
     {
@@ -227,7 +230,7 @@
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "string" },
+      "result": { "type": "string as 'YString'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:221" }]
     },
     {
@@ -241,7 +244,7 @@
         },
         { "name": "number", "type": "u32" }
       ],
-      "result": { "type": "string" },
+      "result": { "type": "string as 'YString'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:242" }]
     },
     { "kind": "module", "name": "tic_tac_toe_example::tic_tac_toe::console_play", "visible": "public" },
@@ -329,7 +332,7 @@
       "kind": "function",
       "name": "tic_tac_toe_example::tic_tac_toe::complaint",
       "params": [{ "name": "error", "type": "MoveError" }],
-      "result": { "type": "ref<target_type=string>", "hold": { "kind": "borrows", "lifetime": "'static" } },
+      "result": { "type": "string as 'YString'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:319" }]
     },
     {
@@ -355,5 +358,13 @@
       ]
     }
   ],
-  "holes": { "tic_tac_toe_example::tic_tac_toe::moves::read_move": { "locals": { "number": "u32?" } } }
+  "holes": {
+    "tic_tac_toe_example::tic_tac_toe::moves::read_move": { "locals": { "number": "u32?" } },
+    "tic_tac_toe_example::tic_tac_toe::shown": {
+      "locals": {
+        "rows": "list<element_type=string as 'YString'> as 'List'",
+        "row": "list<element_type=string as 'YString'> as 'List'"
+      }
+    }
+  }
 }

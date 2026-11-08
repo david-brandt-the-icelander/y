@@ -183,14 +183,14 @@
       "because": "a hidden window shows no frames, and the game waits until it is shown",
       "requires": "Forever",
       "y": "y/src/memory.y:455",
-      "bare": "bare/src/memory.brs:436"
+      "bare": "bare/src/memory.brs:439"
     },
     {
       "claim": "forever",
       "because": "a hidden window shows no frames, and the game waits until it is shown",
       "requires": "Forever",
       "y": "y/src/memory.y:502",
-      "bare": "bare/src/memory.brs:471"
+      "bare": "bare/src/memory.brs:474"
     }
   ],
   "suspensions": [
@@ -200,7 +200,7 @@
       "because": "the http capability may suspend (Y \u00a7 3.7)",
       "lowered": "async fn, and .await at the point",
       "y": "y/src/memory.y:137",
-      "bare": "bare/src/memory.brs:147"
+      "bare": "bare/src/memory.brs:149"
     },
     {
       "subject": "memory_example::memory::show_fetching",
@@ -208,7 +208,7 @@
       "because": "the window capability may suspend (Y \u00a7 3.7)",
       "lowered": "async fn, and .await at the point",
       "y": "y/src/memory.y:456",
-      "bare": "bare/src/memory.brs:436"
+      "bare": "bare/src/memory.brs:439"
     },
     {
       "subject": "memory_example::memory::window_play::play",
@@ -216,7 +216,7 @@
       "because": "show_fetching may suspend",
       "lowered": ".await at the call",
       "y": "y/src/memory.y:478",
-      "bare": "bare/src/memory.brs:450"
+      "bare": "bare/src/memory.brs:453"
     },
     {
       "subject": "memory_example::memory::window_play::play",
@@ -224,7 +224,7 @@
       "because": "new_game may suspend",
       "lowered": ".await at the call",
       "y": "y/src/memory.y:479",
-      "bare": "bare/src/memory.brs:451"
+      "bare": "bare/src/memory.brs:454"
     },
     {
       "subject": "memory_example::memory::window_play::play",
@@ -232,7 +232,7 @@
       "because": "show_fetching may suspend",
       "lowered": ".await at the call",
       "y": "y/src/memory.y:491",
-      "bare": "bare/src/memory.brs:460"
+      "bare": "bare/src/memory.brs:463"
     },
     {
       "subject": "memory_example::memory::window_play::play",
@@ -240,7 +240,7 @@
       "because": "new_game may suspend",
       "lowered": ".await at the call",
       "y": "y/src/memory.y:492",
-      "bare": "bare/src/memory.brs:461"
+      "bare": "bare/src/memory.brs:464"
     },
     {
       "subject": "memory_example::memory::window_play::play",
@@ -248,7 +248,7 @@
       "because": "the window capability may suspend (Y \u00a7 3.7)",
       "lowered": ".await at the point",
       "y": "y/src/memory.y:503",
-      "bare": "bare/src/memory.brs:471"
+      "bare": "bare/src/memory.brs:474"
     },
     {
       "subject": "memory_example::main",
@@ -269,7 +269,7 @@
       "expiry": "setup_error.timed_out",
       "lowered": "Deadline::after at the scope's start, passed to each wait inside it; an expiry converts through SetupError::TimedOut",
       "y": "y/src/memory.y:135",
-      "bare": "bare/src/memory.brs:145"
+      "bare": "bare/src/memory.brs:147"
     }
   ],
   "compiled": [],
@@ -282,7 +282,7 @@
           {
             "name": "code",
             "y": "y/src/memory.y:136",
-            "bare": "bare/src/memory.brs:146"
+            "bare": "bare/src/memory.brs:148"
           }
         ]
       },
@@ -292,7 +292,7 @@
           {
             "name": "number",
             "y": "y/src/memory.y:142",
-            "bare": "bare/src/memory.brs:153"
+            "bare": "bare/src/memory.brs:156"
           }
         ]
       }
@@ -306,22 +306,22 @@
           {
             "name": "judged.off_cards",
             "y": "y/src/memory.y:174",
-            "bare": "bare/src/memory.brs:186"
+            "bare": "bare/src/memory.brs:189"
           },
           {
             "name": "judged.waiting",
             "y": "y/src/memory.y:176",
-            "bare": "bare/src/memory.brs:189"
+            "bare": "bare/src/memory.brs:192"
           },
           {
             "name": "judged.showing",
             "y": "y/src/memory.y:178",
-            "bare": "bare/src/memory.brs:191"
+            "bare": "bare/src/memory.brs:194"
           },
           {
             "name": "judged.free",
             "y": "y/src/memory.y:180",
-            "bare": "bare/src/memory.brs:193"
+            "bare": "bare/src/memory.brs:196"
           }
         ]
       }
@@ -335,17 +335,17 @@
           {
             "name": "turn.first",
             "y": "y/src/memory.y:195",
-            "bare": "bare/src/memory.brs:206"
+            "bare": "bare/src/memory.brs:209"
           },
           {
             "name": "turn.matching",
             "y": "y/src/memory.y:198",
-            "bare": "bare/src/memory.brs:209"
+            "bare": "bare/src/memory.brs:212"
           },
           {
             "name": "turn.different",
             "y": "y/src/memory.y:203",
-            "bare": "bare/src/memory.brs:214"
+            "bare": "bare/src/memory.brs:217"
           }
         ]
       }
@@ -357,7 +357,7 @@
           {
             "name": "number",
             "y": "y/src/memory.y:217",
-            "bare": "bare/src/memory.brs:227"
+            "bare": "bare/src/memory.brs:230"
           }
         ]
       }
@@ -371,17 +371,17 @@
           {
             "name": "judged.won",
             "y": "y/src/memory.y:231",
-            "bare": "bare/src/memory.brs:238"
+            "bare": "bare/src/memory.brs:241"
           },
           {
             "name": "judged.lost",
             "y": "y/src/memory.y:233",
-            "bare": "bare/src/memory.brs:240"
+            "bare": "bare/src/memory.brs:243"
           },
           {
             "name": "judged.playing",
             "y": "y/src/memory.y:235",
-            "bare": "bare/src/memory.brs:242"
+            "bare": "bare/src/memory.brs:245"
           }
         ]
       }
@@ -393,12 +393,12 @@
           {
             "name": "won",
             "y": "y/src/memory.y:250",
-            "bare": "bare/src/memory.brs:254"
+            "bare": "bare/src/memory.brs:257"
           },
           {
             "name": "unfinished",
             "y": "y/src/memory.y:252",
-            "bare": "bare/src/memory.brs:256"
+            "bare": "bare/src/memory.brs:259"
           }
         ]
       }
@@ -410,12 +410,12 @@
           {
             "name": "quick",
             "y": "y/src/memory.y:264",
-            "bare": "bare/src/memory.brs:267"
+            "bare": "bare/src/memory.brs:270"
           },
           {
             "name": "slow",
             "y": "y/src/memory.y:266",
-            "bare": "bare/src/memory.brs:269"
+            "bare": "bare/src/memory.brs:272"
           }
         ]
       }
@@ -427,7 +427,7 @@
           {
             "name": "row",
             "y": "y/src/memory.y:280",
-            "bare": "bare/src/memory.brs:280"
+            "bare": "bare/src/memory.brs:283"
           }
         ]
       },
@@ -437,7 +437,7 @@
           {
             "name": "column",
             "y": "y/src/memory.y:281",
-            "bare": "bare/src/memory.brs:281"
+            "bare": "bare/src/memory.brs:284"
           }
         ]
       },
@@ -447,12 +447,12 @@
           {
             "name": "inside",
             "y": "y/src/memory.y:287",
-            "bare": "bare/src/memory.brs:286"
+            "bare": "bare/src/memory.brs:289"
           },
           {
             "name": "outside",
             "y": "y/src/memory.y:289",
-            "bare": "bare/src/memory.brs:288"
+            "bare": "bare/src/memory.brs:291"
           }
         ]
       }
@@ -466,17 +466,17 @@
           {
             "name": "shown.playing",
             "y": "y/src/memory.y:356",
-            "bare": "bare/src/memory.brs:351"
+            "bare": "bare/src/memory.brs:354"
           },
           {
             "name": "shown.won",
             "y": "y/src/memory.y:361",
-            "bare": "bare/src/memory.brs:355"
+            "bare": "bare/src/memory.brs:358"
           },
           {
             "name": "shown.lost",
             "y": "y/src/memory.y:366",
-            "bare": "bare/src/memory.brs:359"
+            "bare": "bare/src/memory.brs:362"
           }
         ]
       }
@@ -488,7 +488,7 @@
           {
             "name": "row",
             "y": "y/src/memory.y:385",
-            "bare": "bare/src/memory.brs:374"
+            "bare": "bare/src/memory.brs:377"
           }
         ]
       },
@@ -498,7 +498,7 @@
           {
             "name": "column",
             "y": "y/src/memory.y:386",
-            "bare": "bare/src/memory.brs:375"
+            "bare": "bare/src/memory.brs:378"
           }
         ]
       }
@@ -512,17 +512,17 @@
           {
             "name": "shown.face_down",
             "y": "y/src/memory.y:408",
-            "bare": "bare/src/memory.brs:397"
+            "bare": "bare/src/memory.brs:400"
           },
           {
             "name": "shown.face_up",
             "y": "y/src/memory.y:410",
-            "bare": "bare/src/memory.brs:398"
+            "bare": "bare/src/memory.brs:401"
           },
           {
             "name": "shown.matched",
             "y": "y/src/memory.y:413",
-            "bare": "bare/src/memory.brs:402"
+            "bare": "bare/src/memory.brs:405"
           }
         ]
       }
@@ -534,12 +534,12 @@
           {
             "name": "open",
             "y": "y/src/memory.y:483",
-            "bare": "bare/src/memory.brs:454"
+            "bare": "bare/src/memory.brs:457"
           },
           {
             "name": "closed_at_once",
             "y": "y/src/memory.y:504",
-            "bare": "bare/src/memory.brs:454"
+            "bare": "bare/src/memory.brs:457"
           }
         ]
       },
@@ -551,22 +551,22 @@
           {
             "name": "moment.again",
             "y": "y/src/memory.y:490",
-            "bare": "bare/src/memory.brs:459"
+            "bare": "bare/src/memory.brs:462"
           },
           {
             "name": "moment.hiding",
             "y": "y/src/memory.y:493",
-            "bare": "bare/src/memory.brs:462"
+            "bare": "bare/src/memory.brs:465"
           },
           {
             "name": "moment.picking",
             "y": "y/src/memory.y:495",
-            "bare": "bare/src/memory.brs:464"
+            "bare": "bare/src/memory.brs:467"
           },
           {
             "name": "moment.over",
             "y": "y/src/memory.y:498",
-            "bare": "bare/src/memory.brs:467"
+            "bare": "bare/src/memory.brs:470"
           }
         ]
       }
@@ -578,12 +578,12 @@
           {
             "name": "place",
             "y": "y/src/memory.y:516",
-            "bare": "bare/src/memory.brs:483"
+            "bare": "bare/src/memory.brs:486"
           },
           {
             "name": "no_clicks",
             "y": "y/src/memory.y:523",
-            "bare": "bare/src/memory.brs:483"
+            "bare": "bare/src/memory.brs:486"
           }
         ]
       },
@@ -593,12 +593,12 @@
           {
             "name": "chosen",
             "y": "y/src/memory.y:519",
-            "bare": "bare/src/memory.brs:486"
+            "bare": "bare/src/memory.brs:489"
           },
           {
             "name": "ignored",
             "y": "y/src/memory.y:521",
-            "bare": "bare/src/memory.brs:487"
+            "bare": "bare/src/memory.brs:490"
           }
         ]
       }

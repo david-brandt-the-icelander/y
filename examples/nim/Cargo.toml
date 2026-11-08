@@ -6,5 +6,7 @@ description = "Nim, written in Y and lowered through bare Rust and its constrain
 
 [dependencies]
 y-runtime = { path = "../y-runtime" }
+y-string = { path = "../y-string" }
+y-collections = { path = "../y-collections" }
 
 [workspace]

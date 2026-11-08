@@ -45,11 +45,11 @@ beneath the board, and this repository holds none of them.
 
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
-| Y source | `y/src/memory.y`, `y/src/memory.test.y`, `y/src/main.y` | 519, 857, 32 | hand |
-| Bare bodies | `bare/src/memory.brs`, `bare/src/memory/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 490, 671, 56, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
-| Constraint files | `bare/src/*.constraints.json` (131 subjects, 47 clauses) | 943 | `strip`, plus the clauses and status the Y lowering adds, then `bare-rust libfmt` |
+| Y source | `y/src/memory.y`, `y/src/memory.test.y`, `y/src/main.y` | 523, 857, 32 | hand |
+| Bare bodies | `bare/src/memory.brs`, `bare/src/memory/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 493, 671, 56, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
+| Constraint files | `bare/src/*.constraints.json` (131 subjects, 47 clauses) | 1026 | `strip`, plus the clauses and status the Y lowering adds, then `bare-rust libfmt` |
 | Y facts | `bare/y-facts.json` | 1198 | the same, from the Y source and the bare bodies |
-| Rust | `src/memory.rs`, `src/memory/tests.rs`, `src/main.rs`, `src/lib.rs` | 490, 671, 56, 3 | `bare-rust weave`, which gives back the hand-written Rust exactly |
+| Rust | `src/memory.rs`, `src/memory/tests.rs`, `src/main.rs`, `src/lib.rs` | 493, 671, 56, 3 | `bare-rust weave`, which gives back the hand-written Rust exactly |
 
 The network is a capability. It comes from [`../y-http`](../y-http/), a stand-in for a Y standard module
 `standard.http` that gets text over HTTPS with [ureq](https://github.com/algesten/ureq). It is a crate of its own, so
@@ -67,9 +67,10 @@ from [`../y-window`](../y-window/), and the clock, the randomness and deadlines 
 | `picture.from_svg(drawing, size: …) or fail` | `Picture::from_svg(&drawing, …)?` | — | drawn by resvg into pixels; the window makes a texture of them when it first draws them |
 | `window.clicks()`, `window.picture(…)`, `point(x:, y:)` | the same, on `Window` and `Point` | — | Macroquad's mouse and textures, or a fake window's frames |
 | `new_game` and `play`, which may suspend because `site.get()` and `window.next_frame()` may | `async fn`s, and `.await` at seven points, and one more in `main` | `y-facts.json` `suspensions` | the same |
-| `random.chosen(from: faces.codes, count: board.pairs)`, `random.shuffled(dealt)` | `random.chosen(&faces::CODES, board::PAIRS)`, `random.shuffled(&dealt)` | — | in `y_runtime::Random` |
+| `random.chosen(from: faces.codes, count: board.pairs)`, `random.shuffled(dealt)` | `List::from(random.chosen(&faces::CODES.map(YString::new), board::PAIRS))`, `List::from(random.shuffled(&dealt))` | — | in `y_runtime::Random`, which takes a slice and gives a `Vec`; the result is held as a `List` |
 | `game.elapsed.whole_seconds()` | `time::whole_seconds(game.elapsed)` | — | a call into `y_runtime::time`, not an `as` cast |
 | `new_game(…) returns started fails setup_error ensures playing = (standing(started) == outcome.playing)`, and `ensures nothing_turned = started.turned.is_empty()` | `ensure(standing(&started) == Outcome::Playing, "memory::new_game#playing")` and the same for `nothing_turned`, before the return | `ensure playing : result is Ok(started) implies standing(started) is Playing`, and the same for `nothing_turned`; status `lifted` | run-time checks whose failure is a fault; the path enumeration knows from them that a new game has no card turned and is being played |
+| `string`, and `list<…>` in `game`'s fields, `banner`'s lines, `pick`'s clicks and the locals | `YString` and `List<…>`, from [`../y-string`](../y-string/) and [`../y-collections`](../y-collections/); a list parameter is `&List<…>`. The text `site.get` gives is wrapped in `YString::from`, and `window.keys_pressed()` and `window.clicks()` in `List::from`; a `YString` goes to the window by `as_str()` | `list<…> as 'List'`, `string as 'YString'` | the facades; `faces.codes` stays an array of `&str`, made into `YString`s where it is chosen from |
 | `game.pictures.at_number(n)`, for values that are not copied | `list::at_number_ref(&game.pictures, n)` | — | borrows the picture |
 
 ## What had to be assumed

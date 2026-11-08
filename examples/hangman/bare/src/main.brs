@@ -3,14 +3,18 @@
 use hangman_example::hangman::console_play::{play, PlayError};
 use hangman_example::hangman::setup::Word;
 use std::sync::LazyLock;
+use y_collections::List;
 use y_runtime::System;
+use y_string::YString;
 
 /// The value of `compile parse_word_list(game_rules.word_list)` in `main`, which the Y compiler evaluated while building
 /// (Y § 3.17): ten words, as data.
 const COMPILED_WORD_LIST = ["gallows", "noose", "scaffold", "hangman", "trapdoor", "verdict", "alphabet", "puzzle", "riddle", "lantern"];
 
 /// The compiled words as values, built once, on first use, from `COMPILED_WORD_LIST`.
-static WORDS = LazyLock::new(|| COMPILED_WORD_LIST.iter().map(|word| Word::new(word.to_string()).expect("y: a compiled word is a Word")).collect());
+static WORDS = LazyLock::new(|| {
+    COMPILED_WORD_LIST.iter().map(|word| Word::new(YString::new(word)).expect("y: a compiled word is a Word")).collect()
+});
 
 /// Plays one game of Hangman at the terminal.
 ///
@@ -38,7 +42,7 @@ mod tests {
 
     #[test]
     fn compiled_word_list_matches_run_time() {
-        let run_time = parse_word_list(game_rules::WORD_LIST);
+        let run_time = parse_word_list(&YString::new(game_rules::WORD_LIST));
         assert!(run_time == Ok(WORDS.clone()), "y: compile parse_word_list(game_rules.word_list)");
     }
 }

@@ -25,7 +25,9 @@ def moved(source):
     """The line in the new Y source with the text the old source had at `source`; the nearest one if several."""
     y, n = source.rsplit(":", 1)
     if y not in old_src:
-        old_src[y] = subprocess.run(["git", "show", f"HEAD:examples/{ex}/{y}"], capture_output=True, text=True, check=True).stdout.split("\n")
+        shown = subprocess.run(["git", "show", f"HEAD:examples/{ex}/{y}"], capture_output=True, text=True)
+        # a file not committed yet, in a new example, has not moved
+        old_src[y] = shown.stdout.split("\n") if shown.returncode == 0 else src[y]
     text = old_src[y][int(n) - 1]
     hits = [i for i, l in enumerate(src[y], 1) if l == text]
     if not hits:

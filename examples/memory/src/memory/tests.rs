@@ -19,12 +19,12 @@ mod stand_in {
 /// - `pairs`: for each card, the number of the picture it shows.
 /// - `at`: when the game started.
 /// - Returns the game.
-fn dealt(pairs: &[u32], at: Instant) -> Game {
+fn dealt(pairs: &List<u32>, at: Instant) -> Game {
     Game {
-        pairs: pairs.to_vec(),
-        sides: list::repeated(Side::FaceDown, board::CARDS),
-        pictures: Vec::new(),
-        turned: Vec::new(),
+        pairs: pairs.clone(),
+        sides: List::from(list::repeated(Side::FaceDown, board::CARDS)),
+        pictures: List::new(),
+        turned: List::new(),
         turned_at: at,
         matches: 0,
         lives: game_rules::LIVES,
@@ -48,8 +48,8 @@ fn clicking(row: i32, column: i32) -> Frame {
 /// is clicked, then the second.
 ///
 /// - Returns the frames.
-fn every_pair_clicked() -> Vec<Frame> {
-    vec![
+fn every_pair_clicked() -> List<Frame> {
+    list![
         Frame::default(),
         clicking(3, 1), clicking(3, 2),
         clicking(0, 0), clicking(2, 3),
@@ -68,7 +68,7 @@ fn every_pair_clicked() -> Vec<Frame> {
 fn a_click_between_the_cards_chooses_nothing() {
     // y: covers choosable > judged.off_cards
     let mut clock = Clock::fake(Duration::from_secs(1));
-    let game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
+    let game = dealt(&List::from(stand_in::SIDE_BY_SIDE), clock.now());
     let choice = choosable(&game, Point { x: 6, y: 6 });
     assert!(choice.is_none(), "nothing");
 }
@@ -77,7 +77,7 @@ fn a_click_between_the_cards_chooses_nothing() {
 fn no_third_card_can_be_chosen_while_two_show() {
     // y: covers choosable > judged.waiting
     let mut clock = Clock::fake(Duration::from_secs(1));
-    let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
+    let mut game = dealt(&List::from(stand_in::SIDE_BY_SIDE), clock.now());
     turn_over(&mut game, 1, clock.now());
     turn_over(&mut game, 3, clock.now());
     let choice = choosable(&game, Point { x: 564, y: 68 });
@@ -88,7 +88,7 @@ fn no_third_card_can_be_chosen_while_two_show() {
 fn a_face_up_card_cannot_be_chosen_again() {
     // y: covers choosable > judged.showing
     let mut clock = Clock::fake(Duration::from_secs(1));
-    let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
+    let mut game = dealt(&List::from(stand_in::SIDE_BY_SIDE), clock.now());
     turn_over(&mut game, 2, clock.now());
     let choice = choosable(&game, Point { x: 192, y: 68 });
     assert!(choice.is_none(), "not_again");
@@ -98,7 +98,7 @@ fn a_face_up_card_cannot_be_chosen_again() {
 fn a_click_on_a_card_chooses_it() {
     // y: covers choosable > judged.free
     let mut clock = Clock::fake(Duration::from_secs(1));
-    let game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
+    let game = dealt(&List::from(stand_in::SIDE_BY_SIDE), clock.now());
     let choice = choosable(&game, Point { x: 192, y: 68 });
     assert!(choice == Some(2), "the_second_card");
 }
@@ -107,10 +107,10 @@ fn a_click_on_a_card_chooses_it() {
 fn the_first_card_of_a_turn_turns_face_up() {
     // y: covers turn_over > turn.first
     let mut clock = Clock::fake(Duration::from_secs(1));
-    let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
+    let mut game = dealt(&List::from(stand_in::SIDE_BY_SIDE), clock.now());
     turn_over(&mut game, 1, clock.now());
     assert!(list::at_number(&game.sides, 1) == Side::FaceUp, "face_up");
-    assert!(game.turned == vec![1], "waiting_for_the_second");
+    assert!(game.turned == list![1], "waiting_for_the_second");
     assert!(game.lives == game_rules::LIVES, "no_life_lost");
 }
 
@@ -118,7 +118,7 @@ fn the_first_card_of_a_turn_turns_face_up() {
 fn a_matching_pair_stays_face_up() {
     // y: covers turn_over > turn.matching
     let mut clock = Clock::fake(Duration::from_secs(1));
-    let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
+    let mut game = dealt(&List::from(stand_in::SIDE_BY_SIDE), clock.now());
     turn_over(&mut game, 1, clock.now());
     turn_over(&mut game, 2, clock.now());
     assert!(list::at_number(&game.sides, 1) == Side::Matched, "first_matched");
@@ -132,11 +132,11 @@ fn a_matching_pair_stays_face_up() {
 fn a_pair_that_does_not_match_costs_a_life() {
     // y: covers turn_over > turn.different
     let mut clock = Clock::fake(Duration::from_secs(1));
-    let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
+    let mut game = dealt(&List::from(stand_in::SIDE_BY_SIDE), clock.now());
     turn_over(&mut game, 1, clock.now());
     turn_over(&mut game, 3, clock.now());
     assert!(list::at_number(&game.sides, 3) == Side::FaceUp, "second_face_up");
-    assert!(game.turned == vec![1, 3], "both_showing");
+    assert!(game.turned == list![1, 3], "both_showing");
     assert!(game.matches == 0, "no_pair");
     assert!(game.lives == game_rules::LIVES - 1, "a_life_lost");
 }
@@ -145,7 +145,7 @@ fn a_pair_that_does_not_match_costs_a_life() {
 fn two_cards_that_do_not_match_turn_back() {
     // y: covers turn_back > number'many
     let mut clock = Clock::fake(Duration::from_secs(1));
-    let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
+    let mut game = dealt(&List::from(stand_in::SIDE_BY_SIDE), clock.now());
     turn_over(&mut game, 1, clock.now());
     turn_over(&mut game, 3, clock.now());
     turn_back(&mut game);
@@ -158,7 +158,7 @@ fn two_cards_that_do_not_match_turn_back() {
 fn finding_every_pair_wins() {
     // y: covers standing > judged.won
     let mut clock = Clock::fake(Duration::from_secs(1));
-    let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
+    let mut game = dealt(&List::from(stand_in::SIDE_BY_SIDE), clock.now());
     game.matches = board::PAIRS;
     let reached = standing(&game);
     assert!(reached == Outcome::Won, "won");
@@ -168,7 +168,7 @@ fn finding_every_pair_wins() {
 fn losing_every_life_loses() {
     // y: covers standing > judged.lost
     let mut clock = Clock::fake(Duration::from_secs(1));
-    let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
+    let mut game = dealt(&List::from(stand_in::SIDE_BY_SIDE), clock.now());
     game.lives = 0;
     let reached = standing(&game);
     assert!(reached == Outcome::Lost, "lost");
@@ -178,7 +178,7 @@ fn losing_every_life_loses() {
 fn a_new_game_is_being_played() {
     // y: covers standing > judged.playing
     let mut clock = Clock::fake(Duration::from_secs(1));
-    let game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
+    let game = dealt(&List::from(stand_in::SIDE_BY_SIDE), clock.now());
     let reached = standing(&game);
     assert!(reached == Outcome::Playing, "playing");
 }
@@ -187,7 +187,7 @@ fn a_new_game_is_being_played() {
 fn a_won_game_scores_lives_and_seconds() {
     // y: covers score > won
     let mut clock = Clock::fake(Duration::from_secs(1));
-    let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
+    let mut game = dealt(&List::from(stand_in::SIDE_BY_SIDE), clock.now());
     game.matches = board::PAIRS;
     game.lives = 4;
     game.elapsed = Duration::from_secs(100);
@@ -199,7 +199,7 @@ fn a_won_game_scores_lives_and_seconds() {
 fn an_unfinished_game_scores_its_pairs() {
     // y: covers score > unfinished
     let mut clock = Clock::fake(Duration::from_secs(1));
-    let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
+    let mut game = dealt(&List::from(stand_in::SIDE_BY_SIDE), clock.now());
     game.matches = 3;
     game.lives = 0;
     let points = score(&game);
@@ -281,8 +281,8 @@ fn a_card_corner_is_a_step_per_row_and_column() {
 fn no_clicks_turn_nothing() {
     // y: covers pick > no_clicks
     let mut clock = Clock::fake(Duration::from_secs(1));
-    let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
-    pick(&mut game, &[], clock.now());
+    let mut game = dealt(&List::from(stand_in::SIDE_BY_SIDE), clock.now());
+    pick(&mut game, &List::new(), clock.now());
     assert!(game.turned.is_empty(), "nothing_turned");
 }
 
@@ -290,17 +290,17 @@ fn no_clicks_turn_nothing() {
 fn a_click_on_a_card_turns_it() {
     // y: covers pick > place > chosen
     let mut clock = Clock::fake(Duration::from_secs(1));
-    let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
-    pick(&mut game, &[Point { x: 68, y: 68 }], clock.now());
-    assert!(game.turned == vec![1], "first_up");
+    let mut game = dealt(&List::from(stand_in::SIDE_BY_SIDE), clock.now());
+    pick(&mut game, &list![Point { x: 68, y: 68 }], clock.now());
+    assert!(game.turned == list![1], "first_up");
 }
 
 #[test]
 fn a_click_between_the_cards_is_ignored() {
     // y: covers pick > place > ignored
     let mut clock = Clock::fake(Duration::from_secs(1));
-    let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
-    pick(&mut game, &[Point { x: 6, y: 6 }], clock.now());
+    let mut game = dealt(&List::from(stand_in::SIDE_BY_SIDE), clock.now());
+    pick(&mut game, &list![Point { x: 6, y: 6 }], clock.now());
     assert!(game.turned.is_empty(), "nothing_turned");
 }
 
@@ -308,8 +308,8 @@ fn a_click_between_the_cards_is_ignored() {
 fn two_clicks_in_a_frame_turn_two_cards() {
     // y: covers pick > place'many > chosen
     let mut clock = Clock::fake(Duration::from_secs(1));
-    let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
-    pick(&mut game, &[Point { x: 68, y: 68 }, Point { x: 192, y: 68 }], clock.now());
+    let mut game = dealt(&List::from(stand_in::SIDE_BY_SIDE), clock.now());
+    pick(&mut game, &list![Point { x: 68, y: 68 }, Point { x: 192, y: 68 }], clock.now());
     assert!(game.matches == 1, "a_pair");
 }
 
@@ -317,8 +317,8 @@ fn two_clicks_in_a_frame_turn_two_cards() {
 fn two_clicks_between_the_cards_are_ignored() {
     // y: covers pick > place'many > ignored
     let mut clock = Clock::fake(Duration::from_secs(1));
-    let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
-    pick(&mut game, &[Point { x: 6, y: 6 }, Point { x: 130, y: 68 }], clock.now());
+    let mut game = dealt(&List::from(stand_in::SIDE_BY_SIDE), clock.now());
+    pick(&mut game, &list![Point { x: 6, y: 6 }, Point { x: 130, y: 68 }], clock.now());
     assert!(game.turned.is_empty(), "nothing_turned");
 }
 
@@ -326,7 +326,7 @@ fn two_clicks_between_the_cards_are_ignored() {
 fn the_banner_says_how_a_game_is_going() {
     // y: covers banner > shown.playing
     let mut clock = Clock::fake(Duration::from_secs(1));
-    let game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
+    let game = dealt(&List::from(stand_in::SIDE_BY_SIDE), clock.now());
     let lines = banner(&game, 50);
     assert!(lines[0] == "Pairs 0 of 10   Lives 10   Time 0s   Best 50", "says_playing");
     assert!(lines[1] == "Click two cards to turn them over. Escape quits.", "says_how");
@@ -336,7 +336,7 @@ fn the_banner_says_how_a_game_is_going() {
 fn the_banner_says_a_game_is_won() {
     // y: covers banner > shown.won
     let mut clock = Clock::fake(Duration::from_secs(1));
-    let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
+    let mut game = dealt(&List::from(stand_in::SIDE_BY_SIDE), clock.now());
     game.matches = board::PAIRS;
     game.lives = 4;
     game.elapsed = Duration::from_secs(100);
@@ -349,7 +349,7 @@ fn the_banner_says_a_game_is_won() {
 fn the_banner_says_a_game_is_lost() {
     // y: covers banner > shown.lost
     let mut clock = Clock::fake(Duration::from_secs(1));
-    let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
+    let mut game = dealt(&List::from(stand_in::SIDE_BY_SIDE), clock.now());
     game.matches = 3;
     game.lives = 0;
     let lines = banner(&game, 50);
@@ -362,11 +362,11 @@ fn a_game_is_drawn_with_its_banner_and_credit() {
     // y: covers draw > row'many > column'many
     let mut window = Window::fake_frames(Vec::new());
     let mut clock = Clock::fake(Duration::from_secs(1));
-    let game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
+    let game = dealt(&List::from(stand_in::SIDE_BY_SIDE), clock.now());
     draw(&game, 50, &mut window);
-    let written = window.written();
+    let written: List<YString> = window.written().iter().map(|line| YString::new(line)).collect();
     assert!(written[0] == "Pairs 0 of 10   Lives 10   Time 0s   Best 50", "banner_written");
-    assert!(written.last().map(String::as_str) == Some("Pictures: OpenMoji, CC BY-SA 4.0"), "credited");
+    assert!(written.last().map(YString::as_str) == Some("Pictures: OpenMoji, CC BY-SA 4.0"), "credited");
     assert!(window.pictures_drawn() == 0, "all_face_down");
 }
 
@@ -375,7 +375,7 @@ fn a_face_down_card_shows_no_picture() {
     // y: covers draw_card > shown.face_down
     let mut window = Window::fake_frames(Vec::new());
     let mut clock = Clock::fake(Duration::from_secs(1));
-    let game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
+    let game = dealt(&List::from(stand_in::SIDE_BY_SIDE), clock.now());
     draw_card(&game, 1, corner_of(0, 0), &mut window);
     assert!(window.pictures_drawn() == 0, "no_picture");
 }
@@ -386,8 +386,8 @@ fn a_face_up_card_shows_its_picture() {
     let mut window = Window::fake_frames(Vec::new());
     let mut clock = Clock::fake(Duration::from_secs(1));
     let made = Picture::from_svg(stand_in::DRAWING, layout::PICTURE_SIZE).expect("given");
-    let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
-    game.pictures = vec![made];
+    let mut game = dealt(&List::from(stand_in::SIDE_BY_SIDE), clock.now());
+    game.pictures = list![made];
     turn_over(&mut game, 1, clock.now());
     draw_card(&game, 1, corner_of(0, 0), &mut window);
     assert!(window.pictures_drawn() == 1, "its_picture");
@@ -399,8 +399,8 @@ fn a_matched_card_shows_its_picture() {
     let mut window = Window::fake_frames(Vec::new());
     let mut clock = Clock::fake(Duration::from_secs(1));
     let made = Picture::from_svg(stand_in::DRAWING, layout::PICTURE_SIZE).expect("given");
-    let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
-    game.pictures = vec![made];
+    let mut game = dealt(&List::from(stand_in::SIDE_BY_SIDE), clock.now());
+    game.pictures = list![made];
     turn_over(&mut game, 1, clock.now());
     turn_over(&mut game, 2, clock.now());
     draw_card(&game, 2, corner_of(0, 1), &mut window);
@@ -423,8 +423,8 @@ fn a_card_picture_is_drawn() {
     let mut window = Window::fake_frames(Vec::new());
     let mut clock = Clock::fake(Duration::from_secs(1));
     let made = Picture::from_svg(stand_in::DRAWING, layout::PICTURE_SIZE).expect("given");
-    let mut game = dealt(&stand_in::SIDE_BY_SIDE, clock.now());
-    game.pictures = vec![made];
+    let mut game = dealt(&List::from(stand_in::SIDE_BY_SIDE), clock.now());
+    game.pictures = list![made];
     draw_picture(&game, 1, corner_of(0, 0), &mut window);
     assert!(window.pictures_drawn() == 1, "one_picture");
 }
@@ -449,8 +449,8 @@ fn a_new_game_deals_two_cards_of_each_picture() {
     let mut sorted = started.pairs.clone();
     sorted.sort();
     assert!(list::count(&started.pictures) == board::PAIRS, "a_picture_for_each_pair");
-    assert!(sorted == stand_in::SIDE_BY_SIDE, "two_of_each");
-    assert!(started.sides == list::repeated(Side::FaceDown, board::CARDS), "face_down");
+    assert!(sorted == List::from(stand_in::SIDE_BY_SIDE), "two_of_each");
+    assert!(started.sides == List::from(list::repeated(Side::FaceDown, board::CARDS)), "face_down");
     assert!(standing(&started) == Outcome::Playing, "playing");
 }
 
@@ -562,7 +562,7 @@ fn a_window_closed_after_one_frame_ends_play() {
     let site = Http::fake(stand_in::DRAWING);
     let forever = Forever::fake();
     let best = y_window::block_on(play(&mut window, &mut clock, &mut random, &site, &forever)).expect("when");
-    let written = window.written();
+    let written: List<YString> = window.written().iter().map(|line| YString::new(line)).collect();
     assert!(best == 0, "no_score");
     assert!(written.iter().any(|line| line == "Pairs 0 of 10   Lives 10   Time 0s   Best 0"), "one_frame_of_the_game");
     assert!(window.frames_shown() == 2, "two_frames");
@@ -585,19 +585,19 @@ fn a_game_waits_for_clicks() {
 #[test]
 fn a_pair_that_does_not_match_is_shown_then_turned_back() {
     // y: covers play > open'many > moment.hiding'2eq
-    let mut frames = vec![Frame::default(), clicking(0, 0), clicking(0, 1), clicking(0, 2)];
+    let mut frames = list![Frame::default(), clicking(0, 0), clicking(0, 1), clicking(0, 2)];
     frames.extend(std::iter::repeat_n(Frame::default(), 9));
     frames.push(Frame { keys: vec![Key::Escape], clicks: Vec::new() });
-    let mut window = Window::fake_frames(frames);
+    let mut window = Window::fake_frames(frames.into_vec());
     let mut clock = Clock::fake(Duration::from_millis(100));
     let mut random = Random::seeded(7);
     let site = Http::fake(stand_in::DRAWING);
     let forever = Forever::fake();
     let best = y_window::block_on(play(&mut window, &mut clock, &mut random, &site, &forever)).expect("when");
-    let written = window.written();
+    let written: List<YString> = window.written().iter().map(|line| YString::new(line)).collect();
     assert!(best == 0, "no_score");
     assert!(written.iter().any(|line| line == "Pairs 0 of 10   Lives 9   Time 0s   Best 0"), "a_life_lost");
-    assert!(written.last().map(String::as_str) == Some("Pictures: OpenMoji, CC BY-SA 4.0"), "credited");
+    assert!(written.last().map(YString::as_str) == Some("Pictures: OpenMoji, CC BY-SA 4.0"), "credited");
     assert!(window.pictures_drawn() == 21, "turned_back: Expected one picture, then two in each frame for a second, then none.");
 }
 
@@ -625,13 +625,13 @@ fn a_won_game_keeps_its_score() {
     let mut frames = every_pair_clicked();
     frames.push(Frame::default());
     frames.push(Frame { keys: vec![Key::Escape], clicks: Vec::new() });
-    let mut window = Window::fake_frames(frames);
+    let mut window = Window::fake_frames(frames.into_vec());
     let mut clock = Clock::fake(Duration::from_millis(100));
     let mut random = Random::seeded(7);
     let site = Http::fake(stand_in::DRAWING);
     let forever = Forever::fake();
     let best = y_window::block_on(play(&mut window, &mut clock, &mut random, &site, &forever)).expect("when");
-    let written = window.written();
+    let written: List<YString> = window.written().iter().map(|line| YString::new(line)).collect();
     assert!(best == 2680, "scored: Expected 1000 for the pairs, 500 for the lives and 1180 for the seconds under par.");
     assert!(written.iter().any(|line| line == "All pairs in 2s! Score 2680   Best 2680"), "announced");
 }
@@ -644,13 +644,13 @@ fn a_whole_game_is_won_and_another_begun() {
     frames.push(Frame { keys: vec![Key::Space], clicks: Vec::new() });
     frames.push(Frame::default());
     frames.push(Frame { keys: vec![Key::Escape], clicks: Vec::new() });
-    let mut window = Window::fake_frames(frames);
+    let mut window = Window::fake_frames(frames.into_vec());
     let mut clock = Clock::fake(Duration::from_millis(100));
     let mut random = Random::seeded(7);
     let site = Http::fake(stand_in::DRAWING);
     let forever = Forever::fake();
     let best = y_window::block_on(play(&mut window, &mut clock, &mut random, &site, &forever)).expect("when");
-    let written = window.written();
+    let written: List<YString> = window.written().iter().map(|line| YString::new(line)).collect();
     assert!(best == 2680, "scored");
     assert!(written.iter().any(|line| line == "Pairs 0 of 10   Lives 10   Time 0s   Best 2680"), "dealt_again");
 }
@@ -661,7 +661,7 @@ fn a_site_that_fails_for_the_next_game_ends_play() {
     let mut frames = every_pair_clicked();
     frames.push(Frame::default());
     frames.push(Frame { keys: vec![Key::Space], clicks: Vec::new() });
-    let mut window = Window::fake_frames(frames);
+    let mut window = Window::fake_frames(frames.into_vec());
     let mut clock = Clock::fake(Duration::from_millis(100));
     let mut random = Random::seeded(7);
     let site = Http::fake_failing_after(stand_in::DRAWING, 10, 404);

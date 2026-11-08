@@ -26,11 +26,12 @@ letter. Six misses hang the man.
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
 | Y source | `y/src/hangman.y`, `y/src/hangman.test.y`, `y/src/main.y` | 351, 694, 18 | hand |
-| Bare bodies | `bare/src/hangman.brs`, `bare/src/hangman/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 364, 517, 44, 3 | hand, as the Y compiler would lower the source |
-| Constraint files | `bare/src/*.constraints.json` (95 subjects, 30 clauses) | 668 | the same, then `bare-rust libfmt` for the canonical form |
+| Bare bodies | `bare/src/hangman.brs`, `bare/src/hangman/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 368, 571, 48, 3 | hand, as the Y compiler would lower the source |
+| Constraint files | `bare/src/*.constraints.json` (95 subjects, 30 clauses) | 742 | the same, then `bare-rust libfmt` for the canonical form |
 | Y facts | `bare/y-facts.json` | 1017 | the same |
-| Rust | `src/hangman.rs`, `src/hangman/tests.rs`, `src/main.rs`, `src/lib.rs` | 364, 517, 44, 3 | `bare-rust weave` |
+| Rust | `src/hangman.rs`, `src/hangman/tests.rs`, `src/main.rs`, `src/lib.rs` | 368, 571, 48, 3 | `bare-rust weave` |
 | Y runtime | `../y-runtime/src/lib.rs` | 506 | hand: a small stand-in for the runtime that lowered code calls |
+| Y standard types | `../y-string/src/lib.rs`, `../y-collections/src/lib.rs` | — | hand: the native `string`, `rune`, `list` and `set` |
 
 The Y package has two modules. `hangman` holds the game, and `main` is the entry point. They lower to one Rust package:
 a library crate with the module `hangman`, and a binary crate whose `main` calls it.
@@ -71,7 +72,7 @@ a library crate with the module `hangman`, and a binary crate whose `main` calls
 | `forever because "..."` | the `&Forever` argument of the call that waits | `y-facts.json` `claims` | `console.read_line(forever)` |
 | `compile parse_word_list(game_rules.word_list)` | the value, as a `const` array, and a `static` built once from it | `y-facts.json` `compiled` | the same, and a generated test that makes the call at run time and compares |
 | `count<unit_type=rune>`: the misses, and the letters of a word | — (units are erased) | `y-facts.json` `units` | `usize` |
-| `string` (and a read-only `string` parameter), `rune`, `list<element_type=t>`, `set<element_type=t>` | — | `string`, `ref<target_type=string>`, `Rune`, `list<element_type=T> as 'Vec'`, `set<element_type=T> as 'BTreeSet'` | `String`, `&str`, `y_runtime::Rune`, `Vec<T>`, `BTreeSet<T>`: a `set` keeps insertion order (Y § 3.13), but `hits` is only asked what it contains, so the order is never seen, and the backend may sort |
+| `string` (and a read-only `string` parameter), `rune`, `list<element_type=t>`, `set<element_type=t>` | — | `string as 'YString'`, `ref<target_type=string as 'YString'>`, `Rune`, `list<element_type=T> as 'List'`, `set<element_type=T> as 'Set'` | `y_string::YString`, `&YString`, `y_string::Rune`, `y_collections::List<T>`, `y_collections::Set<T>`, which keeps insertion order as Y's `set` does (Y § 3.13); a string literal in a constant group stays a `&'static str` and becomes a `YString` where it is used, and the console, a native boundary, takes and gives host text (`.as_str()`, `YString::from(…)`) |
 | Interpolation, `"{name}"` and `"{game.word}"` | `format!("{name}")`, `format!("{}", game.word)` | — | the same |
 | A binding, `picture = gallows(…)`; a name that changes, `mutable game = new_game(…)`; a change, `name := value` | `let`; `let` (weave adds `mut`); `name = value` | — | `let`; `let mut`, which `weave` derived through rustc (19 of them); `name = value` |
 | `test name` with `covers` and the one path its `when` takes, `covers guess > judged.in_word:` (or `test name:` for a test that claims no path), then the sections `given:`, `inject:`, `when:`, `then:` | `#[test] fn name()`; an `or fail` in `given` or `when` lowers to `expect`; `fake console(input: [...])` to `Console::fake(...)`; each named check of `then`, `name = p`, to `assert!(p, "name")`, with the comment above it, if any, added to the message | `y-facts.json` `tests`: the path each covers, repeated as the test's first line, `// y: covers guess > judged.in_word`; `paths`: every path of the module, and how it ends | the same |
@@ -97,10 +98,10 @@ following:
 
 `../y-runtime` is only as large as this example needs, and each shortcut is stated on the item that takes it:
 
-- **`rune`** (Rust `Rune`) holds one Unicode scalar value, where Y's is an extended grapheme cluster. They are the same for the
-  words here, which a `word` limits to `a` to `z`.
-- **`set`** lowers to `BTreeSet`, which iterates in sorted order where Y iterates in insertion order. The game never
-  iterates a set, so the difference cannot be seen here.
+- **`string` and `rune`** come from `../y-string`, and **`list` and `set`** from `../y-collections`, which implement Y's
+  semantics: a `YString` is normalised to NFC and counted in runes, a `Rune` is one extended grapheme cluster, and a
+  `Set` keeps insertion order. Where they lack an operation the game needs (splitting a string by a separator, joining
+  a list of strings, lowercasing a string), `hangman.rs` does it on the host text and makes a `YString` again.
 - **`random`** seeds from the clock without recording the seed, so a game cannot be replayed (Y § 4.7).
 
 ## Checks

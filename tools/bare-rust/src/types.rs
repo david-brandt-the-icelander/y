@@ -335,6 +335,8 @@ impl Ty {
             Ty::As(t, w) => match (&**t, w.as_str()) {
                 (_, "usize" | "isize" | "char") => w.clone(),
                 (Ty::Text, "String") => "String".into(),
+                // a host's own string type, which takes no arguments: y-string's `YString`
+                (Ty::Text, _) => w.clone(),
                 // a slice is a `list` whose host form is the unsized `[T]`, which only a reference can name
                 (Ty::Coll(k, a), "std::primitive::slice") if k == "list" => format!("[{}]", list(a, cx)?),
                 (Ty::Refined(l, p), "std::primitive::array") if matches!(&**l, Ty::Coll(k, _) if k == "list") => {
@@ -634,6 +636,8 @@ mod tests {
         assert_eq!(t.rust(false, None).unwrap(), "*const u8");
         assert_eq!(t.rust(true, None).unwrap(), "*mut u8");
         assert_eq!(Ty::parse("ptr<target_type=string>").unwrap().rust(false, None).unwrap(), "*const str");
+        assert_eq!(Ty::parse("string as 'YString'").unwrap().rust(false, None).unwrap(), "YString");
+        assert_eq!(Ty::parse("list<element_type=u8> as 'List'").unwrap().rust(false, None).unwrap(), "List<u8>");
         assert_eq!(Ty::parse("ptr<target_type=list<element_type=u8> as 'std::primitive::slice'>").unwrap().rust(true, None).unwrap(), "*mut [u8]");
         assert_eq!(Ty::parse("list<element_type=ptr<target_type=Node>> as 'Vec'").unwrap().rust(false, None).unwrap(), "Vec<*const Node>");
     }

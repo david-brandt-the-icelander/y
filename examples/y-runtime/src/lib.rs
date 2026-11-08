@@ -2,9 +2,16 @@
 //!
 //! Rust lowered from Y calls this crate for what Y has and Rust does not: capabilities (`System`, `Console`, `Random`,
 //! `Clock`, `Forever`), deadlines (`Deadline`, `Expired`), the standard library's text operations on runes and list operations by number, refined types' constraint violations, and faults;
-//! and, in [`decimal`], the constrained integers, decimals, rationals and rounding modes of Y § 3.3.
+//! and, in [`decimal`], the constrained integers, decimals, rationals and rounding modes of Y § 3.3; in [`shared`],
+//! shared state and atomic regions, kept with one lock (Y § 3.9); in [`task`], supervised tasks, detached work and
+//! cancellation (Y § 3.8); in [`arena`], arenas and resources (Y § 3.6); in [`store`], stored records of a schema and
+//! their migrations (Y § 3.12).
 //! It is only as large as the examples need. Where it is simpler than Y's semantics, the item says so.
+pub mod arena;
 pub mod decimal;
+pub mod shared;
+pub mod store;
+pub mod task;
 
 use std::collections::VecDeque;
 use std::fmt;
@@ -246,6 +253,12 @@ impl System {
     /// The clock of the machine the program runs on.
     pub fn clock(&self) -> Clock {
         Clock { fake: None }
+    }
+
+    /// Y's `system.store(path)`: the stored records of a schema, in a file. A file that cannot be read is a fault here;
+    /// one that does not exist yet is an empty store.
+    pub fn store<S: store::Schema>(&self, path: &str) -> store::Store<S> {
+        store::Store::open(std::path::PathBuf::from(path)).unwrap_or_else(|e| fault("y_runtime::System::store", &e.reason))
     }
 
     pub fn forever(&self) -> Forever {

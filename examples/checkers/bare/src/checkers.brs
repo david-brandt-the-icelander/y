@@ -8,13 +8,13 @@
 //! and Rust's colouring makes them `async fn`s.
 
 use std::cmp::Ordering;
+use y_collections::{list, List};
 use y_runtime::{ensure, list, not_reachable, number, require, Forever, Random};
+use y_string::YString;
 use y_window::{Colour, Key, Point, Window};
 use self::{computer::*, drawing::*, rules::*, setup::*, window_play::*};
-
 #[cfg(test)]
 mod tests;
-
 /// The Y facet `setup`: the board, the pieces, the levels of play, and how a game starts.
 mod setup {
     use super::*;
@@ -167,7 +167,7 @@ mod setup {
     /// - `level`: how hard the computer plays.
     /// - Returns the game.
     fn new_game(level) {
-        let squares = Vec::new();
+        let squares = List::new();
         for row in 0..board::SIZE { // y: #row
             for column in 0..board::SIZE { // y: #column
                 squares.push(starting_piece(Square { row, column }));
@@ -292,12 +292,12 @@ mod rules {
 /// - `game`: the game.
 /// - Returns the steps.
 fn all_steps(game) {
-    let found = Vec::new();
+    let found = List::new();
     for placed in own_pieces(game) { // y: #placed, else #no_pieces
         for direction in directions_of(placed.piece) { // y: #direction
             let to = Square { row: placed.square.row + direction.rows, column: placed.square.column + direction.columns };
             if on_board(to) && piece_at(game, to).is_none() { // y: #open
-                found.push(Move { piece: placed.piece, from: placed.square, path: vec![to], captures: Vec::new() });
+                found.push(Move { piece: placed.piece, from: placed.square, path: list![to], captures: List::new() });
             } else { // y: #blocked
                 continue;
             }
@@ -311,9 +311,9 @@ fn all_steps(game) {
 /// - `game`: the game.
 /// - Returns the jumps.
 fn all_jumps(game) {
-    let found = Vec::new();
+    let found = List::new();
     for placed in own_pieces(game) { // y: #placed, else #no_pieces
-        found.extend(chains(game, placed.piece, placed.square, placed.square, &[], &[]));
+        found.extend(chains(game, placed.piece, placed.square, placed.square, &List::new(), &List::new()));
     }
     found
 }
@@ -330,14 +330,14 @@ fn all_jumps(game) {
 /// - `captured`: the squares of the pieces it has jumped over so far.
 /// - Returns the chains, each a whole move, or none when it cannot jump from `at`.
 fn chains(game, piece, start, at, path, captured) {
-    let found = Vec::new();
+    let found = List::new();
     for direction in directions_of(piece) { // y: #direction
         let over = Square { row: at.row + direction.rows, column: at.column + direction.columns };
         let land = Square { row: over.row + direction.rows, column: over.column + direction.columns };
         if jumpable(game, piece, start, over, land) && !captured.contains(&over) { // y: #can_jump
-            let longer = path.to_vec(); // y: a copy
+            let longer = path.clone(); // y: a copy
             longer.push(land);
-            let taken = captured.to_vec(); // y: a copy
+            let taken = captured.clone(); // y: a copy
             taken.push(over);
             let further = chains_after(game, piece, start, land, &longer, &taken);
             if further.is_empty() { // y: #ends_here
@@ -358,7 +358,7 @@ fn chains(game, piece, start, at, path, captured) {
 /// - Returns the chains.
 fn chains_after(game, piece, start, land, path, captured) {
     if !piece.king && land.row == far_row(piece.owner) { // y: #crowned
-        Vec::new()
+        List::new()
     } else { // y: #uncrowned
         chains(game, piece, start, land, path, captured)
     }
@@ -400,7 +400,7 @@ fn belongs_to(game, square, owner) {
 /// - `game`: the game.
 /// - Returns the pieces.
 fn placed_pieces(game) {
-    let found = Vec::new();
+    let found = List::new();
     for row in 0..board::SIZE { // y: #row
         for column in 0..board::SIZE { // y: #column
             let here = Square { row, column };
@@ -418,7 +418,7 @@ fn placed_pieces(game) {
 /// - `game`: the game.
 /// - Returns the pieces.
 fn own_pieces(game) {
-    let found = Vec::new();
+    let found = List::new();
     for placed in placed_pieces(game) { // y: #placed, else #no_pieces
         if placed.piece.owner == game.to_move { // y: #mine
             found.push(placed);
@@ -435,13 +435,13 @@ fn own_pieces(game) {
 /// - Returns the directions: two for a man, and four for a king.
 fn directions_of(piece) {
     let ways = if piece.king { // y: #moving.king
-        &directions::ALL
+        List::from(directions::ALL)
     } else if piece.owner == Side::Red { // y: #moving.red
-        &directions::UP
+        List::from(directions::UP)
     } else { // y: #moving.white
-        &directions::DOWN
+        List::from(directions::DOWN)
     };
-    ensure(list::count(ways) >= 2, "checkers::directions_of#several");
+    ensure(list::count(&ways) >= 2, "checkers::directions_of#several");
     ways
 }
 
@@ -523,14 +523,14 @@ mod computer {
     /// - Returns the move.
     fn computer_move(game, random) {
         require(!legal_moves(game).is_empty(), "checkers::computer_move#has_moves");
-        let options = random.shuffled(&legal_moves(game));
+        let options = List::from(random.shuffled(&legal_moves(game)));
         let allowance = game.level.checks / 2;
         let left = allowance;
-        let values = list::repeated(0, list::count(&options));
+        let values = List::from(list::repeated(0, list::count(&options)));
         let depth = 1;
         let exhausted = false;
         while depth <= search::DEEPEST && !exhausted { // y: #deepening
-            let found = Vec::new();
+            let found = List::new();
             for candidate in &options { // y: #candidate
                 let after = game.clone(); // y: a copy
                 apply(&mut after, candidate.clone()); // y: a copy
@@ -565,7 +565,7 @@ fn searched(game, owner, depth, left) {
         0
     } else { // y: #judged.inner
         *left -= list::count(&moves);
-        let values = Vec::new();
+        let values = List::new();
         for candidate in moves { // y: #candidate
             let after = game.clone(); // y: a copy
             apply(&mut after, candidate);
@@ -591,7 +591,7 @@ fn searched(game, owner, depth, left) {
 fn best_sampled(game, options, values, checks, random) {
     require(!options.is_empty(), "checkers::best_sampled#has_options");
     let best = list::largest(values);
-    let tied = Vec::new();
+    let tied = List::new();
     for option in 1..=list::count(options) { // y: #option
         match list::at_number(values, option).cmp(&best) {
             Ordering::Equal => tied.push(option), // y: #ranked.top
@@ -605,7 +605,7 @@ fn best_sampled(game, options, values, checks, random) {
         }
         Ordering::Greater => { // y: #ties.contested
             let share = checks / list::count(&tied);
-            let averages = Vec::new();
+            let averages = List::new();
             for option in &tied { // y: #option
                 let after = game.clone(); // y: a copy
                 apply(&mut after, list::at_number_ref(options, *option).clone()); // y: a copy
@@ -761,25 +761,25 @@ mod drawing {
         let moves = player_moves(game);
         let name = game.level.name;
         match standing(game) {
-            Outcome::Playing if game.to_move == Side::Red => vec![ // y: #shown.your_move
-                format!("Your move   {name}   Moves {moves}   Best {highest}"),
-                "Click a red piece, then a marked square. Escape quits.".to_string(),
+            Outcome::Playing if game.to_move == Side::Red => list![ // y: #shown.your_move
+                YString::from(format!("Your move   {name}   Moves {moves}   Best {highest}")),
+                YString::new("Click a red piece, then a marked square. Escape quits."),
             ],
-            Outcome::Playing => vec![ // y: #shown.thinking
-                format!("The computer is thinking, at {} positions a move...", game.level.checks),
-                "Escape quits.".to_string(),
+            Outcome::Playing => list![ // y: #shown.thinking
+                YString::from(format!("The computer is thinking, at {} positions a move...", game.level.checks)),
+                YString::new("Escape quits."),
             ],
-            Outcome::Won => vec![ // y: #shown.won
-                format!("You won in {moves} moves against {name}! Score {}   Best {highest}", score(game)),
-                "Space chooses a new game. Escape quits.".to_string(),
+            Outcome::Won => list![ // y: #shown.won
+                YString::from(format!("You won in {moves} moves against {name}! Score {}   Best {highest}", score(game))),
+                YString::new("Space chooses a new game. Escape quits."),
             ],
-            Outcome::Lost => vec![ // y: #shown.lost
-                format!("The computer won. Score 0   Best {highest}"),
-                "Space chooses a new game. Escape quits.".to_string(),
+            Outcome::Lost => list![ // y: #shown.lost
+                YString::from(format!("The computer won. Score 0   Best {highest}")),
+                YString::new("Space chooses a new game. Escape quits."),
             ],
-            Outcome::Drawn => vec![ // y: #shown.drawn
-                format!("A draw: {} turns without a capture. Score 0   Best {highest}", game_rules::QUIET_LIMIT),
-                "Space chooses a new game. Escape quits.".to_string(),
+            Outcome::Drawn => list![ // y: #shown.drawn
+                YString::from(format!("A draw: {} turns without a capture. Score 0   Best {highest}", game_rules::QUIET_LIMIT)),
+                YString::new("Space chooses a new game. Escape quits."),
             ],
         }
     }
@@ -797,8 +797,8 @@ mod drawing {
         draw_marks(game, selected, window);
         let lines = banner(game, highest);
         let top = layout::HEIGHT - layout::BAR_HEIGHT;
-        window.write(&lines[0], layout::GAP, top + 32, layout::TEXT_SIZE, palette::TEXT);
-        window.write(&lines[1], layout::GAP, top + 60, layout::TEXT_SIZE, palette::MUTED);
+        window.write(lines[0].as_str(), layout::GAP, top + 32, layout::TEXT_SIZE, palette::TEXT);
+        window.write(lines[1].as_str(), layout::GAP, top + 60, layout::TEXT_SIZE, palette::MUTED);
     }
 
     /// Draws the levels to choose from, each a button, and the best score so far.
@@ -808,14 +808,14 @@ mod drawing {
     fn draw_levels(highest, window) {
         window.clear(palette::BACKGROUND);
         window.write("Checkers", layout::GAP, 60, layout::TITLE_SIZE, palette::TEXT);
-        let prompt = "Click how hard the computer plays. Escape quits.";
-        window.write(prompt, layout::GAP, 100, layout::TEXT_SIZE, palette::MUTED);
+        let prompt = YString::new("Click how hard the computer plays. Escape quits.");
+        window.write(prompt.as_str(), layout::GAP, 100, layout::TEXT_SIZE, palette::MUTED);
         let top = layout::BUTTON_TOP;
         for level in levels::ALL { // y: #level
-            let checks = format!("Looks at {} positions a move. Wins score x{}.", level.checks, level.weight);
+            let checks = YString::from(format!("Looks at {} positions a move. Wins score x{}.", level.checks, level.weight));
             window.fill(layout::GAP, top, layout::BOARD_SIZE, layout::BUTTON_HEIGHT, palette::BUTTON);
             window.write(level.name, layout::GAP + 16, top + 30, layout::TEXT_SIZE, palette::TEXT);
-            window.write(&checks, layout::GAP + 16, top + 56, layout::TEXT_SIZE, palette::MUTED);
+            window.write(checks.as_str(), layout::GAP + 16, top + 56, layout::TEXT_SIZE, palette::MUTED);
             top += layout::BUTTON_STEP;
         }
         window.write(&format!("Best {highest}"), layout::GAP, top + 24, layout::TEXT_SIZE, palette::TEXT);
@@ -909,7 +909,7 @@ fn in_last_move(game, square) {
 /// - `selected`: the square of the piece the player has selected, if there is one.
 /// - Returns the squares: none when no piece is selected.
 fn landings(game, selected) {
-    let found = Vec::new();
+    let found = List::new();
     for candidate in legal_moves(game) { // y: #candidate, else #no_moves
         if Some(candidate.from) == selected { // y: #from_selected
             found.push(list::last(&candidate.path));
@@ -976,13 +976,13 @@ fn draw_piece(placed, window) {
 /// - Returns the colours of its disc, its ring and its centre.
 fn colours_of(piece) {
     if piece.owner == Side::Red && piece.king { // y: #painted.red_king
-        vec![palette::RED, palette::RED_RING, palette::CROWN]
+        list![palette::RED, palette::RED_RING, palette::CROWN]
     } else if piece.owner == Side::Red { // y: #painted.red_man
-        vec![palette::RED, palette::RED_RING, palette::RED]
+        list![palette::RED, palette::RED_RING, palette::RED]
     } else if piece.king { // y: #painted.white_king
-        vec![palette::WHITE, palette::WHITE_RING, palette::CROWN]
+        list![palette::WHITE, palette::WHITE_RING, palette::CROWN]
     } else { // y: #painted.white_man
-        vec![palette::WHITE, palette::WHITE_RING, palette::WHITE]
+        list![palette::WHITE, palette::WHITE_RING, palette::WHITE]
     }
 }
 
@@ -1030,7 +1030,7 @@ mod window_play {
         let quitting = false;
         while chosen.is_none() && !quitting && !window.close_requested() { // y: #choosing, else #closed_at_once
             quitting = window.keys_pressed().contains(&Key::Escape);
-            chosen = level_clicked(&window.clicks());
+            chosen = level_clicked(&List::from(window.clicks()));
             draw_levels(highest, window);
             window.next_frame(forever).await; // y: forever because "a hidden window shows no frames, and the game waits until it is shown"
         }
@@ -1049,7 +1049,7 @@ mod window_play {
         let quitting = false;
         let again = false;
         while !quitting && !again && !window.close_requested() { // y: #playing, else #closed_at_once
-            let keys = window.keys_pressed();
+            let keys = List::from(window.keys_pressed());
             quitting = keys.contains(&Key::Escape);
             if standing(&game) != Outcome::Playing { // y: #moment.over
                 again = keys.contains(&Key::Space);
@@ -1057,7 +1057,7 @@ mod window_play {
                 let chosen = computer_move(&game, random);
                 apply(&mut game, chosen);
             } else { // y: #moment.players_turn
-                act_on_clicks(&mut game, &mut selected, &window.clicks());
+                act_on_clicks(&mut game, &mut selected, &List::from(window.clicks()));
             }
             draw(&game, selected, highest, window);
             window.next_frame(forever).await; // y: forever because "a hidden window shows no frames, and the game waits until it is shown"

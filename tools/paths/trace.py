@@ -127,6 +127,8 @@ def instrument(src):
     pending_ends = []  # (closing line index, text to insert after it)
     closers = {}
     arm_closers = set()
+    # an alternative of an `orelse` is taken when it commits: its step goes before each `Ok(Step::Done(…))` in its closure
+    commits = {}
     i = 0
     fn_re = re.compile(r"^(\s*)(?:pub(?:\([\w ]+\))? )?(?:async )?fn (\w+)\b.*\{$")
     for i, l in enumerate(lines):
@@ -135,6 +137,8 @@ def instrument(src):
             out.append(l)
             out.append(f"{m.group(1)}    let _path = crate::ytrace::enter(\"{m.group(2)}\");")
             continue
+        if i in commits:
+            out.append(" " * (len(l) - len(l.lstrip())) + f"crate::ytrace::step_plain(\"{commits[i]}\");")
         if i in failing:
             l = wrap_failing(l, failing[i])
         marker = re.search(r"// y: #([\w.']+)(?:, else #(\w+))?", l)
@@ -181,6 +185,11 @@ def instrument(src):
                 else:
                     body = rest.rstrip(",")
                     code = f"{pat}=> {{ crate::ytrace::{kind}(\"{name}\"); {body} }},"
+            elif re.match(r"let (mut )?\w+ = \|.*\{$", t):
+                for j in range(i + 1, find_close(lines, i)):
+                    if lines[j].strip().startswith(("Ok(Step::Done(", "return Ok(Step::Done(")):
+                        commits[j] = name
+                code = l
             else:
                 code = l  # a marker on a line the tracer does not need
             l = code

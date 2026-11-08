@@ -161,7 +161,7 @@
       "because": "a hidden window shows no frames, and the game waits until it is shown",
       "requires": "Forever",
       "y": "y/src/snake.y:362",
-      "bare": "bare/src/snake.brs:328"
+      "bare": "bare/src/snake.brs:330"
     }
   ],
   "suspensions": [
@@ -171,7 +171,7 @@
       "because": "the window capability may suspend (Y \u00a7 3.7)",
       "lowered": "async fn, and .await at the point",
       "y": "y/src/snake.y:363",
-      "bare": "bare/src/snake.brs:328"
+      "bare": "bare/src/snake.brs:330"
     },
     {
       "subject": "snake_example::main",
@@ -194,27 +194,27 @@
           {
             "name": "arrow.up",
             "y": "y/src/snake.y:105",
-            "bare": "bare/src/snake.brs:111"
+            "bare": "bare/src/snake.brs:113"
           },
           {
             "name": "arrow.down",
             "y": "y/src/snake.y:107",
-            "bare": "bare/src/snake.brs:113"
+            "bare": "bare/src/snake.brs:115"
           },
           {
             "name": "arrow.left",
             "y": "y/src/snake.y:109",
-            "bare": "bare/src/snake.brs:115"
+            "bare": "bare/src/snake.brs:117"
           },
           {
             "name": "arrow.right",
             "y": "y/src/snake.y:111",
-            "bare": "bare/src/snake.brs:117"
+            "bare": "bare/src/snake.brs:119"
           },
           {
             "name": "arrow.other",
             "y": "y/src/snake.y:113",
-            "bare": "bare/src/snake.brs:119"
+            "bare": "bare/src/snake.brs:121"
           }
         ]
       }
@@ -228,22 +228,22 @@
           {
             "name": "moved.into_wall",
             "y": "y/src/snake.y:131",
-            "bare": "bare/src/snake.brs:132"
+            "bare": "bare/src/snake.brs:134"
           },
           {
             "name": "moved.into_itself",
             "y": "y/src/snake.y:135",
-            "bare": "bare/src/snake.brs:134"
+            "bare": "bare/src/snake.brs:136"
           },
           {
             "name": "moved.onto_food",
             "y": "y/src/snake.y:137",
-            "bare": "bare/src/snake.brs:136"
+            "bare": "bare/src/snake.brs:138"
           },
           {
             "name": "moved.on",
             "y": "y/src/snake.y:142",
-            "bare": "bare/src/snake.brs:141"
+            "bare": "bare/src/snake.brs:143"
           }
         ]
       }
@@ -255,12 +255,12 @@
           {
             "name": "reversing",
             "y": "y/src/snake.y:157",
-            "bare": "bare/src/snake.brs:155"
+            "bare": "bare/src/snake.brs:157"
           },
           {
             "name": "turning",
             "y": "y/src/snake.y:159",
-            "bare": "bare/src/snake.brs:157"
+            "bare": "bare/src/snake.brs:159"
           }
         ]
       }
@@ -274,22 +274,22 @@
           {
             "name": "going.up",
             "y": "y/src/snake.y:172",
-            "bare": "bare/src/snake.brs:168"
+            "bare": "bare/src/snake.brs:170"
           },
           {
             "name": "going.down",
             "y": "y/src/snake.y:174",
-            "bare": "bare/src/snake.brs:169"
+            "bare": "bare/src/snake.brs:171"
           },
           {
             "name": "going.left",
             "y": "y/src/snake.y:176",
-            "bare": "bare/src/snake.brs:170"
+            "bare": "bare/src/snake.brs:172"
           },
           {
             "name": "going.right",
             "y": "y/src/snake.y:178",
-            "bare": "bare/src/snake.brs:171"
+            "bare": "bare/src/snake.brs:173"
           }
         ]
       }
@@ -303,22 +303,22 @@
           {
             "name": "going.up",
             "y": "y/src/snake.y:192",
-            "bare": "bare/src/snake.brs:182"
+            "bare": "bare/src/snake.brs:184"
           },
           {
             "name": "going.down",
             "y": "y/src/snake.y:194",
-            "bare": "bare/src/snake.brs:183"
+            "bare": "bare/src/snake.brs:185"
           },
           {
             "name": "going.left",
             "y": "y/src/snake.y:196",
-            "bare": "bare/src/snake.brs:184"
+            "bare": "bare/src/snake.brs:186"
           },
           {
             "name": "going.right",
             "y": "y/src/snake.y:198",
-            "bare": "bare/src/snake.brs:185"
+            "bare": "bare/src/snake.brs:187"
           }
         ]
       }
@@ -330,7 +330,7 @@
           {
             "name": "row",
             "y": "y/src/snake.y:223",
-            "bare": "bare/src/snake.brs:203"
+            "bare": "bare/src/snake.brs:205"
           }
         ]
       },
@@ -340,7 +340,7 @@
           {
             "name": "column",
             "y": "y/src/snake.y:224",
-            "bare": "bare/src/snake.brs:204"
+            "bare": "bare/src/snake.brs:206"
           }
         ]
       },
@@ -350,12 +350,12 @@
           {
             "name": "taken",
             "y": "y/src/snake.y:227",
-            "bare": "bare/src/snake.brs:206"
+            "bare": "bare/src/snake.brs:208"
           },
           {
             "name": "vacant",
             "y": "y/src/snake.y:229",
-            "bare": "bare/src/snake.brs:208"
+            "bare": "bare/src/snake.brs:210"
           }
         ]
       }
@@ -367,12 +367,12 @@
           {
             "name": "full",
             "y": "y/src/snake.y:244",
-            "bare": "bare/src/snake.brs:222"
+            "bare": "bare/src/snake.brs:224"
           },
           {
             "name": "room",
             "y": "y/src/snake.y:246",
-            "bare": "bare/src/snake.brs:224"
+            "bare": "bare/src/snake.brs:226"
           }
         ]
       }
@@ -386,22 +386,22 @@
           {
             "name": "shown.playing",
             "y": "y/src/snake.y:283",
-            "bare": "bare/src/snake.brs:264"
+            "bare": "bare/src/snake.brs:266"
           },
           {
             "name": "shown.crashed",
             "y": "y/src/snake.y:285",
-            "bare": "bare/src/snake.brs:265"
+            "bare": "bare/src/snake.brs:267"
           },
           {
             "name": "shown.bitten",
             "y": "y/src/snake.y:287",
-            "bare": "bare/src/snake.brs:266"
+            "bare": "bare/src/snake.brs:268"
           },
           {
             "name": "shown.filled",
             "y": "y/src/snake.y:289",
-            "bare": "bare/src/snake.brs:267"
+            "bare": "bare/src/snake.brs:269"
           }
         ]
       }
@@ -413,12 +413,12 @@
           {
             "name": "part",
             "y": "y/src/snake.y:307",
-            "bare": "bare/src/snake.brs:281"
+            "bare": "bare/src/snake.brs:283"
           },
           {
             "name": "no_tail",
             "y": "y/src/snake.y:309",
-            "bare": "bare/src/snake.brs:281"
+            "bare": "bare/src/snake.brs:283"
           }
         ]
       }
@@ -430,12 +430,12 @@
           {
             "name": "open",
             "y": "y/src/snake.y:348",
-            "bare": "bare/src/snake.brs:315"
+            "bare": "bare/src/snake.brs:317"
           },
           {
             "name": "closed_at_once",
             "y": "y/src/snake.y:364",
-            "bare": "bare/src/snake.brs:315"
+            "bare": "bare/src/snake.brs:317"
           }
         ]
       },
@@ -445,12 +445,12 @@
           {
             "name": "again",
             "y": "y/src/snake.y:353",
-            "bare": "bare/src/snake.brs:319"
+            "bare": "bare/src/snake.brs:321"
           },
           {
             "name": "going_on",
             "y": "y/src/snake.y:356",
-            "bare": "bare/src/snake.brs:322"
+            "bare": "bare/src/snake.brs:324"
           }
         ]
       }
@@ -462,12 +462,12 @@
           {
             "name": "pressed",
             "y": "y/src/snake.y:375",
-            "bare": "bare/src/snake.brs:339"
+            "bare": "bare/src/snake.brs:341"
           },
           {
             "name": "no_keys",
             "y": "y/src/snake.y:377",
-            "bare": "bare/src/snake.brs:339"
+            "bare": "bare/src/snake.brs:341"
           }
         ]
       }
@@ -479,12 +479,12 @@
           {
             "name": "due",
             "y": "y/src/snake.y:395",
-            "bare": "bare/src/snake.brs:354"
+            "bare": "bare/src/snake.brs:356"
           },
           {
             "name": "not_due",
             "y": "y/src/snake.y:398",
-            "bare": "bare/src/snake.brs:354"
+            "bare": "bare/src/snake.brs:356"
           }
         ]
       }

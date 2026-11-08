@@ -16,7 +16,7 @@
     {
       "kind": "static",
       "name": "hangman_example::WORDS",
-      "type": "LazyLock<list<element_type=Word> as 'Vec'>"
+      "type": "LazyLock<list<element_type=Word> as 'List'>"
     },
     {
       "kind": "function",

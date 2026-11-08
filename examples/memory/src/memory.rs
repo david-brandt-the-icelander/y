@@ -6,8 +6,10 @@
 //! `window.next_frame()`: Y has no `async`, and Rust's colouring makes them `async fn`s.
 
 use std::time::{Duration, Instant};
+use y_collections::{list, List};
 use y_http::{Http, HttpError};
 use y_runtime::{ensure, list, require, time, Clock, Deadline, Expired, Forever, Random, Within};
+use y_string::YString;
 use y_window::{Colour, Key, Picture, PictureError, Point, Window};
 use self::{drawing::*, rules::*, setup::*};
 
@@ -84,13 +86,13 @@ pub mod setup {
     #[derive(Clone, Debug, PartialEq)]
     pub struct Game {
         /// For each card, in the order they are numbered, the number of the picture it shows.
-        pub(super) pairs: Vec<u32>,
+        pub(super) pairs: List<u32>,
         /// For each card, in the same order, which side is up.
-        pub(super) sides: Vec<Side>,
+        pub(super) sides: List<Side>,
         /// The pictures, numbered from 1.
-        pub(super) pictures: Vec<Picture>,
+        pub(super) pictures: List<Picture>,
         /// The cards turned face up this turn, and not yet matched: none, one or two.
-        pub(super) turned: Vec<u32>,
+        pub(super) turned: List<u32>,
         /// When the second card of the turn was turned, or when the game started.
         pub(super) turned_at: Instant,
         /// How many pairs have been found.
@@ -138,28 +140,29 @@ pub mod setup {
     /// - Fails `TimedOut`: the pictures took longer than the fetch time to come.
     /// - Fails `NotAPicture`: what OpenMoji gave is not a picture.
     pub async fn new_game(random: &mut Random, clock: &mut Clock, site: &Http) -> Result<Game, SetupError> {
-        let codes = random.chosen(&faces::CODES, board::PAIRS);
-        let mut pictures = Vec::new();
+        let codes = List::from(random.chosen(&faces::CODES.map(YString::new), board::PAIRS));
+        let mut pictures = List::new();
         {
             // y: region fetch is within game_rules.fetch_time or fail
             let deadline = Deadline::after(game_rules::FETCH_TIME);
             for code in codes { // y: #code
                 let drawing = site.get(&format!("/data/color/svg/{code}.svg"), &deadline).await?;
-                let made = Picture::from_svg(&drawing, layout::PICTURE_SIZE)?;
+                let drawing = YString::from(drawing);
+                let made = Picture::from_svg(drawing.as_str(), layout::PICTURE_SIZE)?;
                 pictures.push(made);
             }
         }
-        let mut dealt = Vec::new();
+        let mut dealt = List::new();
         for number in 1..=board::PAIRS { // y: #number
             dealt.push(number);
             dealt.push(number);
         }
         let now = clock.now();
         let started = Game {
-            pairs: random.shuffled(&dealt),
-            sides: list::repeated(Side::FaceDown, board::CARDS),
+            pairs: List::from(random.shuffled(&dealt)),
+            sides: List::from(list::repeated(Side::FaceDown, board::CARDS)),
             pictures,
-            turned: Vec::new(),
+            turned: List::new(),
             turned_at: now,
             matches: 0,
             lives: game_rules::LIVES,
@@ -209,7 +212,7 @@ pub mod rules {
         } else if list::at_number(&game.pairs, game.turned[0]) == list::at_number(&game.pairs, number) { // y: #turn.matching
             list::set_number(&mut game.sides, game.turned[0], Side::Matched);
             list::set_number(&mut game.sides, number, Side::Matched);
-            game.turned = Vec::new();
+            game.turned = List::new();
             game.matches += 1;
         } else { // y: #turn.different
             list::set_number(&mut game.sides, number, Side::FaceUp);
@@ -227,7 +230,7 @@ pub mod rules {
         for number in &game.turned { // y: #number
             list::set_number(&mut game.sides, *number, Side::FaceDown);
         }
-        game.turned = Vec::new();
+        game.turned = List::new();
     }
 
     /// Where a game stands: won when every pair is found, lost when no life is left, and otherwise still being played.
@@ -345,20 +348,20 @@ pub mod drawing {
     /// - `game`: the game.
     /// - `highest`: the best score so far.
     /// - Returns the two lines.
-    pub fn banner(game: &Game, highest: u32) -> Vec<String> {
+    pub fn banner(game: &Game, highest: u32) -> List<YString> {
         let seconds = time::whole_seconds(game.elapsed);
         match standing(game) {
-            Outcome::Playing => vec![ // y: #shown.playing
-                format!("Pairs {} of {}   Lives {}   Time {seconds}s   Best {highest}", game.matches, board::PAIRS, game.lives),
-                "Click two cards to turn them over. Escape quits.".to_string(),
+            Outcome::Playing => list![ // y: #shown.playing
+                YString::from(format!("Pairs {} of {}   Lives {}   Time {seconds}s   Best {highest}", game.matches, board::PAIRS, game.lives)),
+                YString::new("Click two cards to turn them over. Escape quits."),
             ],
-            Outcome::Won => vec![ // y: #shown.won
-                format!("All pairs in {seconds}s! Score {}   Best {highest}", score(game)),
-                "Space plays again. Escape quits.".to_string(),
+            Outcome::Won => list![ // y: #shown.won
+                YString::from(format!("All pairs in {seconds}s! Score {}   Best {highest}", score(game))),
+                YString::new("Space plays again. Escape quits."),
             ],
-            Outcome::Lost => vec![ // y: #shown.lost
-                format!("Out of lives with {} pairs. Score {}   Best {highest}", game.matches, score(game)),
-                "Space plays again. Escape quits.".to_string(),
+            Outcome::Lost => list![ // y: #shown.lost
+                YString::from(format!("Out of lives with {} pairs. Score {}   Best {highest}", game.matches, score(game))),
+                YString::new("Space plays again. Escape quits."),
             ],
         }
     }
@@ -379,10 +382,10 @@ pub mod drawing {
         }
         let lines = banner(game, highest);
         let top = layout::HEIGHT - layout::BAR_HEIGHT;
-        let credit = "Pictures: OpenMoji, CC BY-SA 4.0";
-        window.write(&lines[0], layout::GAP, top + 24, layout::TEXT_SIZE, palette::TEXT);
-        window.write(&lines[1], layout::GAP, top + 50, layout::TEXT_SIZE, palette::TEXT);
-        window.write(credit, layout::GAP, top + 76, layout::TEXT_SIZE, palette::CREDIT);
+        let credit = YString::new("Pictures: OpenMoji, CC BY-SA 4.0");
+        window.write(lines[0].as_str(), layout::GAP, top + 24, layout::TEXT_SIZE, palette::TEXT);
+        window.write(lines[1].as_str(), layout::GAP, top + 50, layout::TEXT_SIZE, palette::TEXT);
+        window.write(credit.as_str(), layout::GAP, top + 76, layout::TEXT_SIZE, palette::CREDIT);
     }
 }
 
@@ -431,8 +434,8 @@ fn draw_picture(game: &Game, number: u32, corner: Point, window: &mut Window) {
 /// - `window`, `forever`: the Y `injected` parameters.
 async fn show_fetching(window: &mut Window, forever: &Forever) {
     window.clear(palette::BACKGROUND);
-    let message = "Fetching pictures from OpenMoji...";
-    window.write(message, layout::GAP, layout::HEIGHT / 2, layout::TEXT_SIZE, palette::TEXT);
+    let message = YString::new("Fetching pictures from OpenMoji...");
+    window.write(message.as_str(), layout::GAP, layout::HEIGHT / 2, layout::TEXT_SIZE, palette::TEXT);
     window.next_frame(forever).await; // y: region frame_shown is forever because "a hidden window shows no frames, and the game waits until it is shown"
 }
 
@@ -452,7 +455,7 @@ pub mod window_play {
         let mut highest = 0;
         let mut quitting = false;
         while !quitting && !window.close_requested() { // y: #open, else #closed_at_once
-            let keys = window.keys_pressed();
+            let keys = List::from(window.keys_pressed());
             let now = clock.now();
             quitting = keys.contains(&Key::Escape);
             let reached = standing(&game);
@@ -463,7 +466,7 @@ pub mod window_play {
                 turn_back(&mut game);
             } else if reached == Outcome::Playing { // y: #moment.picking
                 game.elapsed = now - game.started;
-                pick(&mut game, &window.clicks(), now);
+                pick(&mut game, &List::from(window.clicks()), now);
             } else { // y: #moment.over
                 highest = highest.max(score(&game));
             }
@@ -479,7 +482,7 @@ pub mod window_play {
 /// - `game`: the game, which changes.
 /// - `clicks`: the points clicked.
 /// - `now`: the time now.
-fn pick(game: &mut Game, clicks: &[Point], now: Instant) {
+fn pick(game: &mut Game, clicks: &List<Point>, now: Instant) {
     for place in clicks { // y: #place, else #no_clicks
         let choice = choosable(game, *place);
         match choice {

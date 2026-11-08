@@ -5,7 +5,9 @@
 //! `play` may suspend, because `window.next_frame()` may: Y has no `async`, and Rust's colouring makes it an `async fn`.
 
 use std::time::Instant;
+use y_collections::List;
 use y_runtime::{ensure, list, require, Clock, Forever, Random};
+use y_string::YString;
 use y_window::{Colour, Key, Window};
 use self::{drawing::*, rules::*, setup::*};
 
@@ -81,7 +83,7 @@ mod setup {
     fn new_game(random) {
         let fresh = Game {
             head: Cell { column: 6, row: 7 },
-            tail: vec![Cell { column: 5, row: 7 }, Cell { column: 4, row: 7 }],
+            tail: y_collections::list![Cell { column: 5, row: 7 }, Cell { column: 4, row: 7 }],
             heading: Direction::Right,
             wanted: Direction::Right,
             // until `place_food` chooses a free cell
@@ -134,14 +136,14 @@ mod rules {
         } else if list::without_last(&game.tail).contains(&ahead) { // y: #moved.into_itself
             game.standing = Outcome::Bitten;
         } else if ahead == game.food { // y: #moved.onto_food
-            game.tail.insert(0, game.head);
+            game.tail.push_front(game.head);
             game.head = ahead;
             game.eaten += 1;
             place_food(game, random);
         } else { // y: #moved.on
-            game.tail.insert(0, game.head);
+            game.tail.push_front(game.head);
             game.head = ahead;
-            game.tail.pop();
+            game.tail.take_back();
         }
     }
 }
@@ -199,7 +201,7 @@ fn on_board(place) {
 /// - `game`: the game.
 /// - Returns the cells.
 fn free_cells(game) {
-    let found = Vec::new();
+    let found = List::new();
     for row in 0..board::ROWS { // y: #row
         for column in 0..board::COLUMNS { // y: #column
             let place = Cell { column, row };
@@ -222,7 +224,7 @@ fn place_food(game, random) {
     if free.is_empty() { // y: #full
         game.standing = Outcome::Filled;
     } else { // y: #room
-        game.food = free[random.index_below(free.len())];
+        game.food = free[random.index_below(free.count())];
     }
 }
 
@@ -261,10 +263,10 @@ mod drawing {
     /// - Returns the text.
     fn banner(game, highest) {
         match game.standing {
-            Outcome::Playing => format!("Score {}   Best {highest}   Arrows steer, Escape quits", game.eaten), // y: #shown.playing
-            Outcome::Crashed => format!("Crashed into the wall with {}. Space plays again.", game.eaten), // y: #shown.crashed
-            Outcome::Bitten => format!("Bit itself with {}. Space plays again.", game.eaten), // y: #shown.bitten
-            Outcome::Filled => format!("Filled the board with {}! Space plays again.", game.eaten), // y: #shown.filled
+            Outcome::Playing => YString::from(format!("Score {}   Best {highest}   Arrows steer, Escape quits", game.eaten)), // y: #shown.playing
+            Outcome::Crashed => YString::from(format!("Crashed into the wall with {}. Space plays again.", game.eaten)), // y: #shown.crashed
+            Outcome::Bitten => YString::from(format!("Bit itself with {}. Space plays again.", game.eaten)), // y: #shown.bitten
+            Outcome::Filled => YString::from(format!("Filled the board with {}! Space plays again.", game.eaten)), // y: #shown.filled
         }
     }
 
@@ -283,7 +285,7 @@ mod drawing {
         }
         fill_cell(&game.head, palette::HEAD, window);
         let line = banner(game, highest);
-        window.write(&line, 12, layout::HEIGHT - 14, 24, palette::TEXT);
+        window.write(line.as_str(), 12, layout::HEIGHT - 14, 24, palette::TEXT);
     }
 }
 
@@ -313,7 +315,7 @@ mod window_play {
         let last_step = clock.now();
         let quitting = false;
         while !quitting && !window.close_requested() { // y: #open, else #closed_at_once
-            let keys = window.keys_pressed();
+            let keys = List::from(window.keys_pressed());
             let now = clock.now();
             quitting = keys.contains(&Key::Escape);
             if game.standing != Outcome::Playing && keys.contains(&Key::Space) { // y: #again

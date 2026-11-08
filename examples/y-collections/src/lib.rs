@@ -20,6 +20,44 @@
 //! | `unordered_map` | unordered | [`UnorderedMap`] | `HashMap` |
 //! | `multimap` | ordered by insertion; values many | [`MultiMap`] | a [`Map`] from each key to a `Vec` |
 //!
+//! **A kind's constraints are enforced by what it offers.** An operation its constraints rule out is not a method of
+//! its type, so lowered code that uses one does not compile, as the Y source does not (Y § 3.13). A queue offers
+//! `back_add` and `front_take`, so it cannot be indexed:
+//!
+//! ```compile_fail
+//! let mut q = y_collections::Queue::new();
+//! q.add(1);
+//! let _ = q[0];
+//! ```
+//!
+//! nor taken from the back:
+//!
+//! ```compile_fail
+//! let mut q = y_collections::Queue::new();
+//! q.add(1);
+//! q.take_back();
+//! ```
+//!
+//! An `unordered_set` has no order to observe, so it cannot be iterated; it can be sorted:
+//!
+//! ```compile_fail
+//! let s: y_collections::UnorderedSet<u8> = [3, 1].into_iter().collect();
+//! for x in s.iter() {}
+//! ```
+//!
+//! ```
+//! let s: y_collections::UnorderedSet<u8> = [3, 1].into_iter().collect();
+//! assert_eq!(s.sorted().iter().copied().collect::<Vec<_>>(), [1, 3]);
+//! ```
+//!
+//! A stack offers its back only:
+//!
+//! ```compile_fail
+//! let mut s = y_collections::Stack::new();
+//! s.push(1);
+//! s.take_front();
+//! ```
+//!
 //! An unordered kind has no iterator: it offers membership, counting, `all`, `any`, set operations and `sorted()`,
 //! whose results cannot depend on hash order, so replay never sees it (Y § 4.7). A count is a `usize` and a position is
 //! from 0, as the lowering's `count<unit_type=t>` and `index<unit_type=t>` are. Reading a position that does not exist is `None`;
@@ -85,6 +123,101 @@ impl<T> FromIterator<T> for List<T> {
     fn from_iter<I: IntoIterator<Item = T>>(items: I) -> Self {
         List(items.into_iter().collect())
     }
+}
+
+impl<T> List<T> {
+    /// Inserts at a position, moving the later elements back. A position past the end is a fault.
+    pub fn insert(&mut self, index: usize, value: T) {
+        if index > self.0.len() {
+            no_such_position("list");
+        }
+        self.0.insert(index, value);
+    }
+    /// Removes the element at a position, moving the later ones forward. A position past the end is a fault.
+    pub fn remove(&mut self, index: usize) -> T {
+        if index >= self.0.len() {
+            no_such_position("list");
+        }
+        self.0.remove(index)
+    }
+    /// Keeps the elements that pass, in order.
+    pub fn retain(&mut self, keep: impl FnMut(&T) -> bool) {
+        self.0.retain(keep);
+    }
+    pub fn extend(&mut self, items: impl IntoIterator<Item = T>) {
+        self.0.extend(items);
+    }
+    pub fn clear(&mut self) {
+        self.0.clear();
+    }
+    /// The Rust form, for a native function whose signature names a `Vec`.
+    pub fn into_vec(self) -> Vec<T> {
+        self.0
+    }
+}
+
+/// A list is read and written by position: its elements as a slice, which is what `offers index` allows.
+impl<T> std::ops::Deref for List<T> {
+    type Target = [T];
+    fn deref(&self) -> &[T] {
+        &self.0
+    }
+}
+
+impl<T> std::ops::DerefMut for List<T> {
+    fn deref_mut(&mut self) -> &mut [T] {
+        &mut self.0
+    }
+}
+
+impl<T> From<Vec<T>> for List<T> {
+    fn from(items: Vec<T>) -> Self {
+        List(items)
+    }
+}
+
+impl<T, const N: usize> From<[T; N]> for List<T> {
+    fn from(items: [T; N]) -> Self {
+        List(items.into())
+    }
+}
+
+impl<T: Clone> From<&[T]> for List<T> {
+    fn from(items: &[T]) -> Self {
+        List(items.to_vec())
+    }
+}
+
+impl<T> IntoIterator for List<T> {
+    type Item = T;
+    type IntoIter = std::vec::IntoIter<T>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a List<T> {
+    type Item = &'a T;
+    type IntoIter = std::slice::Iter<'a, T>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a mut List<T> {
+    type Item = &'a mut T;
+    type IntoIter = std::slice::IterMut<'a, T>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter_mut()
+    }
+}
+
+/// `list![a, b, c]`: a list literal, as `vec!` is a vector's.
+#[macro_export]
+macro_rules! list {
+    () => { $crate::List::new() };
+    ($($x:expr),+ $(,)?) => { $crate::List::from([$($x),+]) };
+    ($x:expr; $n:expr) => { $crate::List::from(vec![$x; $n]) };
 }
 
 /// Y's `array`: ordered by position; count fixed; offers index.
@@ -452,6 +585,23 @@ impl<T: Hash + Eq + Clone> Set<T> {
     pub fn iter(&self) -> std::slice::Iter<'_, T> {
         self.order.iter()
     }
+    pub fn is_empty(&self) -> bool {
+        self.order.is_empty()
+    }
+}
+
+impl<'a, T: Hash + Eq + Clone> IntoIterator for &'a Set<T> {
+    type Item = &'a T;
+    type IntoIter = std::slice::Iter<'a, T>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.order.iter()
+    }
+}
+
+impl<T: Hash + Eq + Clone> Hash for Set<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.order.hash(state);
+    }
 }
 
 impl<T: Hash + Eq + Clone> FromIterator<T> for Set<T> {
@@ -568,6 +718,26 @@ impl<T: Hash + Eq> Bag<T> {
     pub fn count(&self) -> usize {
         self.count
     }
+    /// Adds `times` elements equal to `value`.
+    pub fn add_times(&mut self, value: T, times: usize) {
+        if times > 0 {
+            *self.counts.entry(value).or_insert(0) += times;
+            self.count += times;
+        }
+    }
+    /// Removes `times` elements equal to `value`; the bag must hold that many, or it is a fault.
+    pub fn remove_times(&mut self, value: &T, times: usize) {
+        let held = self.count_of(value);
+        if held < times {
+            y_runtime::fault("y_collections::bag", "removes more than the bag holds");
+        }
+        if held == times {
+            self.counts.remove(value);
+        } else if let Some(n) = self.counts.get_mut(value) {
+            *n -= times;
+        }
+        self.count -= times;
+    }
     /// How many of the bag's elements equal `value`.
     pub fn count_of(&self, value: &T) -> usize {
         self.counts.get(value).copied().unwrap_or(0)
@@ -595,6 +765,16 @@ impl<T: Hash + Eq> Bag<T> {
         T: Ord + Clone,
     {
         self.counts.iter().flat_map(|(x, n)| std::iter::repeat_n(x.clone(), *n)).collect()
+    }
+}
+
+impl<T: Hash + Eq> FromIterator<T> for Bag<T> {
+    fn from_iter<I: IntoIterator<Item = T>>(items: I) -> Self {
+        let mut bag = Bag::new();
+        for x in items {
+            bag.add(x);
+        }
+        bag
     }
 }
 

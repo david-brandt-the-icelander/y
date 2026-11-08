@@ -988,7 +988,7 @@ impl<'m> Function<'m> {
         while k < items.len() {
             self.note_type(&items[k].text);
             let mut j = k + 1;
-            while j < items.len() && items[j].text.starts_with("else ") {
+            while j < items.len() && (items[j].text.starts_with("else ") || items[j].text.starts_with("orelse ")) {
                 j += 1;
             }
             let mut next = vec![];
@@ -1023,6 +1023,26 @@ impl<'m> Function<'m> {
         let elses: Vec<&Item> = items[k + 1..].iter().take_while(|it| it.text.starts_with("else ")).collect();
         let m = self.module;
         let say = |s: &str| s.to_string();
+
+        // `region a is …:` with `orelse region b is …:` after it: a decision whose outcomes are the regions
+        if let Some(c) = re!(r"^region (\w+) is .*:$").captures(text) {
+            let mut alternatives: Vec<(String, &[Item])> = vec![];
+            for it in &items[k + 1..] {
+                match re!(r"^orelse region (\w+) is .*:$").captures(&it.text) {
+                    Some(o) => alternatives.push((cap(&o, 1), &it.kids)),
+                    None => break,
+                }
+            }
+            if !alternatives.is_empty() {
+                let mut out = vec![];
+                for (name, body) in [(cap(&c, 1), &kids[..])].into_iter().chain(alternatives) {
+                    for (kind, steps, f2) in self.seq(body, facts.clone()) {
+                        out.push((kind, [vec![name.clone()], steps].concat(), f2));
+                    }
+                }
+                return out;
+            }
+        }
 
         if let Some(c) = re!(r"^if (\w+) = (.*):$").captures(text) {
             let (name, pred) = (cap(&c, 1), cap(&c, 2));
@@ -1132,7 +1152,7 @@ impl<'m> Function<'m> {
             return vec![(text.to_string(), vec![], facts)];
         }
 
-        let mut outs = if !kids.is_empty() && re!(r"^(region |within |inject\(|inject:)").is_match(text) {
+        let mut outs = if !kids.is_empty() && re!(r"^(region |arena |within |inject\(|inject:)").is_match(text) {
             self.seq(kids, facts.clone())
         } else {
             vec![(say("next"), vec![], facts.clone())]

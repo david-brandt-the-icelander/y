@@ -26,7 +26,7 @@
       "kind": "type",
       "name": "hangman_example::hangman::setup::Word",
       "visible": "public",
-      "fields": [{ "type": "string", "hold": { "kind": "owns" } }],
+      "fields": [{ "type": "string as 'YString'", "hold": { "kind": "owns" } }],
       "implements": [
         { "trait": "fmt::Display", "impl": "hangman_example::hangman::setup::Word as fmt::Display" }
       ],
@@ -49,7 +49,7 @@
       "kind": "function",
       "name": "hangman_example::hangman::setup::Word::new",
       "visible": "public",
-      "params": [{ "name": "value", "type": "string" }],
+      "params": [{ "name": "value", "type": "string as 'YString'" }],
       "result": { "type": "Word", "fails": "ConstraintViolation" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:24" }]
     },
@@ -64,7 +64,10 @@
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "ref<target_type=string>", "hold": { "kind": "borrows", "from": "self" } }
+      "result": {
+        "type": "ref<target_type=string as 'YString'>",
+        "hold": { "kind": "borrows", "from": "self" }
+      }
     },
     { "kind": "impl", "name": "hangman_example::hangman::setup::Word as fmt::Display" },
     {
@@ -97,11 +100,11 @@
       "params": [
         {
           "name": "text",
-          "type": "ref<target_type=string>",
+          "type": "ref<target_type=string as 'YString'>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "list<element_type=Word> as 'Vec'", "fails": "WordListError" },
+      "result": { "type": "list<element_type=Word> as 'List'", "fails": "WordListError" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:46" }]
     },
     { "kind": "module", "name": "hangman_example::hangman::rounds", "visible": "public" },
@@ -121,14 +124,14 @@
           "name": "hits",
           "visible": "path",
           "visible_path": "super",
-          "type": "set<element_type=Rune> as 'BTreeSet'",
+          "type": "set<element_type=Rune> as 'Set'",
           "hold": { "kind": "owns" }
         },
         {
           "name": "misses",
           "visible": "path",
           "visible_path": "super",
-          "type": "list<element_type=Rune> as 'Vec'",
+          "type": "list<element_type=Rune> as 'List'",
           "hold": { "kind": "owns" }
         }
       ],
@@ -235,7 +238,7 @@
         },
         {
           "name": "line",
-          "type": "ref<target_type=string>",
+          "type": "ref<target_type=string as 'YString'>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -265,7 +268,7 @@
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "string" },
+      "result": { "type": "string as 'YString'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:188" }]
     },
     {
@@ -273,7 +276,7 @@
       "name": "hangman_example::hangman::display::gallows",
       "visible": "public",
       "params": [{ "name": "misses", "type": "u64 as 'usize'" }],
-      "result": { "type": "string" },
+      "result": { "type": "string as 'YString'" },
       "clauses": [
         {
           "kind": "require",
@@ -291,7 +294,7 @@
         { "name": "letter", "type": "Rune" },
         {
           "name": "hits",
-          "type": "ref<target_type=set<element_type=Rune> as 'BTreeSet'>",
+          "type": "ref<target_type=set<element_type=Rune> as 'Set'>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
@@ -306,11 +309,11 @@
         { "name": "needed", "type": "u64 as 'usize'" },
         {
           "name": "mark",
-          "type": "ref<target_type=string>",
+          "type": "ref<target_type=string as 'YString'>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "string" },
+      "result": { "type": "string as 'YString'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:247" }]
     },
     { "kind": "module", "name": "hangman_example::hangman::console_play", "visible": "public" },
@@ -350,7 +353,7 @@
       "params": [
         {
           "name": "words",
-          "type": "ref<target_type=list<element_type=Word> as 'std::primitive::slice'>",
+          "type": "ref<target_type=list<element_type=Word> as 'List'>",
           "access": { "rights": "read", "guarantee": "readers" }
         },
         {
@@ -414,11 +417,11 @@
         },
         {
           "name": "typed",
-          "type": "ref<target_type=string>",
+          "type": "ref<target_type=string as 'YString'>",
           "access": { "rights": "read", "guarantee": "readers" }
         }
       ],
-      "result": { "type": "string" },
+      "result": { "type": "string as 'YString'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:321" }]
     },
     {
@@ -443,5 +446,10 @@
         { "kind": "effects", "text": "no randomness", "source": "y/src/hangman.y:344" }
       ]
     }
-  ]
+  ],
+  "holes": {
+    "hangman_example::hangman::display::gallows": {
+      "locals": { "texts": "list<element_type=ref<target_type=string>> as 'Vec'" }
+    }
+  }
 }
