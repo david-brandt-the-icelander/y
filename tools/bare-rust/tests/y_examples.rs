@@ -69,10 +69,11 @@ fn read(p: &Path) -> String {
     fs::read_to_string(p).unwrap_or_else(|e| panic!("{}: {e}", p.display()))
 }
 
-/// The constraint file as strip writes it: no clauses, no module level, and the status strip gives.
+/// The constraint file as strip writes it: no clauses, no module level, no regions, and the status strip gives.
 fn without_lowering(js: &Value) -> Value {
     let mut js = js.clone();
     js["status"] = Value::from("lifted");
+    js["subjects"].as_array_mut().unwrap().retain(|s| s["kind"] != "region");
     for s in js["subjects"].as_array_mut().unwrap() {
         s.as_object_mut().unwrap().remove("clauses");
         s.as_object_mut().unwrap().remove("level");
@@ -212,6 +213,55 @@ fn constraint_files_are_valid(name: &str) {
         let errors: Vec<String> = bare_rust::libcheck::validate(&js, None).into_iter().filter(|e| !library_only(e)).collect();
         assert!(errors.is_empty(), "{m}: {errors:#?}");
     }
+    // every module with a `level` uses nothing above it (language 6.22)
+    let bodies: Vec<(String, String, Value)> = modules(&dir)
+        .iter()
+        .map(|m| (format!("bare/src/{m}.brs"), read(&dir.join(format!("bare/src/{m}.brs"))), serde_json::from_str(&read(&dir.join(format!("bare/src/{m}.constraints.json")))).unwrap()))
+        .collect();
+    let errors = bare_rust::level::check(&bodies);
+    assert!(errors.is_empty(), "{errors:#?}");
+}
+
+/// Warehouse's regions and levels are enforced, not only accepted: each change below is refused, by validation
+/// (language 6.23's rules), by weave (a region with no marker in its function, or whose marker says other constraints)
+/// or by the level check (language 6.22).
+#[test]
+fn warehouse_regions_and_levels_are_enforced() {
+    let dir = example("warehouse");
+    let brs = read(&dir.join("bare/src/warehouse.brs"));
+    let js: Value = serde_json::from_str(&read(&dir.join("bare/src/warehouse.constraints.json"))).unwrap();
+    let region = |js: &Value, name: &str| -> usize {
+        js["subjects"].as_array().unwrap().iter().position(|s| s["name"] == format!("warehouse_example::warehouse::{name}")).unwrap()
+    };
+    let woven = |js: &Value| weave_in_crate(&brs, js, Some(&serde_json::Map::new())).err().map(|e| e.msg).unwrap_or_default();
+    let validated = |js: &Value| bare_rust::libcheck::validate(js, None).join("\n");
+    assert_eq!(woven(&js), "");
+    // a region its function does not mark
+    let mut renamed = js.clone();
+    let i = region(&mut renamed, "packing::pack_orders#count_sale");
+    renamed["subjects"][i]["name"] = "warehouse_example::warehouse::packing::pack_orders#count_sales".into();
+    assert!(woven(&renamed).contains("has no `// y: region count_sales is …`"), "{}", woven(&renamed));
+    // a region whose clauses leave out what its marker states
+    let mut fewer = js.clone();
+    let i = region(&mut fewer, "receipts::file_receipts#filing");
+    fewer["subjects"][i]["clauses"].as_array_mut().unwrap().remove(0);
+    assert!(woven(&fewer).contains("the bare body's marker says `uncancellable`, and no clause does"), "{}", woven(&fewer));
+    // a region that waits until a condition, and is not atomic
+    let mut waits = js.clone();
+    let i = region(&mut waits, "stock::reserve#take_from_shelf");
+    waits["subjects"][i]["clauses"].as_array_mut().unwrap().remove(0);
+    assert!(validated(&waits).contains("only an atomic region can wait for"), "{}", validated(&waits));
+    // a region in a function the file does not have
+    let mut lost = js.clone();
+    let i = region(&mut lost, "stock::reserve#put_on_backorder");
+    lost["subjects"][i]["name"] = "warehouse_example::warehouse::stock::restock#put_on_backorder".into();
+    assert!(validated(&lost).contains("which is not a function of the file"), "{}", validated(&lost));
+    // `pricing` pinned below what `split` uses
+    let mut low = js.clone();
+    let i = region(&mut low, "pricing");
+    low["subjects"][i]["level"] = "calculations".into();
+    let errors = bare_rust::level::check(&[("warehouse.brs".into(), brs.clone(), low)]).join("\n");
+    assert!(errors.contains("`&mut` in `warehouse_example::warehouse::pricing::split` needs level `structured`, and module `warehouse_example::warehouse::pricing` is at `calculations`"), "{errors}");
 }
 
 #[test]

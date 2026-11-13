@@ -1,6 +1,7 @@
 """Remake an example's bare files from a fresh strip: the clauses of the committed constraint files carry over by
 subject, each re-pointed at its line in the Y source, and so does a module's `level`; `extra` adds clauses for subjects
-that have none yet, placed at the function, rule or derived value of the subject's name.
+that have none yet, placed at the function, rule or derived value of the subject's name. Regions (`region` subjects,
+language 6.23) carry over too, after their function's subject, their clauses at the region's header.
 
     python3 tools/paths/regen.py <example folder> <strip output> ['{"crate::module::function": [clause, ...]}']
 
@@ -67,9 +68,16 @@ def place(subject, c):
     name = `, both in the function the subject names; an invariant at its `name = ` (or the old line's text); any
     other clause at the head of its function, rule or derived value. When the subject's name is in more than one
     facet, the head nearest the clause's old line."""
+    source = c.get("source")
+    if c["kind"] == "region":
+        # a region's clauses are at its header, `region r is …:` or `orelse region r is …:`, in its function
+        function, region = subject.split("#")
+        hits = [(y, i) for y, h in heads(function) for i in body(y, h) if re.match(rf"\s*(?:orelse )?region {region} is ", src[y][i - 1])]
+        if hits:
+            return near(hits, source)
+        raise SystemExit(f"region {subject}: no `region {region} is` in the function")
     fn = subject.rsplit("::", 1)[1]
     name = c["text"].split()[1] if c["kind"] in ("require", "ensure", "invariant") else None
-    source = c.get("source")
     if c["kind"] in ("require", "ensure"):
         needle = f"where {name} = " if c["kind"] == "require" else f"ensures {name} = "
         hits = [(y, i) for y, h in heads(subject) for i in body(y, h) if needle in src[y][i - 1]]
@@ -99,6 +107,17 @@ for dirpath, _, files in os.walk(f"{stripped}/src"):
         levels = {s["name"]: s["level"] for s in old["subjects"] if "level" in s}
         js = json.load(open(os.path.join(dirpath, f)))
         js["status"] = old["status"]
+        # regions (language 6.23) are the Y lowering's, not strip's: each goes back after its function's subject
+        for r in [r for r in old["subjects"] if r["kind"] == "region"]:
+            fn = r["name"].split("#")[0]
+            at_fn = [k for k, x in enumerate(js["subjects"]) if x["name"] == fn and x["kind"] == "function"]
+            if not at_fn:
+                print(f"dropped region {r['name']}: no function {fn}")
+                continue
+            k = at_fn[0] + 1
+            while k < len(js["subjects"]) and js["subjects"][k]["kind"] == "region":
+                k += 1
+            js["subjects"].insert(k, r)
         for s in js["subjects"]:
             if s["name"] in levels:
                 s["level"] = levels[s["name"]]

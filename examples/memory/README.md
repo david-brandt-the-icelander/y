@@ -47,7 +47,7 @@ beneath the board, and this repository holds none of them.
 |---|---|---|---|
 | Y source | `y/src/memory.y`, `y/src/memory.test.y`, `y/src/main.y` | 523, 857, 32 | hand |
 | Bare bodies | `bare/src/memory.brs`, `bare/src/memory/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 493, 671, 56, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
-| Constraint files | `bare/src/*.constraints.json` (131 subjects, 47 clauses) | 1026 | `strip`, plus the clauses and status the Y lowering adds, then `bare-rust libfmt` |
+| Constraint files | `bare/src/*.constraints.json` (134 subjects, 50 clauses) | 1055 | `strip`, plus the clauses, regions and status the Y lowering adds, then `bare-rust libfmt` |
 | Y facts | `bare/y-facts.json` | 1198 | the same, from the Y source and the bare bodies |
 | Rust | `src/memory.rs`, `src/memory/tests.rs`, `src/main.rs`, `src/lib.rs` | 493, 671, 56, 3 | `bare-rust weave`, which gives back the hand-written Rust exactly |
 
@@ -62,7 +62,7 @@ from [`../y-window`](../y-window/), and the clock, the randomness and deadlines 
 |---|---|---|---|
 | `service openmoji:` with `address = url"https://openmoji.org"` | `mod openmoji { const ADDRESS = "https://openmoji.org"; }` | — | the same |
 | `injected site`, as `http<service=openmoji>`, and `site = system.http(openmoji)` in `main` | `site: &Http`, a shared borrow, because `get` does not change it; `system.http(openmoji::ADDRESS)` | `effects only random, clock, site` | `y_http::Http`, or a fake for tests |
-| `region fetch is within game_rules.fetch_time or fail:` around the fetches (Y § 3.8: a region with an execution constraint) | `Deadline::after(game_rules::FETCH_TIME)`, passed to each `site.get` | `y-facts.json` `deadlines`, a new kind | a deadline from the runtime's monotonic time |
+| `region fetch is within game_rules.fetch_time or fail:` around the fetches (Y § 3.8: a region with an execution constraint) | `Deadline::after(game_rules::FETCH_TIME)`, passed to each `site.get` | `y-facts.json` `deadlines`, a new kind; the region `new_game#fetch`, `within game_rules.fetch_time`, in the constraint file (language 6.23) | a deadline from the runtime's monotonic time |
 | `site.get(path"…") or fail`, which fails with `http_error` or, at the deadline, `expired` | `site.get(&path, &deadline).await?` | `y-facts.json` `suspensions` | `Within<HttpError>`, converted through `setup_error`'s `unreachable` and `timed_out` cases |
 | `picture.from_svg(drawing, size: …) or fail` | `Picture::from_svg(&drawing, …)?` | — | drawn by resvg into pixels; the window makes a texture of them when it first draws them |
 | `window.clicks()`, `window.picture(…)`, `point(x:, y:)` | the same, on `Window` and `Point` | — | Macroquad's mouse and textures, or a fake window's frames |

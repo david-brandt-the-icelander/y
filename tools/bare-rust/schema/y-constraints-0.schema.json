@@ -341,13 +341,14 @@
             "alias",
             "module",
             "use",
-            "macro"
+            "macro",
+            "region"
           ]
         },
         "name": {
           "type": "string",
           "minLength": 1,
-          "description": "The subject's path. A `use` is named `<scope>::use <path as written>`, and is a subject only when it has a visibility (`pub use a::b;`). In a library file, the canonical public path (`std::collections::HashMap::get`, `std::primitive::str::chars`, `std::vec!`)."
+          "description": "The subject's path. A `region` (language 6.23) is named `<function>#<region>`: the function's path and the region's name in it. A `use` is named `<scope>::use <path as written>`, and is a subject only when it has a visibility (`pub use a::b;`). In a library file, the canonical public path (`std::collections::HashMap::get`, `std::primitive::str::chars`, `std::vec!`)."
         },
         "visible": {
           "enum": [
@@ -496,6 +497,22 @@
       },
       "additionalProperties": false,
       "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "region"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "name": {
+                "pattern": "^[a-z_][a-z0-9_]*(::[a-z_][a-z0-9_]*)*#[a-z_][a-z0-9_]*$"
+              }
+            }
+          }
+        },
         {
           "if": {
             "required": [
@@ -658,7 +675,7 @@
         "source"
       ],
       "additionalProperties": false,
-      "description": "A clause the signature slots cannot say. `kind` names the family and `string` is the clause in the syntax of language 15, keyword included (`ensure found : result == self[k]`); `panics` is `fails panic when p`, `panic` being the Rust host's runtime failure. A `callback` clause may name the call's arguments and result (`callback f : called exactly once when exists self, with self, returning r`; the names `with` gives and `returning` binds are in scope in the subject's other clauses, language 6.13), and a `protocol` is a regular expression over the subject's calls (`protocol self.next+`). Language 6.14 adds clauses to existing kinds: `effects` `evaluable at compile time`, `result must be used` with `must be used` on a type or trait, `hold` `hold result : moved from v` and `lifetime v ends in call when p` and `lifetime a, b survive call`, `never panics except exhausted`, `budget work expected amortised O(1)`, `access` `mutates only self[key]`, and `result.0` and `is (a, b)` in expressions; and the kind `obliges`, `obliges caller : p because \"…\"`. Language 6.13 and 6.15 add the calls a result makes later and the sequences of a callback: `callback f : called by result.next, at most once per call, with x, returning y` (`x` and `y` are the lists of the arguments and results of the calls of f in the run), `fails panic in result.next when p`, `final(e)`, and `present`, `select`, `while_true`, `flatten`; language 4 adds `current(h)`, `owner(h)` and `stored_key(m, k)`, and 7.3 `lifetime every item of yields(self) ends with self`. The kind `let` binds a name or a pattern for the clauses after it: `let (head, tail) = result`. `unexpressed` is a promise the language cannot state: `string` is free text and `reason` says why the language cannot say it. Those are the gaps that feed proposal 12.",
+      "description": "A clause the signature slots cannot say. `kind` names the family and `string` is the clause in the syntax of language 15, keyword included (`ensure found : result == self[k]`); `panics` is `fails panic when p`, `panic` being the Rust host's runtime failure. A `callback` clause may name the call's arguments and result (`callback f : called exactly once when exists self, with self, returning r`; the names `with` gives and `returning` binds are in scope in the subject's other clauses, language 6.13), and a `protocol` is a regular expression over the subject's calls (`protocol self.next+`). Language 6.14 adds clauses to existing kinds: `effects` `evaluable at compile time`, `result must be used` with `must be used` on a type or trait, `hold` `hold result : moved from v` and `lifetime v ends in call when p` and `lifetime a, b survive call`, `never panics except exhausted`, `budget work expected amortised O(1)`, `access` `mutates only self[key]`, and `result.0` and `is (a, b)` in expressions; and the kind `obliges`, `obliges caller : p because \"…\"`. Language 6.13 and 6.15 add the calls a result makes later and the sequences of a callback: `callback f : called by result.next, at most once per call, with x, returning y` (`x` and `y` are the lists of the arguments and results of the calls of f in the run), `fails panic in result.next when p`, `final(e)`, and `present`, `select`, `while_true`, `flatten`; language 4 adds `current(h)`, `owner(h)` and `stored_key(m, k)`, and 7.3 `lifetime every item of yields(self) ends with self`. The kind `region` is one constraint on a `region` subject (language 6.23): `within d`, `forever because \"…\"`, `detach because \"…\"`, `uncancellable`, `atomic`, `isolation serializable` or `isolation snapshot`, `may run again`, `waits until name : p`, `on failure unchanged`. The kind `let` binds a name or a pattern for the clauses after it: `let (head, tail) = result`. `unexpressed` is a promise the language cannot state: `string` is free text and `reason` says why the language cannot say it. Those are the gaps that feed proposal 12.",
       "properties": {
         "kind": {
           "enum": [
@@ -684,6 +701,7 @@
             "layout",
             "derive",
             "compat",
+            "region",
             "unexpressed"
           ]
         },

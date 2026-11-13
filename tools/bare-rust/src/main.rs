@@ -56,6 +56,9 @@ const USAGE: &str = "usage:
   bare-rust libfmt <library-file>...
   bare-rust libfmt --expand <library-file>     (print what each type's `derive` list expands to)
       rewrite library files in canonical form
+  bare-rust levels <bare-dir>
+      the level each module needs (language 6.22: data, calculations, structured, shared, effects), from what the bare
+      bodies under it use, and the level pinned on it; fails on a construct above its module's pinned level, as weave does
   bare-rust libstats <library-file> [--work <dir>] [--no-signatures]
       the counts of a library file (entries and clauses by kind, status and source, the `unexpressed` promises by what
       the language lacks) and, unless --no-signatures, how its signatures checked against the real std
@@ -237,6 +240,33 @@ fn run(args: Vec<String>) -> Result<(), String> {
             let n = bare_rust::libcheck::format_files(&paths)?;
             println!("libfmt: {} of {} files rewritten", n, paths.len());
             Ok(())
+        }
+        Some("levels") => {
+            // each module subject's level, pinned or not, against what the bodies under it need (language 6.22)
+            let dir = PathBuf::from(args.get(2).ok_or("levels: a folder of bare files")?);
+            let mut brs = vec![];
+            bare_rust::corpus::find_brs(&dir, &mut brs);
+            brs.sort();
+            let mut files = vec![];
+            for b in &brs {
+                let cj = b.with_extension("constraints.json");
+                let js: serde_json::Value = serde_json::from_str(&rd(&cj.display().to_string())?).map_err(|e| format!("{}: {e}", cj.display()))?;
+                files.push((b.strip_prefix(&dir).unwrap_or(b).display().to_string(), rd(&b.display().to_string())?, js));
+            }
+            for (_, _, js) in &files {
+                for s in js["subjects"].as_array().into_iter().flatten().filter(|s| s["kind"] == "module") {
+                    let m = s["name"].as_str().unwrap_or("");
+                    let pinned = s["level"].as_str().map_or(String::new(), |l| format!(", pinned at {l}"));
+                    let (level, why) = bare_rust::level::needed(&files, m);
+                    let why = why.map_or(String::new(), |(f, u)| format!(": {} in `{}`, {f}:{}", u.what, u.function, u.line));
+                    println!("{m}: needs {level}{pinned}{why}");
+                }
+            }
+            let errs = bare_rust::level::check(&files);
+            for e in &errs {
+                eprintln!("error: {e}");
+            }
+            if errs.is_empty() { Ok(()) } else { Err(format!("levels: {} constructs above their module's level", errs.len())) }
         }
         Some("report") => {
             let dirs: Vec<PathBuf> = args[2..].iter().map(PathBuf::from).collect();

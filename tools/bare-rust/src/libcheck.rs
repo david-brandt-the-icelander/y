@@ -366,6 +366,33 @@ pub fn validate_with(file: &Value, text: Option<&str>, builds: &BTreeSet<String>
         let before_callbacks = scope.clone();
         let binds: Vec<String> = clauses_of().filter(|c| c["kind"] == "callback").filter_map(|c| c["text"].as_str()).flat_map(|t| crate::clause::callback_binds(t, &before_callbacks)).collect();
         scope.names.extend(binds);
+        // language 6.23: a region is named `<function>#<region>`, in a function of the file when the file is a module's;
+        // its clauses, and only its, are of kind `region`, and agree with one another; one that may run again is in a
+        // function that bounds its effects to its state
+        let region_texts: Vec<&str> = clauses_of().filter(|c| c["kind"] == "region").filter_map(|c| c["text"].as_str()).collect();
+        if kind == "region" {
+            match crate::region::split_name(name) {
+                None => errs.push(format!("{at}: a region is named `<function>#<region>`")),
+                Some((f, _)) => {
+                    let function = subject_by_name.get(f).filter(|s| s["kind"] == "function");
+                    if module_file && function.is_none() {
+                        errs.push(format!("{at}: the region is in `{f}`, which is not a function of the file"));
+                    }
+                    let bounded = function.is_some_and(|s| {
+                        s["clauses"].as_array().into_iter().flatten().any(|c| c["kind"] == "effects" && matches!(c["text"].as_str(), Some("pure" | "effects none" | "no io")))
+                    });
+                    if region_texts.contains(&"may run again") && !bounded {
+                        errs.push(format!("{at}: a region that may run again has no effect but on its state, so `{f}` says `no io`, `pure` or `effects none`"));
+                    }
+                }
+            }
+            if clauses_of().any(|c| c["kind"] != "region") {
+                errs.push(format!("{at}: a region's clauses are of kind `region`"));
+            }
+            errs.extend(crate::region::check_clauses(&region_texts).into_iter().map(|e| format!("{at}: {e}")));
+        } else if !region_texts.is_empty() {
+            errs.push(format!("{at}: a `region` clause is for a region subject (`<function>#<region>`)"));
+        }
         for (j, c) in sub["clauses"].as_array().into_iter().flatten().enumerate() {
             let (k, t) = (c["kind"].as_str().unwrap_or(""), c["text"].as_str().unwrap_or(""));
             if k == "derive" {
@@ -373,7 +400,7 @@ pub fn validate_with(file: &Value, text: Option<&str>, builds: &BTreeSet<String>
                 if !crate::derive::is_template(d) || !name.ends_with(&format!("::{d}!")) {
                     errs.push(format!("{at}: clause {j}: `{t}` names a template that is not this derive's"));
                 }
-            } else if k != "unexpressed" {
+            } else if k != "unexpressed" && k != "region" {
                 if !c["given"].is_null() {
                     if !GIVEN_KINDS.contains(&k) {
                         errs.push(format!("{at}: clause {j}: a `{k}` clause is not qualified by `given` (only {})", GIVEN_KINDS.join(", ")));

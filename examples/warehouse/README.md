@@ -47,7 +47,7 @@ The program writes `receipts.store` beside it.
 |---|---|---|---|
 | Y source | `y/src/warehouse.y`, `y/src/warehouse.test.y`, `y/src/main.y` | 287, 316, 63 | hand |
 | Bare bodies | `bare/src/warehouse.brs`, `bare/src/warehouse/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 419, 255, 121, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
-| Constraint files | `bare/src/*.constraints.json` (91 subjects, 7 clauses) | 847 | `strip`, plus the clauses, status and module level the Y lowering adds, then `bare-rust libfmt` |
+| Constraint files | `bare/src/*.constraints.json` (97 subjects, 16 clauses) | 927 | `strip`, plus the clauses, regions, status and module levels the Y lowering adds, then `bare-rust libfmt` |
 | Y facts | `bare/y-facts.json` | 614 | the same, from the Y source and the bare bodies |
 | Rust | `src/warehouse.rs`, `src/warehouse/tests.rs`, `src/main.rs`, `src/lib.rs` | 418, 255, 121, 3 | `bare-rust weave` |
 
@@ -71,6 +71,8 @@ The program writes `receipts.store` beside it.
 | `batch = filed.batch()`, a resource whose release writes the batch and can fail with `store_error` | `Held::new(filed.batch())`, ended with `batch.end()`, whose failure is the function's | `y_runtime::arena::Held`: released exactly once, on a normal exit by `end` and on a failure when it is dropped |
 | `schema item v1:`, `schema item v2:`, `migrate item v1 to v2: vat_rate := tax.standard_rate` | `impl Schema for Item`, whose `decode` reads both versions and migrates version 1 | `y_runtime::store::Store`: records with their versions, read one by one, so a record that fails fails alone, against its key |
 | `store<schema_type=item>`, `system.store(path"items.store")` | `Store<Item>`, `system.store("items.store")`; `Store::fake(lines)` in the tests | — |
+| each `region name is …:` | a `region` subject in the constraint file, `<function>#<name>`, with one clause for each constraint: `atomic`, `waits until enough : …`, `within 10s`, `uncancellable`, `detach because "…"` (constraint language § 6.23). The function marks where the region starts, `// y: region name is …` or `// y: #name` | weave refuses a region its function does not mark, or whose marker states other constraints |
+| the facets' levels, which the Y compiler infers (Y § 3.19) | `"level"` on each facet's module subject: `pricing` at `structured`, `stock` at `shared`, `catalogue::tax` at `data`, the others at `effects` | weave, and `bare-rust levels`, refuse a body that uses more than its module's level: `pricing` at `calculations` fails on `split`'s `&mut` |
 | `constants day:` with lists of structures | functions that make them, since a Rust `const` cannot hold a `List` | — |
 
 ## Checks
