@@ -1,0 +1,51 @@
+{
+  "$schema": "../Meta/Agents/Knowledge/schemas/folder.schema.json",
+  "kind": "folder",
+  "title": "y",
+  "folder": ".",
+  "entities": [
+    {
+      "id": "folder",
+      "title": "y",
+      "summary": "The repository of the Y programming language. It holds no source code yet: only its README, its license and the tooling that documents it.",
+      "purpose": "The repository root holds the README that names the project, the Mozilla Public License 2.0 it is released under, the agent instructions in AGENTS.md, and the skills and knowledge catalogue the .dev files follow in Meta/Agents/.",
+      "boundaries": [
+        "The repository is released under the Mozilla Public License, version 2.0 (LICENSE).",
+        "Meta/Agents/Skills and Meta/Agents/Knowledge are copies of Agents/Skills and Agents/Knowledge in the human-assisted-software-development repository, changed there and copied here."
+      ],
+      "evidenceStatus": "source-verified",
+      "sources": [
+        {
+          "path": "README.md",
+          "symbol": "y"
+        },
+        {
+          "path": "LICENSE",
+          "symbol": "Mozilla Public License Version 2.0"
+        },
+        {
+          "path": "AGENTS.md",
+          "symbol": "Architecture diagrams and knowledge files"
+        }
+      ],
+      "links": [
+        {
+          "path": "README.md",
+          "label": "README"
+        },
+        {
+          "path": "AGENTS.md",
+          "label": "Agent instructions"
+        },
+        {
+          "path": ".dev/component-diagram.json",
+          "label": "The repository's parts"
+        },
+        {
+          "url": "https://github.com/david-brandt-the-icelander/human-assisted-software-development",
+          "label": "human-assisted-software-development"
+        }
+      ]
+    }
+  ]
+}

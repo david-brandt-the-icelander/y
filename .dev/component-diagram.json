@@ -1,0 +1,47 @@
+{
+  "$schema": "../Meta/Agents/Skills/describe-component-diagram/schema.json",
+  "kind": "component",
+  "title": "y component diagram",
+  "folder": ".",
+  "description": "The repository's parts. The Y programming language has no source code here yet; the one part so far is the tooling that documents the repository in .dev folders.",
+  "sources": [
+    {
+      "path": "README.md",
+      "symbol": "y"
+    },
+    {
+      "path": "AGENTS.md",
+      "symbol": "Architecture diagrams and knowledge files"
+    },
+    {
+      "path": "Meta/Agents/Skills/validate_diagrams.py",
+      "symbol": "validate"
+    },
+    {
+      "path": "Meta/Agents/Knowledge/validate_knowledge.py",
+      "symbol": "main"
+    }
+  ],
+  "components": [
+    {
+      "id": "y",
+      "name": "y",
+      "responsibility": "The repository of the Y programming language.",
+      "folder": "."
+    },
+    {
+      "id": "agents",
+      "name": "Skills and knowledge catalogue (Meta/Agents)",
+      "responsibility": "How .dev files are written, and the validators that check them; copied from human-assisted-software-development.",
+      "folder": "Meta/Agents"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "y",
+      "to": "agents",
+      "kind": "contains",
+      "description": "Part of the repository."
+    }
+  ]
+}
