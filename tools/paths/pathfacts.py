@@ -7,7 +7,7 @@ the text it had.
 Places move by comparing the files with the ones in git's HEAD, so run it on uncommitted edits (`rebare.sh` does)."""
 import json, os, re, subprocess, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import yp
+import places, yp
 
 root = sys.argv[1]
 ex = os.path.basename(os.path.abspath(root))
@@ -25,31 +25,33 @@ def lines(p):
 old = {}
 
 
-def moved(place):
-    path, n = place.rsplit(":", 1)
+def old_lines(path):
     if path not in old:
         shown = subprocess.run(["git", "show", f"HEAD:examples/{ex}/{path}"], capture_output=True, text=True, cwd=root)
         # a file not committed yet, in a new example, has not moved
         old[path] = shown.stdout.split("\n") if shown.returncode == 0 else lines(path)
-    text = old[path][int(n) - 1]
-    hits = [i for i, l in enumerate(lines(path), 1) if l == text]
-    if not hits:
-        hits = [i for i, l in enumerate(lines(path), 1) if l.strip() == text.strip()]
-    if not hits and "function " in text:
-        head = text.split("(")[0] + "("
-        hits = [i for i, l in enumerate(lines(path), 1) if l.startswith(head)]
-    if not hits and text.strip():
+    return old[path]
+
+
+def moved(place):
+    """A place found by its old line's text: for facts no test finds (see places.py)."""
+    path, n = place.rsplit(":", 1)
+    hit = places.by_text(old_lines(path), lines(path), int(n))
+    if hit is None:
+        text = old_lines(path)[int(n) - 1] if int(n) <= len(old_lines(path)) else ""
         # a line taken into a region's header keeps its text there: `within d or fail:` in `region r is within d or
         # fail:`, or a claim's `because "…"`
         because = re.search(r'because ".*"', text)
         key = because.group(0) if because else text.strip()
-        hits = [i for i, l in enumerate(lines(path), 1) if "region " in l and key in l]
-    if not hits and len(lines(path)) == len(old[path]):
-        # a line edited in place, in a file that neither gained nor lost lines, keeps its number
-        hits = [int(n)]
-    if not hits:
-        raise SystemExit(f"{place}: `{text}` is gone")
-    return f"{path}:{min(hits, key=lambda i: abs(i - int(n)))}"
+        hits = [i for i, l in enumerate(lines(path), 1) if key and "region " in l and key in l]
+        hit = min(hits, key=lambda i: abs(i - int(n))) if hits else None
+    if hit is None:
+        raise SystemExit(f"{place}: `{old_lines(path)[int(n) - 1]}` is gone")
+    return f"{path}:{hit}"
+
+
+def is_place(v):
+    return isinstance(v, str) and re.fullmatch(r"(y|bare)/src/[\w/.-]+:\d+", v) is not None
 
 
 def relocate(v):
@@ -57,30 +59,79 @@ def relocate(v):
         return {k: relocate(x) for k, x in v.items()}
     if isinstance(v, list):
         return [relocate(x) for x in v]
-    if isinstance(v, str) and re.fullmatch(r"(y|bare)/src/[\w/.-]+:\d+", v):
+    if is_place(v):
         return moved(v)
     return v
 
 
-# a copy stays where it is while its lines still say so; else it moves with its text, or goes with it
+def enclosing(path, n):
+    """The name of the function, rule or `fn` the line is in, and the line it starts at."""
+    head = re.compile(r"^\s*(?:public |private )?(?:function|rule|test) (\w+)\(|^\s*(?:pub(?:\(\w+\))? )?(?:async )?fn (\w+)[<(]")
+    for i in range(n, 0, -1):
+        m = head.match(lines(path)[i - 1])
+        if m:
+            return m.group(1) or m.group(2), i
+    return None, 0
+
+
+def find(kind, found, keep=()):
+    """Re-points the places of every fact of a kind by its anchors (places.py); the rest by their old text."""
+    groups = {}
+    for f in found:
+        for field, (key, test) in places.anchors(kind, f).items():
+            if is_place(f.get(field)):
+                path, n = f[field].rsplit(":", 1)
+                groups.setdefault((key, path), []).append((f, field, int(n), test))
+    done = set()
+    for (key, path), group in groups.items():
+        for (f, field, _, _), hit in zip(group, places.locate([(n, t) for _, _, n, t in group], lines(path))):
+            if hit is not None:
+                f[field] = f"{path}:{hit}"
+                done.add((id(f), field))
+    out = []
+    for f in found:
+        g = {k: (v if (id(f), k) in done or k in keep else relocate(v)) for k, v in f.items()}
+        out.append(g)
+    return out
+
+
+# a copy is found by its bare marker, `// y: a copy` on the line that clones what it copies; its Y line is the line in
+# the function of the same name that names what is copied, the one as far into the function as before
 copies = []
-for c in facts.get("copies", []):
-    def holds(c):
+try:
+    found = find("copies", facts.get("copies", []), keep=("y",))
+except SystemExit:
+    found = []
+    for c in facts.get("copies", []):
         try:
-            return c["what"] in lines(c["y"].rsplit(":", 1)[0])[int(c["y"].rsplit(":", 1)[1]) - 1] and \
-                "// y: a copy" in lines(c["bare"].rsplit(":", 1)[0])[int(c["bare"].rsplit(":", 1)[1]) - 1]
-        except IndexError:
-            return False
-    if not holds(c):
-        try:
-            c = relocate(c)
+            found += find("copies", [c], keep=("y",))
         except SystemExit as e:
-            print("dropped a copy whose line is gone:", c["what"], c["y"], e)
+            print("dropped a copy whose line is gone:", c["what"], c["bare"], e)
+for c in found:
+    old_y = c["y"]
+    ypath, yn = old_y.rsplit(":", 1)
+    name, _ = enclosing(c["bare"].rsplit(":", 1)[0], int(c["bare"].rsplit(":", 1)[1]))
+    old_name, old_start = None, 0
+    for i in range(int(yn), 0, -1):
+        m = re.match(r"^\s*(?:public |private )?(?:function|rule) (\w+)\(", old_lines(ypath)[i - 1]) if i <= len(old_lines(ypath)) else None
+        if m:
+            old_name, old_start = m.group(1), i
+            break
+    starts = [i for i, l in enumerate(lines(ypath), 1) if re.match(rf"^\s*(?:public |private )?(?:function|rule) {name}\(", l)]
+    if starts and old_name == name:
+        start = min(starts, key=lambda i: abs(i - old_start))
+        ends = [i for i, l in enumerate(lines(ypath), 1) if i > start and re.match(r"^\s*(?:public |private )?(?:function|rule|test|type|facet) ", l)]
+        end = ends[0] if ends else len(lines(ypath)) + 1
+        hits = [i for i in range(start, end) if c["what"] in lines(ypath)[i - 1]]
+        if hits:
+            c["y"] = f"{ypath}:{min(hits, key=lambda i: abs(i - start - (int(yn) - old_start)))}"
+    if c["y"] == old_y:
+        try:
+            c["y"] = moved(old_y)
+        except SystemExit as e:
+            print("dropped a copy whose Y line is gone:", c["what"], e)
             continue
-    if holds(c):
-        copies.append(c)
-    else:
-        print("dropped a copy no longer where it moved to:", c["what"], c["y"])
+    copies.append(c)
 if "copies" in facts:
     facts["copies"] = copies
     listed_bare = {c["bare"] for c in copies}
@@ -89,7 +140,9 @@ if "copies" in facts:
             if "// y: a copy" in l and f"{m['bare']}:{i}" not in listed_bare:
                 print(f"WARNING: {m['bare']}:{i} is marked a copy, and no entry in `copies` lists it: {l.strip()}")
 for key in list(facts):
-    if key not in ("decisions", "tests", "paths", "modules", "format", "about", "copies"):
+    if key in ("facets", "units", "capabilities", "claims", "suspensions", "deadlines", "compiled"):
+        facts[key] = find(key, facts[key])
+    elif key not in ("decisions", "tests", "paths", "modules", "format", "about", "copies"):
         facts[key] = relocate(facts[key])
 
 # every function with injected capabilities is listed, the new ones among them

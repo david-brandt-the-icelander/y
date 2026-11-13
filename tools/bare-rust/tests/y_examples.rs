@@ -17,8 +17,10 @@
 mod y_lint;
 mod y_paths;
 
+use bare_rust::corpus::{crate_trees, strip_sources};
 use bare_rust::json::canonical;
-use bare_rust::{normalise_nomut, rustfmt, strip, weave};
+use bare_rust::weave::weave_in_crate;
+use bare_rust::{normalise_nomut, rustfmt};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -113,23 +115,40 @@ fn checkers_bare_files_weave_to_the_committed_rust_and_strip_back() {
     weaves_and_strips_back("checkers", &["checkers", "checkers/tests", "lib", "main"]);
 }
 
+/// Each file of the example weaves to its committed Rust, and the crate's Rust strips back to the bare files. Both are
+/// done to the crate as a whole: a realization (a call with explicit type arguments, language § 3.5) belongs to its
+/// crate, and is listed in the file of the crate's root (`lib` or `main`), not in the file whose body uses it.
 fn weaves_and_strips_back(name: &str, expected: &[&str]) {
     let dir = example(name);
     let mods = modules(&dir);
     assert_eq!(mods, expected);
-    for m in mods {
+    let trees = crate_trees(&dir, false).unwrap();
+    let crate_of = |m: &str| -> PathBuf {
+        let rel = PathBuf::from(format!("src/{m}.rs"));
+        trees.iter().find(|(_, files)| files.contains(&rel)).unwrap_or_else(|| panic!("{m}: in no crate of the package")).0.clone()
+    };
+    let constraints = |m: &str| -> Value { serde_json::from_str(&read(&dir.join(format!("bare/src/{m}.constraints.json")))).unwrap() };
+    let mut sources = vec![];
+    for m in &mods {
         let brs = read(&dir.join(format!("bare/src/{m}.brs")));
         let cjs = read(&dir.join(format!("bare/src/{m}.constraints.json")));
         let js: Value = serde_json::from_str(&cjs).unwrap();
         assert_eq!(canonical(&js), cjs, "{m}: the constraint file is not in canonical form (bare-rust libfmt)");
-        let woven = weave(&brs, &js).unwrap_or_else(|e| panic!("{m}: weave: {e}"));
+        let root = crate_of(m);
+        let root_module = root.with_extension("").strip_prefix("src").unwrap().to_string_lossy().into_owned();
+        let reals = constraints(&root_module)["realizations"].as_object().cloned().unwrap_or_default();
+        let woven = weave_in_crate(&brs, &js, Some(&reals)).unwrap_or_else(|e| panic!("{m}: weave: {}", e.msg)).text;
         let committed = read(&dir.join(format!("src/{m}.rs")));
         let norm = |s: &str| normalise_nomut(s).and_then(|n| rustfmt(&n));
         assert_eq!(norm(&woven).unwrap(), norm(&committed).unwrap(), "{m}: the committed Rust is not the weave of the bare files");
-        let (b2, j2) = strip(&committed, js["crate"].as_str().unwrap(), js["module"].as_str().unwrap())
-            .unwrap_or_else(|e| panic!("{m}: strip: {e}"));
-        assert_eq!(b2, brs, "{m}: strip of the Rust differs from the bare body");
-        assert_eq!(j2, without_lowering(&js), "{m}: strip of the Rust differs from the constraint file in more than clauses and status");
+        sources.push((PathBuf::from(format!("src/{m}.rs")), committed));
+    }
+    let krate = constraints(&mods[0])["crate"].as_str().unwrap().to_string();
+    for (rel, r) in strip_sources(&krate, &sources, &trees) {
+        let m = rel.with_extension("").strip_prefix("src").unwrap().to_string_lossy().into_owned();
+        let (b2, j2) = r.unwrap_or_else(|e| panic!("{m}: strip: {e}"));
+        assert_eq!(b2, read(&dir.join(format!("bare/src/{m}.brs"))), "{m}: strip of the Rust differs from the bare body");
+        assert_eq!(j2, without_lowering(&constraints(&m)), "{m}: strip of the Rust differs from the constraint file in more than clauses and status");
     }
 }
 
@@ -289,6 +308,16 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
         let what = c["what"].as_str().unwrap();
         assert!(at(c["y"].as_str().unwrap()).contains(what), "copy of {what}: not at {}", c["y"]);
         assert!(at(c["bare"].as_str().unwrap()).contains("// y: a copy"), "copy of {what}: not marked at {}", c["bare"]);
+    }
+    // each claim (`forever because "…"`, `detach because "…"`) is where the facts say: its Y line gives the reason, and
+    // so does the `// y:` marker of its bare line; no two claims share a line
+    let mut claimed = BTreeSet::new();
+    for c in facts["claims"].as_array().map_or(&[][..], |v| v) {
+        let because = format!("because \"{}\"", c["because"].as_str().unwrap());
+        let (y, bare) = (c["y"].as_str().unwrap(), c["bare"].as_str().unwrap());
+        assert!(at(y).contains(&because), "claim {because}: not at {y}");
+        assert!(at(bare).split_once("// y:").is_some_and(|(_, m)| m.contains(&because)), "claim {because}: not marked at {bare}");
+        assert!(claimed.insert(y.to_string()), "two claims at {y}");
     }
     // each point where the Y source may suspend is where the facts say, and the bare body awaits it there (Y § 3.7)
     for s in facts["suspensions"].as_array().unwrap() {

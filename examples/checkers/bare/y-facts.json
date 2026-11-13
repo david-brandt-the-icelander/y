@@ -241,8 +241,8 @@
       "claim": "forever",
       "because": "a hidden window shows no frames, and the game waits until it is shown",
       "requires": "Forever",
-      "y": "y/src/checkers.y:1171",
-      "bare": "bare/src/checkers.brs:1035"
+      "y": "y/src/checkers.y:1207",
+      "bare": "bare/src/checkers.brs:1063"
     }
   ],
   "suspensions": [
@@ -275,8 +275,8 @@
       "point": "window.next_frame()",
       "because": "the window capability may suspend (Y \u00a7 3.7)",
       "lowered": "async fn, and .await at the point",
-      "y": "y/src/checkers.y:1171",
-      "bare": "bare/src/checkers.brs:1035"
+      "y": "y/src/checkers.y:1207",
+      "bare": "bare/src/checkers.brs:1063"
     },
     {
       "subject": "checkers_example::main",

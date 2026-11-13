@@ -498,7 +498,7 @@
       }
     },
     "warehouse_example::warehouse::packing::pack_orders": {
-      "locals": { "lines": "list<element_type=Line> as 'List'", "out": "Result<Step<()>, Infallible>" }
+      "locals": { "out": "Result<Step<()>, Infallible>" }
     },
     "warehouse_example::warehouse::packing::pack_day": {
       "locals": {

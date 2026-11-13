@@ -154,7 +154,7 @@
       "claim": "detach",
       "because": "the receipts are printed after the day's report",
       "requires": "Detach",
-      "y": "y/src/main.y:61",
+      "y": "y/src/main.y:60",
       "bare": "bare/src/main.brs:108"
     }
   ],
