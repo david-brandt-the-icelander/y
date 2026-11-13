@@ -176,6 +176,19 @@ public facet stock:
             return reserved = reservation.backordered
 
 
+    ------------------------------------------------------------------------------------------------------------------------
+    Counts the units on the shelf, for a report. It reads one consistent snapshot of the stock and writes nothing, so a
+    reservation that commits while it runs does not make it run again.
+
+    units: How many units are on the shelf, as count<unit_type=sku>.
+
+    holdings: The stock, as shared<value_type=holdings>.
+    ------------------------------------------------------------------------------------------------------------------------
+    function units_on_shelf(injected holdings) returns units:
+        region counted is atomic, isolation snapshot:
+            return units = holdings.on_shelf.count()
+
+
 -- Packing the day's orders, two tasks at a time.
 public facet packing:
     -- Why the day's packing stopped.

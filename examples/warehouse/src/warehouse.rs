@@ -203,7 +203,7 @@ pub mod stock {
     use std::convert::Infallible;
     use y_collections::{Bag, Queue};
     use y_runtime::not_reachable;
-    use y_runtime::shared::{orelse, Shared, Step, Tx};
+    use y_runtime::shared::{atomic_with, orelse, Isolation, Shared, Step, Tx};
 
     /// The units on the shelves, and the lines waiting for more.
     #[derive(Clone, Debug, PartialEq, Eq)]
@@ -246,6 +246,22 @@ pub mod stock {
         match orelse("warehouse::reserve", None, vec![&mut take_from_shelf, &mut put_on_backorder]) {
             Ok(reserved) => reserved,
             Err(_) => not_reachable("warehouse::reserve#put_on_backorder"),
+        }
+    }
+
+    /// Counts the units on the shelf, for a report. It reads one consistent snapshot of the stock and writes nothing, so a
+    /// reservation that commits while it runs does not make it run again.
+    ///
+    /// - `holdings`: the Y `injected` parameter.
+    /// - Returns how many units are on the shelf.
+    pub fn units_on_shelf(holdings: &Shared<Holdings>) -> usize {
+        // y: region counted is atomic, isolation snapshot
+        let counted = atomic_with("warehouse::units_on_shelf#counted", None, Isolation::Snapshot, |tx| -> Result<Step<usize>, Infallible> {
+            Ok(Step::Done(tx.get(holdings).on_shelf.count()))
+        });
+        match counted {
+            Ok(units) => units,
+            Err(_) => not_reachable("warehouse::units_on_shelf#counted"),
         }
     }
 }

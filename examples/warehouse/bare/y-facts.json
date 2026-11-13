@@ -64,7 +64,8 @@
       "members": [
         "holdings",
         "reservation",
-        "reserve"
+        "reserve",
+        "units_on_shelf"
       ]
     },
     {
@@ -72,7 +73,7 @@
       "facet": "packing",
       "path": "warehouse.packing",
       "visible": "public",
-      "y": "y/src/warehouse.y:180",
+      "y": "y/src/warehouse.y:193",
       "rust": "warehouse_example::warehouse::packing",
       "members": [
         "packing_error",
@@ -86,7 +87,7 @@
       "facet": "receipts",
       "path": "warehouse.receipts",
       "visible": "public",
-      "y": "y/src/warehouse.y:239",
+      "y": "y/src/warehouse.y:252",
       "rust": "warehouse_example::warehouse::receipts",
       "members": [
         "receipt",
@@ -115,13 +116,21 @@
       "y": "y/src/warehouse.y:170"
     },
     {
+      "subject": "warehouse_example::warehouse::stock::units_on_shelf",
+      "injected": [
+        "holdings as holdings"
+      ],
+      "lowered": "as the last parameter",
+      "y": "y/src/warehouse.y:187"
+    },
+    {
       "subject": "warehouse_example::warehouse::packing::pack_orders",
       "injected": [
         "holdings as holdings",
         "sold as sold"
       ],
       "lowered": "as the last two parameters, in order",
-      "y": "y/src/warehouse.y:205"
+      "y": "y/src/warehouse.y:218"
     },
     {
       "subject": "warehouse_example::warehouse::packing::pack_day",
@@ -130,7 +139,7 @@
         "sold as sold"
       ],
       "lowered": "as the last two parameters, in order",
-      "y": "y/src/warehouse.y:230"
+      "y": "y/src/warehouse.y:243"
     },
     {
       "subject": "warehouse_example::warehouse::receipts::file_receipts",
@@ -138,7 +147,7 @@
         "filed as filed"
       ],
       "lowered": "as the last parameter",
-      "y": "y/src/warehouse.y:281"
+      "y": "y/src/warehouse.y:294"
     },
     {
       "subject": "warehouse_example::main",
@@ -149,15 +158,7 @@
       "y": "y/src/main.y:41"
     }
   ],
-  "claims": [
-    {
-      "claim": "detach",
-      "because": "the receipts are printed after the day's report",
-      "requires": "Detach",
-      "y": "y/src/main.y:60",
-      "bare": "bare/src/main.brs:108"
-    }
-  ],
+  "claims": [],
   "suspensions": [],
   "compiled": [],
   "copies": [
@@ -170,8 +171,8 @@
     {
       "what": "order.lines",
       "why": "the order still holds its lines",
-      "y": "y/src/warehouse.y:194",
-      "bare": "bare/src/warehouse.brs:277"
+      "y": "y/src/warehouse.y:207",
+      "bare": "bare/src/warehouse.brs:293"
     }
   ],
   "decisions": {
@@ -249,13 +250,13 @@
         "branches": [
           {
             "name": "wanted",
-            "y": "y/src/warehouse.y:208",
-            "bare": "bare/src/warehouse.brs:286"
+            "y": "y/src/warehouse.y:221",
+            "bare": "bare/src/warehouse.brs:302"
           },
           {
             "name": "no_lines",
-            "y": "y/src/warehouse.y:216",
-            "bare": "bare/src/warehouse.brs:286"
+            "y": "y/src/warehouse.y:229",
+            "bare": "bare/src/warehouse.brs:302"
           }
         ]
       },
@@ -264,13 +265,13 @@
         "branches": [
           {
             "name": "shelved",
-            "y": "y/src/warehouse.y:211",
-            "bare": "bare/src/warehouse.brs:288"
+            "y": "y/src/warehouse.y:224",
+            "bare": "bare/src/warehouse.brs:304"
           },
           {
             "name": "backordered",
-            "y": "y/src/warehouse.y:214",
-            "bare": "bare/src/warehouse.brs:299"
+            "y": "y/src/warehouse.y:227",
+            "bare": "bare/src/warehouse.brs:315"
           }
         ]
       }
@@ -281,13 +282,13 @@
         "branches": [
           {
             "name": "wanted",
-            "y": "y/src/warehouse.y:265",
-            "bare": "bare/src/warehouse.brs:396"
+            "y": "y/src/warehouse.y:278",
+            "bare": "bare/src/warehouse.brs:412"
           },
           {
             "name": "no_lines",
-            "y": "y/src/warehouse.y:267",
-            "bare": "bare/src/warehouse.brs:396"
+            "y": "y/src/warehouse.y:280",
+            "bare": "bare/src/warehouse.brs:412"
           }
         ]
       }
@@ -298,13 +299,13 @@
         "branches": [
           {
             "name": "order",
-            "y": "y/src/warehouse.y:285",
-            "bare": "bare/src/warehouse.brs:413"
+            "y": "y/src/warehouse.y:298",
+            "bare": "bare/src/warehouse.brs:429"
           },
           {
             "name": "no_orders",
-            "y": "y/src/warehouse.y:287",
-            "bare": "bare/src/warehouse.brs:413"
+            "y": "y/src/warehouse.y:300",
+            "bare": "bare/src/warehouse.brs:429"
           }
         ]
       }
@@ -379,6 +380,10 @@
     },
     {
       "path": "reserve > put_on_backorder",
+      "ends": "returns"
+    },
+    {
+      "path": "units_on_shelf",
       "ends": "returns"
     },
     {
@@ -519,92 +524,99 @@
         "reserve > put_on_backorder"
       ]
     },
-    "an_orders_lines": {
+    "the_units_on_the_shelf_are_counted": {
       "y": "y/src/warehouse.test.y:143",
+      "rust": "warehouse_example::warehouse::tests::the_units_on_the_shelf_are_counted",
+      "covers": [
+        "units_on_shelf"
+      ]
+    },
+    "an_orders_lines": {
+      "y": "y/src/warehouse.test.y:154",
       "rust": "warehouse_example::warehouse::tests::an_orders_lines",
       "covers": [
         "lines_of"
       ]
     },
     "no_orders_sell_nothing": {
-      "y": "y/src/warehouse.test.y:154",
+      "y": "y/src/warehouse.test.y:165",
       "rust": "warehouse_example::warehouse::tests::no_orders_sell_nothing",
       "covers": [
         "pack_orders > no_lines"
       ]
     },
     "a_shelved_line_is_sold": {
-      "y": "y/src/warehouse.test.y:166",
+      "y": "y/src/warehouse.test.y:177",
       "rust": "warehouse_example::warehouse::tests::a_shelved_line_is_sold",
       "covers": [
         "pack_orders > wanted > shelved"
       ]
     },
     "a_backordered_line_is_not_sold": {
-      "y": "y/src/warehouse.test.y:180",
+      "y": "y/src/warehouse.test.y:191",
       "rust": "warehouse_example::warehouse::tests::a_backordered_line_is_not_sold",
       "covers": [
         "pack_orders > wanted > backordered"
       ]
     },
     "every_line_is_packed": {
-      "y": "y/src/warehouse.test.y:194",
+      "y": "y/src/warehouse.test.y:205",
       "rust": "warehouse_example::warehouse::tests::every_line_is_packed",
       "covers": [
         "pack_orders > wanted'many > shelved"
       ]
     },
     "the_last_line_waits_when_the_shelf_runs_out": {
-      "y": "y/src/warehouse.test.y:210",
+      "y": "y/src/warehouse.test.y:221",
       "rust": "warehouse_example::warehouse::tests::the_last_line_waits_when_the_shelf_runs_out",
       "covers": [
         "pack_orders > wanted'many > backordered"
       ]
     },
     "two_tasks_pack_the_day": {
-      "y": "y/src/warehouse.test.y:226",
+      "y": "y/src/warehouse.test.y:237",
       "rust": "warehouse_example::warehouse::tests::two_tasks_pack_the_day",
       "covers": [
         "pack_day"
       ]
     },
     "a_receipt_of_no_lines": {
-      "y": "y/src/warehouse.test.y:246",
+      "y": "y/src/warehouse.test.y:257",
       "rust": "warehouse_example::warehouse::tests::a_receipt_of_no_lines",
       "covers": [
         "receipt_text > no_lines"
       ]
     },
     "a_receipt_of_one_line": {
-      "y": "y/src/warehouse.test.y:257",
+      "y": "y/src/warehouse.test.y:268",
       "rust": "warehouse_example::warehouse::tests::a_receipt_of_one_line",
       "covers": [
         "receipt_text > wanted"
       ]
     },
     "a_receipt_of_two_lines": {
-      "y": "y/src/warehouse.test.y:268",
+      "y": "y/src/warehouse.test.y:279",
       "rust": "warehouse_example::warehouse::tests::a_receipt_of_two_lines",
       "covers": [
         "receipt_text > wanted'many"
       ]
     },
     "no_orders_file_no_receipts": {
-      "y": "y/src/warehouse.test.y:282",
+      "y": "y/src/warehouse.test.y:293",
       "rust": "warehouse_example::warehouse::tests::no_orders_file_no_receipts",
       "covers": [
         "file_receipts > no_orders"
       ]
     },
     "a_receipt_is_filed": {
-      "y": "y/src/warehouse.test.y:293",
+      "y": "y/src/warehouse.test.y:304",
       "rust": "warehouse_example::warehouse::tests::a_receipt_is_filed",
       "covers": [
         "file_receipts > order"
       ]
     },
     "every_receipt_is_filed": {
-      "y": "y/src/warehouse.test.y:306",
+      "y": "y/src/warehouse.test.y:317",
       "rust": "warehouse_example::warehouse::tests::every_receipt_is_filed",
       "covers": [
         "file_receipts > order'many"

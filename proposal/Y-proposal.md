@@ -1493,9 +1493,11 @@ Anything else is rejected, and the diagnostic names the capability, the call pat
 instead. Values from the clock or randomness are drawn before the transaction and passed in.
 
 **The first backend keeps it with one lock.** Every atomic region takes one global lock and a `waits until` or `retry`
-waits on its condition variable, so every region is serializable by construction and none is ever re-run. Multi-version
-concurrency control with first-committer-wins, as the July 2026 C spike built it, is a later backend's optimisation,
-held to the same constraints; it is the first to re-run a region. The difference from the YAPL-era runtime is scope:
+waits on its condition variable, so every region is serializable by construction and none is ever re-run. Optimistic
+concurrency with first-committer-wins, as the July 2026 C spike built it, keeps the same constraints with more
+concurrency, and is the first to re-run a region: the examples' runtime has it as a second engine
+(`Y_ATOMIC=optimistic`), which runs each region without the lock, validates what it read (serializable) or only what
+it wrote (snapshot) when it commits, and runs it again when a commit invalidated it. The difference from the YAPL-era runtime is scope:
 that runtime put *every* variable under MVCC, and Y puts only what is shared under any of them.
 
 ### 3.10 External effects

@@ -297,6 +297,10 @@
         },
         "hold": {
           "$ref": "#/$defs/hold"
+        },
+        "injected": {
+          "const": true,
+          "description": "The parameter is an injected capability (Y § 3.7), which the Y lowering marks: what a function is given to act on the world with, or a `shared` state. It sets the level the function needs (language 6.22), and no atomic region may use one but a `shared` (language 6.23)."
         }
       }
     },

@@ -7,8 +7,13 @@
     "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
   },
   "subjects": [
-    { "kind": "module", "name": "memory_example::memory::setup", "visible": "public" },
-    { "kind": "module", "name": "memory_example::memory::setup::board", "visible": "public" },
+    { "kind": "module", "name": "memory_example::memory::setup", "visible": "public", "level": "effects" },
+    {
+      "kind": "module",
+      "name": "memory_example::memory::setup::board",
+      "visible": "public",
+      "level": "data"
+    },
     {
       "kind": "const",
       "name": "memory_example::memory::setup::board::COLUMNS",
@@ -33,7 +38,12 @@
       "visible": "public",
       "type": "u32"
     },
-    { "kind": "module", "name": "memory_example::memory::setup::game_rules", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "memory_example::memory::setup::game_rules",
+      "visible": "public",
+      "level": "data"
+    },
     {
       "kind": "const",
       "name": "memory_example::memory::setup::game_rules::LIVES",
@@ -76,7 +86,12 @@
       "visible": "public",
       "type": "Duration"
     },
-    { "kind": "module", "name": "memory_example::memory::setup::faces", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "memory_example::memory::setup::faces",
+      "visible": "public",
+      "level": "data"
+    },
     {
       "kind": "const",
       "name": "memory_example::memory::setup::faces::CODES",
@@ -84,7 +99,12 @@
       "type": "list<element_type=ref<target_type=string>> where count(value) == 20 as 'std::primitive::array'",
       "access": { "rights": "read", "guarantee": "readers" }
     },
-    { "kind": "module", "name": "memory_example::memory::setup::openmoji", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "memory_example::memory::setup::openmoji",
+      "visible": "public",
+      "level": "data"
+    },
     {
       "kind": "const",
       "name": "memory_example::memory::setup::openmoji::ADDRESS",
@@ -227,17 +247,20 @@
         {
           "name": "random",
           "type": "ref<target_type=Random>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         },
         {
           "name": "clock",
           "type": "ref<target_type=Clock>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         },
         {
           "name": "site",
           "type": "ref<target_type=Http>",
-          "access": { "rights": "read", "guarantee": "readers" }
+          "access": { "rights": "read", "guarantee": "readers" },
+          "injected": true
         }
       ],
       "result": { "type": "Game", "fails": "SetupError" },
@@ -264,7 +287,7 @@
         { "kind": "region", "text": "within game_rules.fetch_time", "source": "y/src/memory.y:135" }
       ]
     },
-    { "kind": "module", "name": "memory_example::memory::rules", "visible": "public" },
+    { "kind": "module", "name": "memory_example::memory::rules", "visible": "public", "level": "structured" },
     {
       "kind": "function",
       "name": "memory_example::memory::rules::choosable",
@@ -381,8 +404,13 @@
       "result": { "type": "Point" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/memory.y:302" }]
     },
-    { "kind": "module", "name": "memory_example::memory::drawing", "visible": "public" },
-    { "kind": "module", "name": "memory_example::memory::drawing::layout", "visible": "public" },
+    { "kind": "module", "name": "memory_example::memory::drawing", "visible": "public", "level": "effects" },
+    {
+      "kind": "module",
+      "name": "memory_example::memory::drawing::layout",
+      "visible": "public",
+      "level": "data"
+    },
     {
       "kind": "const",
       "name": "memory_example::memory::drawing::layout::CARD_SIZE",
@@ -437,7 +465,12 @@
       "visible": "public",
       "type": "i32"
     },
-    { "kind": "module", "name": "memory_example::memory::drawing::palette", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "memory_example::memory::drawing::palette",
+      "visible": "public",
+      "level": "data"
+    },
     {
       "kind": "const",
       "name": "memory_example::memory::drawing::palette::BACKGROUND",
@@ -503,7 +536,8 @@
         {
           "name": "window",
           "type": "ref<target_type=Window>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         }
       ],
       "clauses": [
@@ -527,7 +561,8 @@
         {
           "name": "window",
           "type": "ref<target_type=Window>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         }
       ],
       "clauses": [
@@ -546,7 +581,8 @@
         {
           "name": "window",
           "type": "ref<target_type=Window>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         }
       ],
       "clauses": [
@@ -570,7 +606,8 @@
         {
           "name": "window",
           "type": "ref<target_type=Window>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         }
       ],
       "clauses": [
@@ -587,12 +624,14 @@
         {
           "name": "window",
           "type": "ref<target_type=Window>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         },
         {
           "name": "forever",
           "type": "ref<target_type=Forever>",
-          "access": { "rights": "read", "guarantee": "readers" }
+          "access": { "rights": "read", "guarantee": "readers" },
+          "injected": true
         }
       ],
       "clauses": [
@@ -612,7 +651,12 @@
         }
       ]
     },
-    { "kind": "module", "name": "memory_example::memory::window_play", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "memory_example::memory::window_play",
+      "visible": "public",
+      "level": "effects"
+    },
     {
       "kind": "function",
       "name": "memory_example::memory::window_play::play",
@@ -621,27 +665,32 @@
         {
           "name": "window",
           "type": "ref<target_type=Window>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         },
         {
           "name": "clock",
           "type": "ref<target_type=Clock>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         },
         {
           "name": "random",
           "type": "ref<target_type=Random>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         },
         {
           "name": "site",
           "type": "ref<target_type=Http>",
-          "access": { "rights": "read", "guarantee": "readers" }
+          "access": { "rights": "read", "guarantee": "readers" },
+          "injected": true
         },
         {
           "name": "forever",
           "type": "ref<target_type=Forever>",
-          "access": { "rights": "read", "guarantee": "readers" }
+          "access": { "rights": "read", "guarantee": "readers" },
+          "injected": true
         }
       ],
       "result": { "type": "u32", "fails": "SetupError" },

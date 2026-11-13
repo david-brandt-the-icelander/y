@@ -1,7 +1,8 @@
 """Remake an example's bare files from a fresh strip: the clauses of the committed constraint files carry over by
 subject, each re-pointed at its line in the Y source, and so does a module's `level`; `extra` adds clauses for subjects
-that have none yet, placed at the function, rule or derived value of the subject's name. Regions (`region` subjects,
-language 6.23) carry over too, after their function's subject, their clauses at the region's header.
+that have none yet, placed at the function, rule or derived value of the subject's name. A parameter's `injected` mark
+carries over, and so do regions (`region` subjects, language 6.23), after their function's subject, their clauses at
+the region's header.
 
     python3 tools/paths/regen.py <example folder> <strip output> ['{"crate::module::function": [clause, ...]}']
 
@@ -105,6 +106,7 @@ for dirpath, _, files in os.walk(f"{stripped}/src"):
         old = json.load(open(out)) if os.path.exists(out) else {"subjects": []}
         before = {s["name"]: s.get("clauses") for s in old["subjects"]}
         levels = {s["name"]: s["level"] for s in old["subjects"] if "level" in s}
+        injected = {(s["name"], p["name"]) for s in old["subjects"] for p in s.get("params", []) if p.get("injected")}
         js = json.load(open(os.path.join(dirpath, f)))
         js["status"] = old["status"]
         # regions (language 6.23) are the Y lowering's, not strip's: each goes back after its function's subject
@@ -121,6 +123,9 @@ for dirpath, _, files in os.walk(f"{stripped}/src"):
         for s in js["subjects"]:
             if s["name"] in levels:
                 s["level"] = levels[s["name"]]
+            for p in s.get("params", []):
+                if (s["name"], p["name"]) in injected:
+                    p["injected"] = True
             cs = (before.get(s["name"]) or []) + extra.pop(s["name"], [])
             cs.sort(key=lambda c: c["kind"] not in ("require", "ensure"))
             if cs:

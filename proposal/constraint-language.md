@@ -1850,11 +1850,13 @@ prints it under the file's `module` line:
   the level a module was seen to need is proposed as its ceiling, for a person to pin.
 - **For bare Rust:** a module subject's `level` covers the module, the modules inside it (Y's facets) and its files,
   but not its `tests`. `bare-rust` reads what each needs from the bare bodies and the constraint data: a function body
-  is `calculations`; a loop, an assignment, `&mut` or a call of the function it is in is `structured`; shared state, a
-  transaction, an arena or a resource is `shared`; a capability parameter, an `effects only …` clause, `async`,
-  `.await`, a task, a deadline, or a region that waits `forever` or is detached is `effects`. Weave fails on anything
-  above its module's level, and `bare-rust levels <bare-dir>` prints the level each module needs and why, with the
-  level pinned on it.
+  is `calculations`; a loop, an assignment, `&mut` or recursion, direct or through other functions, is `structured`; a
+  parameter the lowering marks `"injected": true` whose type is `Shared<…>`, a transaction, an arena or a resource is
+  `shared`; any other injected parameter, which is a capability, an `effects only …` clause, `async`, `.await`, a
+  task, a deadline, or a region that waits `forever` or is detached is `effects`. A call of a function of the crate
+  needs what that function needs, and an import of a module pinned higher needs that module's level. Weave fails on
+  anything above its module's level, and `bare-rust levels <bare-dir>` prints the level each module needs and why,
+  with the level pinned on it. Every module of the examples is pinned at the level it needs.
 
 ### 6.23 Regions: how a piece of code may execute
 
@@ -1896,18 +1898,27 @@ region 'memory.setup.new_game#fetch'
 - **Fails:** a region that a run shows half done to another, that reads two states a serializable order cannot
   explain, that outlives its deadline, or that is cancelled while uncancellable.
 - **In the constraint data:** a subject of kind `region`, named `<function>#<region>`, whose clauses are of kind
-  `region`, one constraint each:
+  `region`, one constraint each, with `supervise(…)`, the policy for the failures of the region's tasks, among them.
+  What a Y atomic region implies, `may run again` and `on failure unchanged`, its lowering states:
 
   ```json
-  { "kind": "region", "name": "warehouse_example::warehouse::receipts::file_receipts#filing",
-    "clauses": [ { "kind": "region", "text": "uncancellable", "source": "y/src/warehouse.y:284" },
-                 { "kind": "region", "text": "within 50ms", "source": "y/src/warehouse.y:284" } ] }
+  { "kind": "region", "name": "warehouse_example::warehouse::stock::units_on_shelf#counted",
+    "clauses": [ { "kind": "region", "text": "atomic", "source": "y/src/warehouse.y:188" },
+                 { "kind": "region", "text": "isolation snapshot", "source": "y/src/warehouse.y:188" },
+                 { "kind": "region", "text": "may run again", "source": "y/src/warehouse.y:188" },
+                 { "kind": "region", "text": "on failure unchanged", "source": "y/src/warehouse.y:188" } ] }
   ```
 
   For bare Rust, `bare-rust` checks the rules above and that the function is a subject of the file, and weave binds
-  the region to its body: the function marks where the region starts, `// y: region filing is …` or, for an
+  the region to its body. The function marks where the region starts, `// y: region counted is …` or, for an
   alternative of an `orelse`, `// y: #name`, and a marker that states the constraints states the same ones as the
-  clauses. A region that is not in its function's body, or that says other constraints than its marker, is refused.
+  clauses. The code the marker starts (what follows it in its block, or the statement it ends) keeps each constraint:
+  an atomic region runs in a transaction, and, as it may run again, uses no capability but `shared` state and does not
+  wait; a snapshot one is run at `Isolation::Snapshot`; `within` makes a deadline or gives a duration, and every wait
+  in the region takes the deadline; `forever` is given to the wait; `detach` and `supervise` call the runtime's
+  `detach` and `supervised`; `uncancellable` holds cancellation; `waits until name` marks its condition and retries
+  until it holds. A region that is not in its function's body, that says other constraints than its marker, or whose
+  code does not keep them is refused.
 - **Checked:** by the Y compiler for Y; by host analyses where they exist (a transaction's isolation level in T-SQL, a
   lock held across the region in Rust); by concurrency explorers and replays in CI, which run the region's interleavings
   and compare them with a serial order (Loom, Shuttle, Y's own explorer); watched in production from conflict metrics

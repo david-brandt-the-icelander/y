@@ -2,10 +2,10 @@
 //! element fits on one line.
 use serde_json::Value;
 
-const ORDER: [&str; 51] = [
+const ORDER: [&str; 52] = [
     "format", "host", "version", "crate", "module", "status", "failures", "panic", "macros", "views", "subjects", "arms", "pattern", "when", "holes", "kind", "n", "name", "visible", "visible_path", "level",
     "generics", "for", "bounds", "where", "trait", "self", "type", "form", "fields", "derive", "variants", "implements", "assoc", "impl", "params", "result",
-    "fails", "clauses", "access", "hold", "rights", "guarantee", "from", "lifetime", "locals", "realizations", "template", "args", "hints", "sep",
+    "fails", "clauses", "access", "hold", "injected", "rights", "guarantee", "from", "lifetime", "locals", "realizations", "template", "args", "hints", "sep",
 ];
 
 /// The members of a clause of a library file (`clauses`), in the order they are written: the keyword, the text,

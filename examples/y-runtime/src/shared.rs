@@ -1,19 +1,29 @@
-//! Y's shared state and atomic regions (Y § 3.8, § 3.9), kept the way the first backend keeps them: with one lock.
+//! Y's shared state and atomic regions (Y § 3.8, § 3.9).
 //!
 //! - A [`Shared<T>`] is read and written only inside an atomic region, through its [`Tx`].
-//! - Every atomic region takes one global lock for its whole run, so regions are serializable by construction and none
-//!   is ever re-run because of a conflict.
 //! - Writes are buffered in the [`Tx`] and applied when the region ends; a failure, or a [`Step::Retry`], discards them,
-//!   so a failure leaves no trace.
+//!   so a failure leaves no trace (`on failure unchanged`).
 //! - `waits until p` and `retry` wait on one condition variable, which every commit notifies, until the region's
 //!   deadline. A wait that the deadline ends is the failure `expired`.
 //!
+//! Two engines keep the same constraints, and `Y_ATOMIC` chooses between them for the whole program:
+//!
+//! - **One lock** (the default, the first backend's): every atomic region takes one global lock for its whole run, so
+//!   regions are serializable by construction and none is ever re-run.
+//! - **Optimistic** (`Y_ATOMIC=optimistic`): a region runs without the lock against the versions committed when it
+//!   started, and takes the lock only to commit. A commit checks the versions the run depended on: every state it read
+//!   or wrote, for `isolation serializable`; only what it wrote, first committer wins, for `isolation snapshot`, which
+//!   may suffer write skew. A run that a commit invalidated is run again. This is what `may run again` permits, and why
+//!   an atomic region may hold no external effect.
+//!
 //! The lowering of a region `region reserve is atomic, within 5s or fail:` is a call of [`atomic`] with the region's
-//! name, its deadline and a closure for its body. Multi-version concurrency control would keep the same constraints with
-//! more concurrency; it is a later backend's choice.
+//! name, its deadline and a closure for its body; `isolation snapshot` lowers to [`atomic_with`] and
+//! [`Isolation::Snapshot`].
 use super::{Deadline, Expired};
 use std::any::Any;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::Duration;
 
@@ -21,11 +31,48 @@ use std::time::Duration;
 static LOCK: Mutex<u64> = Mutex::new(0);
 /// Notified by every commit, for the regions that wait.
 static CHANGED: Condvar = Condvar::new();
+/// How many runs of atomic regions a commit invalidated, so that they ran again.
+static RERUNS: AtomicU64 = AtomicU64::new(0);
+
+/// What an atomic region observes (Y § 3.9).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Isolation {
+    /// As if no other region ran while it did. The default.
+    Serializable,
+    /// One consistent snapshot; a concurrent region's write to what it only read does not stop it (write skew).
+    Snapshot,
+}
+
+/// How the program keeps its atomic regions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Engine {
+    OneLock,
+    Optimistic,
+}
+
+/// The engine `Y_ATOMIC` names: `optimistic`, or else one lock.
+pub fn engine() -> Engine {
+    match std::env::var("Y_ATOMIC").as_deref() {
+        Ok("optimistic") => Engine::Optimistic,
+        _ => Engine::OneLock,
+    }
+}
+
+/// How many runs of atomic regions have been run again since the program started.
+pub fn reruns() -> u64 {
+    RERUNS.load(Ordering::SeqCst)
+}
+
+/// A shared state's value and the version of the commit that wrote it.
+struct Slot<T> {
+    version: u64,
+    value: T,
+}
 
 /// Y's `shared<value_type=t>`: mutable state reachable from more than one task, read and written only inside an
 /// atomic region.
 pub struct Shared<T> {
-    value: Arc<Mutex<T>>,
+    value: Arc<Mutex<Slot<T>>>,
 }
 
 impl<T> Clone for Shared<T> {
@@ -37,17 +84,26 @@ impl<T> Clone for Shared<T> {
 impl<T: Clone + Send + 'static> Shared<T> {
     /// Y's `shared.new(initial)`.
     pub fn new(initial: T) -> Self {
-        Shared { value: Arc::new(Mutex::new(initial)) }
+        Shared { value: Arc::new(Mutex::new(Slot { version: 0, value: initial })) }
     }
 
     /// Y's `snapshot()`: an immutable, consistent copy, taken as a read-only transaction.
     pub fn snapshot(&self) -> T {
         let _held = hold();
-        self.value.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        self.slot().value.clone()
+    }
+
+    fn slot(&self) -> MutexGuard<'_, Slot<T>> {
+        self.value.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     fn key(&self) -> usize {
         Arc::as_ptr(&self.value) as *const () as usize
+    }
+
+    fn version_of(&self) -> Arc<dyn Fn() -> u64 + Send + Sync> {
+        let v = Arc::clone(&self.value);
+        Arc::new(move || v.lock().unwrap_or_else(|e| e.into_inner()).version)
     }
 }
 
@@ -61,8 +117,10 @@ pub enum Step<R> {
 
 /// Writes buffered by a run, by the address of the shared state they are for.
 type Pending = HashMap<usize, Box<dyn Any + Send>>;
-/// Applies one buffered write when the region commits.
-type Apply = Box<dyn FnOnce(&mut Pending) + Send>;
+/// Applies one buffered write when the region commits, with the commit's version.
+type Apply = Box<dyn FnOnce(&mut Pending, u64) + Send>;
+/// The version of one shared state now.
+type VersionOf = Arc<dyn Fn() -> u64 + Send + Sync>;
 /// One alternative of an `orelse`: a run of an atomic region's body.
 pub type Alternative<'a, R, E> = &'a mut dyn FnMut(&mut Tx) -> Result<Step<R>, E>;
 
@@ -70,19 +128,32 @@ pub type Alternative<'a, R, E> = &'a mut dyn FnMut(&mut Tx) -> Result<Step<R>, E
 pub struct Tx {
     pending: Pending,
     apply: Vec<Apply>,
+    /// Optimistic runs: the version the run reads at, what it read and wrote, and whether a read saw a later commit.
+    stamp: Option<u64>,
+    read: RefCell<HashMap<usize, VersionOf>>,
+    written: HashMap<usize, VersionOf>,
+    stale: Cell<bool>,
 }
 
 impl Tx {
-    fn new() -> Tx {
-        Tx { pending: HashMap::new(), apply: Vec::new() }
+    fn new(stamp: Option<u64>) -> Tx {
+        Tx { pending: HashMap::new(), apply: Vec::new(), stamp, read: RefCell::new(HashMap::new()), written: HashMap::new(), stale: Cell::new(false) }
     }
 
     /// The value of a shared state, as this run sees it: Y reads a `shared` inside `atomic` as a `mutable` value.
     pub fn get<T: Clone + Send + 'static>(&self, shared: &Shared<T>) -> T {
-        match self.pending.get(&shared.key()).and_then(|v| v.downcast_ref::<T>()) {
-            Some(written) => written.clone(),
-            None => shared.value.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+        if let Some(written) = self.pending.get(&shared.key()).and_then(|v| v.downcast_ref::<T>()) {
+            return written.clone();
         }
+        let slot = shared.slot();
+        if let Some(stamp) = self.stamp {
+            // a value committed after the run started is not in its snapshot: the run is run again
+            if slot.version > stamp {
+                self.stale.set(true);
+            }
+            self.read.borrow_mut().entry(shared.key()).or_insert_with(|| shared.version_of());
+        }
+        slot.value.clone()
     }
 
     /// Writes a shared state; the write becomes visible to others when the region ends.
@@ -90,18 +161,30 @@ impl Tx {
         let key = shared.key();
         if !self.pending.contains_key(&key) {
             let target = Arc::clone(&shared.value);
-            self.apply.push(Box::new(move |pending| {
+            self.apply.push(Box::new(move |pending, version| {
                 if let Some(v) = pending.remove(&key).and_then(|v| v.downcast::<T>().ok()) {
-                    *target.lock().unwrap_or_else(|e| e.into_inner()) = *v;
+                    *target.lock().unwrap_or_else(|e| e.into_inner()) = Slot { version, value: *v };
                 }
             }));
+            if self.stamp.is_some() {
+                self.written.insert(key, shared.version_of());
+            }
         }
         self.pending.insert(key, Box::new(value));
     }
 
-    fn commit(mut self) {
+    /// Whether an optimistic run may commit, under the lock: nothing it depended on was committed since it started.
+    fn valid(&self, isolation: Isolation) -> bool {
+        let Some(stamp) = self.stamp else { return true };
+        let unchanged = |v: &VersionOf| v() <= stamp;
+        !self.stale.get()
+            && self.written.values().all(unchanged)
+            && (isolation == Isolation::Snapshot || self.read.borrow().values().all(unchanged))
+    }
+
+    fn commit(mut self, version: u64) {
         for apply in self.apply.drain(..) {
-            apply(&mut self.pending);
+            apply(&mut self.pending, version);
         }
     }
 }
@@ -130,15 +213,25 @@ pub enum Aborted<E> {
     Expired(Expired),
 }
 
-/// Runs an atomic region: `region name is atomic` with an optional deadline (`within`). The body runs under the one
-/// lock with a fresh [`Tx`]; `Ok(Step::Done(r))` commits and returns `r`; `Ok(Step::Retry)` discards the run and waits
-/// for a commit; `Err(e)` discards the run and fails with `e`. Waiting past the deadline fails with `expired`.
+/// Runs an atomic region: `region name is atomic` with an optional deadline (`within`), serializable. The body runs
+/// with a fresh [`Tx`]; `Ok(Step::Done(r))` commits and returns `r`; `Ok(Step::Retry)` discards the run and waits for
+/// a commit; `Err(e)` discards the run and fails with `e`. Waiting past the deadline fails with `expired`.
 pub fn atomic<R, E>(
-    _name: &str,
+    name: &str,
     deadline: Option<&Deadline>,
+    body: impl FnMut(&mut Tx) -> Result<Step<R>, E>,
+) -> Result<R, Aborted<E>> {
+    atomic_with(name, deadline, Isolation::Serializable, body)
+}
+
+/// As [`atomic`], with the region's isolation: `isolation snapshot`.
+pub fn atomic_with<R, E>(
+    name: &str,
+    deadline: Option<&Deadline>,
+    isolation: Isolation,
     mut body: impl FnMut(&mut Tx) -> Result<Step<R>, E>,
 ) -> Result<R, Aborted<E>> {
-    orelse(_name, deadline, vec![&mut body])
+    orelse_with(name, deadline, isolation, vec![&mut body])
 }
 
 /// `waits until name = (p)` on an atomic region: the body runs only once `ready` holds, and waits for a commit until
@@ -152,23 +245,36 @@ pub fn atomic_when<R, E>(
     atomic(name, deadline, |tx| if ready(tx) { body(tx).map(Step::Done) } else { Ok(Step::Retry) })
 }
 
-/// Y's `orelse`: the alternatives, left to right, under one hold of the lock. The first that does not retry decides;
-/// when every one retries, the region waits for a commit and tries them all again.
-pub fn orelse<R, E>(
+/// Y's `orelse`, serializable: the alternatives, left to right. The first that does not retry decides; when every one
+/// retries, the region waits for a commit and tries them all again.
+pub fn orelse<R, E>(name: &str, deadline: Option<&Deadline>, alternatives: Vec<Alternative<'_, R, E>>) -> Result<R, Aborted<E>> {
+    orelse_with(name, deadline, Isolation::Serializable, alternatives)
+}
+
+/// As [`orelse`], with the region's isolation.
+pub fn orelse_with<R, E>(
     _name: &str,
     deadline: Option<&Deadline>,
+    isolation: Isolation,
     mut alternatives: Vec<Alternative<'_, R, E>>,
 ) -> Result<R, Aborted<E>> {
+    match engine() {
+        Engine::OneLock => one_lock(deadline, &mut alternatives),
+        Engine::Optimistic => optimistic(deadline, isolation, &mut alternatives),
+    }
+}
+
+/// Every alternative under one hold of the lock: never run again.
+fn one_lock<R, E>(deadline: Option<&Deadline>, alternatives: &mut [Alternative<'_, R, E>]) -> Result<R, Aborted<E>> {
     let mut held = hold();
     loop {
         for alternative in alternatives.iter_mut() {
-            let mut tx = Tx::new();
+            let mut tx = Tx::new(None);
             match alternative(&mut tx) {
                 Ok(Step::Done(r)) => {
-                    let changed = !tx.apply.is_empty();
-                    tx.commit();
-                    if changed {
+                    if !tx.apply.is_empty() {
                         *held += 1;
+                        tx.commit(*held);
                         CHANGED.notify_all();
                     }
                     return Ok(r);
@@ -178,6 +284,41 @@ pub fn orelse<R, E>(
             }
         }
         held = wait(held, deadline).map_err(Aborted::Expired)?;
+    }
+}
+
+/// Each run without the lock, at the version committed when it starts; the lock only to commit. A run that a commit
+/// invalidated, whatever it decided, is run again.
+fn optimistic<R, E>(deadline: Option<&Deadline>, isolation: Isolation, alternatives: &mut [Alternative<'_, R, E>]) -> Result<R, Aborted<E>> {
+    'run: loop {
+        let stamp = *hold();
+        for alternative in alternatives.iter_mut() {
+            let mut tx = Tx::new(Some(stamp));
+            let decided = alternative(&mut tx);
+            let mut held = hold();
+            if !tx.valid(isolation) {
+                drop(held);
+                RERUNS.fetch_add(1, Ordering::SeqCst);
+                continue 'run;
+            }
+            match decided {
+                Ok(Step::Done(r)) => {
+                    if !tx.apply.is_empty() {
+                        *held += 1;
+                        tx.commit(*held);
+                        CHANGED.notify_all();
+                    }
+                    return Ok(r);
+                }
+                Ok(Step::Retry) => {}
+                Err(e) => return Err(Aborted::Failed(e)),
+            }
+        }
+        // every alternative retried: wait for a commit after the version they read
+        let held = hold();
+        if *held == stamp {
+            drop(wait(held, deadline).map_err(Aborted::Expired)?);
+        }
     }
 }
 
@@ -285,5 +426,88 @@ mod tests {
             t.join().unwrap();
         }
         assert_eq!(counter.snapshot(), 4000);
+    }
+
+    /// Runs `f` with the optimistic engine. The tests that set `Y_ATOMIC` hold this lock, so that no other test of the
+    /// file sees the variable change under it.
+    fn optimistically<R>(f: impl FnOnce() -> R) -> R {
+        static ENV: Mutex<()> = Mutex::new(());
+        let _g = ENV.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::set_var("Y_ATOMIC", "optimistic");
+        let r = f();
+        std::env::remove_var("Y_ATOMIC");
+        r
+    }
+
+    /// A run reads `a`, another region commits a write to `read_by_other`, and the run then writes `b`. Returns how many
+    /// times the run ran.
+    fn interleaved(isolation: Isolation, written_by_other_is_read: bool) -> u32 {
+        let a = Shared::new(1u32);
+        let b = Shared::new(0u32);
+        let other_target = if written_by_other_is_read { a.clone() } else { b.clone() };
+        let runs = Cell::new(0u32);
+        let r: Result<(), Aborted<()>> = atomic_with("skew", None, isolation, |tx| {
+            runs.set(runs.get() + 1);
+            let seen = tx.get(&a);
+            if runs.get() == 1 {
+                // another task commits in the middle of the first run
+                let _: Result<(), Aborted<()>> = atomic("other", None, |tx2| {
+                    tx2.set(&other_target, 10);
+                    Ok(Step::Done(()))
+                });
+            }
+            tx.set(&b, seen);
+            Ok(Step::Done(()))
+        });
+        assert_eq!(r, Ok(()));
+        runs.get()
+    }
+
+    #[test]
+    fn optimistic_serializable_runs_again_when_what_it_read_changed() {
+        optimistically(|| {
+            assert_eq!(interleaved(Isolation::Serializable, true), 2);
+        });
+    }
+
+    #[test]
+    fn optimistic_snapshot_allows_write_skew_and_stops_lost_updates() {
+        optimistically(|| {
+            // only read: the snapshot run commits, with what it saw when it started
+            assert_eq!(interleaved(Isolation::Snapshot, true), 1);
+            // written by both: first committer wins, so the run is run again
+            assert_eq!(interleaved(Isolation::Snapshot, false), 2);
+        });
+    }
+
+    #[test]
+    fn optimistic_regions_stay_serializable_and_a_failure_leaves_no_trace() {
+        optimistically(|| {
+            let counter = Shared::new(0u64);
+            let threads: Vec<_> = (0..8)
+                .map(|_| {
+                    let c = counter.clone();
+                    thread::spawn(move || {
+                        for _ in 0..300 {
+                            let _: Result<(), Aborted<()>> = atomic("add", None, |tx| {
+                                let n = tx.get(&c);
+                                tx.set(&c, n + 1);
+                                Ok(Step::Done(()))
+                            });
+                        }
+                    })
+                })
+                .collect();
+            for t in threads {
+                t.join().unwrap();
+            }
+            assert_eq!(counter.snapshot(), 2400);
+            let r: Result<(), Aborted<&str>> = atomic("fail", None, |tx| {
+                tx.set(&counter, 0);
+                Err("declined")
+            });
+            assert_eq!(r, Err(Aborted::Failed("declined")));
+            assert_eq!(counter.snapshot(), 2400);
+        });
     }
 }
