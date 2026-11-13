@@ -95,8 +95,9 @@ def find(kind, found, keep=()):
     return out
 
 
-# a copy is found by its bare marker, `// y: a copy` on the line that clones what it copies; its Y line is the line in
-# the function of the same name that names what is copied, the one as far into the function as before
+# a copy is found by its bare marker, `// y: a copy` on the line that clones what it copies; its Y line is in the
+# function of the same name, among the lines that name what is copied: the one with the most names in common with the
+# bare line, each line taken once
 copies = []
 try:
     found = find("copies", facts.get("copies", []), keep=("y",))
@@ -107,31 +108,36 @@ except SystemExit:
             found += find("copies", [c], keep=("y",))
         except SystemExit as e:
             print("dropped a copy whose line is gone:", c["what"], c["bare"], e)
+groups = {}
 for c in found:
-    old_y = c["y"]
-    ypath, yn = old_y.rsplit(":", 1)
     name, _ = enclosing(c["bare"].rsplit(":", 1)[0], int(c["bare"].rsplit(":", 1)[1]))
-    old_name, old_start = None, 0
-    for i in range(int(yn), 0, -1):
-        m = re.match(r"^\s*(?:public |private )?(?:function|rule) (\w+)\(", old_lines(ypath)[i - 1]) if i <= len(old_lines(ypath)) else None
-        if m:
-            old_name, old_start = m.group(1), i
-            break
+    groups.setdefault((c["y"].rsplit(":", 1)[0], name, c["what"]), []).append(c)
+for (ypath, name, what), cs in groups.items():
+    cs.sort(key=lambda c: int(c["bare"].rsplit(":", 1)[1]))
     starts = [i for i, l in enumerate(lines(ypath), 1) if re.match(rf"^\s*(?:public |private )?(?:function|rule) {name}\(", l)]
-    if starts and old_name == name:
-        start = min(starts, key=lambda i: abs(i - old_start))
-        ends = [i for i, l in enumerate(lines(ypath), 1) if i > start and re.match(r"^\s*(?:public |private )?(?:function|rule|test|type|facet) ", l)]
+    hits = []
+    for start in starts:
+        ends = [i for i, l in enumerate(lines(ypath), 1) if i > start and re.match(r"^\s*(?:public |private )?(?:function|rule|test|type|facet|structure|constants) ", l)]
         end = ends[0] if ends else len(lines(ypath)) + 1
-        hits = [i for i in range(start, end) if c["what"] in lines(ypath)[i - 1]]
-        if hits:
-            c["y"] = f"{ypath}:{min(hits, key=lambda i: abs(i - start - (int(yn) - old_start)))}"
-    if c["y"] == old_y:
-        try:
-            c["y"] = moved(old_y)
-        except SystemExit as e:
-            print("dropped a copy whose Y line is gone:", c["what"], e)
-            continue
-    copies.append(c)
+        hits += [i for i in range(start + 1, end) if what in lines(ypath)[i - 1]]
+    words = lambda t: set(re.findall(r"[A-Za-z_]\w*", t.split("// y:")[0])) - {"let", "mutable", "clone", "return"}
+    taken = set()
+    for k, c in enumerate(cs):
+        # the line most like the bare line: the most names in common, then in order
+        bare = lines(c["bare"].rsplit(":", 1)[0])[int(c["bare"].rsplit(":", 1)[1]) - 1]
+        free = [h for h in hits if h not in taken] or hits
+        if free:
+            best = max(free, key=lambda h: (len(words(lines(ypath)[h - 1]) & words(bare)), -h))
+            taken.add(best)
+            c["y"] = f"{ypath}:{best}"
+        else:
+            try:
+                c["y"] = moved(c["y"])
+            except SystemExit as e:
+                print("dropped a copy whose Y line is gone:", c["what"], e)
+                continue
+        copies.append(c)
+copies.sort(key=lambda c: (c["bare"].rsplit(":", 1)[0], int(c["bare"].rsplit(":", 1)[1])))
 if "copies" in facts:
     facts["copies"] = copies
     listed_bare = {c["bare"] for c in copies}

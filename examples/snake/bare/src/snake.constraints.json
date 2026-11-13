@@ -7,8 +7,8 @@
     "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
   },
   "subjects": [
-    { "kind": "module", "name": "snake_example::snake::setup", "visible": "public" },
-    { "kind": "module", "name": "snake_example::snake::setup::board", "visible": "public" },
+    { "kind": "module", "name": "snake_example::snake::setup", "visible": "public", "level": "effects" },
+    { "kind": "module", "name": "snake_example::snake::setup::board", "visible": "public", "level": "data" },
     {
       "kind": "const",
       "name": "snake_example::snake::setup::board::COLUMNS",
@@ -21,7 +21,12 @@
       "visible": "public",
       "type": "i32"
     },
-    { "kind": "module", "name": "snake_example::snake::setup::game_rules", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "snake_example::snake::setup::game_rules",
+      "visible": "public",
+      "level": "data"
+    },
     {
       "kind": "const",
       "name": "snake_example::snake::setup::game_rules::STEP_TIME",
@@ -125,7 +130,8 @@
         {
           "name": "random",
           "type": "ref<target_type=Random>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         }
       ],
       "result": { "type": "Game" },
@@ -142,7 +148,7 @@
         { "kind": "effects", "text": "no suspension", "source": "y/src/snake.y:75" }
       ]
     },
-    { "kind": "module", "name": "snake_example::snake::rules", "visible": "public" },
+    { "kind": "module", "name": "snake_example::snake::rules", "visible": "public", "level": "effects" },
     {
       "kind": "function",
       "name": "snake_example::snake::rules::turned",
@@ -171,7 +177,8 @@
         {
           "name": "random",
           "type": "ref<target_type=Random>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         }
       ],
       "clauses": [
@@ -261,7 +268,8 @@
         {
           "name": "random",
           "type": "ref<target_type=Random>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         }
       ],
       "clauses": [
@@ -272,8 +280,13 @@
         { "kind": "access", "text": "mutates only game", "source": "y/src/snake.y:241" }
       ]
     },
-    { "kind": "module", "name": "snake_example::snake::drawing", "visible": "public" },
-    { "kind": "module", "name": "snake_example::snake::drawing::layout", "visible": "public" },
+    { "kind": "module", "name": "snake_example::snake::drawing", "visible": "public", "level": "effects" },
+    {
+      "kind": "module",
+      "name": "snake_example::snake::drawing::layout",
+      "visible": "public",
+      "level": "data"
+    },
     {
       "kind": "const",
       "name": "snake_example::snake::drawing::layout::CELL_SIZE",
@@ -298,7 +311,12 @@
       "visible": "public",
       "type": "i32"
     },
-    { "kind": "module", "name": "snake_example::snake::drawing::palette", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "snake_example::snake::drawing::palette",
+      "visible": "public",
+      "level": "data"
+    },
     {
       "kind": "const",
       "name": "snake_example::snake::drawing::palette::BACKGROUND",
@@ -364,7 +382,8 @@
         {
           "name": "window",
           "type": "ref<target_type=Window>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         }
       ],
       "clauses": [
@@ -387,7 +406,8 @@
         {
           "name": "window",
           "type": "ref<target_type=Window>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         }
       ],
       "clauses": [
@@ -397,7 +417,12 @@
         { "kind": "effects", "text": "no suspension", "source": "y/src/snake.y:323" }
       ]
     },
-    { "kind": "module", "name": "snake_example::snake::window_play", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "snake_example::snake::window_play",
+      "visible": "public",
+      "level": "effects"
+    },
     {
       "kind": "function",
       "name": "snake_example::snake::window_play::play",
@@ -406,22 +431,26 @@
         {
           "name": "window",
           "type": "ref<target_type=Window>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         },
         {
           "name": "clock",
           "type": "ref<target_type=Clock>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         },
         {
           "name": "random",
           "type": "ref<target_type=Random>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         },
         {
           "name": "forever",
           "type": "ref<target_type=Forever>",
-          "access": { "rights": "read", "guarantee": "readers" }
+          "access": { "rights": "read", "guarantee": "readers" },
+          "injected": true
         }
       ],
       "result": { "type": "u32" },
@@ -478,7 +507,8 @@
         {
           "name": "random",
           "type": "ref<target_type=Random>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         }
       ],
       "result": { "type": "Instant" },

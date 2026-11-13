@@ -7,8 +7,18 @@
     "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
   },
   "subjects": [
-    { "kind": "module", "name": "checkers_example::checkers::setup", "visible": "public" },
-    { "kind": "module", "name": "checkers_example::checkers::setup::board", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "checkers_example::checkers::setup",
+      "visible": "public",
+      "level": "structured"
+    },
+    {
+      "kind": "module",
+      "name": "checkers_example::checkers::setup::board",
+      "visible": "public",
+      "level": "data"
+    },
     {
       "kind": "const",
       "name": "checkers_example::checkers::setup::board::SIZE",
@@ -21,14 +31,24 @@
       "visible": "public",
       "type": "i32"
     },
-    { "kind": "module", "name": "checkers_example::checkers::setup::game_rules", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "checkers_example::checkers::setup::game_rules",
+      "visible": "public",
+      "level": "data"
+    },
     {
       "kind": "const",
       "name": "checkers_example::checkers::setup::game_rules::QUIET_LIMIT",
       "visible": "public",
       "type": "u32"
     },
-    { "kind": "module", "name": "checkers_example::checkers::setup::scoring", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "checkers_example::checkers::setup::scoring",
+      "visible": "public",
+      "level": "data"
+    },
     {
       "kind": "const",
       "name": "checkers_example::checkers::setup::scoring::WIN_POINTS",
@@ -137,7 +157,12 @@
         }
       ]
     },
-    { "kind": "module", "name": "checkers_example::checkers::setup::directions", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "checkers_example::checkers::setup::directions",
+      "visible": "public",
+      "level": "data"
+    },
     {
       "kind": "const",
       "name": "checkers_example::checkers::setup::directions::UP",
@@ -220,7 +245,12 @@
         }
       ]
     },
-    { "kind": "module", "name": "checkers_example::checkers::setup::levels", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "checkers_example::checkers::setup::levels",
+      "visible": "public",
+      "level": "data"
+    },
     {
       "kind": "const",
       "name": "checkers_example::checkers::setup::levels::ALL",
@@ -297,7 +327,12 @@
       "result": { "type": "Piece?" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:179" }]
     },
-    { "kind": "module", "name": "checkers_example::checkers::rules", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "checkers_example::checkers::rules",
+      "visible": "public",
+      "level": "structured"
+    },
     {
       "kind": "function",
       "name": "checkers_example::checkers::rules::legal_moves",
@@ -574,8 +609,18 @@
       "result": { "type": "bool" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:531" }]
     },
-    { "kind": "module", "name": "checkers_example::checkers::computer", "visible": "public" },
-    { "kind": "module", "name": "checkers_example::checkers::computer::search", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "checkers_example::checkers::computer",
+      "visible": "public",
+      "level": "effects"
+    },
+    {
+      "kind": "module",
+      "name": "checkers_example::checkers::computer::search",
+      "visible": "public",
+      "level": "data"
+    },
     {
       "kind": "const",
       "name": "checkers_example::checkers::computer::search::DEEPEST",
@@ -641,7 +686,8 @@
         {
           "name": "random",
           "type": "ref<target_type=Random>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         }
       ],
       "result": { "type": "Move" },
@@ -707,7 +753,8 @@
         {
           "name": "random",
           "type": "ref<target_type=Random>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         }
       ],
       "result": { "type": "Move" },
@@ -738,7 +785,8 @@
         {
           "name": "random",
           "type": "ref<target_type=Random>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         }
       ],
       "result": { "type": "i32" },
@@ -763,7 +811,8 @@
         {
           "name": "random",
           "type": "ref<target_type=Random>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         }
       ],
       "result": { "type": "PlayedOut" },
@@ -802,8 +851,18 @@
       "result": { "type": "i32" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:768" }]
     },
-    { "kind": "module", "name": "checkers_example::checkers::drawing", "visible": "public" },
-    { "kind": "module", "name": "checkers_example::checkers::drawing::layout", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "checkers_example::checkers::drawing",
+      "visible": "public",
+      "level": "effects"
+    },
+    {
+      "kind": "module",
+      "name": "checkers_example::checkers::drawing::layout",
+      "visible": "public",
+      "level": "data"
+    },
     {
       "kind": "const",
       "name": "checkers_example::checkers::drawing::layout::SQUARE_SIZE",
@@ -894,7 +953,12 @@
       "visible": "public",
       "type": "i32"
     },
-    { "kind": "module", "name": "checkers_example::checkers::drawing::palette", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "checkers_example::checkers::drawing::palette",
+      "visible": "public",
+      "level": "data"
+    },
     {
       "kind": "const",
       "name": "checkers_example::checkers::drawing::palette::BACKGROUND",
@@ -1009,7 +1073,8 @@
         {
           "name": "window",
           "type": "ref<target_type=Window>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         }
       ],
       "clauses": [
@@ -1028,7 +1093,8 @@
         {
           "name": "window",
           "type": "ref<target_type=Window>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         }
       ],
       "clauses": [
@@ -1124,7 +1190,8 @@
         {
           "name": "window",
           "type": "ref<target_type=Window>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         }
       ],
       "clauses": [
@@ -1146,7 +1213,8 @@
         {
           "name": "window",
           "type": "ref<target_type=Window>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         }
       ],
       "clauses": [
@@ -1169,7 +1237,8 @@
         {
           "name": "window",
           "type": "ref<target_type=Window>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         }
       ],
       "clauses": [
@@ -1187,7 +1256,8 @@
         {
           "name": "window",
           "type": "ref<target_type=Window>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         }
       ],
       "clauses": [
@@ -1204,7 +1274,12 @@
       "result": { "type": "list<element_type=Colour> as 'List'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:1105" }]
     },
-    { "kind": "module", "name": "checkers_example::checkers::window_play", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "checkers_example::checkers::window_play",
+      "visible": "public",
+      "level": "effects"
+    },
     {
       "kind": "type",
       "name": "checkers_example::checkers::window_play::Ending",
@@ -1234,17 +1309,20 @@
         {
           "name": "window",
           "type": "ref<target_type=Window>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         },
         {
           "name": "random",
           "type": "ref<target_type=Random>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         },
         {
           "name": "forever",
           "type": "ref<target_type=Forever>",
-          "access": { "rights": "read", "guarantee": "readers" }
+          "access": { "rights": "read", "guarantee": "readers" },
+          "injected": true
         }
       ],
       "result": { "type": "u32" },
@@ -1261,12 +1339,14 @@
         {
           "name": "window",
           "type": "ref<target_type=Window>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         },
         {
           "name": "forever",
           "type": "ref<target_type=Forever>",
-          "access": { "rights": "read", "guarantee": "readers" }
+          "access": { "rights": "read", "guarantee": "readers" },
+          "injected": true
         }
       ],
       "result": { "type": "Level?" },
@@ -1286,17 +1366,20 @@
         {
           "name": "window",
           "type": "ref<target_type=Window>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         },
         {
           "name": "random",
           "type": "ref<target_type=Random>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         },
         {
           "name": "forever",
           "type": "ref<target_type=Forever>",
-          "access": { "rights": "read", "guarantee": "readers" }
+          "access": { "rights": "read", "guarantee": "readers" },
+          "injected": true
         }
       ],
       "result": { "type": "Ending" },

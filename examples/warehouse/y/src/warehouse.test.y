@@ -139,6 +139,17 @@ test a_line_the_shelf_cannot_fill_is_backordered
         shelf_kept = (holdings.snapshot().on_shelf.count_of("tea-1") == 1)
 
 
+-- The shelf is counted from a snapshot of the stock.
+test the_units_on_the_shelf_are_counted
+        covers units_on_shelf:
+    inject:
+            holdings = shared.new(holdings(on_shelf: bag.of(["tea-1", "tea-1", "cup-3"]), backordered: queue.new()))
+    when:
+        units = units_on_shelf()
+    then:
+        three = (units == 3)
+
+
 -- An order's lines are its own.
 test an_orders_lines
         covers lines_of:

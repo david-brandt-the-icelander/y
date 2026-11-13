@@ -7,8 +7,18 @@
     "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
   },
   "subjects": [
-    { "kind": "module", "name": "tic_tac_toe_example::tic_tac_toe::setup", "visible": "public" },
-    { "kind": "module", "name": "tic_tac_toe_example::tic_tac_toe::setup::board", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "tic_tac_toe_example::tic_tac_toe::setup",
+      "visible": "public",
+      "level": "calculations"
+    },
+    {
+      "kind": "module",
+      "name": "tic_tac_toe_example::tic_tac_toe::setup::board",
+      "visible": "public",
+      "level": "data"
+    },
     {
       "kind": "const",
       "name": "tic_tac_toe_example::tic_tac_toe::setup::board::SQUARES",
@@ -80,7 +90,12 @@
       "result": { "type": "Game" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:38" }]
     },
-    { "kind": "module", "name": "tic_tac_toe_example::tic_tac_toe::moves", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "tic_tac_toe_example::tic_tac_toe::moves",
+      "visible": "public",
+      "level": "structured"
+    },
     {
       "kind": "type",
       "name": "tic_tac_toe_example::tic_tac_toe::moves::MoveError",
@@ -247,7 +262,12 @@
       "result": { "type": "string as 'YString'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:242" }]
     },
-    { "kind": "module", "name": "tic_tac_toe_example::tic_tac_toe::console_play", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "tic_tac_toe_example::tic_tac_toe::console_play",
+      "visible": "public",
+      "level": "effects"
+    },
     {
       "kind": "type",
       "name": "tic_tac_toe_example::tic_tac_toe::console_play::PlayError",
@@ -286,12 +306,14 @@
         {
           "name": "console",
           "type": "ref<target_type=Console>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         },
         {
           "name": "forever",
           "type": "ref<target_type=Forever>",
-          "access": { "rights": "read", "guarantee": "readers" }
+          "access": { "rights": "read", "guarantee": "readers" },
+          "injected": true
         }
       ],
       "result": { "type": "()", "fails": "PlayError" },
@@ -313,12 +335,14 @@
         {
           "name": "console",
           "type": "ref<target_type=Console>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         },
         {
           "name": "forever",
           "type": "ref<target_type=Forever>",
-          "access": { "rights": "read", "guarantee": "readers" }
+          "access": { "rights": "read", "guarantee": "readers" },
+          "injected": true
         }
       ],
       "result": { "type": "()", "fails": "PlayError" },
@@ -347,7 +371,8 @@
         {
           "name": "console",
           "type": "ref<target_type=Console>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         }
       ],
       "result": { "type": "()", "fails": "ConsoleError" },

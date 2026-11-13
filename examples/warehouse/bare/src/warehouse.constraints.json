@@ -129,7 +129,8 @@
         {
           "name": "items",
           "type": "ref<target_type=Store<Item>>",
-          "access": { "rights": "read", "guarantee": "readers" }
+          "access": { "rights": "read", "guarantee": "readers" },
+          "injected": true
         }
       ],
       "result": { "type": "map<key_type=Sku, value_type=Item> as 'SortedMap'", "fails": "CatalogueError" }
@@ -288,7 +289,8 @@
         {
           "name": "holdings",
           "type": "ref<target_type=Shared<Holdings>>",
-          "access": { "rights": "read", "guarantee": "readers" }
+          "access": { "rights": "read", "guarantee": "readers" },
+          "injected": true
         }
       ],
       "result": { "type": "Reservation" }
@@ -302,13 +304,43 @@
           "kind": "region",
           "text": "waits until enough : holdings.on_shelf.count_of(wanted.sku) >= wanted.quantity",
           "source": "y/src/warehouse.y:171"
-        }
+        },
+        { "kind": "region", "text": "may run again", "source": "y/src/warehouse.y:171" },
+        { "kind": "region", "text": "on failure unchanged", "source": "y/src/warehouse.y:171" }
       ]
     },
     {
       "kind": "region",
       "name": "warehouse_example::warehouse::stock::reserve#put_on_backorder",
-      "clauses": [{ "kind": "region", "text": "atomic", "source": "y/src/warehouse.y:174" }]
+      "clauses": [
+        { "kind": "region", "text": "atomic", "source": "y/src/warehouse.y:174" },
+        { "kind": "region", "text": "may run again", "source": "y/src/warehouse.y:174" },
+        { "kind": "region", "text": "on failure unchanged", "source": "y/src/warehouse.y:174" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::stock::units_on_shelf",
+      "visible": "public",
+      "params": [
+        {
+          "name": "holdings",
+          "type": "ref<target_type=Shared<Holdings>>",
+          "access": { "rights": "read", "guarantee": "readers" },
+          "injected": true
+        }
+      ],
+      "result": { "type": "u64 as 'usize'" }
+    },
+    {
+      "kind": "region",
+      "name": "warehouse_example::warehouse::stock::units_on_shelf#counted",
+      "clauses": [
+        { "kind": "region", "text": "atomic", "source": "y/src/warehouse.y:188" },
+        { "kind": "region", "text": "isolation snapshot", "source": "y/src/warehouse.y:188" },
+        { "kind": "region", "text": "may run again", "source": "y/src/warehouse.y:188" },
+        { "kind": "region", "text": "on failure unchanged", "source": "y/src/warehouse.y:188" }
+      ]
     },
     {
       "kind": "module",
@@ -339,7 +371,7 @@
         }
       ],
       "result": { "type": "list<element_type=Line> as 'List'" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/warehouse.y:193" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/warehouse.y:206" }]
     },
     {
       "kind": "function",
@@ -354,19 +386,25 @@
         {
           "name": "holdings",
           "type": "ref<target_type=Shared<Holdings>>",
-          "access": { "rights": "read", "guarantee": "readers" }
+          "access": { "rights": "read", "guarantee": "readers" },
+          "injected": true
         },
         {
           "name": "sold",
           "type": "ref<target_type=Shared<Bag<Sku>>>",
-          "access": { "rights": "read", "guarantee": "readers" }
+          "access": { "rights": "read", "guarantee": "readers" },
+          "injected": true
         }
       ]
     },
     {
       "kind": "region",
       "name": "warehouse_example::warehouse::packing::pack_orders#count_sale",
-      "clauses": [{ "kind": "region", "text": "atomic", "source": "y/src/warehouse.y:212" }]
+      "clauses": [
+        { "kind": "region", "text": "atomic", "source": "y/src/warehouse.y:225" },
+        { "kind": "region", "text": "may run again", "source": "y/src/warehouse.y:225" },
+        { "kind": "region", "text": "on failure unchanged", "source": "y/src/warehouse.y:225" }
+      ]
     },
     {
       "kind": "function",
@@ -381,12 +419,14 @@
         {
           "name": "holdings",
           "type": "ref<target_type=Shared<Holdings>>",
-          "access": { "rights": "read", "guarantee": "readers" }
+          "access": { "rights": "read", "guarantee": "readers" },
+          "injected": true
         },
         {
           "name": "sold",
           "type": "ref<target_type=Shared<Bag<Sku>>>",
-          "access": { "rights": "read", "guarantee": "readers" }
+          "access": { "rights": "read", "guarantee": "readers" },
+          "injected": true
         }
       ],
       "result": { "type": "()", "fails": "PackingError" }
@@ -394,7 +434,14 @@
     {
       "kind": "region",
       "name": "warehouse_example::warehouse::packing::pack_day#packing",
-      "clauses": [{ "kind": "region", "text": "within 10s", "source": "y/src/warehouse.y:233" }]
+      "clauses": [
+        { "kind": "region", "text": "within 10s", "source": "y/src/warehouse.y:246" },
+        {
+          "kind": "region",
+          "text": "supervise(restart: restart_policy.each_failed, at_most: 2, per: 1min)",
+          "source": "y/src/warehouse.y:246"
+        }
+      ]
     },
     {
       "kind": "module",
@@ -502,7 +549,7 @@
         }
       ],
       "result": { "type": "string as 'YString'" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/warehouse.y:260" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/warehouse.y:273" }]
     },
     {
       "kind": "function",
@@ -517,7 +564,8 @@
         {
           "name": "filed",
           "type": "ref<target_type=Store<Receipt>>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         }
       ],
       "result": { "type": "()", "fails": "StoreError" }
@@ -526,8 +574,8 @@
       "kind": "region",
       "name": "warehouse_example::warehouse::receipts::file_receipts#filing",
       "clauses": [
-        { "kind": "region", "text": "uncancellable", "source": "y/src/warehouse.y:284" },
-        { "kind": "region", "text": "within 50ms", "source": "y/src/warehouse.y:284" }
+        { "kind": "region", "text": "uncancellable", "source": "y/src/warehouse.y:297" },
+        { "kind": "region", "text": "within 50ms", "source": "y/src/warehouse.y:297" }
       ]
     }
   ],
@@ -561,6 +609,9 @@
         "put_on_backorder.tx": { "host": "&mut Tx", "form": "ref_hole" },
         "out_2": "Result<Step<Reservation>, Infallible>"
       }
+    },
+    "warehouse_example::warehouse::stock::units_on_shelf": {
+      "locals": { "out": "Result<Step<u64 as 'usize'>, Infallible>" }
     },
     "warehouse_example::warehouse::packing::pack_orders": {
       "locals": { "out": "Result<Step<()>, Infallible>" }

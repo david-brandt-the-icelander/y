@@ -127,6 +127,14 @@ fn a_line_the_shelf_cannot_fill_is_backordered() {
 }
 
 #[test]
+fn the_units_on_the_shelf_are_counted() {
+    // y: covers units_on_shelf
+    let holdings = shelf(&["tea-1", "tea-1", "cup-3"]);
+    let units = units_on_shelf(&holdings);
+    assert!(units == 3, "three");
+}
+
+#[test]
 fn an_orders_lines() {
     // y: covers lines_of
     let one = order(1, 1, list![line("tea-1", 1, "4.50", "0.2400")]);

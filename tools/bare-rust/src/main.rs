@@ -258,7 +258,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
                     let m = s["name"].as_str().unwrap_or("");
                     let pinned = s["level"].as_str().map_or(String::new(), |l| format!(", pinned at {l}"));
                     let (level, why) = bare_rust::level::needed(&files, m);
-                    let why = why.map_or(String::new(), |(f, u)| format!(": {} in `{}`, {f}:{}", u.what, u.function, u.line));
+                    let why = why.map_or(String::new(), |u| format!(": {} in `{}`, {}:{}", u.what.trim_end_matches(','), u.function, u.file, u.line));
                     println!("{m}: needs {level}{pinned}{why}");
                 }
             }

@@ -7,8 +7,8 @@
     "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
   },
   "subjects": [
-    { "kind": "module", "name": "nim_example::nim::setup", "visible": "public" },
-    { "kind": "module", "name": "nim_example::nim::setup::game_rules", "visible": "public" },
+    { "kind": "module", "name": "nim_example::nim::setup", "visible": "public", "level": "calculations" },
+    { "kind": "module", "name": "nim_example::nim::setup::game_rules", "visible": "public", "level": "data" },
     {
       "kind": "const",
       "name": "nim_example::nim::setup::game_rules::STARTING_HEAPS",
@@ -43,7 +43,7 @@
       "result": { "type": "Game" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/nim.y:31" }]
     },
-    { "kind": "module", "name": "nim_example::nim::moves", "visible": "public" },
+    { "kind": "module", "name": "nim_example::nim::moves", "visible": "public", "level": "structured" },
     {
       "kind": "type",
       "name": "nim_example::nim::moves::Move",
@@ -218,7 +218,7 @@
       "result": { "type": "string as 'YString'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/nim.y:201" }]
     },
-    { "kind": "module", "name": "nim_example::nim::console_play", "visible": "public" },
+    { "kind": "module", "name": "nim_example::nim::console_play", "visible": "public", "level": "effects" },
     {
       "kind": "type",
       "name": "nim_example::nim::console_play::PlayError",
@@ -254,12 +254,14 @@
         {
           "name": "console",
           "type": "ref<target_type=Console>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         },
         {
           "name": "forever",
           "type": "ref<target_type=Forever>",
-          "access": { "rights": "read", "guarantee": "readers" }
+          "access": { "rights": "read", "guarantee": "readers" },
+          "injected": true
         }
       ],
       "result": { "type": "()", "fails": "PlayError" },
@@ -281,12 +283,14 @@
         {
           "name": "console",
           "type": "ref<target_type=Console>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         },
         {
           "name": "forever",
           "type": "ref<target_type=Forever>",
-          "access": { "rights": "read", "guarantee": "readers" }
+          "access": { "rights": "read", "guarantee": "readers" },
+          "injected": true
         }
       ],
       "result": { "type": "Player", "fails": "PlayError" },
@@ -311,7 +315,8 @@
         {
           "name": "console",
           "type": "ref<target_type=Console>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         }
       ],
       "result": { "type": "()", "fails": "ConsoleError" },

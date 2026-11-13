@@ -120,6 +120,11 @@
       "name": "warehouse_example::warehouse::tests::a_line_the_shelf_cannot_fill_is_backordered",
       "params": []
     },
+    {
+      "kind": "function",
+      "name": "warehouse_example::warehouse::tests::the_units_on_the_shelf_are_counted",
+      "params": []
+    },
     { "kind": "function", "name": "warehouse_example::warehouse::tests::an_orders_lines", "params": [] },
     {
       "kind": "function",

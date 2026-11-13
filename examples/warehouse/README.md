@@ -45,17 +45,19 @@ The program writes `receipts.store` beside it.
 
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
-| Y source | `y/src/warehouse.y`, `y/src/warehouse.test.y`, `y/src/main.y` | 287, 316, 63 | hand |
-| Bare bodies | `bare/src/warehouse.brs`, `bare/src/warehouse/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 419, 255, 121, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
-| Constraint files | `bare/src/*.constraints.json` (97 subjects, 16 clauses) | 927 | `strip`, plus the clauses, regions, status and module levels the Y lowering adds, then `bare-rust libfmt` |
-| Y facts | `bare/y-facts.json` | 614 | the same, from the Y source and the bare bodies |
-| Rust | `src/warehouse.rs`, `src/warehouse/tests.rs`, `src/main.rs`, `src/lib.rs` | 418, 255, 121, 3 | `bare-rust weave` |
+| Y source | `y/src/warehouse.y`, `y/src/warehouse.test.y`, `y/src/main.y` | 300, 327, 63 | hand |
+| Bare bodies | `bare/src/warehouse.brs`, `bare/src/warehouse/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 435, 263, 121, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
+| Constraint files | `bare/src/*.constraints.json` (100 subjects, 27 clauses) | 983 | `strip`, plus the clauses, regions, status and module levels the Y lowering adds, then `bare-rust libfmt` |
+| Y facts | `bare/y-facts.json` | 626 | the same, from the Y source and the bare bodies |
+| Rust | `src/warehouse.rs`, `src/warehouse/tests.rs`, `src/main.rs`, `src/lib.rs` | 434, 263, 121, 3 | `bare-rust weave` |
 
 ## What Warehouse adds to Hangman's lowering
 
 | Y | Rust | Runtime |
 |---|---|---|
 | `shared<value_type=holdings>`, and a region that is `atomic` | `Shared<Holdings>`, and a closure over a `Tx` that reads with `tx.get` and writes with `tx.set` | `y_runtime::shared`: every atomic region takes one global lock, so regions are serializable by construction and none is ever re-run. Writes are buffered and applied when the region ends, so a failure leaves no trace |
+| `region counted is atomic, isolation snapshot:` in `units_on_shelf` | `atomic_with(…, Isolation::Snapshot, …)` | the region reads one consistent snapshot; under the optimistic engine a commit to what it only read does not make it run again (first committer wins on what it writes) |
+| what `atomic` implies, unwritten in Y (§ 3.8): the region may run again, and a failure leaves no trace | the region subject's clauses `may run again` and `on failure unchanged` | `y_runtime::shared` keeps `atomic` with one lock by default; `Y_ATOMIC=optimistic` runs each region without the lock and runs it again when a commit invalidated it, so weave refuses an atomic region whose code uses a capability other than `shared` state, or waits |
 | `waits until enough = (…)` on the region `take_from_shelf` | the closure returns `Step::Retry` when the condition does not hold, marked `// y: waits until enough` | the region waits on one condition variable, which every commit notifies |
 | `region take_from_shelf is …:` `orelse region put_on_backorder is …:` | one closure per alternative, each marked `// y: #name`, passed in order to `orelse` | the alternatives run left to right under one hold of the lock; the first that does not retry commits. The path tools count the alternatives as a decision whose outcomes are the regions' names, and `trace.py` records an alternative where it commits |
 | `region packing is within 10s or fail, supervise(restart: restart_policy.each_failed, at_most: 2, per: 1min):`, with `task first_half = …` and `task second_half = …` | a `Deadline`, and two `TaskBody` closures run by `supervised` | `y_runtime::task::supervised`: a thread per task; the region ends when all have; a failed task is restarted as the policy allows |
@@ -71,14 +73,15 @@ The program writes `receipts.store` beside it.
 | `batch = filed.batch()`, a resource whose release writes the batch and can fail with `store_error` | `Held::new(filed.batch())`, ended with `batch.end()`, whose failure is the function's | `y_runtime::arena::Held`: released exactly once, on a normal exit by `end` and on a failure when it is dropped |
 | `schema item v1:`, `schema item v2:`, `migrate item v1 to v2: vat_rate := tax.standard_rate` | `impl Schema for Item`, whose `decode` reads both versions and migrates version 1 | `y_runtime::store::Store`: records with their versions, read one by one, so a record that fails fails alone, against its key |
 | `store<schema_type=item>`, `system.store(path"items.store")` | `Store<Item>`, `system.store("items.store")`; `Store::fake(lines)` in the tests | — |
-| each `region name is …:` | a `region` subject in the constraint file, `<function>#<name>`, with one clause for each constraint: `atomic`, `waits until enough : …`, `within 10s`, `uncancellable`, `detach because "…"` (constraint language § 6.23). The function marks where the region starts, `// y: region name is …` or `// y: #name` | weave refuses a region its function does not mark, or whose marker states other constraints |
-| the facets' levels, which the Y compiler infers (Y § 3.19) | `"level"` on each facet's module subject: `pricing` at `structured`, `stock` at `shared`, `catalogue::tax` at `data`, the others at `effects` | weave, and `bare-rust levels`, refuse a body that uses more than its module's level: `pricing` at `calculations` fails on `split`'s `&mut` |
+| each `region name is …:` | a `region` subject in the constraint file, `<function>#<name>`, with one clause for each constraint: `atomic`, `isolation snapshot`, `may run again`, `on failure unchanged`, `waits until enough : …`, `within 10s`, `supervise(…)`, `uncancellable`, `detach because "…"` (constraint language § 6.23). The function marks where the region starts, `// y: region name is …` or `// y: #name` | weave refuses a region its function does not mark, or whose marker states other constraints |
+| the facets' levels, which the Y compiler infers (Y § 3.19) | `"level"` on each facet's module subject: `pricing` at `structured`, `stock` at `shared`, `catalogue::tax` at `data`, the others at `effects`; each `injected` parameter is marked so in the constraint file | weave, and `bare-rust levels`, refuse a body that uses more than its module's level, its calls of the crate's functions and its imports counted: `pricing` at `calculations` fails on `split`'s `&mut` |
 | `constants day:` with lists of structures | functions that make them, since a Rust `const` cannot hold a `List` | — |
 
 ## Checks
 
-- `cargo test`: the 25 lowered Y tests, one for each of the module's 25 paths.
-- `tools/paths/rebare.sh warehouse`: 10 decisions, 25 paths, 25 tests, `uncovered: [] unknown: []`, and the example's
+- `cargo test`: the 26 lowered Y tests, one for each of the module's 26 paths. `Y_ATOMIC=optimistic cargo test` runs them
+  again with the optimistic engine, which may run a region again.
+- `tools/paths/rebare.sh warehouse`: 10 decisions, 26 paths, 26 tests, `uncovered: [] unknown: []`, and the example's
   checks in `tools/bare-rust/tests/y_examples.rs`, which pass.
 - `python3 tools/paths/trace.py examples/warehouse warehouse`: every path is taken by the test that claims it, the two
   alternatives of `reserve`'s `orelse` among them.

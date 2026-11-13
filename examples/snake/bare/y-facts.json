@@ -155,15 +155,7 @@
       "y": "y/src/main.y:15"
     }
   ],
-  "claims": [
-    {
-      "claim": "forever",
-      "because": "a hidden window shows no frames, and the game waits until it is shown",
-      "requires": "Forever",
-      "y": "y/src/snake.y:362",
-      "bare": "bare/src/snake.brs:330"
-    }
-  ],
+  "claims": [],
   "suspensions": [
     {
       "subject": "snake_example::snake::window_play::play",

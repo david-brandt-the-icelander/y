@@ -367,8 +367,7 @@ pub fn validate_with(file: &Value, text: Option<&str>, builds: &BTreeSet<String>
         let binds: Vec<String> = clauses_of().filter(|c| c["kind"] == "callback").filter_map(|c| c["text"].as_str()).flat_map(|t| crate::clause::callback_binds(t, &before_callbacks)).collect();
         scope.names.extend(binds);
         // language 6.23: a region is named `<function>#<region>`, in a function of the file when the file is a module's;
-        // its clauses, and only its, are of kind `region`, and agree with one another; one that may run again is in a
-        // function that bounds its effects to its state
+        // its clauses, and only its, are of kind `region`, and agree with one another (weave checks its code)
         let region_texts: Vec<&str> = clauses_of().filter(|c| c["kind"] == "region").filter_map(|c| c["text"].as_str()).collect();
         if kind == "region" {
             match crate::region::split_name(name) {
@@ -377,12 +376,6 @@ pub fn validate_with(file: &Value, text: Option<&str>, builds: &BTreeSet<String>
                     let function = subject_by_name.get(f).filter(|s| s["kind"] == "function");
                     if module_file && function.is_none() {
                         errs.push(format!("{at}: the region is in `{f}`, which is not a function of the file"));
-                    }
-                    let bounded = function.is_some_and(|s| {
-                        s["clauses"].as_array().into_iter().flatten().any(|c| c["kind"] == "effects" && matches!(c["text"].as_str(), Some("pure" | "effects none" | "no io")))
-                    });
-                    if region_texts.contains(&"may run again") && !bounded {
-                        errs.push(format!("{at}: a region that may run again has no effect but on its state, so `{f}` says `no io`, `pure` or `effects none`"));
                     }
                 }
             }

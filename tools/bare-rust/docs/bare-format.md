@@ -380,13 +380,15 @@ Two kinds of site cannot be bound and stay `e as _` with a hint `{"kind": "cast"
 
 Two kinds of entry have no Rust item of their own. A **region** (constraint language § 6.23) is how a function, or a
 named part of one, may execute: a subject of kind `region`, named `<function>#<region>`, with one clause of kind
-`region` for each constraint (`atomic`, `within 50ms`, `waits until enough : p`, `forever because "…"`, …). The
-function's body marks where the region starts with a comment, `// y: region filing is uncancellable, within 50ms` or,
-for an alternative of an `orelse`, `// y: #name`; weave binds the region to that marker, and refuses a region its
-function does not mark, or whose marker states other constraints than its clauses. A **level** (§ 6.22) is a field of
-a module's subject, `"level": "structured"`: nothing in the module, its inner modules or its files (its `tests` aside)
-may use more. Weave refuses a body above its module's level, naming the construct; `bare-rust levels <bare-dir>`
-prints what each module needs and why.
+`region` for each constraint (`atomic`, `may run again`, `within 50ms`, `waits until enough : p`, `forever because
+"…"`, `supervise(…)`, …). The function's body marks where the region starts with a comment, `// y: region filing is
+uncancellable, within 50ms` or, for an alternative of an `orelse`, `// y: #name`; weave binds the region to that
+marker, and refuses a region its function does not mark, whose marker states other constraints than its clauses, or
+whose code (what follows the marker in its block, or the statement the marker ends) does not keep them. A **level**
+(§ 6.22) is a field of a module's subject, `"level": "structured"`: nothing in the module, its inner modules or its
+files (its `tests` aside) may use more, the functions it calls and the modules it imports counted. A parameter the Y
+lowering injects is marked `"injected": true`, which is how a capability is known. Weave refuses a body above its
+module's level, naming the construct; `bare-rust levels <bare-dir>` prints what each module needs and why.
 
 ```text
 { "kind": "region", "name": "shop::checkout::hold#hold_one", "clauses": [ { "kind": "region", "text": "atomic", "source": "y/src/checkout.y:12" } ] }

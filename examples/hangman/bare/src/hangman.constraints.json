@@ -7,8 +7,18 @@
     "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
   },
   "subjects": [
-    { "kind": "module", "name": "hangman_example::hangman::setup", "visible": "public" },
-    { "kind": "module", "name": "hangman_example::hangman::setup::game_rules", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "hangman_example::hangman::setup",
+      "visible": "public",
+      "level": "structured"
+    },
+    {
+      "kind": "module",
+      "name": "hangman_example::hangman::setup::game_rules",
+      "visible": "public",
+      "level": "data"
+    },
     {
       "kind": "const",
       "name": "hangman_example::hangman::setup::game_rules::WORD_LIST",
@@ -107,7 +117,12 @@
       "result": { "type": "list<element_type=Word> as 'List'", "fails": "WordListError" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:46" }]
     },
-    { "kind": "module", "name": "hangman_example::hangman::rounds", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "hangman_example::hangman::rounds",
+      "visible": "public",
+      "level": "calculations"
+    },
     {
       "kind": "type",
       "name": "hangman_example::hangman::rounds::Game",
@@ -256,7 +271,12 @@
         { "kind": "access", "text": "mutates only game.hits, game.misses", "source": "y/src/hangman.y:155" }
       ]
     },
-    { "kind": "module", "name": "hangman_example::hangman::display", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "hangman_example::hangman::display",
+      "visible": "public",
+      "level": "structured"
+    },
     {
       "kind": "function",
       "name": "hangman_example::hangman::display::masked",
@@ -316,7 +336,12 @@
       "result": { "type": "string as 'YString'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/hangman.y:247" }]
     },
-    { "kind": "module", "name": "hangman_example::hangman::console_play", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "hangman_example::hangman::console_play",
+      "visible": "public",
+      "level": "effects"
+    },
     {
       "kind": "type",
       "name": "hangman_example::hangman::console_play::PlayError",
@@ -359,17 +384,20 @@
         {
           "name": "console",
           "type": "ref<target_type=Console>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         },
         {
           "name": "random",
           "type": "ref<target_type=Random>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         },
         {
           "name": "forever",
           "type": "ref<target_type=Forever>",
-          "access": { "rights": "read", "guarantee": "readers" }
+          "access": { "rights": "read", "guarantee": "readers" },
+          "injected": true
         }
       ],
       "result": { "type": "()", "fails": "PlayError" },
@@ -396,7 +424,8 @@
         {
           "name": "console",
           "type": "ref<target_type=Console>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         }
       ],
       "result": { "type": "()", "fails": "ConsoleError" },
@@ -436,7 +465,8 @@
         {
           "name": "console",
           "type": "ref<target_type=Console>",
-          "access": { "rights": "write", "guarantee": "exclusive" }
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
         }
       ],
       "result": { "type": "()", "fails": "ConsoleError" },

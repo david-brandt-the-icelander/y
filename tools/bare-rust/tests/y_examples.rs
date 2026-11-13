@@ -69,7 +69,8 @@ fn read(p: &Path) -> String {
     fs::read_to_string(p).unwrap_or_else(|e| panic!("{}: {e}", p.display()))
 }
 
-/// The constraint file as strip writes it: no clauses, no module level, no regions, and the status strip gives.
+/// The constraint file as strip writes it: no clauses, no module level, no regions, no `injected` mark on a parameter,
+/// and the status strip gives.
 fn without_lowering(js: &Value) -> Value {
     let mut js = js.clone();
     js["status"] = Value::from("lifted");
@@ -77,6 +78,9 @@ fn without_lowering(js: &Value) -> Value {
     for s in js["subjects"].as_array_mut().unwrap() {
         s.as_object_mut().unwrap().remove("clauses");
         s.as_object_mut().unwrap().remove("level");
+        for p in s.get_mut("params").and_then(Value::as_array_mut).into_iter().flatten() {
+            p.as_object_mut().unwrap().remove("injected");
+        }
     }
     js
 }
@@ -223,8 +227,8 @@ fn constraint_files_are_valid(name: &str) {
 }
 
 /// Warehouse's regions and levels are enforced, not only accepted: each change below is refused, by validation
-/// (language 6.23's rules), by weave (a region with no marker in its function, or whose marker says other constraints)
-/// or by the level check (language 6.22).
+/// (language 6.23's rules), by weave (a region with no marker in its function, whose marker says other constraints, or
+/// whose code does not keep them) or by the level check (language 6.22).
 #[test]
 fn warehouse_regions_and_levels_are_enforced() {
     let dir = example("warehouse");
@@ -246,6 +250,15 @@ fn warehouse_regions_and_levels_are_enforced() {
     let i = region(&mut fewer, "receipts::file_receipts#filing");
     fewer["subjects"][i]["clauses"].as_array_mut().unwrap().remove(0);
     assert!(woven(&fewer).contains("the bare body's marker says `uncancellable`, and no clause does"), "{}", woven(&fewer));
+    // a snapshot region whose code runs it serializable
+    let serializable = brs.replace("Isolation::Snapshot", "Isolation::Serializable");
+    let refused = weave_in_crate(&serializable, &js, Some(&serde_json::Map::new())).err().map(|e| e.msg).unwrap_or_default();
+    assert!(refused.contains("says `isolation snapshot`, and the code its marker starts does not run it at `Isolation::Snapshot`"), "{refused}");
+    // a region whose tasks are supervised, and whose clauses do not say how
+    let mut unsupervised = js.clone();
+    let i = region(&unsupervised, "packing::pack_day#packing");
+    unsupervised["subjects"][i]["clauses"].as_array_mut().unwrap().retain(|c| !c["text"].as_str().unwrap().starts_with("supervise"));
+    assert!(woven(&unsupervised).contains("the bare body's marker says `supervise`, and no clause does"), "{}", woven(&unsupervised));
     // a region that waits until a condition, and is not atomic
     let mut waits = js.clone();
     let i = region(&mut waits, "stock::reserve#take_from_shelf");
@@ -359,8 +372,8 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
         assert!(at(c["y"].as_str().unwrap()).contains(what), "copy of {what}: not at {}", c["y"]);
         assert!(at(c["bare"].as_str().unwrap()).contains("// y: a copy"), "copy of {what}: not marked at {}", c["bare"]);
     }
-    // each claim (`forever because "…"`, `detach because "…"`) is where the facts say: its Y line gives the reason, and
-    // so does the `// y:` marker of its bare line; no two claims share a line
+    // each claim outside a region (`console.read_line() forever because "…"`) is where the facts say: its Y line gives
+    // the reason, and so does the `// y:` marker of its bare line; no two claims share a line
     let mut claimed = BTreeSet::new();
     for c in facts["claims"].as_array().map_or(&[][..], |v| v) {
         let because = format!("because \"{}\"", c["because"].as_str().unwrap());
@@ -368,6 +381,7 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
         assert!(at(y).contains(&because), "claim {because}: not at {y}");
         assert!(at(bare).split_once("// y:").is_some_and(|(_, m)| m.contains(&because)), "claim {because}: not marked at {bare}");
         assert!(claimed.insert(y.to_string()), "two claims at {y}");
+        assert!(!at(bare).contains("// y: region "), "claim {because} at {bare} is a region's: it is a clause of the region subject");
     }
     // each point where the Y source may suspend is where the facts say, and the bare body awaits it there (Y § 3.7)
     for s in facts["suspensions"].as_array().unwrap() {
@@ -375,21 +389,9 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
         assert!(at(s["y"].as_str().unwrap()).contains(point), "suspension at {point}: not at {}", s["y"]);
         assert!(at(s["bare"].as_str().unwrap()).contains(".await"), "suspension at {point}: not awaited at {}", s["bare"]);
     }
-    // each region `within` a deadline is where the facts say, and the bare body starts its deadline there and passes it
-    // to each wait inside the region (Y § 3.8); a file without one has no `deadlines` fact
-    for d in facts["deadlines"].as_array().map_or(&[][..], |v| v) {
-        let bound = d["bound"].as_str().unwrap();
-        let header = at(d["y"].as_str().unwrap());
-        let header = header.trim();
-        assert!(header.starts_with("region ") && header.ends_with(&format!(" is within {bound} or fail:")), "deadline {bound}: not at {}", d["y"]);
-        assert!(at(d["bare"].as_str().unwrap()).contains("Deadline::after("), "deadline {bound}: not started at {}", d["bare"]);
-        let (file, line) = d["bare"].as_str().unwrap().rsplit_once(':').unwrap();
-        let rest: Vec<String> = read(&dir.join(file)).lines().skip(line.parse().unwrap()).map(str::to_string).collect();
-        for wait in d["covers"].as_array().unwrap() {
-            let wait = wait.as_str().unwrap();
-            assert!(rest.iter().any(|l| l.contains(wait) && l.contains("&deadline")), "deadline {bound}: {wait} is not given it");
-        }
-    }
+    // a region's constraints, its deadline and its `forever` among them, are its subject's in the constraint files
+    // (language 6.23), which weave holds its code to; the facts do not repeat them
+    assert!(facts.get("deadlines").is_none(), "a region's deadline is a `within` clause of its region subject");
     // every named decision of the Y source is listed: `if name = …:`, `while name = …:`, `for name in …:`, `condition
     // label.name = …:`, `else name:` and `else name`
     let mut in_source = BTreeSet::new();

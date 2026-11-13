@@ -177,22 +177,7 @@
       "y": "y/src/main.y:22"
     }
   ],
-  "claims": [
-    {
-      "claim": "forever",
-      "because": "a hidden window shows no frames, and the game waits until it is shown",
-      "requires": "Forever",
-      "y": "y/src/memory.y:455",
-      "bare": "bare/src/memory.brs:439"
-    },
-    {
-      "claim": "forever",
-      "because": "a hidden window shows no frames, and the game waits until it is shown",
-      "requires": "Forever",
-      "y": "y/src/memory.y:502",
-      "bare": "bare/src/memory.brs:474"
-    }
-  ],
+  "claims": [],
   "suspensions": [
     {
       "subject": "memory_example::memory::setup::new_game",
@@ -257,19 +242,6 @@
       "lowered": "async fn entry, run on Macroquad's executor by y_window::run, and .await at the call",
       "y": "y/src/main.y:31",
       "bare": "bare/src/main.brs:52"
-    }
-  ],
-  "deadlines": [
-    {
-      "subject": "memory_example::memory::setup::new_game",
-      "bound": "game_rules.fetch_time",
-      "covers": [
-        "site.get("
-      ],
-      "expiry": "setup_error.timed_out",
-      "lowered": "Deadline::after at the scope's start, passed to each wait inside it; an expiry converts through SetupError::TimedOut",
-      "y": "y/src/memory.y:135",
-      "bare": "bare/src/memory.brs:147"
     }
   ],
   "compiled": [],
