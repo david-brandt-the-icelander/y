@@ -1,5 +1,5 @@
 {
-  "about": "The level (constraint language 6.22, Y \u00a7 3.19) a call into each library needs, by module path: a call of a function under a path listed here, or of a method of a type under it, needs that level, and the longest path that matches wins. Every library a body calls into is listed, at least by its crate: a call into a library with no entry needs `effects`, since nothing says it has none. `bare-rust` resolves a call through the file's `use` declarations, and a method through its receiver's type when the constraint data gives it.",
+  "about": "The level (constraint language 6.22, Y \u00a7 3.19) a call into each library needs, by module path: a call of a function under a path listed here, or of a method of a type under it, needs that level, and the longest path that matches wins. Every library a body calls into is listed, at least by its crate: a call into a library with no entry needs `effects`, since nothing says it has none. `bare-rust` takes the function a call resolves to from rustc where the woven crate builds (`crate::facts`), and else resolves it through the file's `use` declarations, and a method through its receiver's type when the constraint data gives it. A method of a trait needs the level of its type's module and of its trait's. `bare-rust levels --libraries <crate>...` checks the table against what a library crate's code calls; `trusted` names the functions of a library that call more than their module's level for the library's own sake, each with why: they are held at their module's level all the same.",
   "modules": {
     "std": "calculations",
     "core": "calculations",
@@ -7,6 +7,8 @@
     "y_runtime": "calculations",
     "y_collections": "calculations",
     "y_string": "calculations",
+    "unicode_normalization": "calculations",
+    "unicode_segmentation": "calculations",
     "y_runtime::shared": "shared",
     "y_runtime::arena": "shared",
     "y_runtime::task": "effects",
@@ -23,12 +25,19 @@
     "std::rc": "shared",
     "std::sync": "shared",
     "std::thread": "effects",
+    "std::thread::LocalKey": "shared",
     "std::fs": "effects",
     "std::io": "effects",
+    "std::io::Error": "calculations",
+    "std::io::ErrorKind": "calculations",
     "std::net": "effects",
     "std::env": "effects",
     "std::process": "effects",
     "std::time::Instant": "effects",
     "std::time::SystemTime": "effects"
+  },
+  "trusted": {
+    "y_runtime::shared::engine": "reads `Y_ATOMIC`, the runtime's own choice of engine for atomic regions, not the program's environment",
+    "y_runtime::shared::wait": "waits for a commit on the deadline its caller gave it: the caller pays for the deadline (`y_runtime::Deadline::after`, at `effects`) and for the wait (`// y: waits until \u2026`, at `effects`)"
   }
 }

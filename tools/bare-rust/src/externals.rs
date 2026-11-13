@@ -258,7 +258,7 @@ fn is_ident_byte(c: u8) -> bool {
 }
 
 /// The index after the `>` that closes the `<` at `i`, not counting the `>` of `->`.
-fn skip_balanced(s: &str, i: usize) -> usize {
+pub(crate) fn skip_balanced(s: &str, i: usize) -> usize {
     let b = s.as_bytes();
     let (mut depth, mut j) = (0i32, i);
     while j < b.len() {
@@ -279,7 +279,7 @@ fn skip_balanced(s: &str, i: usize) -> usize {
 }
 
 /// The segments of the path that starts at `i`, without generic arguments. A `<impl X>` segment is kept whole.
-fn read_path(s: &str, i: usize) -> Vec<String> {
+pub(crate) fn read_path(s: &str, i: usize) -> Vec<String> {
     let b = s.as_bytes();
     let (mut j, mut segs) = (i, vec![]);
     loop {
@@ -354,7 +354,7 @@ fn prim_of(impl_seg: &str) -> Option<String> {
 }
 
 /// `core::x::Y<alloc::z::W>` as `std::x::Y<std::z::W>`: every path root that is not a public `std` one.
-fn fold_roots(s: &str) -> String {
+pub(crate) fn fold_roots(s: &str) -> String {
     let b = s.as_bytes();
     let mut out = String::new();
     let mut i = 0;
@@ -401,7 +401,7 @@ fn is_type_param(t: &str) -> bool {
 }
 
 /// Split at the first ` as ` that is not inside `<>`.
-fn split_as(s: &str) -> Option<(&str, &str)> {
+pub(crate) fn split_as(s: &str) -> Option<(&str, &str)> {
     let b = s.as_bytes();
     let (mut depth, mut j) = (0i32, 0);
     while j < b.len() {
@@ -1039,12 +1039,12 @@ pub fn read_syntax(dir: &Path, files: &[String], all_targets: bool, out: &mut Ex
 // ---------------------------------------------------------------------------------------------------------------
 // Driver
 
-struct Target {
-    kind: &'static str,
-    name: String,
+pub(crate) struct Target {
+    pub(crate) kind: &'static str,
+    pub(crate) name: String,
 }
 
-fn targets(dir: &Path, all_targets: bool) -> R<Vec<Target>> {
+pub(crate) fn targets(dir: &Path, all_targets: bool) -> R<Vec<Target>> {
     let o = Command::new("cargo")
         .args(["metadata", "--no-deps", "--format-version", "1"])
         .current_dir(dir)
@@ -1077,7 +1077,7 @@ fn targets(dir: &Path, all_targets: bool) -> R<Vec<Target>> {
 }
 
 /// The MIR of one target, from `cargo rustc`.
-fn mir_of(dir: &Path, target_dir: &Path, t: &Target, unit_tests: bool) -> R<String> {
+pub(crate) fn mir_of(dir: &Path, target_dir: &Path, t: &Target, unit_tests: bool) -> R<String> {
     let mut args = vec!["rustc".to_string(), "--profile=check".into()];
     match t.kind {
         "lib" => args.push("--lib".into()),

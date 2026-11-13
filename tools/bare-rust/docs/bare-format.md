@@ -386,14 +386,33 @@ uncancellable, within 50ms` or, for an alternative of an `orelse`, `// y: #name`
 marker, and refuses a region its function does not mark, whose marker states other constraints than its clauses, or
 whose code does not keep them. That code is what follows the marker in its block, up to `// y: end region name` or the
 block's end, or the statement the marker ends; a region that more of the function's statements follow in its block
-must say where it ends. Weave reads that code's calls, names and waits, resolved through the file's `use`
-declarations, and an atomic region may call nothing that needs `effects`, nor a function passed in. A **level**
-(§ 6.22) is a field of a module's subject, `"level": "structured"`: nothing in the module, its inner modules or its
-files (its `tests` aside) may use more, the functions it calls (method calls among them) and the modules it imports
-counted, and a library's calls at the level `libraries/levels.json` gives its module; a library it does not list
-counts as `effects`. A parameter the Y
-lowering injects is marked `"injected": true`, which is how a capability is known. Weave refuses a body above its
-module's level, naming the construct; `bare-rust levels <bare-dir>` prints what each module needs and why.
+must say where it ends. Weave reads that code's calls, names and waits, and an atomic region may call nothing that
+needs `effects`, nor a function passed in. A **level** (§ 6.22) is a field of a module's subject, `"level":
+"structured"`: nothing in the module, its inner modules or its files (its `tests` aside) may use more, the functions
+it calls (method calls among them) and the modules it imports counted, and a library's calls at the level
+`libraries/levels.json` gives its module; a library it does not list counts as `effects`. A parameter the Y lowering
+injects is marked `"injected": true`, which is how a capability is known. Weave refuses a body above its module's
+level, naming the construct; `bare-rust levels <bare-dir>` prints what each module needs and why.
+
+Which function a call calls, for both checks, is read one of two ways, and weave prints which (`weave: levels and
+regions checked from …`, and `checks_via` in `--json`):
+
+- **From rustc.** A weave with cargo checks levels and regions after the build, when the crate has either. Where the
+  woven crate builds, it reads the crate's MIR (`cargo rustc -- -Zunpretty=mir`, as `bare-rust externals` does), maps
+  each call back to the bare file through the span map, and takes the item rustc resolved: a method is its receiver's
+  type's whatever names the receiver (`|t| t.count()` is `Tally`'s `count` when `t` is a `Tally`), and a library's
+  function is found where it is defined, so a re-export, a renamed import or a local that holds the function (`let
+  run = atomic; run(…)`) is that function. A trait's method called on a type parameter may be any impl of the trait in
+  the crate.
+- **From the syntax**, when there is no build: a weave without cargo, a crate that does not compile, a file weave
+  refused, or a call rustc said nothing of. A name is resolved through the file's `use` declarations; a method's
+  receiver type comes from the constraint data when the receiver is a parameter or a typed local, and is otherwise
+  unknown, so the call counts as the most demanding method of that name in the crate.
+
+`bare-rust levels <bare-dir> --crate <crate-dir> --out <dir>` weaves with cargo and prints the levels from rustc's
+calls (`--show-calls` lists them). `bare-rust levels --libraries <crate>…` checks `libraries/levels.json` against what a
+library crate calls, from its MIR: a public function that reaches a library module above the level the table gives
+the function, or a library the table does not list, fails, unless the table's `trusted` names the function with why.
 
 ```text
 { "kind": "region", "name": "shop::checkout::hold#hold_one", "clauses": [ { "kind": "region", "text": "atomic", "source": "y/src/checkout.y:12" } ] }

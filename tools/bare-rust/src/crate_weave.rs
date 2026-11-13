@@ -3,7 +3,7 @@
 use crate::cargo::{self, Diag};
 use crate::corpus::{corpus_files, find_brs};
 use crate::trace::Kind;
-use crate::weave::{weave_in_crate, HoleSite, WeaveError, Woven};
+use crate::weave::{weave_file, HoleSite, WeaveError, Woven};
 use crate::R;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -138,6 +138,11 @@ pub struct CrateWeave {
     pub reach: crate::builds::Reach,
     /// The diagnostics of the last `cargo check` in each build, by the build's name.
     pub runs: Vec<(String, Vec<Diag>)>,
+    /// How the module levels and the regions were checked, when the crate has any: `rustc (MIR of lib, bin x)`, from the
+    /// calls rustc resolved in the woven crate, or `syntax (why)`, from the bare bodies' syntax alone.
+    pub checks_via: Option<String>,
+    /// The calls rustc resolved in the woven crate, by bare file, when the checks read them.
+    pub facts: Option<crate::facts::Facts>,
 }
 
 impl CrateWeave {
@@ -167,6 +172,7 @@ impl CrateWeave {
             "weave_errors": self.weave_errors.iter().map(|(f, e)| serde_json::json!({"file": f.display().to_string(), "message": e})).collect::<Vec<_>>(),
             "unbound": {"locals": ul, "hints": uh, "subjects": us},
             "mut_inserted": self.mut_added(),
+            "checks_via": self.checks_via,
             "errors": crate::errmap::map_crate(self).iter().map(|e| e.to_json()).collect::<Vec<_>>(),
         })
     }
@@ -211,6 +217,9 @@ impl CrateWeave {
                 String::new()
             }
         );
+        if let Some(via) = &self.checks_via {
+            println!("weave: levels and regions checked from {via}");
+        }
     }
 }
 
@@ -661,7 +670,7 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
                 js["holes"] = Value::Object(kept);
                 dropped.extend(reals_dropped.iter().cloned());
             }
-            Ok::<_, WeaveError>((weave_in_crate(&bare, &js, Some(&reals))?, js, dropped))
+            Ok::<_, WeaveError>((weave_file(&bare, &js, Some(&reals), !o.cargo)?, js, dropped))
         })();
         match r {
             Ok((woven, json, dropped)) => cw.files.push(WovenFile { rel, woven, json, mut_added: 0, dropped }),
@@ -681,11 +690,18 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
         }
     }
     cw.realizations = reals;
-    // A module's `level` is a ceiling (language 6.22): what any body under it uses above it fails the weave.
+    // A module's `level` is a ceiling (language 6.22): what any body under it uses above it fails the weave. A region's
+    // code keeps its constraints (6.23). With cargo, both wait for the build, to read what rustc resolved; without, or
+    // where the crate does not build, they read the bare bodies' syntax.
     let bodies: Vec<(String, String, Value)> = cw.files.iter().map(|f| (f.bare_name(), f.woven.bare.clone(), f.json.clone())).collect();
-    for e in crate::level::check(&bodies) {
-        let file = e.split(':').next().unwrap_or("").to_string();
-        cw.weave_errors.push((PathBuf::from(file).with_extension("rs"), e));
+    let checked = bodies.iter().any(|(_, _, js)| js["subjects"].as_array().into_iter().flatten().any(|s| s["kind"] == "region" || (s["kind"] == "module" && s["level"].is_string())));
+    let deferred = o.cargo && checked;
+    if !deferred {
+        let errs = levels_and_regions(&cw.files, &bodies, None, o.cargo);
+        push_checks(&mut cw, errs);
+        if checked {
+            cw.checks_via = Some("syntax (weave ran without cargo)".into());
+        }
     }
     let woven_set: BTreeSet<PathBuf> = cw.files.iter().map(|f| f.rel.clone()).collect();
     cw.unwoven = corpus_files(&crate_dir, true).unwrap_or_default().into_iter().filter(|f| !woven_set.contains(f)).collect();
@@ -698,6 +714,12 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
     fs::create_dir_all(out.join("target")).map_err(|e| format!("{}: {e}", out.display()))?;
     for f in &cw.files {
         write(&out.join(&f.rel), &f.woven.text)?;
+    }
+    if deferred && !cw.weave_errors.is_empty() {
+        // the crate is not built: its bodies' syntax is all there is to read
+        let errs = levels_and_regions(&cw.files, &bodies, None, true);
+        push_checks(&mut cw, errs);
+        cw.checks_via = Some("syntax (weave refused a file, so the crate was not built)".into());
     }
     if !o.cargo || !cw.weave_errors.is_empty() {
         write_map(out, &cw.files)?;
@@ -741,8 +763,66 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
     let files = std::mem::take(&mut cw.files);
     classify(&files, &diags, &mut cw);
     cw.files = files;
+    if deferred {
+        let builds = !diags.iter().any(Diag::is_error) && cw.cargo_stderr.is_empty();
+        let facts = if builds {
+            let krate = bodies.first().map(|b| crate::weave::base_path(&b.2).split("::").next().unwrap_or("").to_string()).unwrap_or_default();
+            let woven: Vec<crate::facts::Woven> = cw
+                .files
+                .iter()
+                .map(|f| crate::facts::Woven { rel: f.rel.to_string_lossy().replace('\\', "/"), text: &f.woven.text, map: &f.woven.map, bare_name: f.bare_name(), bare: &f.woven.bare })
+                .collect();
+            crate::facts::of_crate(out, &o.target, &krate, &woven)
+        } else {
+            Err("the woven crate does not build".into())
+        };
+        let errs = match &facts {
+            Ok((facts, targets)) => {
+                cw.checks_via = Some(format!("rustc (MIR of {})", targets.join(", ")));
+                levels_and_regions(&cw.files, &bodies, Some(facts), true)
+            }
+            Err(e) => {
+                cw.checks_via = Some(format!("syntax ({e})"));
+                levels_and_regions(&cw.files, &bodies, None, true)
+            }
+        };
+        push_checks(&mut cw, errs);
+        cw.facts = facts.ok().map(|f| f.0);
+    }
     write_map(out, &cw.files)?;
     Ok(cw)
+}
+
+/// What the level check (language 6.22) and, with `regions`, the region check (6.23) find wrong in the woven files,
+/// as (woven file, message, whether it is a region's): from the calls rustc resolved, with `facts`, or else from the
+/// bare bodies' syntax.
+fn levels_and_regions(files: &[WovenFile], bodies: &[(String, String, Value)], facts: Option<&crate::facts::Facts>, regions: bool) -> Vec<(PathBuf, String, bool)> {
+    let mut out = vec![];
+    for e in crate::level::check_with(bodies, facts) {
+        let file = e.split(':').next().unwrap_or("").to_string();
+        out.push((PathBuf::from(file).with_extension("rs"), e, false));
+    }
+    for f in files.iter().filter(|_| regions) {
+        let own = facts.and_then(|m| m.get(&f.bare_name())).map(Vec::as_slice);
+        for r in f.json["subjects"].as_array().into_iter().flatten().filter(|s| s["kind"] == "region") {
+            if let Err(e) = crate::region::check_body_with(&f.woven.bare, &f.json, r["name"].as_str().unwrap_or(""), own) {
+                out.push((f.rel.clone(), e, true));
+            }
+        }
+    }
+    out
+}
+
+/// The refusals of `levels_and_regions`, as weave errors; a region's also mapped to its bare file, as weave maps the
+/// refusals it makes while weaving.
+fn push_checks(cw: &mut CrateWeave, errs: Vec<(PathBuf, String, bool)>) {
+    for (rel, e, region) in errs {
+        if region {
+            let we = WeaveError { msg: e.clone(), short: None, at: None };
+            cw.weave_diags.push(crate::errmap::map_weave_error(&rel.with_extension("brs").display().to_string(), &rel.with_extension("constraints.json").display().to_string(), &we));
+        }
+        cw.weave_errors.push((rel, e));
+    }
 }
 
 #[cfg(test)]

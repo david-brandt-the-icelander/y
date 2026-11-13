@@ -937,6 +937,12 @@ pub fn weave_at(brs: &str, json: &Value) -> Result<Woven, WeaveError> {
 /// As `weave_at`, for a file of a crate whose realizations are `reals` (the crate's table, from its root's file). A
 /// realization no body uses is then the crate's to report, not the file's.
 pub fn weave_in_crate(brs: &str, json: &Value, reals: Option<&serde_json::Map<String, Value>>) -> Result<Woven, WeaveError> {
+    weave_file(brs, json, reals, true)
+}
+
+/// As `weave_in_crate`, and with `regions` false the code of the file's regions is not checked: the caller checks it,
+/// with what rustc resolved in the woven crate where it builds (`crate::crate_weave`, `region::check_body_with`).
+pub fn weave_file(brs: &str, json: &Value, reals: Option<&serde_json::Map<String, Value>>, regions: bool) -> Result<Woven, WeaveError> {
     let tree = parse_bare(brs);
     if let Some(e) = crate::first_error(&tree) {
         let at = e.split_once(':').and_then(|(l, c)| Some((l.parse().ok()?, c.parse().ok()?)));
@@ -946,10 +952,10 @@ pub fn weave_in_crate(brs: &str, json: &Value, reals: Option<&serde_json::Map<St
         });
     }
     crate::hints::reject_placeholders(json)?;
-    weave_checked(brs, json, tree, reals).map_err(|(e, off)| WeaveError { at: off.map(|o| line_col(brs, o)), msg: e, short: None })
+    weave_checked(brs, json, tree, reals, regions).map_err(|(e, off)| WeaveError { at: off.map(|o| line_col(brs, o)), msg: e, short: None })
 }
 
-fn weave_checked(brs: &str, json: &Value, tree: tree_sitter::Tree, crate_reals: Option<&serde_json::Map<String, Value>>) -> Result<Woven, (String, Option<usize>)> {
+fn weave_checked(brs: &str, json: &Value, tree: tree_sitter::Tree, crate_reals: Option<&serde_json::Map<String, Value>>, regions: bool) -> Result<Woven, (String, Option<usize>)> {
     let krate = json["crate"].as_str().ok_or_else(|| ("slot missing: crate".to_string(), None))?;
     let subjects = json["subjects"].as_array().ok_or_else(|| ("slot missing: subjects".to_string(), None))?;
     let subs: HashMap<String, &Value> = subjects.iter().filter_map(|s| Some((s["name"].as_str()?.to_string(), s))).collect();
@@ -978,7 +984,7 @@ fn weave_checked(brs: &str, json: &Value, tree: tree_sitter::Tree, crate_reals: 
     let mut unbound = std::mem::take(&mut w.unbound);
     // a region binds to its marker in its function's body, not to an item (language 6.23): one with no marker, whose
     // marker states other constraints than its clauses, or whose code does not keep them, is refused
-    for r in subjects.iter().filter(|s| s["kind"] == "region") {
+    for r in subjects.iter().filter(|s| s["kind"] == "region" && regions) {
         let name = r["name"].as_str().unwrap_or("");
         crate::region::check_body(brs, json, name).map_err(|e| (e, None))?;
     }

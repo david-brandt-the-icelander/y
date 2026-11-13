@@ -13,6 +13,7 @@ pub mod e3;
 pub mod errmap;
 pub mod crate_weave;
 pub mod externals;
+pub mod facts;
 pub mod hints;
 pub mod host;
 pub mod scaffold;

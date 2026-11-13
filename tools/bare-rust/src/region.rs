@@ -21,9 +21,17 @@
 //!   `// y: waits until name` and retries until it holds; `supervise` runs its tasks with `supervised`.
 //!
 //! The code a marker starts is what follows it in its block, up to `// y: end region name` or the block's end, for a
-//! marker on a line of its own, and the statement it ends for one after code. What that code does is read from its
-//! syntax: the calls it makes, the names it uses, the waits in it. Weave runs the last two, and refuses a file whose
-//! region its body does not keep.
+//! marker on a line of its own, and the statement it ends for one after code. Weave runs the last two, and refuses a
+//! file whose region its body does not keep.
+//!
+//! What that code does is read from its syntax: the calls it makes, the names it uses, the waits in it. Which function
+//! a call calls is taken from rustc where the woven crate builds (`check_body_with`, with `crate::facts`): weave with
+//! cargo checks the regions after the build, so `atomic` bound to a local, renamed or re-exported is still the
+//! runtime's transaction, and a method is its receiver's type's. Without a build (`check_body`, a weave without
+//! cargo, a crate that does not compile), a call's function is the path it names, through the file's `use`
+//! declarations. A call rustc said nothing of (in a test, in a macro) is read the second way. The rest is syntax either
+//! way: the capabilities used, by parameter name; the function passed in that is called, by name; the deadline a wait
+//! takes; `Isolation::Snapshot` and `Step::Retry`, by path.
 use crate::{parse_bare, text};
 use serde_json::Value;
 use tree_sitter::Node;
@@ -243,6 +251,14 @@ fn names(nodes: &[Node], src: &str, word: &str) -> bool {
 /// its clauses' constraints (`find_marker`, `agree`), and the code the marker starts keeps each of them. What the code
 /// does is read from its syntax: the calls it makes, the names it uses, the waits in it.
 pub fn check_body(brs: &str, js: &Value, name: &str) -> Result<(), String> {
+    check_body_with(brs, js, name, None)
+}
+
+/// As `check_body`, with the calls rustc resolved in the bare body (`crate::facts`): a call's function is the one rustc
+/// says, whatever the call names it by, and the calls the region makes are counted as `crate::level::uses_with` counts
+/// them. A call rustc said nothing of is read from its syntax.
+pub fn check_body_with(brs: &str, js: &Value, name: &str, facts: Option<&[crate::facts::Fact]>) -> Result<(), String> {
+    let facts = facts.filter(|f| !f.is_empty());
     let base = crate::weave::base_path(js);
     let stated = find_marker(brs, &base, name)?;
     let subject = js["subjects"].as_array().into_iter().flatten().find(|s| s["kind"] == "region" && s["name"] == name);
@@ -272,8 +288,14 @@ pub fn check_body(brs: &str, js: &Value, name: &str) -> Result<(), String> {
         let first = path.split("::").next().unwrap_or("");
         imports.get(first).map_or(path.to_string(), |m| format!("{m}{}", &path[first.len()..]))
     };
+    // the function a call calls: the one rustc resolved where the call names it (the last it resolved there, which for
+    // `a.b().held()` is `held`), or else the path it names, through the imports
     let path_of = |c: Node| -> Option<String> {
         let f = c.child_by_field_name("function")?;
+        let resolved = facts.and_then(|fs| fs.iter().filter(|x| x.offset >= f.start_byte() && x.offset < f.end_byte()).max_by_key(|x| x.offset));
+        if let Some(x) = resolved {
+            return Some(x.callee.path.clone());
+        }
         matches!(f.kind(), "identifier" | "scoped_identifier").then(|| resolve(text(f, brs)))
     };
     let calls: Vec<Node> = all.iter().copied().filter(|n| n.kind() == "call_expression").collect();
@@ -326,7 +348,8 @@ pub fn check_body(brs: &str, js: &Value, name: &str) -> Result<(), String> {
             return Err(format!("region `{name}` is atomic and may run again, so it does not wait, and it awaits"));
         }
         let file = format!("{}.brs", js["module"].as_str().unwrap_or("").trim_end_matches(".rs"));
-        let effects = crate::level::uses(&[(file, brs.to_string(), js.clone())]);
+        let by_file: crate::facts::Facts = facts.map(|fs| [(file.clone(), fs.to_vec())].into_iter().collect()).unwrap_or_default();
+        let effects = crate::level::uses_with(&[(file, brs.to_string(), js.clone())], facts.map(|_| &by_file));
         let waits_inside = |what: &str| what.starts_with("a wait, `waits until");
         if let Some(u) = effects.iter().find(|u| u.function == f && u.level == 4 && u.line >= rows.0 && u.line <= rows.1 && !waits_inside(&u.what)) {
             return Err(format!("region `{name}` is atomic and may run again, so it holds no external effect, and it has {} at line {} (language 6.22: `effects`)", u.what.trim_end_matches(','), u.line));
@@ -375,7 +398,8 @@ pub fn check_body(brs: &str, js: &Value, name: &str) -> Result<(), String> {
     if has("uncancellable") {
         // `.held(…)` on a `y_runtime::task::Cancellation`
         let held = calls.iter().any(|c| {
-            c.child_by_field_name("function").is_some_and(|g| {
+            path_of(*c).as_deref() == Some("y_runtime::task::Cancellation::held")
+                || c.child_by_field_name("function").is_some_and(|g| {
                 g.kind() == "field_expression"
                     && g.child_by_field_name("field").is_some_and(|m| text(m, brs) == "held")
                     && g.child_by_field_name("value").is_some_and(|v| paths_in(v).iter().any(|p| p.starts_with("y_runtime::task::Cancellation")))
@@ -560,5 +584,31 @@ mod tests {
         // an `atomic` that is not the runtime's is no transaction
         let other = brs.replace("use y_runtime::shared::{atomic, Step};", "use mylib::atomic;\nuse y_runtime::shared::Step;");
         assert!(check_body(&other, &js, "c::m::apply#add").unwrap_err().contains("runs in no transaction"));
+    }
+
+    #[test]
+    fn rustc_sees_an_aliased_atomic_as_a_transaction() {
+        // `run` is `atomic`, bound to a local: by its syntax, a call of `run`, which is no transaction
+        let brs = "use y_runtime::shared::{atomic, Step};\nfn add(count) {\n    let run = atomic;\n    // y: region add is atomic\n    run(\"m::add#add\", None, |tx| Ok(Step::Done(tx.get(count))))\n}\n";
+        let add = serde_json::json!({"kind": "function", "name": "c::m::add", "params": [{"name": "count", "type": "Shared<u32>", "injected": true}]});
+        let js = constraints(serde_json::json!([add, region("c::m::add#add", &["atomic", "may run again", "on failure unchanged"])]));
+        assert!(check_body(brs, &js, "c::m::add#add").unwrap_err().contains("runs in no transaction"));
+        let externs = ["y_runtime".to_string()].into_iter().collect();
+        let at = |s: &str, mir: &str| {
+            let offset = brs.find(s).unwrap();
+            crate::facts::Fact { offset, line: crate::trace::line_col(brs, offset).0, callee: crate::facts::callee(mir, "c", &externs).unwrap() }
+        };
+        // rustc names the function where `run` is bound and where it is called
+        let facts = vec![
+            at("atomic;", "y_runtime::shared::atomic::<u32, (), {closure@src/m.rs:5:30: 5:34}>"),
+            at("run(", "y_runtime::shared::atomic::<u32, (), {closure@src/m.rs:5:30: 5:34}>"),
+            at("get(", "y_runtime::shared::Tx::get::<u32>"),
+        ];
+        assert_eq!(check_body_with(brs, &js, "c::m::add#add", Some(&facts)), Ok(()));
+        // and a call in it that needs `effects`, by any name, is refused
+        let mut store = facts.clone();
+        store.push(at("get(", "y_runtime::store::Store::<m::Item>::read_all"));
+        let err = check_body_with(brs, &js, "c::m::add#add", Some(&store)).unwrap_err();
+        assert!(err.contains("`read_all` (`y_runtime::store::Store::read_all`)"), "{err}");
     }
 }
