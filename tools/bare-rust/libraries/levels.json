@@ -1,6 +1,12 @@
 {
-  "about": "The level (constraint language 6.22, Y \u00a7 3.19) a call into each library module needs, by the module's path: a call of a function under a path listed here, or of a function or method of a type under it, needs that level. The longest path that matches wins. A library not listed needs `calculations`, as any function does. `bare-rust` resolves a call through the file's `use` declarations, and reads this table when it works out the level a body needs.",
+  "about": "The level (constraint language 6.22, Y \u00a7 3.19) a call into each library needs, by module path: a call of a function under a path listed here, or of a method of a type under it, needs that level, and the longest path that matches wins. Every library a body calls into is listed, at least by its crate: a call into a library with no entry needs `effects`, since nothing says it has none. `bare-rust` resolves a call through the file's `use` declarations, and a method through its receiver's type when the constraint data gives it.",
   "modules": {
+    "std": "calculations",
+    "core": "calculations",
+    "alloc": "calculations",
+    "y_runtime": "calculations",
+    "y_collections": "calculations",
+    "y_string": "calculations",
     "y_runtime::shared": "shared",
     "y_runtime::arena": "shared",
     "y_runtime::task": "effects",

@@ -113,7 +113,8 @@ Beyond what Hangman, Nim and Snake assumed:
   comes back.
 - **`tools/bare-rust/tests/y_examples.rs`** runs the same checks on Memory as on the other examples. Weave holds the
   region `new_game#fetch` to its `within`: the code its marker starts makes the deadline, and passes it to each wait
-  inside it.
+  inside it. The Y statements after the region are outside it, so the bare body marks its end, `// y: end region
+  fetch`.
 - **The window itself:** under a virtual X display, the game fetched its pictures, drew the board, turned over the cards
   clicked, and wrote the best score at the terminal when Escape was pressed. openmoji.org is outside the network policy
   of the machine this was made on, so that run fetched the same SVG files from OpenMoji's repository on GitHub, by

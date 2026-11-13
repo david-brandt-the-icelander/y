@@ -108,7 +108,7 @@ fn use_map(imports: &[Import], file: &str) -> BTreeMap<String, String> {
 #[derive(Clone)]
 enum Call {
     Path(String),
-    Method { name: String, receiver: String },
+    Method { name: String, receiver: String, ty: Option<String> },
 }
 
 /// A function of the crate: its path, its file, what it uses itself, and the calls it makes, with their lines.
@@ -173,21 +173,95 @@ fn read_file(file: &str, brs: &str, js: &Value, fns: &mut Vec<Function>, imports
         if let Some(body) = node.child_by_field_name("body") {
             walk(body, brs, &mut add, &mut calls);
         }
-        fns.push(Function { path: path.clone(), file: file.to_string(), own, calls });
-    }
-    // a call into a library module needs that module's level (`libraries/levels.json`), through the file's imports
-    let uses = use_map(imports, file);
-    for f in fns.iter_mut().filter(|f| f.file == file) {
-        for (call, line) in &f.calls {
-            if let Call::Path(p) = call {
-                let first = p.split("::").next().unwrap_or("");
-                let full = uses.get(first).map_or(p.clone(), |m| format!("{m}{}", &p[first.len()..]));
-                if let Some(l) = library_level(&full).filter(|l| *l >= 2) {
-                    f.own.push(Use { level: l, what: format!("`{p}` (`{full}`)"), function: f.path.clone(), file: file.to_string(), line: *line });
+        // a method's receiver, when it is a parameter or a local whose type the constraint data gives: its type's name
+        let typed = |name: &str| -> Option<String> {
+            let param = subject(&path).and_then(|s| s["params"].as_array()?.iter().find(|p| p["name"] == name).and_then(|p| p["type"].as_str().map(str::to_string)));
+            let local = js["holes"][path.as_str()]["locals"][name].as_str().map(str::to_string).or_else(|| js["holes"][path.as_str()]["locals"][name]["type"].as_str().map(str::to_string));
+            param.or(local).map(|t| type_head(&t))
+        };
+        for (c, _) in calls.iter_mut() {
+            if let Call::Method { receiver, ty, .. } = c {
+                if receiver.chars().all(|ch| ch.is_alphanumeric() || ch == '_') {
+                    *ty = typed(receiver);
                 }
             }
         }
+        fns.push(Function { path: path.clone(), file: file.to_string(), own, calls });
     }
+    // a call into a library needs its module's level (`libraries/levels.json`), through the file's imports; a call into a
+    // library the table does not know needs `effects`, as nothing says it has none
+    let uses = use_map(imports, file);
+    let local = local_names(&tree.root_node(), brs, &base);
+    for f in fns.iter_mut().filter(|f| f.file == file) {
+        for (call, line) in &f.calls {
+            let (shown, full) = match call {
+                Call::Path(p) => {
+                    let first = p.split("::").next().unwrap_or("");
+                    match uses.get(first) {
+                        Some(m) => (p.clone(), format!("{m}{}", &p[first.len()..])),
+                        None if p.contains("::") => (p.clone(), p.clone()),
+                        None => continue,
+                    }
+                }
+                Call::Method { name, ty: Some(t), .. } => match uses.get(t.as_str()) {
+                    Some(m) => (format!(".{name}"), format!("{m}::{name}")),
+                    None => continue,
+                },
+                _ => continue,
+            };
+            let first = full.split("::").next().unwrap_or("");
+            if local.contains(first) || (first.starts_with(|c: char| c.is_ascii_uppercase()) && !uses.contains_key(first)) {
+                // the crate's own, or a type of the prelude (`String::from`, `Vec::new`)
+                continue;
+            }
+            match library_level(&full) {
+                Some(l) if l >= 2 => f.own.push(Use { level: l, what: format!("`{shown}` (`{full}`)"), function: f.path.clone(), file: file.to_string(), line: *line }),
+                Some(_) => {}
+                None => f.own.push(Use { level: 4, what: format!("`{shown}` (`{full}`), a library with no level in libraries/levels.json"), function: f.path.clone(), file: file.to_string(), line: *line }),
+            }
+        }
+    }
+}
+
+/// A type's name, from the constraint data's form of it: `ref<target_type=Game>` is `Game`, `Shared<Holdings>` is
+/// `Shared`, `list<element_type=Line> as 'List'` is `List`.
+fn type_head(t: &str) -> String {
+    let t = t.trim();
+    if let Some(inner) = t.strip_prefix("ref<target_type=").and_then(|r| r.strip_suffix('>')) {
+        return type_head(inner);
+    }
+    if let Some((_, facade)) = t.rsplit_once(" as '") {
+        return facade.trim_end_matches('\'').rsplit("::").next().unwrap_or("").to_string();
+    }
+    t.split('<').next().unwrap_or(t).rsplit("::").next().unwrap_or(t).to_string()
+}
+
+/// The names a bare body declares, and the crate's own roots: what a path that starts with one of them is not a
+/// library's.
+fn local_names(root: &Node, src: &str, base: &str) -> BTreeSet<String> {
+    fn go(n: Node, src: &str, out: &mut BTreeSet<String>) {
+        if matches!(n.kind(), "mod_item" | "function_item" | "struct_item" | "enum_item" | "type_item" | "trait_item" | "const_item" | "static_item" | "union_item") {
+            if let Some(name) = n.child_by_field_name("name") {
+                out.insert(text(name, src).to_string());
+            }
+        }
+        let mut c = n.walk();
+        for ch in n.named_children(&mut c) {
+            go(ch, src, out);
+        }
+    }
+    let mut out: BTreeSet<String> = ["crate", "self", "super", "Self"].iter().map(|s| s.to_string()).collect();
+    out.insert(base.split("::").next().unwrap_or("").to_string());
+    go(*root, src, &mut out);
+    out
+}
+
+/// The paths a bare body's `use` declarations bring in, by name: for the region checks (`crate::region`).
+pub fn imports_of(brs: &str, js: &Value) -> BTreeMap<String, String> {
+    let (mut fns, mut imports) = (vec![], vec![]);
+    let tree = parse_bare(brs);
+    collect(tree.root_node(), brs, &crate::weave::base_path(js), &mut fns, &mut imports, "");
+    use_map(&imports, "")
 }
 
 /// The functions (with their full paths) and the imports under a node.
@@ -249,7 +323,7 @@ fn walk(n: Node, src: &str, add: &mut impl FnMut(&str, String, usize), calls: &m
                     "identifier" | "scoped_identifier" => calls.push((Call::Path(text(f, src).to_string()), line)),
                     "field_expression" => {
                         if let (Some(v), Some(m)) = (f.child_by_field_name("value"), f.child_by_field_name("field")) {
-                            calls.push((Call::Method { name: text(m, src).to_string(), receiver: text(v, src).to_string() }, line));
+                            calls.push((Call::Method { name: text(m, src).to_string(), receiver: text(v, src).to_string(), ty: None }, line));
                         }
                     }
                     _ => {}
@@ -299,7 +373,13 @@ fn resolve(call: &Call, caller: &str, krate: &str, fns: &BTreeMap<String, usize>
             let one = hits.len() == 1;
             (hits, one)
         }
-        Call::Method { name, receiver } => {
+        Call::Method { name, receiver, ty } => {
+            if let Some(t) = ty {
+                // the receiver's type is known: its method, if the type is the crate's; else none of the crate's
+                let hits: Vec<usize> = fns.iter().filter(|(p, _)| p.ends_with(&format!("::{t}::{name}"))).map(|(_, i)| *i).collect();
+                let one = hits.len() == 1;
+                return (hits, one);
+            }
             if receiver == "self" {
                 let mut segs: Vec<&str> = caller.split("::").collect();
                 segs.pop();
@@ -539,5 +619,17 @@ mod tests {
         assert!(of("show").iter().any(|(w, l)| w.contains("a call of `play`") && *l == "structured"), "{:#?}", of("show"));
         assert!(of("start").iter().any(|(w, l)| w.contains("`step` (it may be `c::m::moves::step`") && *l == "structured"), "{:#?}", of("start"));
         assert!(of("wait").iter().any(|(w, l)| w.contains("`y_runtime::Deadline::after`") && *l == "effects"), "{:#?}", of("wait"));
+    }
+
+    #[test]
+    fn a_receivers_type_picks_its_method_and_an_unknown_library_needs_effects() {
+        // two types have `count`; `total`'s receiver is a `Tally`, whose `count` is a calculation, while `Ledger`'s loops
+        let brs = "use rand::random;\nmod m2 {\n    impl Tally {\n        fn count(self) {\n            1\n        }\n    }\n    impl Ledger {\n        fn count(self) {\n            loop {}\n        }\n    }\n    fn total(tally) {\n        tally.count()\n    }\n    fn guess() {\n        random()\n    }\n}\n";
+        let total = json!({"kind": "function", "name": "c::m::m2::total", "params": [{"name": "tally", "type": "ref<target_type=Tally>"}], "clauses": [{"kind": "effects", "text": "pure", "source": "y/src/m.y:1"}]});
+        let f = file(brs, json!([pure("c::m::m2::Tally::count"), pure("c::m::m2::Ledger::count"), total, pure("c::m::m2::guess")]));
+        let all = uses(&[f]);
+        let of = |f: &str| all.iter().filter(|u| u.function == format!("c::m::m2::{f}")).map(|u| (u.what.clone(), LEVELS[u.level])).collect::<Vec<_>>();
+        assert!(of("total").iter().all(|(_, l)| *l == "calculations"), "{:#?}", of("total"));
+        assert!(of("guess").iter().any(|(w, l)| w.contains("`rand::random`), a library with no level") && *l == "effects"), "{:#?}", of("guess"));
     }
 }

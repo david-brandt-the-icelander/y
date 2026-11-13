@@ -234,20 +234,6 @@ fn descendants<'t>(nodes: &[Node<'t>]) -> Vec<Node<'t>> {
     out
 }
 
-/// A call's callee as a name: the last segment of a path (`atomic`, `after` of `Deadline::after`), or a method's name;
-/// with the whole path for a path.
-fn callee<'a>(call: Node, src: &'a str) -> Option<(&'a str, &'a str)> {
-    let f = call.child_by_field_name("function")?;
-    match f.kind() {
-        "identifier" | "scoped_identifier" => {
-            let path = text(f, src);
-            Some((path.rsplit("::").next().unwrap_or(path), path))
-        }
-        "field_expression" => f.child_by_field_name("field").map(|m| (text(m, src), text(m, src))),
-        _ => None,
-    }
-}
-
 /// Whether an identifier or path among the nodes is `word`, or ends in `::word`.
 fn names(nodes: &[Node], src: &str, word: &str) -> bool {
     nodes.iter().any(|n| matches!(n.kind(), "identifier" | "scoped_identifier") && (text(*n, src) == word || text(*n, src).ends_with(&format!("::{word}"))))
@@ -280,39 +266,60 @@ pub fn check_body(brs: &str, js: &Value, name: &str) -> Result<(), String> {
     let top = extent(*marker, *node, r, brs);
     let all = descendants(&top);
     let rows = (top.first().map_or(0, |n| n.start_position().row) + 1, top.last().map_or(0, |n| n.end_position().row) + 1);
+    // names resolve through the file's imports: `atomic` after `use y_runtime::shared::atomic;` is that function
+    let imports = crate::level::imports_of(brs, js);
+    let resolve = |path: &str| -> String {
+        let first = path.split("::").next().unwrap_or("");
+        imports.get(first).map_or(path.to_string(), |m| format!("{m}{}", &path[first.len()..]))
+    };
+    let path_of = |c: Node| -> Option<String> {
+        let f = c.child_by_field_name("function")?;
+        matches!(f.kind(), "identifier" | "scoped_identifier").then(|| resolve(text(f, brs)))
+    };
     let calls: Vec<Node> = all.iter().copied().filter(|n| n.kind() == "call_expression").collect();
-    let calls_to = |want: &[&str]| -> Vec<Node> { calls.iter().copied().filter(|c| callee(*c, brs).is_some_and(|(last, _)| want.contains(&last))).collect() };
+    let calls_to = |want: &[&str]| -> Vec<Node> { calls.iter().copied().filter(|c| path_of(*c).is_some_and(|p| want.contains(&p.as_str()))).collect() };
+    let paths_in = |n: Node| -> Vec<String> { descendants(&[n]).iter().filter(|x| matches!(x.kind(), "identifier" | "scoped_identifier")).map(|x| resolve(text(*x, brs))).collect() };
     let awaits: Vec<Node> = all.iter().copied().filter(|n| n.kind() == "await_expression").collect();
     let comment_says = |what: &str| all.iter().any(|n| n.kind() == "line_comment" && text(*n, brs).trim_start_matches("// y:").trim() == what);
     let has = |c: &str| clauses.iter().any(|t| head(t) == Some(c));
     let says = |what: &str| format!("region `{name}` says `{what}`, and the code its marker starts");
+    let params = js["subjects"].as_array().into_iter().flatten().find(|s| s["kind"] == "function" && s["name"] == f).map(|s| s["params"].clone()).unwrap_or_default();
+    let params: Vec<(String, String, bool)> = params
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|p| (p["name"].as_str().unwrap_or("").to_string(), p["type"].as_str().unwrap_or("").to_string(), p["injected"] == true))
+        .collect();
+    const TRANSACTIONS: [&str; 5] = ["y_runtime::shared::atomic", "y_runtime::shared::atomic_with", "y_runtime::shared::atomic_when", "y_runtime::shared::orelse", "y_runtime::shared::orelse_with"];
     // the transaction an atomic region runs in: a call in the region, or, for an alternative of an `orelse` (a closure
     // `let r = |tx| …`), the `orelse` of the function that is given it
-    let mut transaction = calls_to(&["atomic", "atomic_with", "atomic_when", "orelse", "orelse_with"]);
+    let mut transaction = calls_to(&TRANSACTIONS);
     if transaction.is_empty() && top.len() == 1 && top[0].kind() == "let_declaration" {
         let named = top[0].child_by_field_name("pattern").is_some_and(|p| text(p, brs) == r);
         let closure = top[0].child_by_field_name("value").is_some_and(|v| v.kind() == "closure_expression");
         if named && closure {
-            let whole = descendants(&[*node]);
-            transaction = whole
+            transaction = descendants(&[*node])
                 .iter()
                 .copied()
-                .filter(|n| n.kind() == "call_expression" && callee(*n, brs).is_some_and(|(last, _)| last == "orelse" || last == "orelse_with"))
+                .filter(|n| n.kind() == "call_expression" && path_of(*n).is_some_and(|p| p.ends_with("::orelse") || p.ends_with("::orelse_with")) && path_of(*n).is_some_and(|p| TRANSACTIONS.contains(&p.as_str())))
                 .filter(|c| c.child_by_field_name("arguments").is_some_and(|a| names(&descendants(&[a]), brs, r)))
                 .collect();
         }
     }
     if has("atomic") {
         if transaction.is_empty() {
-            return Err(format!("{} runs in no transaction (`atomic`, `atomic_with`, `atomic_when`, or an alternative of `orelse`)", says("atomic")));
+            return Err(format!("{} runs in no transaction (`y_runtime::shared`'s `atomic`, `atomic_with`, `atomic_when`, or an alternative of `orelse`)", says("atomic")));
         }
-        // it may run again, so it holds no external effect: no capability but shared state, no wait, and nothing it
-        // calls that needs `effects` (language 6.22)
-        let params = js["subjects"].as_array().into_iter().flatten().find(|s| s["kind"] == "function" && s["name"] == f).map(|s| s["params"].clone()).unwrap_or_default();
-        for p in params.as_array().into_iter().flatten().filter(|p| p["injected"] == true) {
-            let (n, ty) = (p["name"].as_str().unwrap_or(""), p["type"].as_str().unwrap_or(""));
-            if !ty.contains("Shared<") && all.iter().any(|x| x.kind() == "identifier" && text(*x, brs) == n) {
+        // it may run again, so it holds no external effect: no capability but shared state, no wait, no function value
+        // passed in (whose effects nothing says), and nothing it calls that needs `effects` (language 6.22)
+        for (n, ty, injected) in &params {
+            let used = all.iter().any(|x| x.kind() == "identifier" && text(*x, brs) == n);
+            if *injected && !ty.contains("Shared<") && used {
                 return Err(format!("region `{name}` is atomic and may run again, so it holds no external effect, and it uses the capability `{n}`"));
+            }
+            let called = calls.iter().any(|c| c.child_by_field_name("function").is_some_and(|g| g.kind() == "identifier" && text(g, brs) == n));
+            if !injected && called {
+                return Err(format!("region `{name}` is atomic and may run again, and it calls `{n}`, a function passed in, whose effects nothing says"));
             }
         }
         if !awaits.is_empty() {
@@ -325,40 +332,62 @@ pub fn check_body(brs: &str, js: &Value, name: &str) -> Result<(), String> {
             return Err(format!("region `{name}` is atomic and may run again, so it holds no external effect, and it has {} at line {} (language 6.22: `effects`)", u.what.trim_end_matches(','), u.line));
         }
     }
-    let snapshot = |c: &Node| c.child_by_field_name("arguments").is_some_and(|a| names(&descendants(&[a]), brs, "Snapshot"));
+    let snapshot = |c: &Node| c.child_by_field_name("arguments").is_some_and(|a| paths_in(a).iter().any(|p| p == "y_runtime::shared::Isolation::Snapshot"));
     if clauses.contains(&"isolation snapshot") && !transaction.iter().any(snapshot) {
-        return Err(format!("{} does not run it at `Isolation::Snapshot`", says("isolation snapshot")));
+        return Err(format!("{} does not run it at `y_runtime::shared::Isolation::Snapshot`", says("isolation snapshot")));
     }
     if has("within") {
-        let deadline = calls.iter().any(|c| callee(*c, brs).is_some_and(|(last, path)| last == "after" && path.contains("Deadline")));
-        let duration = calls.iter().any(|c| callee(*c, brs).is_some_and(|(_, path)| path.contains("Duration::")));
-        if !deadline && !duration {
-            return Err(format!("{} starts no deadline (`Deadline::after`) and gives no duration", says("within")));
+        let started = calls_to(&["y_runtime::Deadline::after"]);
+        let duration = calls.iter().any(|c| path_of(*c).is_some_and(|p| p.starts_with("std::time::Duration::")));
+        if started.is_empty() && !duration {
+            return Err(format!("{} starts no deadline (`y_runtime::Deadline::after`) and gives no duration (`std::time::Duration`)", says("within")));
         }
-        if deadline {
+        // the deadline is the name the region binds it to, and every wait in the region takes it
+        let bound: Vec<String> = started
+            .iter()
+            .filter_map(|c| c.parent().filter(|p| p.kind() == "let_declaration").and_then(|p| p.child_by_field_name("pattern")).map(|p| text(p, brs).to_string()))
+            .collect();
+        if let Some(d) = bound.first() {
             for w in &awaits {
-                if !names(&descendants(&[*w]), brs, "deadline") {
-                    return Err(format!("region `{name}` is within a deadline, and a wait in it does not take the deadline: `{}`", text(*w, brs).lines().next().unwrap_or("")));
+                if !names(&descendants(&[*w]), brs, d) {
+                    return Err(format!("region `{name}` is within the deadline `{d}`, and a wait in it does not take it: `{}`", text(*w, brs).lines().next().unwrap_or("")));
                 }
             }
         }
     }
-    if has("forever because") && !calls.iter().any(|c| c.child_by_field_name("arguments").is_some_and(|a| names(&descendants(&[a]), brs, "forever"))) {
-        return Err(format!("{} does not give `forever` to its wait", says("forever because")));
+    if has("forever because") {
+        // `forever` is the capability to wait without bound: a parameter of type `Forever`, given to a call in the region
+        let forever: Vec<&String> = params.iter().filter(|(_, ty, _)| ty == "Forever" || ty.ends_with("<target_type=Forever>")).map(|(n, ..)| n).collect();
+        let given = calls.iter().any(|c| c.child_by_field_name("arguments").is_some_and(|a| forever.iter().any(|n| names(&descendants(&[a]), brs, n))));
+        if !given {
+            return Err(format!("{} gives no `Forever` capability to its wait", says("forever because")));
+        }
     }
-    let checks: [(&str, &str, &str); 3] = [
-        ("detach because", "detach", "does not call `detach`"),
-        ("uncancellable", "held", "does not hold cancellation (`.held(…)`)"),
-        ("supervise", "supervised", "does not run its tasks with `supervised`"),
+    let checks: [(&str, &str, &str); 2] = [
+        ("detach because", "y_runtime::task::detach", "does not call `y_runtime::task::detach`"),
+        ("supervise", "y_runtime::task::supervised", "does not run its tasks with `y_runtime::task::supervised`"),
     ];
     for (c, call, missing) in checks {
         if has(c) && calls_to(&[call]).is_empty() {
             return Err(format!("{} {missing}", says(c)));
         }
     }
+    if has("uncancellable") {
+        // `.held(…)` on a `y_runtime::task::Cancellation`
+        let held = calls.iter().any(|c| {
+            c.child_by_field_name("function").is_some_and(|g| {
+                g.kind() == "field_expression"
+                    && g.child_by_field_name("field").is_some_and(|m| text(m, brs) == "held")
+                    && g.child_by_field_name("value").is_some_and(|v| paths_in(v).iter().any(|p| p.starts_with("y_runtime::task::Cancellation")))
+            })
+        });
+        if !held {
+            return Err(format!("{} does not hold cancellation (`y_runtime::task::Cancellation`'s `held`)", says("uncancellable")));
+        }
+    }
     for t in clauses.iter().filter(|t| head(t) == Some("waits until")) {
         let n = t["waits until".len()..].trim().split(" : ").next().unwrap_or("");
-        let retries = names(&all, brs, "Retry") || !calls_to(&["atomic_when"]).is_empty();
+        let retries = all.iter().any(|x| x.kind() == "scoped_identifier" && resolve(text(*x, brs)) == "y_runtime::shared::Step::Retry") || !calls_to(&["y_runtime::shared::atomic_when"]).is_empty();
         if !comment_says(&format!("waits until {n}")) || !retries {
             return Err(format!("{} does not mark its condition `// y: waits until {n}` and retry until it holds", says("waits until")));
         }
@@ -468,14 +497,14 @@ mod tests {
 
     #[test]
     fn the_code_a_marker_starts_keeps_its_constraints() {
-        let shown = "fn show(console, count) {\n    // y: region tally is atomic\n    let n = atomic(\"m::show#tally\", None, |tx| { let out = {\n        Ok(Step::Done(tx.get(count)))\n    }; out });\n    console.write_line(n);\n}\n";
+        let shown = "use y_runtime::shared::{atomic, atomic_with, Isolation, Step};\nfn show(console, count) {\n    // y: region tally is atomic\n    let n = atomic(\"m::show#tally\", None, |tx| { let out = {\n        Ok(Step::Done(tx.get(count)))\n    }; out });\n    console.write_line(n);\n}\n";
         let show = serde_json::json!({"kind": "function", "name": "c::m::show", "params": [{"name": "console", "type": "Console", "injected": true}, {"name": "count", "type": "Shared<u32>", "injected": true}]});
         let ok = constraints(serde_json::json!([show.clone(), region("c::m::show#tally", &["atomic", "may run again", "on failure unchanged"])]));
         // a marker on a line of its own starts everything after it in its block: here the console's write too, which an
         // atomic region may not hold
         assert!(check_body(shown, &ok, "c::m::show#tally").unwrap_err().contains("uses the capability `console`"));
         // in a block of its own, the region ends before the write
-        let fixed = "fn show(console, count) {\n    let n = {\n        // y: region tally is atomic\n        atomic(\"m::show#tally\", None, |tx| Ok(Step::Done(tx.get(count))))\n    };\n    console.write_line(n);\n}\n";
+        let fixed = "use y_runtime::shared::{atomic, atomic_with, Isolation, Step};\nfn show(console, count) {\n    let n = {\n        // y: region tally is atomic\n        atomic(\"m::show#tally\", None, |tx| Ok(Step::Done(tx.get(count))))\n    };\n    console.write_line(n);\n}\n";
         assert_eq!(check_body(fixed, &ok, "c::m::show#tally"), Ok(()));
         // a region that is not run as a transaction
         let plain = fixed.replace("atomic(\"m::show#tally\", None, |tx| Ok(Step::Done(tx.get(count))))", "count.snapshot()");
@@ -483,16 +512,20 @@ mod tests {
         // snapshot isolation is said in the code too
         let snap = constraints(serde_json::json!([show, region("c::m::show#tally", &["atomic", "isolation snapshot", "may run again", "on failure unchanged"])]));
         let fixed_snap = fixed.replace("// y: region tally is atomic", "// y: region tally is atomic, isolation snapshot");
-        assert!(check_body(&fixed_snap, &snap, "c::m::show#tally").unwrap_err().contains("`Isolation::Snapshot`"));
+        assert!(check_body(&fixed_snap, &snap, "c::m::show#tally").unwrap_err().contains("`y_runtime::shared::Isolation::Snapshot`"));
         let with = fixed_snap.replace("atomic(\"m::show#tally\", None,", "atomic_with(\"m::show#tally\", None, Isolation::Snapshot,");
         assert_eq!(check_body(&with, &snap, "c::m::show#tally"), Ok(()));
     }
 
     #[test]
     fn a_deadline_is_started_and_given_to_every_wait() {
-        let body = "async fn fetch(site) {\n    {\n        // y: region fetch is within 5s or fail\n        let deadline = Deadline::after(FIVE);\n        let a = site.get(\"/a\", &deadline).await?;\n        let b = site.get(\"/b\").await?;\n    }\n}\n";
+        let body = "use y_runtime::Deadline;\nasync fn fetch(site) {\n    {\n        // y: region fetch is within 5s or fail\n        let deadline = Deadline::after(FIVE);\n        let a = site.get(\"/a\", &deadline).await?;\n        let b = site.get(\"/b\").await?;\n    }\n}\n";
         let js = constraints(serde_json::json!([{"kind": "function", "name": "c::m::fetch", "params": []}, region("c::m::fetch#fetch", &["within 5s"])]));
-        assert!(check_body(body, &js, "c::m::fetch#fetch").unwrap_err().contains("does not take the deadline"));
+        assert!(check_body(body, &js, "c::m::fetch#fetch").unwrap_err().contains("within the deadline `deadline`, and a wait in it does not take it"));
+        // the deadline is found by its binding, whatever it is named
+        let renamed = body.replace("let deadline =", "let limit =").replace("&deadline", "&limit");
+        assert!(check_body(&renamed, &js, "c::m::fetch#fetch").unwrap_err().contains("within the deadline `limit`"));
+        assert_eq!(check_body(&renamed.replace("site.get(\"/b\")", "site.get(\"/b\", &limit)"), &js, "c::m::fetch#fetch"), Ok(()));
         assert_eq!(check_body(&body.replace("site.get(\"/b\")", "site.get(\"/b\", &deadline)"), &js, "c::m::fetch#fetch"), Ok(()));
     }
 
@@ -516,5 +549,16 @@ mod tests {
         let brs3 = brs2.replace("        log();\n", "");
         assert_eq!(check_body(&brs3, &js2, "c::m::tally#add"), Ok(()));
         assert!(check_body(&brs3.replace("    // y: end region add\n", ""), &js2, "c::m::tally#add").unwrap_err().contains("uses the capability `console`"));
+    }
+
+    #[test]
+    fn an_atomic_region_calls_no_function_passed_in() {
+        let brs = "use y_runtime::shared::{atomic, Step};\nfn apply(count, change) {\n    // y: region add is atomic\n    atomic(\"m::apply#add\", None, |tx| Ok(Step::Done(change(tx.get(count)))))\n}\n";
+        let apply = serde_json::json!({"kind": "function", "name": "c::m::apply", "params": [{"name": "count", "type": "Shared<u32>", "injected": true}, {"name": "change", "type": "fn(u32) -> u32"}]});
+        let js = constraints(serde_json::json!([apply, region("c::m::apply#add", &["atomic", "may run again", "on failure unchanged"])]));
+        assert!(check_body(brs, &js, "c::m::apply#add").unwrap_err().contains("it calls `change`, a function passed in"));
+        // an `atomic` that is not the runtime's is no transaction
+        let other = brs.replace("use y_runtime::shared::{atomic, Step};", "use mylib::atomic;\nuse y_runtime::shared::Step;");
+        assert!(check_body(&other, &js, "c::m::apply#add").unwrap_err().contains("runs in no transaction"));
     }
 }

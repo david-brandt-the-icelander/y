@@ -273,7 +273,7 @@ fn warehouse_regions_and_levels_are_enforced() {
     // a snapshot region whose code runs it serializable
     let serializable = brs.replace("Isolation::Snapshot", "Isolation::Serializable");
     let refused = weave_in_crate(&serializable, &js, Some(&serde_json::Map::new())).err().map(|e| e.msg).unwrap_or_default();
-    assert!(refused.contains("says `isolation snapshot`, and the code its marker starts does not run it at `Isolation::Snapshot`"), "{refused}");
+    assert!(refused.contains("says `isolation snapshot`, and the code its marker starts does not run it at `y_runtime::shared::Isolation::Snapshot`"), "{refused}");
     // a region whose tasks are supervised, and whose clauses do not say how
     let mut unsupervised = js.clone();
     let i = region(&unsupervised, "packing::pack_day#packing");
@@ -420,6 +420,36 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
             js["subjects"].as_array().unwrap().iter().filter(|s| s["kind"] == "region").map(|s| s["name"].as_str().unwrap().to_string()).collect::<Vec<_>>()
         })
         .collect();
+    // a region that Y statements follow in its block ends where the bare body says, `// y: end region r`, in its function
+    let bare_text: Vec<String> = facts["modules"].as_array().unwrap().iter().filter_map(|m| m["bare"].as_str()).map(|b| read(&dir.join(b))).collect();
+    let ends_in = |function: &str, r: &str| -> bool {
+        bare_text.iter().any(|b| {
+            let lines: Vec<&str> = b.lines().collect();
+            lines.iter().enumerate().filter(|(_, l)| l.contains(&format!("fn {function}("))).any(|(start, _)| {
+                lines[start + 1..]
+                    .iter()
+                    .take_while(|l| !l.trim_start().trim_start_matches("pub ").trim_start_matches("async ").starts_with("fn "))
+                    .any(|l| l.trim() == format!("// y: end region {r}"))
+            })
+        })
+    };
+    for y in &code {
+        let lines: Vec<String> = read(&dir.join(y)).lines().map(str::to_string).collect();
+        let mut function = String::new();
+        for (i, line) in lines.iter().enumerate() {
+            let t = line.trim_start().trim_start_matches("public ");
+            if let Some(rest) = t.strip_prefix("function ") {
+                function = rest.split('(').next().unwrap().to_string();
+            }
+            if let Some(rest) = t.strip_prefix("orelse ").unwrap_or(t).strip_prefix("region ") {
+                let r = rest.split_whitespace().next().unwrap();
+                let at = line.len() - line.trim_start().len();
+                let next = lines[i + 1..].iter().find(|l| !l.trim().is_empty() && l.len() - l.trim_start().len() <= at);
+                let followed = next.is_some_and(|l| l.len() - l.trim_start().len() == at && !l.trim_start().starts_with("orelse ") && !l.trim_start().starts_with("else "));
+                assert!(!followed || ends_in(&function, r), "{y}:{}: Y statements follow the region {function}#{r} in its block, and the bare body does not mark its end, `// y: end region {r}`", i + 1);
+            }
+        }
+    }
     for y in &code {
         let mut function = String::new();
         for (i, line) in read(&dir.join(y)).lines().enumerate() {

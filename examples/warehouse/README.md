@@ -79,8 +79,10 @@ The program writes `receipts.store` beside it.
 
 ## Checks
 
-- `cargo test`: the 26 lowered Y tests, one for each of the module's 26 paths. `Y_ATOMIC=optimistic cargo test` runs them
-  again with the optimistic engine, which may run a region again.
+- `cargo test`: the 26 lowered Y tests, one for each of the module's 26 paths, and `tests/optimistic.rs`, which is not
+  lowered from Y: under the optimistic engine, another task's reservation commits between a reservation's read and its
+  commit (the runtime's `after_next_read` puts it there), and the reservation runs again, every time.
+  `Y_ATOMIC=optimistic cargo test` runs the Y tests with the optimistic engine too.
 - `tools/paths/rebare.sh warehouse`: 10 decisions, 26 paths, 26 tests, `uncovered: [] unknown: []`, and the example's
   checks in `tools/bare-rust/tests/y_examples.rs`, which pass.
 - `python3 tools/paths/trace.py examples/warehouse warehouse`: every path is taken by the test that claims it, the two
