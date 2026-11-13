@@ -11,8 +11,8 @@
 //! - the paths of each module (`y_paths`, Y § 3.5) are the ones `bare/y-facts.json` lists, every loop that may never
 //!   run has its `else`, and the tests together cover every path that needs a test (Y § 3.14).
 //!
-//! The Y source is read through its tree, from `y-parse` (`tools/y-parse`), for the regions and the named decisions and
-//! in `y_levels`; `y_paths`, `y_lint` and the layout rules read it as text.
+//! The Y source is read through its tree, from `y-parse` (`tools/y-parse`), for the regions and the named decisions, in
+//! `y_levels` and in `y_lint`; `y_paths` and the layout rules read it as text.
 //!
 //! To refresh the Rust after editing the bare files, from `tools/bare-rust`:
 //! `cargo run -q -- weave ../../examples/<name>/bare --out ../../examples/.woven --crate ../../examples/<name>`, then

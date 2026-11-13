@@ -39,7 +39,7 @@ fn a_facet_with_its_comment() {
     assert_eq!((c.kind, s(c, "name")), ("constants", "rules"));
     let items = c.nodes("items");
     let ty = items[0].node("type").unwrap();
-    assert_eq!((s(ty, "name"), s(ty.nodes("args")[0], "name")), ("count", "unit_type"));
+    assert_eq!((s(ty, "name"), s(ty.nodes("args")[0], "name"), s(ty, "text")), ("count", "unit_type", "count<unit_type=rune>"));
     assert_eq!(s(ty.nodes("args")[0].node("value").unwrap(), "name"), "rune");
     assert_eq!(s(items[1].node("value").unwrap(), "value"), "a b");
     assert_eq!(items[1].line, 5);
@@ -106,6 +106,13 @@ fn a_documentation_block_and_its_entries() {
     assert_eq!((s(e[0], "name"), s(e[0], "text"), e[0].line), ("text", "The words, as string.", 4));
     assert_eq!(s(e[1], "name"), "fails list_error.empty");
     assert!(s(d, "text").starts_with("Reads a list."));
+    let ty = e[0].node("type").unwrap();
+    assert_eq!((s(ty, "name"), ty.line), ("string", 5));
+    assert!(e[1].node("type").is_none());
+    // only what follows the last `as` is read, so the prose may hold what Y does not
+    let f = decl("-------\nshown: Each letter (`_ o _`) as it is, as list<element_type=decimal<scale=2>>.\n-------\nfunction f():\n    return\n");
+    let ty = f.node("doc").unwrap().nodes("entries")[0].node("type").unwrap().clone();
+    assert_eq!((s(&ty, "text"), s(ty.nodes("args")[0], "text")), ("list<element_type=decimal<scale=2>>", "decimal<scale=2>"));
 }
 
 #[test]
@@ -192,6 +199,8 @@ fn comments_are_kept_with_their_lines() {
     let t = tree("-- one\nmodule m\n\n-- two\nfunction f():\n    -- three\n    a = 1  -- four\n");
     let cs: Vec<(usize, &str)> = t.nodes("comments").iter().map(|c| (c.line, s(c, "text"))).collect();
     assert_eq!(cs, [(1, "one"), (4, "two"), (6, "three"), (7, "four")]);
+    let alone: Vec<bool> = t.nodes("comments").iter().map(|c| c.flag("alone")).collect();
+    assert_eq!(alone, [true, true, true, false]);
     assert_eq!(s(t.nodes("decls")[1], "comment"), "two");
 }
 

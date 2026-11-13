@@ -1,22 +1,24 @@
 //! The lint `type_argument_name` (Y § 3.1), as `y lint` would report it: an argument that takes a type is named
-//! `…_type`, and one that takes a value is not. There is no Y compiler yet; this reads the Y text as the examples use
-//! it. `tools/paths/ylint.py` is the same lint for the command line: change both together.
+//! `…_type`, and one that takes a value is not. It reads the Y's tree, from `y-parse` (`tools/y-parse`).
+//! `tools/paths/ylint.py` is the same lint for the command line: change both together.
 //!
-//! - An argument is `name=value` inside `kind<…>`.
-//! - Its value is a type when it is a type with arguments (`list<…>`), a built-in type, or a name the module declares
-//!   as a type (`structure`, `type`, `constants`, `state`, `schema`, `enumeration`).
+//! - An argument is `name=value` inside `kind<…>`, in the code or in the type a documentation entry ends with (`game:
+//!   The game, as game.`).
+//! - Its value is a type when it is a type with arguments (`list<…>`), a built-in type, or a name the module declares as
+//!   a type (`structure`, `type`, `constants`, `schema`).
 //! - Its value is a value when it is a literal (a number, with or without a unit, a string, `true`, `false`), a path
-//!   (`game_rules.size`), or a name the module declares as a `service` or a `unit`.
+//!   (`game_rules.size`), or a name the module declares as a `service`.
 //! - Anything else, such as a name imported from another module, is not judged.
 //! - `-- lint: allow type_argument_name because "…"` on the line, or alone on the line before it, suppresses the error.
+use y_parse::Node;
 
 const BUILT_IN: [&str; 19] = [
     "boolean", "int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64", "float64", "integer", "decimal",
     "rational", "string", "rune", "scalar", "bytes", "void", "byte",
 ];
-const TYPE_DECLARATIONS: [&str; 6] = ["structure", "type", "constants", "state", "schema", "enumeration"];
-const VALUE_DECLARATIONS: [&str; 2] = ["service", "unit"];
-const ALLOW: &str = "-- lint: allow type_argument_name because \"";
+const TYPE_DECLARATIONS: [&str; 4] = ["structure", "type_decl", "constants", "schema"];
+const VALUE_DECLARATIONS: [&str; 1] = ["service"];
+const ALLOW: &str = "lint: allow type_argument_name because \"";
 
 #[derive(PartialEq)]
 enum Kind {
@@ -25,110 +27,63 @@ enum Kind {
     Unknown,
 }
 
-/// The names the module declares after one of `words`: `structure game:` declares `game`.
-fn declared(source: &str, words: &[&str]) -> Vec<String> {
+/// The names the module declares with a declaration of one of `kinds`, in a facet or not.
+fn declared(tree: &Node, kinds: &[&str]) -> Vec<String> {
     let mut out = vec![];
-    for line in source.lines() {
-        let t = line.trim_start().trim_start_matches("public ");
-        for w in words {
-            if let Some(rest) = t.strip_prefix(w).and_then(|r| r.strip_prefix(' ')) {
-                let name: String = rest.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '_').collect();
-                if !name.is_empty() {
-                    out.push(name);
-                }
-            }
-        }
+    for d in tree.nodes("decls") {
+        let inner = if d.kind == "facet" { d.nodes("decls") } else { vec![d] };
+        out.extend(inner.into_iter().filter(|x| kinds.contains(&x.kind)).map(|x| x.str("name").unwrap().to_string()));
     }
     out
 }
 
-/// The `name=value` arguments of every `kind<…>` on a line, outermost first, with nested ones after.
-fn arguments(line: &str) -> Vec<(String, String)> {
-    let cs: Vec<char> = line.chars().collect();
-    let mut out = vec![];
-    for (i, c) in cs.iter().enumerate() {
-        if *c != '<' || i == 0 || !(cs[i - 1].is_ascii_lowercase() || cs[i - 1].is_ascii_digit() || cs[i - 1] == '_') {
-            continue;
-        }
-        let (mut depth, mut parts, mut cur) = (0, vec![], String::new());
-        let mut closed = false;
-        for &d in &cs[i + 1..] {
-            match d {
-                '<' => depth += 1,
-                '>' if depth == 0 => {
-                    closed = true;
-                    break;
-                }
-                '>' => depth -= 1,
-                _ => {}
-            }
-            if d == ',' && depth == 0 {
-                parts.push(std::mem::take(&mut cur));
-            } else {
-                cur.push(d);
-            }
-        }
-        if !closed {
-            continue;
-        }
-        parts.push(cur);
-        for p in parts {
-            if let Some((name, value)) = p.split_once('=') {
-                let name = name.trim();
-                if !name.is_empty() && name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_') {
-                    out.push((name.to_string(), value.trim().to_string()));
-                }
-            }
-        }
-    }
-    out
-}
-
-fn kind(value: &str, types: &[String], values: &[String]) -> Kind {
-    let v = value.trim();
-    if v.contains('<') {
-        return Kind::Type;
-    }
-    let first = v.chars().next().unwrap_or(' ');
-    if first.is_ascii_digit() || first == '-' || first == '"' || v == "true" || v == "false" || v.contains('.') {
+/// Whether an argument's value is a type or a value: a type node is a type unless it is a path, and a literal or a
+/// negative number is a value.
+fn kind(value: &Node, types: &[String], values: &[String]) -> Kind {
+    if value.kind != "type" {
         return Kind::Value;
     }
-    if BUILT_IN.contains(&v) || types.iter().any(|t| t == v) {
+    let name = value.str("name").unwrap();
+    if !value.nodes("args").is_empty() {
         Kind::Type
-    } else if values.iter().any(|t| t == v) {
+    } else if name.contains('.') {
+        Kind::Value
+    } else if BUILT_IN.contains(&name) || types.iter().any(|t| t == name) {
+        Kind::Type
+    } else if values.iter().any(|t| t == name) {
         Kind::Value
     } else {
         Kind::Unknown
     }
 }
 
-/// Every `type_argument_name` error in a Y source, as `file:line: …`.
+/// Every `type_argument_name` error in a Y source, as `file:line: …`, in the order of their lines; a source that does
+/// not parse gives its parse error.
 pub fn type_argument_names(file: &str, source: &str) -> Vec<String> {
-    let types = declared(source, &TYPE_DECLARATIONS);
-    let values = declared(source, &VALUE_DECLARATIONS);
-    let lines: Vec<&str> = source.lines().collect();
-    let mut errors = vec![];
-    for (n, line) in lines.iter().enumerate() {
-        let allowed = line.contains(ALLOW) || (n > 0 && lines[n - 1].trim_start().starts_with(ALLOW));
-        if allowed {
-            continue;
-        }
-        for (name, value) in arguments(line) {
+    let tree = match y_parse::parse(source) {
+        Ok(t) => t,
+        Err(e) => return vec![format!("{file}:{}: {}", e.line, e.message)],
+    };
+    let (types, values) = (declared(&tree, &TYPE_DECLARATIONS), declared(&tree, &VALUE_DECLARATIONS));
+    let allows: Vec<(usize, bool)> = tree.nodes("comments").iter().filter(|c| c.str("text").unwrap().starts_with(ALLOW)).map(|c| (c.line, c.flag("alone"))).collect();
+    let allowed = |line: usize| allows.iter().any(|&(l, alone)| l == line || (alone && l + 1 == line));
+    let mut errors: Vec<(usize, String)> = vec![];
+    for ty in tree.find("type") {
+        for a in ty.nodes("args") {
+            let (line, name, text) = (a.line, a.str("name").unwrap(), a.str("text").unwrap());
+            if allowed(line) {
+                continue;
+            }
             let suffixed = name.ends_with("_type");
-            match kind(&value, &types, &values) {
-                Kind::Type if !suffixed => errors.push(format!(
-                    "{file}:{}: type_argument_name: `{name}` takes a type, `{value}`; name it `{name}_type`",
-                    n + 1
-                )),
-                Kind::Value if suffixed => errors.push(format!(
-                    "{file}:{}: type_argument_name: `{name}` takes a value, `{value}`; name it without `_type`",
-                    n + 1
-                )),
+            match kind(a.node("value").unwrap(), &types, &values) {
+                Kind::Type if !suffixed => errors.push((line, format!("{file}:{line}: type_argument_name: `{name}` takes a type, `{text}`; name it `{name}_type`"))),
+                Kind::Value if suffixed => errors.push((line, format!("{file}:{line}: type_argument_name: `{name}` takes a value, `{text}`; name it without `_type`"))),
                 _ => {}
             }
         }
     }
-    errors
+    errors.sort_by_key(|(line, _)| *line);
+    errors.into_iter().map(|(_, e)| e).collect()
 }
 
 #[cfg(test)]
@@ -139,21 +94,29 @@ mod tests {
     fn the_lint_judges_types_values_and_suppressions() {
         let src = "structure word:\n    text is string\n\n\
                    service shop:\n    address = url\"https://shop\"\n\n\
-                   a is list<element_type=word>\n\
-                   b is list<element=word>\n\
-                   c is decimal<precision=12, scale_type=2>\n\
-                   d is http<service=shop>\n\
-                   e is http<service_type=shop>\n\
-                   f is map<key_type=word, value=list<element_type=uint32>>\n\
-                   g is pair<first=imported>\n\
-                   -- lint: allow type_argument_name because \"the standard library's name\"\n\
-                   h is count<of=rune>\n\
-                   i is count<of=rune>  -- lint: allow type_argument_name because \"as above\"\n";
+                   structure judged:\n\
+                   \x20   a is list<element_type=word>\n\
+                   \x20   b is list<element=word>\n\
+                   \x20   c is decimal<precision=12, scale_type=2>\n\
+                   \x20   d is http<service=shop>\n\
+                   \x20   e is http<service_type=shop>\n\
+                   \x20   f is map<key_type=word, value=list<element_type=uint32>>\n\
+                   \x20   g is pair<first=imported>\n\
+                   \x20   -- lint: allow type_argument_name because \"the standard library's name\"\n\
+                   \x20   h is count<of=rune>\n\
+                   \x20   i is count<of=rune>  -- lint: allow type_argument_name because \"as above\"\n\
+                   \x20   j is count<of=-1>\n\n\n\
+                   ----------\n\
+                   Does it.\n\n\
+                   k: The k, as list<element=word>.\n\
+                   ----------\n\
+                   function f(k):\n    return\n";
         let errors = type_argument_names("t.y", src);
         let lines: Vec<&str> = errors.iter().map(|e| e.split(": type_argument_name").next().unwrap()).collect();
-        assert_eq!(lines, ["t.y:8", "t.y:9", "t.y:11", "t.y:12"], "{errors:#?}");
+        assert_eq!(lines, ["t.y:9", "t.y:10", "t.y:12", "t.y:13", "t.y:24"], "{errors:#?}");
         assert!(errors[0].contains("`element` takes a type, `word`; name it `element_type`"), "{}", errors[0]);
         assert!(errors[1].contains("`scale_type` takes a value, `2`"), "{}", errors[1]);
-        assert!(errors[3].contains("`value` takes a type"), "{}", errors[3]);
+        assert!(errors[3].contains("`value` takes a type, `list<element_type=uint32>`"), "{}", errors[3]);
+        assert!(type_argument_names("t.y", "function f(:\n")[0].starts_with("t.y:1: "));
     }
 }

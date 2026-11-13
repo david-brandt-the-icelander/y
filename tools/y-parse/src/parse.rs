@@ -53,7 +53,7 @@ pub fn parse(src: &str) -> Result<Node, Error> {
         return Err(Error::new(lines[pos].line, "indented less than its block, and more than the block that holds it"));
     }
     let decls = decls(&entries, src, Context::File)?;
-    let comments: Vec<Node> = comments.into_iter().map(|c| Node::new("comment", c.line).with("text", c.text)).collect();
+    let comments: Vec<Node> = comments.into_iter().map(|c| Node::new("comment", c.line).with("text", c.text).with("alone", c.alone)).collect();
     Ok(Node::new("file", 1).with("decls", decls).with("comments", comments))
 }
 
@@ -370,7 +370,7 @@ impl<'a> P<'a> {
     /// A type: `string`, `count<unit_type=rune>`, `list<element_type=decimal<precision=12, scale=2>>`. An argument's
     /// value is a type, or a literal such as `12` or `-1`.
     fn ty(&mut self) -> Result<Node, Error> {
-        let line = self.here();
+        let (line, start) = (self.here(), self.i);
         let name = self.dotted()?;
         let mut args = vec![];
         if self.eat("<") {
@@ -378,15 +378,16 @@ impl<'a> P<'a> {
                 let aline = self.here();
                 let an = self.ident()?;
                 self.expect("=")?;
+                let start = self.i;
                 let value = if self.ident_at(0) && !self.is("true") && !self.is("false") { self.ty()? } else { self.unary()? };
-                args.push(Node::new("type_arg", aline).with("name", an).with("value", value));
+                args.push(Node::new("type_arg", aline).with("name", an).with("value", value).with("text", self.text(start, self.i)));
                 if !self.eat(",") {
                     break;
                 }
             }
             self.expect(">")?;
         }
-        Ok(Node::new("type", line).with("name", name).with("args", args))
+        Ok(Node::new("type", line).with("name", name).with("args", args).with("text", self.text(start, self.i)))
     }
 
     /// `name = condition`, and more of them after `and`: a `where` or `ensures` clause, or a type's `where`.
@@ -440,10 +441,12 @@ enum Context {
 }
 
 /// A documentation block: its text, and its entries. An entry is a line that starts with a name and `: ` (`game: The
-/// game, as game.`, `fails guess_error.empty: …`), with the indented lines that continue it.
+/// game, as game.`, `fails guess_error.empty: …`), with the indented lines that continue it. An entry that ends in `as
+/// type.` has that `type`, with the lines it is on; any other has none.
 fn doc_node(d: &Doc) -> Node {
     let text = d.lines.iter().map(|(_, l)| l.as_str()).collect::<Vec<_>>().join("\n");
-    let mut entries: Vec<Node> = vec![];
+    // each entry, and its text's pieces with their lines: the rest of its first line, then each line that continues it
+    let mut entries: Vec<(Node, Vec<(usize, String)>)> = vec![];
     let mut open = false;
     for (n, l) in &d.lines {
         if l.trim().is_empty() {
@@ -451,9 +454,10 @@ fn doc_node(d: &Doc) -> Node {
             continue;
         }
         if open && l.starts_with(' ') {
-            let e = entries.last_mut().unwrap();
+            let (e, pieces) = entries.last_mut().unwrap();
             let t = format!("{} {}", e.str("text").unwrap(), l.trim());
             e.set("text", t);
+            pieces.push((*n, l.trim().to_string()));
             continue;
         }
         open = false;
@@ -461,12 +465,37 @@ fn doc_node(d: &Doc) -> Node {
             let words: Vec<&str> = name.split(' ').collect();
             let is_name = |w: &str| !w.is_empty() && w.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.');
             if (words.len() == 1 && is_name(words[0])) || (words.len() == 2 && words[0] == "fails" && is_name(words[1])) {
-                entries.push(Node::new("doc_entry", *n).with("name", name).with("text", rest.trim()));
+                entries.push((Node::new("doc_entry", *n).with("name", name).with("text", rest.trim()), vec![(*n, rest.trim().to_string())]));
                 open = true;
             }
         }
     }
+    let entries: Vec<Node> = entries.into_iter().map(|(e, pieces)| e.with("type", entry_type(&pieces))).collect();
     Node::new("doc", d.line).with("end", d.end).with("text", text).with("entries", entries)
+}
+
+/// The type an entry ends with, `… as list<element_type=word>.`; `None` when it ends otherwise. Only the text after
+/// the last word `as` is read, since the prose before it may hold what Y does not (`` `_ o _ e` ``).
+fn entry_type(pieces: &[(usize, String)]) -> Option<Node> {
+    let word_as = |t: &str| {
+        t.match_indices("as").map(|(i, _)| i).filter(|&i| {
+            let b = t.as_bytes();
+            (i == 0 || b[i - 1] == b' ') && (i + 2 == t.len() || b[i + 2] == b' ')
+        }).last()
+    };
+    let k = pieces.iter().rposition(|(_, t)| word_as(t).is_some())?;
+    let mut rest: Vec<(usize, &str)> = vec![(pieces[k].0, &pieces[k].1[word_as(&pieces[k].1)? + 2..])];
+    rest.extend(pieces[k + 1..].iter().map(|(n, t)| (*n, t.as_str())));
+    let src = rest.iter().map(|(_, t)| *t).collect::<Vec<_>>().join("\n");
+    let (mut toks, mut depth, mut comments, mut off) = (vec![], 0, vec![], 0);
+    for (n, t) in &rest {
+        lex::lex(t, *n, off, &mut toks, &mut depth, &mut comments).ok()?;
+        off += t.len() + 1;
+    }
+    let mut p = P { t: &toks, i: 0, src: &src, line: rest[0].0 };
+    let ty = p.ty().ok()?;
+    p.eat(".");
+    p.done().then_some(ty)
 }
 
 /// A declaration's node, with what is above it: its documentation block, its comment, and where it ends.

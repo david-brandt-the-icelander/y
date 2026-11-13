@@ -36,6 +36,8 @@ pub struct Token {
 pub struct Comment {
     pub line: usize,
     pub text: String,
+    /// Whether it is alone on its line, not after code.
+    pub alone: bool,
 }
 
 /// The lines between two dashed rules, without the indentation of the rules.
@@ -109,7 +111,7 @@ pub fn lines(src: &str) -> Result<(Vec<Line>, Vec<Comment>), Error> {
             continue;
         }
         if let Some(rest) = t.strip_prefix("--") {
-            let c = Comment { line: no, text: rest.trim().to_string() };
+            let c = Comment { line: no, text: rest.trim().to_string(), alone: true };
             all_comments.push(c.clone());
             comments.push(c);
             i += 1;
@@ -140,7 +142,7 @@ pub fn lines(src: &str) -> Result<(Vec<Line>, Vec<Comment>), Error> {
             if k < phys.len() && !is_rule(phys[k].2.trim()) && indent_of(phys[k].2) > indent {
                 for &(n, _, l) in &phys[i..k] {
                     if !l.trim().is_empty() {
-                        all_comments.push(Comment { line: n, text: l.trim()[2..].trim().to_string() });
+                        all_comments.push(Comment { line: n, text: l.trim()[2..].trim().to_string(), alone: true });
                     }
                 }
                 i = k;
@@ -154,7 +156,7 @@ pub fn lines(src: &str) -> Result<(Vec<Line>, Vec<Comment>), Error> {
 }
 
 /// The tokens of one physical line, appended to `toks`; a comment at its end goes to `comments`.
-fn lex(l: &str, no: usize, off: usize, toks: &mut Vec<Token>, depth: &mut i32, comments: &mut Vec<Comment>) -> Result<(), Error> {
+pub fn lex(l: &str, no: usize, off: usize, toks: &mut Vec<Token>, depth: &mut i32, comments: &mut Vec<Comment>) -> Result<(), Error> {
     let b = l.as_bytes();
     let mut i = 0;
     let push = |toks: &mut Vec<Token>, kind, s: usize, e: usize| toks.push(Token { kind, text: l[s..e].to_string(), line: no, start: off + s, end: off + e });
@@ -163,7 +165,7 @@ fn lex(l: &str, no: usize, off: usize, toks: &mut Vec<Token>, depth: &mut i32, c
         if c == b' ' || c == b'\t' {
             i += 1;
         } else if c == b'-' && b.get(i + 1) == Some(&b'-') {
-            comments.push(Comment { line: no, text: l[i + 2..].trim().to_string() });
+            comments.push(Comment { line: no, text: l[i + 2..].trim().to_string(), alone: false });
             break;
         } else if c.is_ascii_alphabetic() || c == b'_' {
             let s = i;

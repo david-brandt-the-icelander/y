@@ -33,7 +33,7 @@ documentation block above it) and its `comment` (the `--` lines right above it).
 
 | Kind | Fields |
 |---|---|
-| `file` | `decls`; `comments`, every comment of the file as `comment` nodes with their `text` |
+| `file` | `decls`; `comments`, every comment of the file as `comment` nodes with their `text`, and `alone`, whether no code is before it on its line |
 | `module`, `import` | `name`; `from` and `names` |
 | `facet` | `name`, `decls` |
 | `constants`, `service` | `name`, `items`: `constant` or `setting` nodes with `name`, `type` (or null) and `value` |
@@ -43,7 +43,7 @@ documentation block above it) and its `comment` (the `--` lines right above it).
 | `function` | `name`, `params` (`param` nodes: `name`, `injected`, `mutable`, `type`), `returns`, `fails` (a list of names), `where` and `ensures` (clauses: `name`, `condition`), `body` |
 | `rule` | `name`, `params`, `value` |
 | `test` | `name`, `covers` (a `path` node with its `text` and its `steps`, or null), `sections` (`section` nodes: `name` is `given`, `inject`, `when` or `then`, and `body`) |
-| `doc` | `text`, its lines without the rules' indentation; `entries`: a line that starts with a name and `: ` (`game: The game, as game.`, `fails guess_error.empty: …`), with the indented lines that continue it, as `doc_entry` nodes with `name` and `text` |
+| `doc` | `text`, its lines without the rules' indentation; `entries`: a line that starts with a name and `: ` (`game: The game, as game.`, `fails guess_error.empty: …`), with the indented lines that continue it, as `doc_entry` nodes with `name`, `text`, and `type`, the type after its last word `as`, or null when it does not end in `as type.` |
 | `let` | `name`, `mutable`, `value`: `a = …`, `mutable a = …`, and a test's `then:` condition |
 | `assign`, `expr` | `target` and `value` (`a.b := …`); `value` (a statement that is an expression) |
 | `if`, `while` | `name`, `condition`, `body`, `else` |
@@ -62,7 +62,7 @@ documentation block above it) and its `comment` (the `--` lines right above it).
 | `list` | `items` |
 | `or_fail`, `forever` | `value` (`e or fail`); `value`, `because` (`e forever because "…"`) |
 | `mutable`, `fake`, `compile` | `value`: an argument `mutable g`, a test's `fake store(…)`, `main`'s `compile f(…)` |
-| `type` | `name`, `args` (`type_arg` nodes: `name`, and `value`, a type or a literal) |
+| `type` | `name`, `args` (`type_arg` nodes: `name`, `value`, a type or a literal, and `text`, the value as written), `text` as written |
 
 ## How lines become a tree
 
@@ -112,8 +112,10 @@ checks on the text.
   the end of one that statements follow) and for the decisions a module names.
 - `tools/paths/regen.py` reads it, through `tools/paths/ytree.py`, for the functions, rules and derived values and
   their facets, their `where` and `ensures` clauses, invariants, `injected` parameters, and regions.
+- The lint `type_argument_name`, `tools/paths/ylint.py` and its twin `tools/bare-rust/tests/y_lint/mod.rs`, reads the
+  type arguments in the code and in the types documentation entries end with, the declarations, and the comments that
+  suppress it.
 
 The other tools still read Y as text: the path enumerator `tools/paths/yp.py` and its Rust port
-`tools/bare-rust/tests/y_paths/mod.rs`, the lint `tools/paths/ylint.py` and `tools/bare-rust/tests/y_lint/mod.rs`,
-`tools/paths/pathfacts.py`, `tools/paths/places.py` and `tools/paths/trace.py`, and the layout checks of
-`y_examples.rs`.
+`tools/bare-rust/tests/y_paths/mod.rs`, `tools/paths/pathfacts.py`, `tools/paths/places.py` and
+`tools/paths/trace.py`, and the layout checks of `y_examples.rs`.

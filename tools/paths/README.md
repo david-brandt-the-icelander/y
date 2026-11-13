@@ -3,8 +3,8 @@
 Scripts that keep the examples under [`../../examples`](../../examples/) in step with their execution paths (Y § 3.5,
 § 3.14). There is no Y compiler, so these stand in for the parts of one that the examples need: they enumerate the paths
 of a Y module, regenerate the lowered `bare/` files and `bare/y-facts.json`, and run the tests to see which paths they
-take. They need Python 3 and a Rust toolchain, and nothing else. `regen.py` reads the Y source through the parser in
-[`../y-parse`](../y-parse/); the others still read it as text.
+take. They need Python 3 and a Rust toolchain, and nothing else. `regen.py` and `ylint.py` read the Y source through the
+parser in [`../y-parse`](../y-parse/); the others still read it as text.
 
 | File | What it does |
 |---|---|
