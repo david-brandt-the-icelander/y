@@ -1855,10 +1855,11 @@ prints it under the file's `module` line:
   whose type is `Shared<…>` is `shared`; any other injected parameter, which is a capability, an `effects only …`
   clause, `async`, `.await`, a wait (`waits until`), or a region that waits `forever` or is detached is `effects`. A
   call into a library needs the level its module has in a table, `libraries/levels.json` (`y_runtime::shared` is
-  `shared`, `y_runtime::task` and `std::fs` are `effects`), matched through the file's `use` declarations. A call of a
-  function of the crate needs what that function needs; a method call, whose receiver's type the bare body does not
-  say, and a name defined more than once out of the caller's reach, need the most that any function they may be
-  needs. An import of a module pinned higher needs that module's level. Weave fails on anything above its module's
+  `shared`, `y_runtime::task` and `std::fs` are `effects`), matched through the file's `use` declarations; every
+  library is listed, at least by its crate, and a call into one that is not needs `effects`, as nothing says it has
+  none. A call of a function of the crate needs what that function needs. A method call takes its receiver's type from
+  the constraint data when the receiver is a parameter or a typed local; when the type is unknown, the call, like a
+  name defined more than once out of the caller's reach, needs the most that any function it may be needs. An import of a module pinned higher needs that module's level. Weave fails on anything above its module's
   level, and `bare-rust levels <bare-dir>` prints the level each module needs and why, with the level pinned on it.
   Every module of the examples is pinned at the level it needs, and the examples' checks hold each facet's pin to a
   second inference made from the Y source alone.
@@ -1918,12 +1919,14 @@ region 'memory.setup.new_game#fetch'
   the region to its body. The function marks where the region starts, `// y: region counted is …` or, for an
   alternative of an `orelse`, `// y: #name`, and a marker that states the constraints states the same ones as the
   clauses. The code the marker starts is what follows it in its block, up to `// y: end region counted` or the block's
-  end, or the statement it ends for a marker after code; weave reads its syntax, its calls, names and waits, and holds
-  it to each constraint: an atomic region runs in a transaction, and, as it may run again, uses no capability but
-  `shared` state, does not wait, and calls nothing that needs `effects` (§ 6.22); a snapshot one is run at `Isolation::Snapshot`; `within` makes a deadline or gives a duration, and every wait
-  in the region takes the deadline; `forever` is given to the wait; `detach` and `supervise` call the runtime's
-  `detach` and `supervised`; `uncancellable` holds cancellation; `waits until name` marks its condition and retries
-  until it holds. A region that is not in its function's body, that says other constraints than its marker, or whose
+  end, or the statement it ends for a marker after code; a region that Y statements follow in its block says where it
+  ends. Weave reads that code's syntax, resolving names through the file's `use` declarations and the constraint
+  data, and holds it to each constraint: an atomic region runs in a transaction of `y_runtime::shared`, and, as it may
+  run again, uses no capability but `shared` state, does not wait, calls no function passed in, and calls nothing
+  that needs `effects` (§ 6.22); a snapshot one passes `Isolation::Snapshot`; `within` binds a deadline that every
+  wait takes, by whatever name it binds it to; `forever` gives the wait a parameter of type `Forever`;
+  `detach` and `supervise` call the runtime's `detach` and `supervised`; `uncancellable` holds cancellation with a
+  `Cancellation`; `waits until name` marks its condition and retries until it holds. A region that is not in its function's body, that says other constraints than its marker, or whose
   code does not keep them is refused.
 - **Checked:** by the Y compiler for Y; by host analyses where they exist (a transaction's isolation level in T-SQL, a
   lock held across the region in Rust); by concurrency explorers and replays in CI, which run the region's interleavings

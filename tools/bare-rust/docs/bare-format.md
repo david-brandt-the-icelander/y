@@ -385,11 +385,13 @@ named part of one, may execute: a subject of kind `region`, named `<function>#<r
 uncancellable, within 50ms` or, for an alternative of an `orelse`, `// y: #name`; weave binds the region to that
 marker, and refuses a region its function does not mark, whose marker states other constraints than its clauses, or
 whose code does not keep them. That code is what follows the marker in its block, up to `// y: end region name` or the
-block's end, or the statement the marker ends; weave reads its calls, names and waits, and an atomic region may call
-nothing that needs `effects`. A **level**
+block's end, or the statement the marker ends; a region that more of the function's statements follow in its block
+must say where it ends. Weave reads that code's calls, names and waits, resolved through the file's `use`
+declarations, and an atomic region may call nothing that needs `effects`, nor a function passed in. A **level**
 (§ 6.22) is a field of a module's subject, `"level": "structured"`: nothing in the module, its inner modules or its
 files (its `tests` aside) may use more, the functions it calls (method calls among them) and the modules it imports
-counted, and a library's calls at the level `libraries/levels.json` gives its module. A parameter the Y
+counted, and a library's calls at the level `libraries/levels.json` gives its module; a library it does not list
+counts as `effects`. A parameter the Y
 lowering injects is marked `"injected": true`, which is how a capability is known. Weave refuses a body above its
 module's level, naming the construct; `bare-rust levels <bare-dir>` prints what each module needs and why.
 

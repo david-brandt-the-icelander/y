@@ -58,6 +58,18 @@ pub fn engine() -> Engine {
     }
 }
 
+thread_local! {
+    /// What `after_next_read` asked to run.
+    static AFTER_READ: RefCell<Option<Box<dyn FnOnce()>>> = RefCell::new(None);
+}
+
+/// For tests of the optimistic engine: runs `hook` once, on this thread, right after the next read of an optimistic run,
+/// as another task's commit would land between a region's read and its commit. It makes a re-run happen when a test
+/// wants one, instead of when the scheduler happens to give one.
+pub fn after_next_read(hook: impl FnOnce() + 'static) {
+    AFTER_READ.with(|h| *h.borrow_mut() = Some(Box::new(hook)));
+}
+
 /// How many runs of atomic regions have been run again since the program started.
 pub fn reruns() -> u64 {
     RERUNS.load(Ordering::SeqCst)
@@ -145,15 +157,23 @@ impl Tx {
         if let Some(written) = self.pending.get(&shared.key()).and_then(|v| v.downcast_ref::<T>()) {
             return written.clone();
         }
-        let slot = shared.slot();
-        if let Some(stamp) = self.stamp {
-            // a value committed after the run started is not in its snapshot: the run is run again
-            if slot.version > stamp {
-                self.stale.set(true);
+        let value = {
+            let slot = shared.slot();
+            if let Some(stamp) = self.stamp {
+                // a value committed after the run started is not in its snapshot: the run is run again
+                if slot.version > stamp {
+                    self.stale.set(true);
+                }
+                self.read.borrow_mut().entry(shared.key()).or_insert_with(|| shared.version_of());
             }
-            self.read.borrow_mut().entry(shared.key()).or_insert_with(|| shared.version_of());
+            slot.value.clone()
+        };
+        if self.stamp.is_some() {
+            if let Some(hook) = AFTER_READ.with(|h| h.borrow_mut().take()) {
+                hook();
+            }
         }
-        slot.value.clone()
+        value
     }
 
     /// Writes a shared state; the write becomes visible to others when the region ends.

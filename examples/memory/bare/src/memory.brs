@@ -151,6 +151,7 @@ mod setup {
                 let made = Picture::from_svg(drawing.as_str(), layout::PICTURE_SIZE)?;
                 pictures.push(made);
             }
+            // y: end region fetch
         }
         let dealt = List::new();
         for number in 1..=board::PAIRS { // y: #number

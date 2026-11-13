@@ -2,6 +2,10 @@
 //! the one `bare_rust::level` makes from the bare bodies, so that the levels pinned in an example's constraint files
 //! are checked against what the Y says and not only against the tool that proposed them.
 //!
+//! It reads the Y as statements in indented blocks, each with its strings and comments taken out (`code`), and decides
+//! by the statement's words (`words`): what a statement starts with, the constraints a region header lists, the names
+//! it calls. It is not a parser of Y's grammar, of which there is none yet.
+//!
 //! A function, a rule or a derived value is `calculations`. `structured` adds a `mutable` name or parameter, `:=`,
 //! `for`, `while`, and recursion. `shared` adds an injected parameter its documentation gives as `shared<…>`, an
 //! `atomic` region, an `arena`, and `shared.new(…)`. `effects` adds any other injected parameter, a region that is
@@ -17,6 +21,52 @@ struct Function {
     level: usize,
     why: String,
     calls: BTreeSet<String>,
+}
+
+/// A line without its strings (`"…"`, kept as `""`) and its comment (`-- …`).
+fn code(l: &str) -> String {
+    let (mut out, mut quoted, mut chars) = (String::new(), false, l.chars().peekable());
+    while let Some(c) = chars.next() {
+        if c == '"' {
+            quoted = !quoted;
+            out.push(c);
+        } else if quoted {
+            continue;
+        } else if c == '-' && chars.peek() == Some(&'-') {
+            break;
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// A statement's words and operators, in order: `x := y.add(z)` is `x`, `:=`, `y`, `.`, `add`, `(`, `z`, `)`.
+fn words(t: &str) -> Vec<String> {
+    let (mut out, mut word) = (vec![], String::new());
+    let cs: Vec<char> = t.chars().collect();
+    let mut i = 0;
+    while i < cs.len() {
+        let c = cs[i];
+        if c.is_alphanumeric() || c == '_' {
+            word.push(c);
+        } else {
+            if !word.is_empty() {
+                out.push(std::mem::take(&mut word));
+            }
+            if c == ':' && cs.get(i + 1) == Some(&'=') {
+                out.push(":=".into());
+                i += 1;
+            } else if !c.is_whitespace() {
+                out.push(c.to_string());
+            }
+        }
+        i += 1;
+    }
+    if !word.is_empty() {
+        out.push(word);
+    }
+    out
 }
 
 fn indent(l: &str) -> usize {
@@ -99,21 +149,32 @@ pub fn facet_levels(source: &str) -> BTreeMap<String, (usize, String)> {
                 (f.level, f.why) = (level, why.chars().take(50).collect());
             }
         };
-        if t.starts_with("for ") || t.starts_with("while ") || t.starts_with("mutable ") || t.contains(" := ") {
+        let c = code(l);
+        let ws = words(&c);
+        let first = ws.first().map(String::as_str).unwrap_or("");
+        let has = |w: &str| ws.iter().any(|x| x == w);
+        let seq = |a: &str, b: &str| ws.windows(2).any(|p| p[0] == a && p[1] == b);
+        if matches!(first, "for" | "while" | "mutable") || has(":=") {
             up(2, t);
         }
-        if t.contains("is atomic") || t.contains(" atomic,") || t.starts_with("arena ") || t.contains("shared.new(") {
+        if first == "arena" || (seq("shared", ".") && seq(".", "new")) {
             up(3, t);
         }
-        if ["forever because", "detach because", "waits until", "system."].iter().any(|w| t.contains(w))
-            || t.contains(" is within ")
-            || t.contains(", within ")
-            || t.starts_with("task ")
-            || t.starts_with("inject(")
-        {
+        // a region's header: `region r is c1, c2, …:` or `orelse region r is …:`, its constraints by their first words
+        if first == "region" || (first == "orelse" && ws.get(1).is_some_and(|w| w == "region")) {
+            let constraints = c.split_once(" is ").map(|(_, cs)| cs.trim_end_matches(':')).unwrap_or("");
+            for part in constraints.split(',') {
+                match words(part).first().map(String::as_str).unwrap_or("") {
+                    "atomic" => up(3, t),
+                    "within" | "forever" | "detach" | "waits" | "uncancellable" => up(4, t),
+                    _ => {}
+                }
+            }
+        }
+        if first == "task" || first == "inject" || seq("system", ".") {
             up(4, t);
         }
-        f.calls.extend(called(t));
+        f.calls.extend(called(&c));
     }
     // a call of a function of the module needs what it needs; a call of itself is recursion
     loop {
