@@ -14,6 +14,7 @@
 //! To refresh the Rust after editing the bare files, from `tools/bare-rust`:
 //! `cargo run -q -- weave ../../examples/<name>/bare --out ../../examples/.woven --crate ../../examples/<name>`, then
 //! copy `.woven/src` over `examples/<name>/src` and delete `.woven`.
+mod y_levels;
 mod y_lint;
 mod y_paths;
 
@@ -224,6 +225,25 @@ fn constraint_files_are_valid(name: &str) {
         .collect();
     let errors = bare_rust::level::check(&bodies);
     assert!(errors.is_empty(), "{errors:#?}");
+    // and each facet's pinned level is the one its Y source needs, read from the Y alone (`y_levels`)
+    let pinned: BTreeMap<String, String> = bodies
+        .iter()
+        .flat_map(|(_, _, js)| js["subjects"].as_array().unwrap().clone())
+        .filter(|s| s["kind"] == "module" && s["level"].is_string())
+        .map(|s| (s["name"].as_str().unwrap().to_string(), s["level"].as_str().unwrap().to_string()))
+        .collect();
+    let y_dir = dir.join("y/src");
+    let mut ys: Vec<PathBuf> = fs::read_dir(&y_dir).unwrap().map(|e| e.unwrap().path()).collect();
+    ys.sort();
+    let mut checked = 0;
+    for y in ys.iter().filter(|p| p.extension().is_some_and(|e| e == "y") && !p.to_string_lossy().ends_with(".test.y")) {
+        for (facet, (level, why)) in y_levels::facet_levels(&read(y)) {
+            let Some((module, pin)) = pinned.iter().find(|(m, _)| m.ends_with(&format!("::{facet}"))) else { continue };
+            assert_eq!(pin, y_levels::LEVELS[level], "{module} is pinned at `{pin}`, and its Y source needs `{}` ({why})", y_levels::LEVELS[level]);
+            checked += 1;
+        }
+    }
+    assert!(checked > 0 || !pinned.keys().any(|m| m.matches("::").count() > 1), "no facet's level was checked against the Y source");
 }
 
 /// Warehouse's regions and levels are enforced, not only accepted: each change below is refused, by validation
@@ -392,6 +412,27 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
     // a region's constraints, its deadline and its `forever` among them, are its subject's in the constraint files
     // (language 6.23), which weave holds its code to; the facts do not repeat them
     assert!(facts.get("deadlines").is_none(), "a region's deadline is a `within` clause of its region subject");
+    // and every region of the Y source has its subject: `region r is …:` in function `f` is `…::f#r`
+    let regions: BTreeSet<String> = modules(&dir)
+        .iter()
+        .flat_map(|m| {
+            let js: Value = serde_json::from_str(&read(&dir.join(format!("bare/src/{m}.constraints.json")))).unwrap();
+            js["subjects"].as_array().unwrap().iter().filter(|s| s["kind"] == "region").map(|s| s["name"].as_str().unwrap().to_string()).collect::<Vec<_>>()
+        })
+        .collect();
+    for y in &code {
+        let mut function = String::new();
+        for (i, line) in read(&dir.join(y)).lines().enumerate() {
+            let t = line.trim_start().trim_start_matches("public ");
+            if let Some(rest) = t.strip_prefix("function ").or_else(|| t.strip_prefix("rule ")) {
+                function = rest.split('(').next().unwrap().to_string();
+            }
+            if let Some(rest) = t.strip_prefix("orelse ").unwrap_or(t).strip_prefix("region ") {
+                let r = rest.split_whitespace().next().unwrap();
+                assert!(regions.iter().any(|n| n.ends_with(&format!("::{function}#{r}"))), "{y}:{}: the region {function}#{r} has no region subject", i + 1);
+            }
+        }
+    }
     // every named decision of the Y source is listed: `if name = …:`, `while name = …:`, `for name in …:`, `condition
     // label.name = …:`, `else name:` and `else name`
     let mut in_source = BTreeSet::new();

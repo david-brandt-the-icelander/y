@@ -14,7 +14,7 @@
 //!   started, and takes the lock only to commit. A commit checks the versions the run depended on: every state it read
 //!   or wrote, for `isolation serializable`; only what it wrote, first committer wins, for `isolation snapshot`, which
 //!   may suffer write skew. A run that a commit invalidated is run again. This is what `may run again` permits, and why
-//!   an atomic region may hold no external effect.
+//!   an atomic region may hold no external effect. A run that retries waits until a commit changes something it read.
 //!
 //! The lowering of a region `region reserve is atomic, within 5s or fail:` is a call of [`atomic`] with the region's
 //! name, its deadline and a closure for its body; `isolation snapshot` lowers to [`atomic_with`] and
@@ -292,6 +292,8 @@ fn one_lock<R, E>(deadline: Option<&Deadline>, alternatives: &mut [Alternative<'
 fn optimistic<R, E>(deadline: Option<&Deadline>, isolation: Isolation, alternatives: &mut [Alternative<'_, R, E>]) -> Result<R, Aborted<E>> {
     'run: loop {
         let stamp = *hold();
+        // what the alternatives that retried read: the run waits until a commit changes some of it
+        let mut watched: Vec<VersionOf> = vec![];
         for alternative in alternatives.iter_mut() {
             let mut tx = Tx::new(Some(stamp));
             let decided = alternative(&mut tx);
@@ -310,14 +312,15 @@ fn optimistic<R, E>(deadline: Option<&Deadline>, isolation: Isolation, alternati
                     }
                     return Ok(r);
                 }
-                Ok(Step::Retry) => {}
+                Ok(Step::Retry) => watched.extend(tx.read.borrow().values().cloned()),
                 Err(e) => return Err(Aborted::Failed(e)),
             }
         }
-        // every alternative retried: wait for a commit after the version they read
-        let held = hold();
-        if *held == stamp {
-            drop(wait(held, deadline).map_err(Aborted::Expired)?);
+        // every alternative retried: wait until a commit changes what they read (Y § 3.9: `retry` waits until something
+        // it read changes), or the deadline
+        let mut held = hold();
+        while !watched.iter().any(|v| v() > stamp) {
+            held = wait(held, deadline).map_err(Aborted::Expired)?;
         }
     }
 }
@@ -508,6 +511,45 @@ mod tests {
             });
             assert_eq!(r, Err(Aborted::Failed("declined")));
             assert_eq!(counter.snapshot(), 2400);
+        });
+    }
+
+    #[test]
+    fn optimistic_retry_waits_for_what_it_read_to_change() {
+        optimistically(|| {
+            let stock = Shared::new(0u32);
+            let other = Shared::new(0u32);
+            let (filler, unrelated) = (stock.clone(), other.clone());
+            let runs = Arc::new(AtomicU64::new(0));
+            let counted = Arc::clone(&runs);
+            let waiter = thread::spawn(move || {
+                let d = Deadline::after(Duration::from_secs(5));
+                atomic("take", Some(&d), |tx| -> Result<Step<u32>, ()> {
+                    counted.fetch_add(1, Ordering::SeqCst);
+                    let n = tx.get(&stock);
+                    if n == 0 {
+                        return Ok(Step::Retry);
+                    }
+                    tx.set(&stock, n - 1);
+                    Ok(Step::Done(n))
+                })
+            });
+            thread::sleep(Duration::from_millis(50));
+            // commits to what the waiter did not read do not wake it to run again
+            for i in 0..5 {
+                let _: Result<(), Aborted<()>> = atomic("other", None, |tx| {
+                    tx.set(&unrelated, i);
+                    Ok(Step::Done(()))
+                });
+            }
+            thread::sleep(Duration::from_millis(50));
+            assert_eq!(runs.load(Ordering::SeqCst), 1, "the waiter ran again for a commit it did not read");
+            let _: Result<(), Aborted<()>> = atomic("fill", None, |tx| {
+                tx.set(&filler, 2);
+                Ok(Step::Done(()))
+            });
+            assert_eq!(waiter.join().unwrap(), Ok(2));
+            assert_eq!(runs.load(Ordering::SeqCst), 2);
         });
     }
 }

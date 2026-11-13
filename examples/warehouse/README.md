@@ -46,10 +46,10 @@ The program writes `receipts.store` beside it.
 | Stage | Files | Lines | Written by |
 |---|---|---|---|
 | Y source | `y/src/warehouse.y`, `y/src/warehouse.test.y`, `y/src/main.y` | 300, 327, 63 | hand |
-| Bare bodies | `bare/src/warehouse.brs`, `bare/src/warehouse/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 435, 263, 121, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
+| Bare bodies | `bare/src/warehouse.brs`, `bare/src/warehouse/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 436, 263, 122, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
 | Constraint files | `bare/src/*.constraints.json` (100 subjects, 27 clauses) | 983 | `strip`, plus the clauses, regions, status and module levels the Y lowering adds, then `bare-rust libfmt` |
 | Y facts | `bare/y-facts.json` | 626 | the same, from the Y source and the bare bodies |
-| Rust | `src/warehouse.rs`, `src/warehouse/tests.rs`, `src/main.rs`, `src/lib.rs` | 434, 263, 121, 3 | `bare-rust weave` |
+| Rust | `src/warehouse.rs`, `src/warehouse/tests.rs`, `src/main.rs`, `src/lib.rs` | 435, 263, 122, 3 | `bare-rust weave` |
 
 ## What Warehouse adds to Hangman's lowering
 
@@ -74,7 +74,7 @@ The program writes `receipts.store` beside it.
 | `schema item v1:`, `schema item v2:`, `migrate item v1 to v2: vat_rate := tax.standard_rate` | `impl Schema for Item`, whose `decode` reads both versions and migrates version 1 | `y_runtime::store::Store`: records with their versions, read one by one, so a record that fails fails alone, against its key |
 | `store<schema_type=item>`, `system.store(path"items.store")` | `Store<Item>`, `system.store("items.store")`; `Store::fake(lines)` in the tests | — |
 | each `region name is …:` | a `region` subject in the constraint file, `<function>#<name>`, with one clause for each constraint: `atomic`, `isolation snapshot`, `may run again`, `on failure unchanged`, `waits until enough : …`, `within 10s`, `supervise(…)`, `uncancellable`, `detach because "…"` (constraint language § 6.23). The function marks where the region starts, `// y: region name is …` or `// y: #name` | weave refuses a region its function does not mark, or whose marker states other constraints |
-| the facets' levels, which the Y compiler infers (Y § 3.19) | `"level"` on each facet's module subject: `pricing` at `structured`, `stock` at `shared`, `catalogue::tax` at `data`, the others at `effects`; each `injected` parameter is marked so in the constraint file | weave, and `bare-rust levels`, refuse a body that uses more than its module's level, its calls of the crate's functions and its imports counted: `pricing` at `calculations` fails on `split`'s `&mut` |
+| the facets' levels, which the Y compiler infers (Y § 3.19) | `"level"` on each facet's module subject: `pricing` at `structured`, `catalogue::tax` at `data`, the others at `effects` (`stock` waits, in `waits until`); each `injected` parameter is marked so in the constraint file | weave, and `bare-rust levels`, refuse a body that uses more than its module's level, its calls of the crate's functions and its imports counted: `pricing` at `calculations` fails on `split`'s `&mut` |
 | `constants day:` with lists of structures | functions that make them, since a Rust `const` cannot hold a `List` | — |
 
 ## Checks

@@ -430,6 +430,7 @@ mod receipts {
                 batch.get().put(Receipt { order: order.number, text: receipt_text(order) });
             }
         });
+        // y: end region filing
         batch.end()
     }
 }

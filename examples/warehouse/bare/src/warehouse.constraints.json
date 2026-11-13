@@ -259,7 +259,7 @@
       "kind": "module",
       "name": "warehouse_example::warehouse::stock",
       "visible": "public",
-      "level": "shared"
+      "level": "effects"
     },
     {
       "kind": "type",

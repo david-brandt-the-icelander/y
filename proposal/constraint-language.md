@@ -1850,13 +1850,18 @@ prints it under the file's `module` line:
   the level a module was seen to need is proposed as its ceiling, for a person to pin.
 - **For bare Rust:** a module subject's `level` covers the module, the modules inside it (Y's facets) and its files,
   but not its `tests`. `bare-rust` reads what each needs from the bare bodies and the constraint data: a function body
-  is `calculations`; a loop, an assignment, `&mut` or recursion, direct or through other functions, is `structured`; a
-  parameter the lowering marks `"injected": true` whose type is `Shared<…>`, a transaction, an arena or a resource is
-  `shared`; any other injected parameter, which is a capability, an `effects only …` clause, `async`, `.await`, a
-  task, a deadline, or a region that waits `forever` or is detached is `effects`. A call of a function of the crate
-  needs what that function needs, and an import of a module pinned higher needs that module's level. Weave fails on
-  anything above its module's level, and `bare-rust levels <bare-dir>` prints the level each module needs and why,
-  with the level pinned on it. Every module of the examples is pinned at the level it needs.
+  is `calculations`; a loop, an assignment, `&mut`, a parameter the function changes (write access: Y's `mutable`) or
+  recursion, direct or through other functions, is `structured`; a parameter the lowering marks `"injected": true`
+  whose type is `Shared<…>` is `shared`; any other injected parameter, which is a capability, an `effects only …`
+  clause, `async`, `.await`, a wait (`waits until`), or a region that waits `forever` or is detached is `effects`. A
+  call into a library needs the level its module has in a table, `libraries/levels.json` (`y_runtime::shared` is
+  `shared`, `y_runtime::task` and `std::fs` are `effects`), matched through the file's `use` declarations. A call of a
+  function of the crate needs what that function needs; a method call, whose receiver's type the bare body does not
+  say, and a name defined more than once out of the caller's reach, need the most that any function they may be
+  needs. An import of a module pinned higher needs that module's level. Weave fails on anything above its module's
+  level, and `bare-rust levels <bare-dir>` prints the level each module needs and why, with the level pinned on it.
+  Every module of the examples is pinned at the level it needs, and the examples' checks hold each facet's pin to a
+  second inference made from the Y source alone.
 
 ### 6.23 Regions: how a piece of code may execute
 
@@ -1912,9 +1917,10 @@ region 'memory.setup.new_game#fetch'
   For bare Rust, `bare-rust` checks the rules above and that the function is a subject of the file, and weave binds
   the region to its body. The function marks where the region starts, `// y: region counted is …` or, for an
   alternative of an `orelse`, `// y: #name`, and a marker that states the constraints states the same ones as the
-  clauses. The code the marker starts (what follows it in its block, or the statement it ends) keeps each constraint:
-  an atomic region runs in a transaction, and, as it may run again, uses no capability but `shared` state and does not
-  wait; a snapshot one is run at `Isolation::Snapshot`; `within` makes a deadline or gives a duration, and every wait
+  clauses. The code the marker starts is what follows it in its block, up to `// y: end region counted` or the block's
+  end, or the statement it ends for a marker after code; weave reads its syntax, its calls, names and waits, and holds
+  it to each constraint: an atomic region runs in a transaction, and, as it may run again, uses no capability but
+  `shared` state, does not wait, and calls nothing that needs `effects` (§ 6.22); a snapshot one is run at `Isolation::Snapshot`; `within` makes a deadline or gives a duration, and every wait
   in the region takes the deadline; `forever` is given to the wait; `detach` and `supervise` call the runtime's
   `detach` and `supervised`; `uncancellable` holds cancellation; `waits until name` marks its condition and retries
   until it holds. A region that is not in its function's body, that says other constraints than its marker, or whose

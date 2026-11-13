@@ -11,7 +11,8 @@ S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
 (cd "$B" && cargo build -q --release)
 "$B/target/release/bare-rust" strip "$E" --out "$S/$1" --src-only | tail -1
-cd "$Y/examples" && python3 "$P/regen.py" "$1" "$S/$1" | grep -v "^no clauses" || true
+cd "$Y/examples" && { python3 "$P/regen.py" "$1" "$S/$1" > "$S/regen.out" || { cat "$S/regen.out"; exit 1; }; }
+grep -v "^no clauses" "$S/regen.out" || true
 "$B/target/release/bare-rust" libfmt $(ls "$E"/bare/src/*.constraints.json "$E"/bare/src/*/*.constraints.json 2>/dev/null) | tail -1
 cd "$Y/examples" && python3 "$P/pathfacts.py" "$1"
 python3 "$P/ylint.py" "$E"/y/src/*.y

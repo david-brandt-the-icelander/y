@@ -1,0 +1,28 @@
+{
+  "about": "The level (constraint language 6.22, Y \u00a7 3.19) a call into each library module needs, by the module's path: a call of a function under a path listed here, or of a function or method of a type under it, needs that level. The longest path that matches wins. A library not listed needs `calculations`, as any function does. `bare-rust` resolves a call through the file's `use` declarations, and reads this table when it works out the level a body needs.",
+  "modules": {
+    "y_runtime::shared": "shared",
+    "y_runtime::arena": "shared",
+    "y_runtime::task": "effects",
+    "y_runtime::store": "effects",
+    "y_runtime::System": "effects",
+    "y_runtime::Console": "effects",
+    "y_runtime::Clock": "effects",
+    "y_runtime::Random": "effects",
+    "y_runtime::Forever": "effects",
+    "y_runtime::Deadline": "effects",
+    "y_window": "effects",
+    "y_http": "effects",
+    "std::cell": "shared",
+    "std::rc": "shared",
+    "std::sync": "shared",
+    "std::thread": "effects",
+    "std::fs": "effects",
+    "std::io": "effects",
+    "std::net": "effects",
+    "std::env": "effects",
+    "std::process": "effects",
+    "std::time::Instant": "effects",
+    "std::time::SystemTime": "effects"
+  }
+}
