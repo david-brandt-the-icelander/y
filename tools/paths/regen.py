@@ -1,8 +1,8 @@
 """Remake an example's bare files from a fresh strip: the clauses of the committed constraint files carry over by
 subject, each re-pointed at its line in the Y source, and so does a module's `level`; `extra` adds clauses for subjects
-that have none yet, placed at the function, rule or derived value of the subject's name. A parameter's `injected` mark
-carries over, and so do regions (`region` subjects, language 6.23), after their function's subject, their clauses at
-the region's header.
+that have none yet, placed at the function, rule or derived value of the subject's name. What strip cannot see of the
+Y lowering is made from the Y source on every run: each `injected` parameter's mark, and each region (`region
+subject`, language 6.23) after its function's subject, with its constraints as clauses at the region's header.
 
     python3 tools/paths/regen.py <example folder> <strip output> ['{"crate::module::function": [clause, ...]}']
 
@@ -70,13 +70,6 @@ def place(subject, c):
     other clause at the head of its function, rule or derived value. When the subject's name is in more than one
     facet, the head nearest the clause's old line."""
     source = c.get("source")
-    if c["kind"] == "region":
-        # a region's clauses are at its header, `region r is …:` or `orelse region r is …:`, in its function
-        function, region = subject.split("#")
-        hits = [(y, i) for y, h in heads(function) for i in body(y, h) if re.match(rf"\s*(?:orelse )?region {region} is ", src[y][i - 1])]
-        if hits:
-            return near(hits, source)
-        raise SystemExit(f"region {subject}: no `region {region} is` in the function")
     fn = subject.rsplit("::", 1)[1]
     name = c["text"].split()[1] if c["kind"] in ("require", "ensure", "invariant") else None
     if c["kind"] in ("require", "ensure"):
@@ -96,6 +89,74 @@ def place(subject, c):
         return moved(source)
     return at(f"function {fn}(")
 
+
+def y_functions():
+    """Each function of the Y source: (file, facet or None, name, its parameters, its body's lines as (number, text))."""
+    out = []
+    for y in ys:
+        facet, current = None, None
+        for i, l in enumerate(src[y], 1):
+            t, ind = l.strip(), len(l) - len(l.lstrip())
+            if ind == 0 and t and not t.startswith("--"):
+                m = re.match(r"(?:public )?facet (\w+):", t)
+                facet = m.group(1) if m else None
+                current = None
+            m = re.match(r"\s*(?:public )?(?:function|rule) (\w+)\(([^)]*)\)", l)
+            if m:
+                current = (y, facet if ind > 0 else None, m.group(1), [p.strip() for p in m.group(2).split(",")], [], ind)
+                out.append(current)
+                continue
+            if current and t and ind <= current[5]:
+                current = None
+            if current:
+                current[4].append((i, l))
+    return [c[:5] for c in out]
+
+
+def subject_of(subjects, facet, fn):
+    """The function subject a Y function lowers to: its name ends in `::facet::fn`, or `::fn` outside a facet."""
+    tail = f"::{facet}::{fn}" if facet else f"::{fn}"
+    hits = [s for s in subjects if s["kind"] == "function" and s["name"].endswith(tail)]
+    return hits[0] if hits else None
+
+
+def split_top(text):
+    """A region's constraints, split at the commas outside brackets and quotes."""
+    parts, depth, quoted, start = [], 0, False, 0
+    for i, c in enumerate(text):
+        if c == '"':
+            quoted = not quoted
+        elif c in "([" and not quoted:
+            depth += 1
+        elif c in ")]" and not quoted:
+            depth -= 1
+        elif c == "," and depth == 0 and not quoted:
+            parts.append(text[start:i].strip())
+            start = i + 1
+    parts.append(text[start:].strip())
+    return [p for p in parts if p]
+
+
+def region_clauses(constraints):
+    """A Y region's constraints as the constraint language's clauses (language 6.23): `within d or fail` is `within d`,
+    `waits until name = (p)` is `waits until name : p`, and `atomic` adds what it implies, `may run again` and
+    `on failure unchanged`."""
+    out = []
+    for c in split_top(constraints):
+        m = re.fullmatch(r"waits until (\w+) = \((.*)\)", c)
+        if m:
+            out.append(f"waits until {m.group(1)} : {m.group(2)}")
+        elif c.startswith("within "):
+            out.append(re.sub(r" or fail$", "", c))
+        else:
+            out.append(c)
+    if "atomic" in out:
+        out += ["may run again", "on failure unchanged"]
+    return out
+
+
+Y_FUNCTIONS = y_functions()
+
 missing = []
 for dirpath, _, files in os.walk(f"{stripped}/src"):
     for f in files:
@@ -106,21 +167,28 @@ for dirpath, _, files in os.walk(f"{stripped}/src"):
         old = json.load(open(out)) if os.path.exists(out) else {"subjects": []}
         before = {s["name"]: s.get("clauses") for s in old["subjects"]}
         levels = {s["name"]: s["level"] for s in old["subjects"] if "level" in s}
-        injected = {(s["name"], p["name"]) for s in old["subjects"] for p in s.get("params", []) if p.get("injected")}
         js = json.load(open(os.path.join(dirpath, f)))
         js["status"] = old["status"]
-        # regions (language 6.23) are the Y lowering's, not strip's: each goes back after its function's subject
-        for r in [r for r in old["subjects"] if r["kind"] == "region"]:
-            fn = r["name"].split("#")[0]
-            at_fn = [k for k, x in enumerate(js["subjects"]) if x["name"] == fn and x["kind"] == "function"]
-            if not at_fn:
-                print(f"dropped region {r['name']}: no function {fn}")
+        # the Y lowering's own, which strip cannot see: each `injected` parameter is marked so, and each region of a
+        # function is a `region` subject after the function's (language 6.23), its clauses at the region's header
+        injected, regions = set(), {}
+        for y, facet, fn, params, lines_of_fn in Y_FUNCTIONS:
+            sub = subject_of(js["subjects"], facet, fn)
+            if sub is None:
                 continue
-            k = at_fn[0] + 1
-            while k < len(js["subjects"]) and js["subjects"][k]["kind"] == "region":
-                k += 1
-            js["subjects"].insert(k, r)
+            injected |= {(sub["name"], p.split()[-1]) for p in params if p.startswith("injected ")}
+            for i, l in lines_of_fn:
+                m = re.match(r"\s*(?:orelse )?region (\w+) is (.*):$", l)
+                if m:
+                    texts = region_clauses(m.group(2))
+                    regions.setdefault(sub["name"], []).append({"kind": "region", "name": f"{sub['name']}#{m.group(1)}",
+                        "clauses": [{"kind": "region", "text": t, "source": f"{y}:{i}"} for t in texts]})
+        for fn_name, rs in regions.items():
+            k = next(k for k, x in enumerate(js["subjects"]) if x["name"] == fn_name and x["kind"] == "function") + 1
+            js["subjects"][k:k] = rs
         for s in js["subjects"]:
+            if s["kind"] == "region":
+                continue
             if s["name"] in levels:
                 s["level"] = levels[s["name"]]
             for p in s.get("params", []):

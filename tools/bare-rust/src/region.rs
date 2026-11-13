@@ -15,12 +15,15 @@
 //!   clauses (`find_marker`, `agree`);
 //! - the code the marker starts keeps each constraint (`check_body`): an atomic region runs in a transaction
 //!   (`atomic`, `atomic_with`, `atomic_when`, or as an alternative of `orelse`), and, as it may run again, uses no
-//!   capability but `shared` state and does not wait; a snapshot one says `Isolation::Snapshot`; `within` starts a
+//!   capability but `shared` state, does not wait, and calls nothing that needs `effects` (language 6.22); a snapshot one says `Isolation::Snapshot`; `within` starts a
 //!   deadline or gives a duration, and every wait in the region takes the deadline; `forever` gives `forever`;
 //!   `detach` calls `detach`; `uncancellable` holds cancellation (`.held(`); `waits until name` marks its condition
 //!   `// y: waits until name` and retries until it holds; `supervise` runs its tasks with `supervised`.
 //!
-//! Weave runs the last two, and refuses a file whose region its body does not keep.
+//! The code a marker starts is what follows it in its block, up to `// y: end region name` or the block's end, for a
+//! marker on a line of its own, and the statement it ends for one after code. What that code does is read from its
+//! syntax: the calls it makes, the names it uses, the waits in it. Weave runs the last two, and refuses a file whose
+//! region its body does not keep.
 use crate::{parse_bare, text};
 use serde_json::Value;
 use tree_sitter::Node;
@@ -181,15 +184,19 @@ pub fn find_marker(brs: &str, base: &str, name: &str) -> Result<Vec<String>, Str
     Err(format!("region `{name}`: the body of `{f}` has no `// y: region {r} is …` or `// y: #{r}` where it starts"))
 }
 
-/// The code a marker starts: for a marker on a line of its own, what follows it to the end of its block; for one after
-/// code on its line, the outermost statement that starts on that line.
-fn extent<'t>(comment: Node<'t>, function: Node<'t>) -> Vec<Node<'t>> {
+/// The code a marker starts: for a marker on a line of its own, what follows it in its block, up to a marker
+/// `// y: end region name` on a line of its own or the block's end; for one after code on its line, the outermost
+/// statement that starts on that line.
+fn extent<'t>(comment: Node<'t>, function: Node<'t>, region: &str, src: &str) -> Vec<Node<'t>> {
     let row = comment.start_position().row;
     let before = comment.prev_sibling().filter(|p| p.end_position().row == row);
     if before.is_none() {
         let mut out = vec![];
         let mut next = comment.next_sibling();
         while let Some(n) = next {
+            if n.kind() == "line_comment" && text(n, src).trim_start_matches("// y:").trim() == format!("end region {region}") {
+                break;
+            }
             if n.kind() != "}" {
                 out.push(n);
             }
@@ -211,8 +218,44 @@ fn extent<'t>(comment: Node<'t>, function: Node<'t>) -> Vec<Node<'t>> {
     vec![best]
 }
 
+/// Every node under the nodes, themselves among them.
+fn descendants<'t>(nodes: &[Node<'t>]) -> Vec<Node<'t>> {
+    fn go<'t>(n: Node<'t>, out: &mut Vec<Node<'t>>) {
+        out.push(n);
+        let mut c = n.walk();
+        for ch in n.children(&mut c) {
+            go(ch, out);
+        }
+    }
+    let mut out = vec![];
+    for n in nodes {
+        go(*n, &mut out);
+    }
+    out
+}
+
+/// A call's callee as a name: the last segment of a path (`atomic`, `after` of `Deadline::after`), or a method's name;
+/// with the whole path for a path.
+fn callee<'a>(call: Node, src: &'a str) -> Option<(&'a str, &'a str)> {
+    let f = call.child_by_field_name("function")?;
+    match f.kind() {
+        "identifier" | "scoped_identifier" => {
+            let path = text(f, src);
+            Some((path.rsplit("::").next().unwrap_or(path), path))
+        }
+        "field_expression" => f.child_by_field_name("field").map(|m| (text(m, src), text(m, src))),
+        _ => None,
+    }
+}
+
+/// Whether an identifier or path among the nodes is `word`, or ends in `::word`.
+fn names(nodes: &[Node], src: &str, word: &str) -> bool {
+    nodes.iter().any(|n| matches!(n.kind(), "identifier" | "scoped_identifier") && (text(*n, src) == word || text(*n, src).ends_with(&format!("::{word}"))))
+}
+
 /// The region `function#region` of the constraint file `js`, against the bare body: its marker is there and states
-/// its clauses' constraints (`find_marker`, `agree`), and the code the marker starts keeps each of them.
+/// its clauses' constraints (`find_marker`, `agree`), and the code the marker starts keeps each of them. What the code
+/// does is read from its syntax: the calls it makes, the names it uses, the waits in it.
 pub fn check_body(brs: &str, js: &Value, name: &str) -> Result<(), String> {
     let base = crate::weave::base_path(js);
     let stated = find_marker(brs, &base, name)?;
@@ -234,60 +277,89 @@ pub fn check_body(brs: &str, js: &Value, name: &str) -> Result<(), String> {
             m.starts_with(&format!("region {r} is ")) || m.split_whitespace().any(|w| w.trim_end_matches(',') == format!("#{r}"))
         })
         .ok_or_else(|| format!("region `{name}`: no marker"))?;
-    let code: String = extent(*marker, *node).iter().map(|n| text(*n, brs)).collect::<Vec<_>>().join("\n");
-    let whole = text(*node, brs);
+    let top = extent(*marker, *node, r, brs);
+    let all = descendants(&top);
+    let rows = (top.first().map_or(0, |n| n.start_position().row) + 1, top.last().map_or(0, |n| n.end_position().row) + 1);
+    let calls: Vec<Node> = all.iter().copied().filter(|n| n.kind() == "call_expression").collect();
+    let calls_to = |want: &[&str]| -> Vec<Node> { calls.iter().copied().filter(|c| callee(*c, brs).is_some_and(|(last, _)| want.contains(&last))).collect() };
+    let awaits: Vec<Node> = all.iter().copied().filter(|n| n.kind() == "await_expression").collect();
+    let comment_says = |what: &str| all.iter().any(|n| n.kind() == "line_comment" && text(*n, brs).trim_start_matches("// y:").trim() == what);
     let has = |c: &str| clauses.iter().any(|t| head(t) == Some(c));
     let says = |what: &str| format!("region `{name}` says `{what}`, and the code its marker starts");
+    // the transaction an atomic region runs in: a call in the region, or, for an alternative of an `orelse` (a closure
+    // `let r = |tx| …`), the `orelse` of the function that is given it
+    let mut transaction = calls_to(&["atomic", "atomic_with", "atomic_when", "orelse", "orelse_with"]);
+    if transaction.is_empty() && top.len() == 1 && top[0].kind() == "let_declaration" {
+        let named = top[0].child_by_field_name("pattern").is_some_and(|p| text(p, brs) == r);
+        let closure = top[0].child_by_field_name("value").is_some_and(|v| v.kind() == "closure_expression");
+        if named && closure {
+            let whole = descendants(&[*node]);
+            transaction = whole
+                .iter()
+                .copied()
+                .filter(|n| n.kind() == "call_expression" && callee(*n, brs).is_some_and(|(last, _)| last == "orelse" || last == "orelse_with"))
+                .filter(|c| c.child_by_field_name("arguments").is_some_and(|a| names(&descendants(&[a]), brs, r)))
+                .collect();
+        }
+    }
     if has("atomic") {
-        let transaction = ["atomic(", "atomic_with(", "atomic_when(", "orelse(", "orelse_with("].iter().any(|c| code.contains(c));
-        // an alternative of an `orelse`: a closure `let r = |tx| …`, passed to the `orelse`
-        let alternative = code.trim_start().starts_with(&format!("let {r} = |"))
-            && whole.split("orelse").skip(1).any(|after| after.split(';').next().is_some_and(|call| call.split(|c: char| !c.is_alphanumeric() && c != '_').any(|w| w == r)));
-        if !transaction && !alternative {
+        if transaction.is_empty() {
             return Err(format!("{} runs in no transaction (`atomic`, `atomic_with`, `atomic_when`, or an alternative of `orelse`)", says("atomic")));
         }
-        // it may run again, so it holds no external effect: no capability but shared state, and no wait
+        // it may run again, so it holds no external effect: no capability but shared state, no wait, and nothing it
+        // calls that needs `effects` (language 6.22)
         let params = js["subjects"].as_array().into_iter().flatten().find(|s| s["kind"] == "function" && s["name"] == f).map(|s| s["params"].clone()).unwrap_or_default();
         for p in params.as_array().into_iter().flatten().filter(|p| p["injected"] == true) {
             let (n, ty) = (p["name"].as_str().unwrap_or(""), p["type"].as_str().unwrap_or(""));
-            if !ty.contains("Shared<") && code.split(|c: char| !c.is_alphanumeric() && c != '_').any(|w| w == n) {
+            if !ty.contains("Shared<") && all.iter().any(|x| x.kind() == "identifier" && text(*x, brs) == n) {
                 return Err(format!("region `{name}` is atomic and may run again, so it holds no external effect, and it uses the capability `{n}`"));
             }
         }
-        if code.contains(".await") {
+        if !awaits.is_empty() {
             return Err(format!("region `{name}` is atomic and may run again, so it does not wait, and it awaits"));
         }
+        let file = format!("{}.brs", js["module"].as_str().unwrap_or("").trim_end_matches(".rs"));
+        let effects = crate::level::uses(&[(file, brs.to_string(), js.clone())]);
+        let waits_inside = |what: &str| what.starts_with("a wait, `waits until");
+        if let Some(u) = effects.iter().find(|u| u.function == f && u.level == 4 && u.line >= rows.0 && u.line <= rows.1 && !waits_inside(&u.what)) {
+            return Err(format!("region `{name}` is atomic and may run again, so it holds no external effect, and it has {} at line {} (language 6.22: `effects`)", u.what.trim_end_matches(','), u.line));
+        }
     }
-    let isolation_snapshot = clauses.contains(&"isolation snapshot");
-    if isolation_snapshot && !code.contains("Isolation::Snapshot") && !whole.contains("Isolation::Snapshot") {
+    let snapshot = |c: &Node| c.child_by_field_name("arguments").is_some_and(|a| names(&descendants(&[a]), brs, "Snapshot"));
+    if clauses.contains(&"isolation snapshot") && !transaction.iter().any(snapshot) {
         return Err(format!("{} does not run it at `Isolation::Snapshot`", says("isolation snapshot")));
     }
     if has("within") {
-        if !code.contains("Deadline::after(") && !code.contains("Duration::") {
+        let deadline = calls.iter().any(|c| callee(*c, brs).is_some_and(|(last, path)| last == "after" && path.contains("Deadline")));
+        let duration = calls.iter().any(|c| callee(*c, brs).is_some_and(|(_, path)| path.contains("Duration::")));
+        if !deadline && !duration {
             return Err(format!("{} starts no deadline (`Deadline::after`) and gives no duration", says("within")));
         }
-        if code.contains("Deadline::after(") {
-            for l in code.lines().filter(|l| l.contains(".await")) {
-                if !l.contains("deadline") {
-                    return Err(format!("region `{name}` is within a deadline, and a wait in it does not take the deadline: `{}`", l.trim()));
+        if deadline {
+            for w in &awaits {
+                if !names(&descendants(&[*w]), brs, "deadline") {
+                    return Err(format!("region `{name}` is within a deadline, and a wait in it does not take the deadline: `{}`", text(*w, brs).lines().next().unwrap_or("")));
                 }
             }
         }
     }
-    let checks: [(&str, &[&str], &str); 4] = [
-        ("forever because", &["forever"], "does not give `forever` to its wait"),
-        ("detach because", &["detach("], "does not call `detach`"),
-        ("uncancellable", &[".held("], "does not hold cancellation (`.held(`)"),
-        ("supervise", &["supervised("], "does not run its tasks with `supervised`"),
+    if has("forever because") && !calls.iter().any(|c| c.child_by_field_name("arguments").is_some_and(|a| names(&descendants(&[a]), brs, "forever"))) {
+        return Err(format!("{} does not give `forever` to its wait", says("forever because")));
+    }
+    let checks: [(&str, &str, &str); 3] = [
+        ("detach because", "detach", "does not call `detach`"),
+        ("uncancellable", "held", "does not hold cancellation (`.held(…)`)"),
+        ("supervise", "supervised", "does not run its tasks with `supervised`"),
     ];
-    for (c, needles, missing) in checks {
-        if has(c) && !needles.iter().any(|n| code.contains(n)) {
+    for (c, call, missing) in checks {
+        if has(c) && calls_to(&[call]).is_empty() {
             return Err(format!("{} {missing}", says(c)));
         }
     }
     for t in clauses.iter().filter(|t| head(t) == Some("waits until")) {
         let n = t["waits until".len()..].trim().split(" : ").next().unwrap_or("");
-        if !code.contains(&format!("// y: waits until {n}")) || !(code.contains("Step::Retry") || code.contains("atomic_when(")) {
+        let retries = names(&all, brs, "Retry") || !calls_to(&["atomic_when"]).is_empty();
+        if !comment_says(&format!("waits until {n}")) || !retries {
             return Err(format!("{} does not mark its condition `// y: waits until {n}` and retry until it holds", says("waits until")));
         }
     }
@@ -422,5 +494,27 @@ mod tests {
         let js = constraints(serde_json::json!([{"kind": "function", "name": "c::m::fetch", "params": []}, region("c::m::fetch#fetch", &["within 5s"])]));
         assert!(check_body(body, &js, "c::m::fetch#fetch").unwrap_err().contains("does not take the deadline"));
         assert_eq!(check_body(&body.replace("site.get(\"/b\")", "site.get(\"/b\", &deadline)"), &js, "c::m::fetch#fetch"), Ok(()));
+    }
+
+    #[test]
+    fn an_end_marker_ends_a_region_and_calls_are_followed() {
+        // `log` uses the console; `tally` calls it from inside its atomic region
+        let brs = "use y_runtime::shared::{atomic, Step};\nfn log(console) {\n    console.write_line(\"x\")\n}\nfn tally(count, console) {\n    // y: region add is atomic\n    let n = atomic(\"m::tally#add\", None, |tx| { let out = {\n        log(console);\n        Ok(Step::Done(tx.get(count)))\n    }; out });\n    // y: end region add\n    console.write_line(n);\n}\n";
+        let log = serde_json::json!({"kind": "function", "name": "c::m::log", "params": [{"name": "console", "type": "Console", "injected": true}]});
+        let tally = serde_json::json!({"kind": "function", "name": "c::m::tally", "params": [{"name": "count", "type": "Shared<u32>", "injected": true}, {"name": "console", "type": "Console", "injected": true}]});
+        let js = constraints(serde_json::json!([log, tally, region("c::m::tally#add", &["atomic", "may run again", "on failure unchanged"])]));
+        // the console is used in the region, as an argument of the call
+        assert!(check_body(brs, &js, "c::m::tally#add").unwrap_err().contains("uses the capability `console`"));
+        // without the argument, the call of `log` still needs `effects`, which the region may not hold
+        let tally2 = serde_json::json!({"kind": "function", "name": "c::m::tally", "params": [{"name": "count", "type": "Shared<u32>", "injected": true}, {"name": "console", "type": "Console", "injected": true}]});
+        let log2 = serde_json::json!({"kind": "function", "name": "c::m::log", "params": [], "clauses": [{"kind": "effects", "text": "effects only console", "source": "y/src/m.y:1"}]});
+        let js2 = constraints(serde_json::json!([log2, tally2, region("c::m::tally#add", &["atomic", "may run again", "on failure unchanged"])]));
+        let brs2 = brs.replace("fn log(console)", "fn log()").replace("log(console);", "log();");
+        let err = check_body(&brs2, &js2, "c::m::tally#add").unwrap_err();
+        assert!(err.contains("a call of `log`, which needs `effects`"), "{err}");
+        // with the call gone, the region ends at its end marker, before the console's write
+        let brs3 = brs2.replace("        log();\n", "");
+        assert_eq!(check_body(&brs3, &js2, "c::m::tally#add"), Ok(()));
+        assert!(check_body(&brs3.replace("    // y: end region add\n", ""), &js2, "c::m::tally#add").unwrap_err().contains("uses the capability `console`"));
     }
 }

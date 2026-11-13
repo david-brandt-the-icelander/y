@@ -8,20 +8,25 @@
 //!
 //! What each level adds, as bare Rust shows it:
 //! - `calculations`: a function body;
-//! - `structured`: a loop (`for`, `while`, `loop`), an assignment, `&mut`, and recursion: a call of the function it is
-//!   in, or of one that calls back to it;
-//! - `shared`: a parameter the Y lowering marks `injected` whose type is `Shared<…>`, and shared state, transactions,
-//!   arenas and resources made in the body (`Shared::new`, `atomic`, `atomic_with`, `atomic_when`, `orelse`,
-//!   `Arena::new`, `Held::new`, and std's `Cell`, `RefCell`, `Mutex`, `RwLock`, `Rc`, `Arc`);
+//! - `structured`: a loop (`for`, `while`, `loop`), an assignment, `&mut`, a parameter the function changes (one
+//!   whose access is `write`: Y's `mutable`), and recursion: a call of the function it is in, or of one that calls
+//!   back to it;
+//! - `shared`: a parameter the Y lowering marks `injected` whose type is `Shared<…>`, and a call into a library module
+//!   at `shared` (`y_runtime::shared`, `y_runtime::arena`, `std::cell`, `std::sync`, …);
 //! - `effects`: any other `injected` parameter, which is a capability; an `effects only …` clause; `async`, `.await`;
-//!   the runtime's system, tasks and deadlines (`System::root`, `supervised`, `detach`, `Cancellation::held`,
-//!   `Deadline::after`); and a region that waits `forever` or is detached.
+//!   a call into a library module at `effects` (`y_runtime::task`, `y_runtime::store`, `y_runtime::System`,
+//!   `y_runtime::Deadline`, `std::fs`, …); a wait (`// y: waits until name`); and a region that waits `forever` or
+//!   is detached.
+//!
+//! The library modules' levels are a table, `libraries/levels.json`, and a call is matched to it through the file's
+//! `use` declarations: `atomic(…)` after `use y_runtime::shared::atomic;` is a call of `y_runtime::shared::atomic`.
 //!
 //! A module's level is the highest of anything it declares or imports (Y § 3.19): a call of a function of the crate
 //! needs the level that function needs, so a `calculations` module that calls a `structured` function is
-//! `structured`. A call is followed when its callee is a path or a name the crate has one function for in reach; a
-//! method call (`x.f()`), whose type the bare body does not say, is not. An import (`use`) of a module pinned at a
-//! higher level fails too.
+//! `structured`. A method call (`x.f()`), whose receiver's type the bare body does not say, may be any method `f` of
+//! the crate's types (or, on `self`, its own type's), and a name the crate has more than one function for, out of
+//! reach of the caller, may be any of them: such a call needs the most that any of them needs. An import (`use`) of a
+//! module pinned at a higher level fails too.
 use crate::{parse_bare, text};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -45,16 +50,73 @@ pub struct Use {
     pub line: usize,
 }
 
-const SHARED: &[&str] = &["Shared::new", "Arena::new", "Held::new", "Cell::new", "RefCell::new", "Mutex::new", "RwLock::new", "Rc::new", "Arc::new"];
-const SHARED_CALLS: &[&str] = &["atomic", "atomic_with", "atomic_when", "orelse", "orelse_with"];
-const EFFECT_CALLS: &[&str] = &["System::root", "supervised", "detach", "Cancellation::held", "Deadline::after"];
+/// The levels of library modules (`libraries/levels.json`): a call into one needs its level.
+const LIBRARY_LEVELS: &str = include_str!("../libraries/levels.json");
 
-/// A function of the crate: its path, its file, what it uses itself, and the calls it makes (callee as written, line).
+/// The level a call of the library path `path` needs, by the longest module of the table it is under.
+fn library_level(path: &str) -> Option<usize> {
+    thread_local! {
+        static TABLE: Vec<(String, usize)> = {
+            let v: Value = serde_json::from_str(LIBRARY_LEVELS).expect("libraries/levels.json");
+            v["modules"].as_object().into_iter().flatten().filter_map(|(m, l)| Some((m.clone(), rank(l.as_str()?)?))).collect()
+        };
+    }
+    TABLE.with(|t| t.iter().filter(|(m, _)| path == m || path.starts_with(&format!("{m}::"))).max_by_key(|(m, _)| m.len()).map(|(_, l)| *l))
+}
+
+/// The names a file's `use` declarations bring in, to their paths: `use a::b::{c, d as e};` gives `c` → `a::b::c` and
+/// `e` → `a::b::d`. Globs bring in nothing by name.
+fn use_map(imports: &[Import], file: &str) -> BTreeMap<String, String> {
+    fn go(prefix: &str, tree: &str, out: &mut BTreeMap<String, String>) {
+        let tree = tree.trim();
+        if let Some(open) = tree.find('{').filter(|_| tree.ends_with('}')) {
+            let base = tree[..open].trim_end_matches("::");
+            let inner = &tree[open + 1..tree.len() - 1];
+            let (mut depth, mut start) = (0, 0);
+            for (i, c) in inner.char_indices() {
+                match c {
+                    '{' => depth += 1,
+                    '}' => depth -= 1,
+                    ',' if depth == 0 => {
+                        go(&join(prefix, base), &inner[start..i], out);
+                        start = i + 1;
+                    }
+                    _ => {}
+                }
+            }
+            go(&join(prefix, base), &inner[start..], out);
+        } else if !tree.is_empty() && !tree.ends_with('*') {
+            let (path, alias) = tree.split_once(" as ").map_or((tree, None), |(p, a)| (p.trim(), Some(a.trim())));
+            let full = join(prefix, path);
+            let name = alias.unwrap_or_else(|| full.rsplit("::").next().unwrap_or(&full)).to_string();
+            if name != "self" {
+                out.insert(name, full);
+            }
+        }
+    }
+    fn join(a: &str, b: &str) -> String {
+        if a.is_empty() { b.to_string() } else if b.is_empty() { a.to_string() } else { format!("{a}::{b}") }
+    }
+    let mut out = BTreeMap::new();
+    for im in imports.iter().filter(|i| i.file == file) {
+        go("", &im.path, &mut out);
+    }
+    out
+}
+
+/// A call as the bare body writes it: a path (`f`, `a::b::f`) or a method (`x.f`, kept as `.f` with its receiver).
+#[derive(Clone)]
+enum Call {
+    Path(String),
+    Method { name: String, receiver: String },
+}
+
+/// A function of the crate: its path, its file, what it uses itself, and the calls it makes, with their lines.
 struct Function {
     path: String,
     file: String,
     own: Vec<Use>,
-    calls: Vec<(String, usize)>,
+    calls: Vec<(Call, usize)>,
 }
 
 /// An import: the module it is in, the path as written, its file and line.
@@ -87,6 +149,10 @@ fn read_file(file: &str, brs: &str, js: &Value, fns: &mut Vec<Function>, imports
             add("effects", "an `async` function".into(), line);
         }
         if let Some(sub) = subject(&path) {
+            // a parameter the function changes (`mutable` in Y: write access to what it refers to) is mutation
+            for p in sub["params"].as_array().into_iter().flatten().filter(|p| p["injected"] != true && p["access"]["rights"] == "write") {
+                add("structured", format!("the parameter `{}`, which it changes", p["name"].as_str().unwrap_or("")), line);
+            }
             for p in sub["params"].as_array().into_iter().flatten().filter(|p| p["injected"] == true) {
                 let ty = p["type"].as_str().unwrap_or("");
                 let ty = ty.strip_prefix("ref<target_type=").and_then(|t| t.strip_suffix('>')).unwrap_or(ty);
@@ -108,6 +174,19 @@ fn read_file(file: &str, brs: &str, js: &Value, fns: &mut Vec<Function>, imports
             walk(body, brs, &mut add, &mut calls);
         }
         fns.push(Function { path: path.clone(), file: file.to_string(), own, calls });
+    }
+    // a call into a library module needs that module's level (`libraries/levels.json`), through the file's imports
+    let uses = use_map(imports, file);
+    for f in fns.iter_mut().filter(|f| f.file == file) {
+        for (call, line) in &f.calls {
+            if let Call::Path(p) = call {
+                let first = p.split("::").next().unwrap_or("");
+                let full = uses.get(first).map_or(p.clone(), |m| format!("{m}{}", &p[first.len()..]));
+                if let Some(l) = library_level(&full).filter(|l| *l >= 2) {
+                    f.own.push(Use { level: l, what: format!("`{p}` (`{full}`)"), function: f.path.clone(), file: file.to_string(), line: *line });
+                }
+            }
+        }
     }
 }
 
@@ -146,7 +225,7 @@ fn collect<'t>(n: Node<'t>, src: &str, path: &str, fns: &mut Vec<(String, Node<'
     }
 }
 
-fn walk(n: Node, src: &str, add: &mut impl FnMut(&str, String, usize), calls: &mut Vec<(String, usize)>) {
+fn walk(n: Node, src: &str, add: &mut impl FnMut(&str, String, usize), calls: &mut Vec<(Call, usize)>) {
     let line = n.start_position().row + 1;
     match n.kind() {
         // a function inside this one is read as its own
@@ -160,20 +239,20 @@ fn walk(n: Node, src: &str, add: &mut impl FnMut(&str, String, usize), calls: &m
             if t.starts_with("// y:") && (t.contains(" forever because \"") || t.contains(" detach because \"")) {
                 add("effects", "a region that waits forever or is detached".into(), line);
             }
+            if t.starts_with("// y: waits until ") {
+                add("effects", format!("a wait, `{}`", t.trim_start_matches("// y: ")), line);
+            }
         }
         "call_expression" => {
             if let Some(f) = n.child_by_field_name("function") {
-                let callee = text(f, src);
-                let parts: Vec<&str> = callee.rsplitn(3, "::").collect();
-                let tail = if parts.len() >= 2 { format!("{}::{}", parts[1], parts[0]) } else { callee.to_string() };
-                if SHARED.contains(&tail.as_str()) || (f.kind() == "identifier" && SHARED_CALLS.contains(&callee)) {
-                    add("shared", format!("`{callee}`"), line);
-                }
-                if EFFECT_CALLS.contains(&tail.as_str()) || (f.kind() == "identifier" && EFFECT_CALLS.contains(&callee)) {
-                    add("effects", format!("`{callee}`"), line);
-                }
-                if matches!(f.kind(), "identifier" | "scoped_identifier") {
-                    calls.push((callee.to_string(), line));
+                match f.kind() {
+                    "identifier" | "scoped_identifier" => calls.push((Call::Path(text(f, src).to_string()), line)),
+                    "field_expression" => {
+                        if let (Some(v), Some(m)) = (f.child_by_field_name("value"), f.child_by_field_name("field")) {
+                            calls.push((Call::Method { name: text(m, src).to_string(), receiver: text(v, src).to_string() }, line));
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
@@ -185,25 +264,54 @@ fn walk(n: Node, src: &str, add: &mut impl FnMut(&str, String, usize), calls: &m
     }
 }
 
-/// The function of the crate a call names, from the function `caller`: a path names the function whose path ends with
-/// it; a name, the function of that name nearest the caller (in its module, then in each module around it), or the
-/// crate's one function of that name.
-fn resolve<'a>(callee: &str, caller: &str, krate: &str, fns: &'a BTreeMap<String, usize>) -> Option<&'a String> {
-    let callee = callee.strip_prefix("crate::").map(|c| format!("{krate}::{c}")).unwrap_or_else(|| callee.to_string());
-    if callee.contains("::") {
-        let hits: Vec<&String> = fns.keys().filter(|p| **p == callee || p.ends_with(&format!("::{callee}"))).collect();
-        return (hits.len() == 1).then(|| hits[0]);
-    }
-    let mut scope: Vec<&str> = caller.split("::").collect();
-    while !scope.is_empty() {
-        let candidate = format!("{}::{callee}", scope.join("::"));
-        if let Some((k, _)) = fns.get_key_value(&candidate) {
-            return Some(k);
+/// The functions of the crate a call may be, from the function `caller`, and whether it can be only one. A path names
+/// the functions whose paths end with it; a name, the function of that name nearest the caller (in its module, then in
+/// each module around it), or else every function of the crate of that name. A method (`x.f()`), whose receiver's type
+/// the bare body does not say, is the caller's own type's `f` when the receiver is `self`, and else every method `f`
+/// of a type of the crate. A call that may be several needs the most any of them needs; only a call that can be one
+/// counts as recursion.
+fn resolve(call: &Call, caller: &str, krate: &str, fns: &BTreeMap<String, usize>) -> (Vec<usize>, bool) {
+    let by_last = |name: &str, methods: bool| -> Vec<usize> {
+        fns.iter()
+            .filter(|(p, _)| {
+                let mut segs = p.rsplit("::");
+                segs.next() == Some(name) && (!methods || segs.next().is_some_and(|t| t.starts_with(|c: char| c.is_ascii_uppercase())))
+            })
+            .map(|(_, i)| *i)
+            .collect()
+    };
+    match call {
+        Call::Path(callee) => {
+            let callee = callee.strip_prefix("crate::").map(|c| format!("{krate}::{c}")).unwrap_or_else(|| callee.clone());
+            if callee.contains("::") {
+                let hits: Vec<usize> = fns.iter().filter(|(p, _)| **p == callee || p.ends_with(&format!("::{callee}"))).map(|(_, i)| *i).collect();
+                let one = hits.len() == 1;
+                return (hits, one);
+            }
+            let mut scope: Vec<&str> = caller.split("::").collect();
+            while !scope.is_empty() {
+                if let Some(i) = fns.get(&format!("{}::{callee}", scope.join("::"))) {
+                    return (vec![*i], true);
+                }
+                scope.pop();
+            }
+            let hits = by_last(&callee, false);
+            let one = hits.len() == 1;
+            (hits, one)
         }
-        scope.pop();
+        Call::Method { name, receiver } => {
+            if receiver == "self" {
+                let mut segs: Vec<&str> = caller.split("::").collect();
+                segs.pop();
+                if let Some(i) = fns.get(&format!("{}::{name}", segs.join("::"))) {
+                    return (vec![*i], true);
+                }
+            }
+            let hits = by_last(name, true);
+            let one = hits.len() == 1;
+            (hits, one)
+        }
     }
-    let hits: Vec<&String> = fns.keys().filter(|p| p.rsplit("::").next() == Some(callee.as_str())).collect();
-    (hits.len() == 1).then(|| hits[0])
 }
 
 fn short(path: &str) -> &str {
@@ -219,10 +327,25 @@ pub fn uses(files: &[(String, String, Value)]) -> Vec<Use> {
     }
     let krate = files.first().map(|f| crate_name(&f.2)).unwrap_or_default();
     let index: BTreeMap<String, usize> = fns.iter().enumerate().map(|(i, f)| (f.path.clone(), i)).collect();
-    let edges: Vec<Vec<(usize, usize)>> = fns
+    // each call's possible callees, with its line and whether it can be only one
+    let calls: Vec<Vec<(Vec<usize>, usize, bool, String)>> = fns
         .iter()
-        .map(|f| f.calls.iter().filter_map(|(c, line)| resolve(c, &f.path, &krate, &index).map(|p| (index[p], *line))).collect())
+        .map(|f| {
+            f.calls
+                .iter()
+                .map(|(c, line)| {
+                    let (hits, one) = resolve(c, &f.path, &krate, &index);
+                    let shown = match c {
+                        Call::Path(p) => p.clone(),
+                        Call::Method { name, .. } => format!(".{name}"),
+                    };
+                    (hits, *line, one, shown)
+                })
+                .filter(|(hits, ..)| !hits.is_empty())
+                .collect()
+        })
         .collect();
+    let edges: Vec<Vec<(usize, usize)>> = calls.iter().map(|cs| cs.iter().filter(|c| c.2).map(|c| (c.0[0], c.1)).collect()).collect();
     // recursion: a call of a function that reaches back to the caller
     let reaches = |from: usize, to: usize| -> bool {
         let (mut seen, mut stack) = (BTreeSet::new(), vec![from]);
@@ -250,9 +373,10 @@ pub fn uses(files: &[(String, String, Value)]) -> Vec<Use> {
     loop {
         let mut changed = false;
         for i in 0..fns.len() {
-            for &(j, _) in &edges[i] {
-                if level[j] > level[i] {
-                    level[i] = level[j];
+            for (hits, ..) in &calls[i] {
+                let most = hits.iter().map(|j| level[*j]).max().unwrap_or(0);
+                if most > level[i] {
+                    level[i] = most;
                     changed = true;
                 }
             }
@@ -264,10 +388,11 @@ pub fn uses(files: &[(String, String, Value)]) -> Vec<Use> {
     let mut out = vec![];
     for (i, f) in fns.iter().enumerate() {
         out.extend(own[i].iter().cloned());
-        let mine = own[i].iter().map(|u| u.level).max().unwrap_or(0);
-        for &(j, line) in &edges[i] {
-            if level[j] > mine && j != i {
-                out.push(Use { level: level[j], what: format!("a call of `{}`, which needs `{}`,", short(&fns[j].path), LEVELS[level[j]]), function: f.path.clone(), file: f.file.clone(), line });
+        for (hits, line, one, shown) in &calls[i] {
+            let (j, most) = hits.iter().map(|j| (*j, level[*j])).max_by_key(|x| x.1).unwrap();
+            if most >= 2 && !(hits.len() == 1 && j == i) {
+                let which = if *one { format!("`{}`", short(&fns[j].path)) } else { format!("`{shown}` (it may be `{}`, which needs the most of the {} it may be)", fns[j].path, hits.len()) };
+                out.push(Use { level: most, what: format!("a call of {which}, which needs `{}`,", LEVELS[most]), function: f.path.clone(), file: f.file.clone(), line: *line });
             }
         }
     }
@@ -363,7 +488,7 @@ mod tests {
 
     #[test]
     fn shared_state_and_effects() {
-        let brs = "fn count(sold) {\n    atomic(|tx| tx.get(sold))\n}\nfn show(console) {\n    console.write_line(\"hi\")\n}\nasync fn wait(w) {\n    w.next().await\n}\n";
+        let brs = "use y_runtime::shared::{atomic, Step};\nfn count(sold) {\n    atomic(|tx| tx.get(sold))\n}\nfn show(console) {\n    console.write_line(\"hi\")\n}\nasync fn wait(w) {\n    w.next().await\n}\n";
         let show = json!({"kind": "function", "name": "c::m::show", "params": [{"name": "console", "type": "ref<target_type=Console>", "injected": true}]});
         let f = file(brs, json!([pure("c::m::count"), show, pure("c::m::wait")]));
         let found: Vec<(String, &str)> = uses(&[f]).into_iter().filter(|u| u.level >= 3).map(|u| (u.function, LEVELS[u.level])).collect();
@@ -401,5 +526,18 @@ mod tests {
         let brs = "mod tests {\n    fn t() {\n        loop {}\n    }\n}\n";
         let f = pin(&file(brs, json!([pure("c::m::tests::t")])), "c::m", "calculations");
         assert!(check(&[f]).is_empty());
+    }
+
+    #[test]
+    fn method_calls_ambiguous_names_and_library_calls_count() {
+        // `Game::play` loops; `show` calls it as a method; `start` calls `step`, which two modules define; `wait` calls
+        // the runtime's deadline through its import
+        let brs = "use y_runtime::Deadline;\nmod rules {\n    fn step(x) {\n        x\n    }\n}\nmod moves {\n    fn step(x) {\n        for y in x {\n            y;\n        }\n    }\n}\nmod board {\n    impl Game {\n        fn play(self) {\n            loop {}\n        }\n    }\n    fn show(game) {\n        game.play()\n    }\n    fn start(x) {\n        step(x)\n    }\n    fn wait() {\n        Deadline::after(FIVE)\n    }\n}\n";
+        let f = file(brs, json!([pure("c::m::rules::step"), pure("c::m::moves::step"), pure("c::m::board::Game::play"), pure("c::m::board::show"), pure("c::m::board::start"), pure("c::m::board::wait")]));
+        let all = uses(&[f]);
+        let of = |f: &str| all.iter().filter(|u| u.function == format!("c::m::board::{f}")).map(|u| (u.what.clone(), LEVELS[u.level])).collect::<Vec<_>>();
+        assert!(of("show").iter().any(|(w, l)| w.contains("a call of `play`") && *l == "structured"), "{:#?}", of("show"));
+        assert!(of("start").iter().any(|(w, l)| w.contains("`step` (it may be `c::m::moves::step`") && *l == "structured"), "{:#?}", of("start"));
+        assert!(of("wait").iter().any(|(w, l)| w.contains("`y_runtime::Deadline::after`") && *l == "effects"), "{:#?}", of("wait"));
     }
 }

@@ -113,6 +113,7 @@ fn main() {
             }
             Ok(())
         }; out });
+        // y: end region printing
         if let Ok(printed) = printing.wait() {
             printed?;
         }

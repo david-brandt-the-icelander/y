@@ -121,7 +121,7 @@
       "kind": "module",
       "name": "hangman_example::hangman::rounds",
       "visible": "public",
-      "level": "calculations"
+      "level": "structured"
     },
     {
       "kind": "type",
