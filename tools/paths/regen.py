@@ -8,12 +8,24 @@ subject`, language 6.23) after its function's subject, with its constraints as c
 
 The strip output is what `bare-rust strip <example> --out <dir> --src-only` writes. A clause's line is found by what
 the clause says (see `place`), so edits to the Y source do not lose it; only an invariant's falls back to the text its
-line had in git's HEAD. It prints the functions left with no clauses: give them some with `extra`."""
+line had in git's HEAD. It prints the functions left with no clauses: give them some with `extra`.
+
+It reads the Y source through its tree (`ytree.py`, from `tools/y-parse`): the functions, rules and derived values and
+their facets, their `where` and `ensures` clauses, types' `where` clauses and structures' invariants, `injected`
+parameters, and regions with their constraints as written."""
 import json, os, re, shutil, subprocess, sys
+import ytree
 root, stripped = sys.argv[1], sys.argv[2]
 extra = json.loads(sys.argv[3]) if len(sys.argv) > 3 else {}
 ys = [f"y/src/{f}" for f in sorted(os.listdir(f"{root}/y/src")) if f.endswith(".y") and not f.endswith(".test.y")]
 src = {y: open(f"{root}/{y}").read().split("\n") for y in ys}
+# the Y source's trees (`ytree`), and in them: each function, rule and derived value, with its file and facet; and the
+# `where` clauses of types, which are invariants
+TREES = {y: t for y, t in zip(ys, ytree.trees([f"{root}/{y}" for y in ys]).values())}
+HEADS = [(y, facet, n) for y in ys for facet, d in ytree.declarations(TREES[y])
+         for n in ([d] if d["kind"] in ("function", "rule") else [m for m in ytree.nodes(d, "members") if m["kind"] == "derived"])]
+HEAD_AT = {(y, d["line"]): d for y, _, d in HEADS}
+INVARIANT_WHERES = {id(w) for y in ys for n in ytree.walk(TREES[y]) if n["kind"] == "type_decl" for w in ytree.nodes(n, "where")}
 
 def at(needle):
     hits = [(y, i) for y in ys for i, l in enumerate(src[y], 1) if needle in l]
@@ -40,21 +52,10 @@ def heads(subject):
     """The Y lines where the subject's function, rule or derived value starts; in its facet, when the subject names
     one (`crate::module::facet::function`)."""
     fn = subject.rsplit("::", 1)[1]
-    head = re.compile(rf"^\s*(?:public |private )?(?:function|rule) {re.escape(fn)}\(|^\s*(?:public |private )?derived {re.escape(fn)} is ")
-    found = [(y, i) for y in ys for i, l in enumerate(src[y], 1) if head.search(l)]
     facet = subject.split("::")[-2] if subject.count("::") >= 3 else None
-    starts = [(y, i) for y in ys for i, l in enumerate(src[y], 1) if facet and re.match(rf"(?:public |private )?facet {facet}:", l)]
-    inside = [(y, i) for y, i in found if any(y == fy and i in body(fy, f) for fy, f in starts)]
-    return inside or found
-
-
-def body(y, start):
-    """The lines of the declaration that starts at `start`: up to the next line indented no deeper."""
-    ind = len(src[y][start - 1]) - len(src[y][start - 1].lstrip())
-    end = start + 1
-    while end <= len(src[y]) and (not src[y][end - 1].strip() or len(src[y][end - 1]) - len(src[y][end - 1].lstrip()) > ind):
-        end += 1
-    return range(start, end)
+    found = [(y, d["line"], f) for y, f, d in HEADS if d["name"] == fn]
+    inside = [(y, i) for y, i, f in found if facet and f == facet]
+    return inside or [(y, i) for y, i, _ in found]
 
 
 def near(hits, source):
@@ -73,14 +74,17 @@ def place(subject, c):
     fn = subject.rsplit("::", 1)[1]
     name = c["text"].split()[1] if c["kind"] in ("require", "ensure", "invariant") else None
     if c["kind"] in ("require", "ensure"):
-        needle = f"where {name} = " if c["kind"] == "require" else f"ensures {name} = "
-        hits = [(y, i) for y, h in heads(subject) for i in body(y, h) if needle in src[y][i - 1]]
+        key = "where" if c["kind"] == "require" else "ensures"
+        hits = [(y, w["line"]) for y, h in heads(subject) for w in ytree.nodes(HEAD_AT[(y, h)], key) if w["name"] == name]
         if hits:
             return near(hits, source)
     if c["kind"] == "invariant":
         if source and moved(source):
             return moved(source)
-        hits = [(y, i) for y in ys for i, l in enumerate(src[y], 1) if re.search(rf"\b{re.escape(name)} = ", l)]
+        # a structure's `invariant name = …`, or a type's `where name = …`
+        hits = [(y, n["line"]) for y in ys for n in ytree.walk(TREES[y])
+                if n["kind"] == "invariant" or id(n) in INVARIANT_WHERES
+                if n["name"] == name]
         if hits:
             return near(hits, source)
     if heads(subject):
@@ -91,26 +95,18 @@ def place(subject, c):
 
 
 def y_functions():
-    """Each function of the Y source: (file, facet or None, name, its parameters, its body's lines as (number, text))."""
+    """Each function and rule of the Y source: (file, facet or None, name, its injected parameters, its regions as
+    (line, name, constraints' texts)), each `orelse region` after the region before it."""
     out = []
     for y in ys:
-        facet, current = None, None
-        for i, l in enumerate(src[y], 1):
-            t, ind = l.strip(), len(l) - len(l.lstrip())
-            if ind == 0 and t and not t.startswith("--"):
-                m = re.match(r"(?:public )?facet (\w+):", t)
-                facet = m.group(1) if m else None
-                current = None
-            m = re.match(r"\s*(?:public )?(?:function|rule) (\w+)\(([^)]*)\)", l)
-            if m:
-                current = (y, facet if ind > 0 else None, m.group(1), [p.strip() for p in m.group(2).split(",")], [], ind)
-                out.append(current)
+        for facet, d in ytree.declarations(TREES[y]):
+            if d["kind"] not in ("function", "rule"):
                 continue
-            if current and t and ind <= current[5]:
-                current = None
-            if current:
-                current[4].append((i, l))
-    return [c[:5] for c in out]
+            # the walk visits each `orelse region` too, after the region before it
+            regions = [(r["line"], r["name"], [c["text"] for c in r["constraints"]]) for r in ytree.walk(d) if r["kind"] == "region"]
+            injected = [p["name"] for p in d["params"] if p["injected"]]
+            out.append((y, facet, d["name"], injected, regions))
+    return out
 
 
 def subject_of(subjects, facet, fn):
@@ -120,29 +116,12 @@ def subject_of(subjects, facet, fn):
     return hits[0] if hits else None
 
 
-def split_top(text):
-    """A region's constraints, split at the commas outside brackets and quotes."""
-    parts, depth, quoted, start = [], 0, False, 0
-    for i, c in enumerate(text):
-        if c == '"':
-            quoted = not quoted
-        elif c in "([" and not quoted:
-            depth += 1
-        elif c in ")]" and not quoted:
-            depth -= 1
-        elif c == "," and depth == 0 and not quoted:
-            parts.append(text[start:i].strip())
-            start = i + 1
-    parts.append(text[start:].strip())
-    return [p for p in parts if p]
-
-
 def region_clauses(constraints):
-    """A Y region's constraints as the constraint language's clauses (language 6.23): `within d or fail` is `within d`,
-    `waits until name = (p)` is `waits until name : p`, and `atomic` adds what it implies, `may run again` and
-    `on failure unchanged`."""
+    """A Y region's constraints, each as written, as the constraint language's clauses (language 6.23): `within d or
+    fail` is `within d`, `waits until name = (p)` is `waits until name : p`, and `atomic` adds what it implies, `may
+    run again` and `on failure unchanged`."""
     out = []
-    for c in split_top(constraints):
+    for c in constraints:
         m = re.fullmatch(r"waits until (\w+) = \((.*)\)", c)
         if m:
             out.append(f"waits until {m.group(1)} : {m.group(2)}")
@@ -172,17 +151,14 @@ for dirpath, _, files in os.walk(f"{stripped}/src"):
         # the Y lowering's own, which strip cannot see: each `injected` parameter is marked so, and each region of a
         # function is a `region` subject after the function's (language 6.23), its clauses at the region's header
         injected, regions = set(), {}
-        for y, facet, fn, params, lines_of_fn in Y_FUNCTIONS:
+        for y, facet, fn, injected_params, regions_of_fn in Y_FUNCTIONS:
             sub = subject_of(js["subjects"], facet, fn)
             if sub is None:
                 continue
-            injected |= {(sub["name"], p.split()[-1]) for p in params if p.startswith("injected ")}
-            for i, l in lines_of_fn:
-                m = re.match(r"\s*(?:orelse )?region (\w+) is (.*):$", l)
-                if m:
-                    texts = region_clauses(m.group(2))
-                    regions.setdefault(sub["name"], []).append({"kind": "region", "name": f"{sub['name']}#{m.group(1)}",
-                        "clauses": [{"kind": "region", "text": t, "source": f"{y}:{i}"} for t in texts]})
+            injected |= {(sub["name"], p) for p in injected_params}
+            for i, r, constraints in regions_of_fn:
+                regions.setdefault(sub["name"], []).append({"kind": "region", "name": f"{sub['name']}#{r}",
+                    "clauses": [{"kind": "region", "text": t, "source": f"{y}:{i}"} for t in region_clauses(constraints)]})
         for fn_name, rs in regions.items():
             k = next(k for k, x in enumerate(js["subjects"]) if x["name"] == fn_name and x["kind"] == "function") + 1
             js["subjects"][k:k] = rs

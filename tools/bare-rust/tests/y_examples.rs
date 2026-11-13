@@ -11,6 +11,9 @@
 //! - the paths of each module (`y_paths`, Y § 3.5) are the ones `bare/y-facts.json` lists, every loop that may never
 //!   run has its `else`, and the tests together cover every path that needs a test (Y § 3.14).
 //!
+//! The Y source is read through its tree, from `y-parse` (`tools/y-parse`), for the regions and the named decisions and
+//! in `y_levels`; `y_paths`, `y_lint` and the layout rules read it as text.
+//!
 //! To refresh the Rust after editing the bare files, from `tools/bare-rust`:
 //! `cargo run -q -- weave ../../examples/<name>/bare --out ../../examples/.woven --crate ../../examples/<name>`, then
 //! copy `.woven/src` over `examples/<name>/src` and delete `.woven`.
@@ -433,74 +436,41 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
             })
         })
     };
-    for y in &code {
-        let lines: Vec<String> = read(&dir.join(y)).lines().map(str::to_string).collect();
-        let mut function = String::new();
-        for (i, line) in lines.iter().enumerate() {
-            let t = line.trim_start().trim_start_matches("public ");
-            if let Some(rest) = t.strip_prefix("function ") {
-                function = rest.split('(').next().unwrap().to_string();
-            }
-            if let Some(rest) = t.strip_prefix("orelse ").unwrap_or(t).strip_prefix("region ") {
-                let r = rest.split_whitespace().next().unwrap();
-                let at = line.len() - line.trim_start().len();
-                let next = lines[i + 1..].iter().find(|l| !l.trim().is_empty() && l.len() - l.trim_start().len() <= at);
-                let followed = next.is_some_and(|l| l.len() - l.trim_start().len() == at && !l.trim_start().starts_with("orelse ") && !l.trim_start().starts_with("else "));
-                assert!(!followed || ends_in(&function, r), "{y}:{}: Y statements follow the region {function}#{r} in its block, and the bare body does not mark its end, `// y: end region {r}`", i + 1);
-            }
-        }
-    }
-    for y in &code {
-        let mut function = String::new();
-        for (i, line) in read(&dir.join(y)).lines().enumerate() {
-            let t = line.trim_start().trim_start_matches("public ");
-            if let Some(rest) = t.strip_prefix("function ").or_else(|| t.strip_prefix("rule ")) {
-                function = rest.split('(').next().unwrap().to_string();
-            }
-            if let Some(rest) = t.strip_prefix("orelse ").unwrap_or(t).strip_prefix("region ") {
-                let r = rest.split_whitespace().next().unwrap();
-                assert!(regions.iter().any(|n| n.ends_with(&format!("::{function}#{r}"))), "{y}:{}: the region {function}#{r} has no region subject", i + 1);
-            }
-        }
-    }
-    // every named decision of the Y source is listed: `if name = …:`, `while name = …:`, `for name in …:`, `condition
-    // label.name = …:`, `else name:` and `else name`
+    // the Y source's trees (`tools/y-parse`): each region of a function or a rule, in the block of statements it is in,
+    // and the decisions each function names
     let mut in_source = BTreeSet::new();
     for y in &code {
-        let mut function = String::new();
-        let mut last_region = String::new();
-        for line in read(&dir.join(y)).lines() {
-            let words: Vec<&str> = line.split_whitespace().collect();
-            // `region a is …:` and `orelse region b is …:`: the alternatives of an `orelse` are its outcomes
-            if words.first() == Some(&"region") && words.get(2) == Some(&"is") {
-                last_region = words[1].to_string();
-            }
-            if words.first() == Some(&"orelse") && words.get(1) == Some(&"region") && words.get(3) == Some(&"is") {
-                in_source.insert(format!("{function}#{last_region}"));
-                in_source.insert(format!("{function}#{}", words[2]));
-            }
-            if let Some(i) = words.iter().position(|w| *w == "function") {
-                function = words[i + 1].split('(').next().unwrap().to_string();
-            }
-            for (i, w) in words.iter().enumerate() {
-                if (*w == "if" || *w == "while") && words.get(i + 2) == Some(&"=") && line.trim_end().ends_with(':') {
-                    in_source.insert(format!("{function}#{}", words[i + 1]));
+        let tree = y_parse::parse_file(&dir.join(y)).unwrap_or_else(|e| panic!("{e}"));
+        for f in tree.find("function").into_iter().chain(tree.find("rule")) {
+            let function = f.str("name").unwrap();
+            f.walk(&mut |n: &y_parse::Node| {
+                // a block of statements: each region in it has its subject, and when statements follow it, the bare
+                // body marks its end; of `region a is …:` and `orelse region b is …:`, statements follow only `b`
+                let block = n.nodes("body");
+                for (k, s) in block.iter().enumerate().filter(|(_, s)| s.kind == "region") {
+                    let alternatives: Vec<&y_parse::Node> = std::iter::once(*s).chain(s.nodes("orelse")).collect();
+                    for (j, a) in alternatives.iter().enumerate() {
+                        let r = a.str("name").unwrap();
+                        assert!(regions.iter().any(|x| x.ends_with(&format!("::{function}#{r}"))), "{y}:{}: the region {function}#{r} has no region subject", a.line);
+                        let followed = j + 1 == alternatives.len() && k + 1 < block.len();
+                        assert!(!followed || ends_in(function, r), "{y}:{}: Y statements follow the region {function}#{r} in its block, and the bare body does not mark its end, `// y: end region {r}`", a.line);
+                    }
                 }
-                if i == 0 && *w == "for" && words.get(2) == Some(&"in") && line.trim_end().ends_with(':') {
-                    in_source.insert(format!("{function}#{}", words[1]));
+                // every named decision is listed: `if name = …:`, `while name = …:`, `for name in …:`, `condition
+                // label.name = …:`, `else name:` and `else name`; and the alternatives of an `orelse` are its outcomes
+                let mut named = |x: &y_parse::Node| {
+                    in_source.insert(format!("{function}#{}", x.str("name").unwrap()));
+                };
+                match n.kind {
+                    "if" | "while" | "for" => named(n),
+                    "conditional" | "compare" => n.nodes("conditions").into_iter().for_each(&mut named),
+                    "region" if !n.nodes("orelse").is_empty() => std::iter::once(n).chain(n.nodes("orelse")).for_each(&mut named),
+                    _ => {}
                 }
-                // `else name`, the loop's that may never run
-                if i == 0 && *w == "else" && words.len() == 2 && !words[1].ends_with(':') {
-                    in_source.insert(format!("{function}#{}", words[1]));
+                if matches!(n.kind, "if" | "while" | "for" | "conditional" | "compare") {
+                    n.node("else").into_iter().for_each(&mut named);
                 }
-                if i == 0 && *w == "condition" && words.get(2) == Some(&"=") {
-                    in_source.insert(format!("{function}#{}", words[1]));
-                }
-                // `else name:`
-                if *w == "else" && words.get(i + 1).is_some_and(|x| x.ends_with(':') && *x != "if") {
-                    in_source.insert(format!("{function}#{}", words[i + 1].trim_end_matches(':')));
-                }
-            }
+            });
         }
     }
     assert_eq!(listed, in_source, "y-facts.json and the Y source name different decisions");
