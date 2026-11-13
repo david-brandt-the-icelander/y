@@ -105,6 +105,18 @@
       "name": "warehouse_example::main",
       "params": [],
       "result": { "type": "()", "fails": "MainError" }
+    },
+    {
+      "kind": "region",
+      "name": "warehouse_example::main#printing",
+      "clauses": [
+        {
+          "kind": "region",
+          "text": "detach because \"the receipts are printed after the day's report\"",
+          "source": "y/src/main.y:60"
+        },
+        { "kind": "region", "text": "within 1min", "source": "y/src/main.y:60" }
+      ]
     }
   ],
   "holes": {

@@ -8,5 +8,8 @@
   },
   "subjects": [
     { "kind": "module", "name": "warehouse_example::warehouse", "visible": "public", "level": "effects" }
-  ]
+  ],
+  "realizations": {
+    "collect_list_line": { "template": "<_>::collect", "args": ["list<element_type=Line> as 'List'"] }
+  }
 }

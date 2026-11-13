@@ -976,7 +976,17 @@ fn weave_checked(brs: &str, json: &Value, tree: tree_sitter::Tree, crate_reals: 
     }
     // Entries of the file that nothing in the body took: a subject with no item, a `holes` entry with no body.
     let mut unbound = std::mem::take(&mut w.unbound);
-    let mut stale: Vec<&str> = subjects.iter().filter_map(|s| s["name"].as_str()).filter(|n| !w.used.contains(*n)).collect();
+    // a region binds to its marker in its function's body, not to an item (language 6.23): one with no marker, or whose
+    // marker states other constraints than its clauses, is refused
+    for r in subjects.iter().filter(|s| s["kind"] == "region") {
+        let name = r["name"].as_str().unwrap_or("");
+        let clauses: Vec<&str> = r["clauses"].as_array().into_iter().flatten().filter_map(|c| c["text"].as_str()).collect();
+        let stated = crate::region::find_marker(brs, &base_path(json), name).map_err(|e| (e, None))?;
+        if let Some(e) = crate::region::agree(name, &stated, &clauses).into_iter().next() {
+            return Err((e, None));
+        }
+    }
+    let mut stale: Vec<&str> = subjects.iter().filter(|s| s["kind"] != "region").filter_map(|s| s["name"].as_str()).filter(|n| !w.used.contains(*n)).collect();
     for k in json["holes"].as_object().into_iter().flatten().map(|(k, _)| k.as_str()) {
         if !w.scanned.contains(k) && !stale.contains(&k) {
             stale.push(k);

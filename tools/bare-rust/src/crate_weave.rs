@@ -681,6 +681,12 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
         }
     }
     cw.realizations = reals;
+    // A module's `level` is a ceiling (language 6.22): what any body under it uses above it fails the weave.
+    let bodies: Vec<(String, String, Value)> = cw.files.iter().map(|f| (f.bare_name(), f.woven.bare.clone(), f.json.clone())).collect();
+    for e in crate::level::check(&bodies) {
+        let file = e.split(':').next().unwrap_or("").to_string();
+        cw.weave_errors.push((PathBuf::from(file).with_extension("rs"), e));
+    }
     let woven_set: BTreeSet<PathBuf> = cw.files.iter().map(|f| f.rel.clone()).collect();
     cw.unwoven = corpus_files(&crate_dir, true).unwrap_or_default().into_iter().filter(|f| !woven_set.contains(f)).collect();
     prepare_out(out, &[from, &crate_dir])?;

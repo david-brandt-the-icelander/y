@@ -8,14 +8,16 @@ take. They need Python 3 and a Rust toolchain, and nothing else.
 | File | What it does |
 |---|---|
 | [`rebare.sh`](rebare.sh) | `tools/paths/rebare.sh <example>`: remakes `examples/<example>/bare/` from the example's Rust and Y (using `regen.py` and `pathfacts.py`), then runs the example's checks in `tools/bare-rust/tests/y_examples.rs`. Run it after any change to an example's Y or Rust; never edit `bare/` by hand. It prints `uncovered: [] unknown: []` when every path that needs a test is claimed by one |
-| [`regen.py`](regen.py) | Rebuilds the `.brs` bodies and constraint files from `bare-rust strip`, carrying each function's clauses over and re-pointing them at their lines in the Y. A function that is new has no clauses: pass them as JSON in the third argument. It prints the functions left without any |
-| [`pathfacts.py`](pathfacts.py) | Rewrites `bare/y-facts.json`: the decisions (loops and `compare` among them), every path of the module and how it ends, and the path each test claims; the other facts carry over, each place moved to the line that now has its text |
+| [`regen.py`](regen.py) | Rebuilds the `.brs` bodies and constraint files from `bare-rust strip`, carrying each function's clauses over and re-pointing them at their lines in the Y: a `require` at its `where name = `, an `ensure` at its `ensures name = `, in the function the subject names, and any other clause at the function's head. A function that is new has no clauses: pass them as JSON in the third argument. It prints the functions left without any |
+| [`pathfacts.py`](pathfacts.py) | Rewrites `bare/y-facts.json`: the decisions (loops and `compare` among them), every path of the module and how it ends, and the path each test claims; the other facts carry over, each place found again by what the fact says (see `places.py`) |
+| [`places.py`](places.py) | How `pathfacts.py` finds a fact's lines after an edit: by the fact's own words, not by its old line's text. A claim's `because "…"` is on its Y line and in the `// y:` marker of its bare line; a copy's bare line is marked `// y: a copy` and clones what it copies; a facet's line is `facet name:`; a capability's is its function's head. Facts that share such a key take its lines in order |
 | [`yp.py`](yp.py) | The path enumerator, with its prover of facts. `python3 tools/paths/yp.py examples/nim/y/src/nim.y all` lists the paths of a module; the module docstring states the rules. `tools/bare-rust/tests/y_paths/mod.rs` is a port of it to Rust, which the checks use: change both together, and keep their output the same |
 | [`ylint.py`](ylint.py) | `python3 tools/paths/ylint.py <file.y>…`: the lint `type_argument_name` (Y § 3.1), which `rebare.sh` runs: an argument that takes a type is named `…_type`, and one that takes a value is not, unless `-- lint: allow type_argument_name because "…"` suppresses it. `tools/bare-rust/tests/y_lint/mod.rs` is the same lint in Rust, which the example checks run: change both together |
 | [`trace.py`](trace.py) | `python3 tools/paths/trace.py examples/<example> <module>`: runs the example's tests with every decision of the module instrumented (by [`ytrace.rs`](ytrace.rs)), and reports a test that does not take the path it claims, a path no test takes or claims, and a path taken that the enumerator does not know. The checks in `y_examples.rs` only see what the tests claim; this sees what they do |
 
-`regen.py` and `pathfacts.py` find where a line has moved by comparing the files with git's `HEAD`, so run them on
-uncommitted edits, as `rebare.sh` does, and commit the result with the edits.
+So an edit may change or move the lines a fact is about, and the fact follows. Only a fact no key finds (a copy's Y
+line when its function was renamed, an invariant's clause) falls back to the text its line had in git's `HEAD`, so run
+the scripts on uncommitted edits, as `rebare.sh` does, and commit the result with the edits.
 
 `trace.py` works on a copy of the example in `$YTRACE_WORK` (by default `y-trace` in the system's temporary folder) and
 keeps its cargo target folder there between runs. It exits with status 1 if it reports anything.

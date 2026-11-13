@@ -376,6 +376,23 @@ A suffixed literal in a pattern (`1u8 => ...`) has no `let` to carry its type. W
 
 Two kinds of site cannot be bound and stay `e as _` with a hint `{"kind": "cast", "n": <ordinal of the cast in the body>, "type": "<T>"}`: a cast in a macro argument that runs only sometimes (an assertion's message, `debug_assert!`), and one holding a value that releases something at its end (a lock guard) where the statement might not run. Do not write new ones; use a cast local.
 
+### Regions and module levels
+
+Two kinds of entry have no Rust item of their own. A **region** (constraint language § 6.23) is how a function, or a
+named part of one, may execute: a subject of kind `region`, named `<function>#<region>`, with one clause of kind
+`region` for each constraint (`atomic`, `within 50ms`, `waits until enough : p`, `forever because "…"`, …). The
+function's body marks where the region starts with a comment, `// y: region filing is uncancellable, within 50ms` or,
+for an alternative of an `orelse`, `// y: #name`; weave binds the region to that marker, and refuses a region its
+function does not mark, or whose marker states other constraints than its clauses. A **level** (§ 6.22) is a field of
+a module's subject, `"level": "structured"`: nothing in the module, its inner modules or its files (its `tests` aside)
+may use more. Weave refuses a body above its module's level, naming the construct; `bare-rust levels <bare-dir>`
+prints what each module needs and why.
+
+```text
+{ "kind": "region", "name": "shop::checkout::hold#hold_one", "clauses": [ { "kind": "region", "text": "atomic", "source": "y/src/checkout.y:12" } ] }
+{ "kind": "module", "name": "shop::pricing", "visible": "public", "level": "calculations" }
+```
+
 ## When something is wrong, the message names the fix
 
 - `let x: T = ...` in a `.brs`: `src/lib.brs:12:9: a local's type does not go in the bare body; ...` prints the

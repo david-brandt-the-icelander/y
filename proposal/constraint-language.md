@@ -1848,6 +1848,13 @@ prints it under the file's `module` line:
   effects of § 6.3 that a lower level implies (`pure`, `no io`, `effects none`), which are checked as those are.
 - **Harvested:** from the Y compiler's inferred level, and for other hosts from the effect manifests and the bodies:
   the level a module was seen to need is proposed as its ceiling, for a person to pin.
+- **For bare Rust:** a module subject's `level` covers the module, the modules inside it (Y's facets) and its files,
+  but not its `tests`. `bare-rust` reads what each needs from the bare bodies and the constraint data: a function body
+  is `calculations`; a loop, an assignment, `&mut` or a call of the function it is in is `structured`; shared state, a
+  transaction, an arena or a resource is `shared`; a capability parameter, an `effects only …` clause, `async`,
+  `.await`, a task, a deadline, or a region that waits `forever` or is detached is `effects`. Weave fails on anything
+  above its module's level, and `bare-rust levels <bare-dir>` prints the level each module needs and why, with the
+  level pinned on it.
 
 ### 6.23 Regions: how a piece of code may execute
 
@@ -1875,15 +1882,32 @@ region 'memory.setup.new_game#fetch'
   named regions states them on the whole callable, its `function` subject, or names a block by its own means (a label,
   an attribute, a marker comment the profile names).
 - **The constraints:** `within d`, a deadline every wait in the region shares; `forever because "…"`, a wait without
-  bound, assumed (§ 10.2); `uncancellable`, cancellation held until it ends, with `within`; `atomic`; `isolation
-  serializable` or `isolation snapshot`, what an atomic region observes, serializable unless it says otherwise;
-  `may run again`, which permits the host to run it more than once; `waits until p`, it starts only once `p` holds;
-  `on failure unchanged`.
+  bound, assumed (§ 10.2); `detach because "…"`, work that may outlive the callable that starts it, assumed the same
+  way; `uncancellable`, cancellation held until it ends, with `within`; `atomic`; `isolation serializable` or
+  `isolation snapshot`, what an atomic region observes, serializable unless it says otherwise; `may run again`, which
+  permits the host to run it more than once; `waits until name : p`, it starts only once `p` holds, named as Y names
+  it; `on failure unchanged`.
+- **What goes with what:** `isolation`, `may run again` and `waits until` are for an atomic region; `uncancellable`
+  needs a `within`; a region is `within` a bound or waits `forever`, not both; and a region says each constraint
+  once.
 - **What follows:** `may run again` requires that the region have no effect but on the state the run's commit makes
   visible, which is `effects only` (§ 6.3) over that state, so a region that may run again and calls the network
   breaks it at build. Y's atomic regions imply it.
 - **Fails:** a region that a run shows half done to another, that reads two states a serializable order cannot
   explain, that outlives its deadline, or that is cancelled while uncancellable.
+- **In the constraint data:** a subject of kind `region`, named `<function>#<region>`, whose clauses are of kind
+  `region`, one constraint each:
+
+  ```json
+  { "kind": "region", "name": "warehouse_example::warehouse::receipts::file_receipts#filing",
+    "clauses": [ { "kind": "region", "text": "uncancellable", "source": "y/src/warehouse.y:284" },
+                 { "kind": "region", "text": "within 50ms", "source": "y/src/warehouse.y:284" } ] }
+  ```
+
+  For bare Rust, `bare-rust` checks the rules above and that the function is a subject of the file, and weave binds
+  the region to its body: the function marks where the region starts, `// y: region filing is …` or, for an
+  alternative of an `orelse`, `// y: #name`, and a marker that states the constraints states the same ones as the
+  clauses. A region that is not in its function's body, or that says other constraints than its marker, is refused.
 - **Checked:** by the Y compiler for Y; by host analyses where they exist (a transaction's isolation level in T-SQL, a
   lock held across the region in Rust); by concurrency explorers and replays in CI, which run the region's interleavings
   and compare them with a serial order (Loom, Shuttle, Y's own explorer); watched in production from conflict metrics

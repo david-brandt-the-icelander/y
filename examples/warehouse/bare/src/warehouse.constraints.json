@@ -7,7 +7,12 @@
     "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
   },
   "subjects": [
-    { "kind": "module", "name": "warehouse_example::warehouse::catalogue", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "warehouse_example::warehouse::catalogue",
+      "visible": "public",
+      "level": "effects"
+    },
     {
       "kind": "alias",
       "name": "warehouse_example::warehouse::catalogue::Sku",
@@ -26,7 +31,12 @@
       "visible": "public",
       "type": { "host": "Decimal<i32, 5, 4>", "form": "const_args" }
     },
-    { "kind": "module", "name": "warehouse_example::warehouse::catalogue::tax", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "warehouse_example::warehouse::catalogue::tax",
+      "visible": "public",
+      "level": "data"
+    },
     {
       "kind": "const",
       "name": "warehouse_example::warehouse::catalogue::tax::STANDARD_RATE",
@@ -124,7 +134,12 @@
       ],
       "result": { "type": "map<key_type=Sku, value_type=Item> as 'SortedMap'", "fails": "CatalogueError" }
     },
-    { "kind": "module", "name": "warehouse_example::warehouse::pricing", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "warehouse_example::warehouse::pricing",
+      "visible": "public",
+      "level": "structured"
+    },
     {
       "kind": "alias",
       "name": "warehouse_example::warehouse::pricing::Quantity",
@@ -239,7 +254,12 @@
       "result": { "type": "list<element_type=Price> as 'List'" },
       "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/warehouse.y:134" }]
     },
-    { "kind": "module", "name": "warehouse_example::warehouse::stock", "visible": "public" },
+    {
+      "kind": "module",
+      "name": "warehouse_example::warehouse::stock",
+      "visible": "public",
+      "level": "shared"
+    },
     {
       "kind": "type",
       "name": "warehouse_example::warehouse::stock::Holdings",
@@ -273,7 +293,29 @@
       ],
       "result": { "type": "Reservation" }
     },
-    { "kind": "module", "name": "warehouse_example::warehouse::packing", "visible": "public" },
+    {
+      "kind": "region",
+      "name": "warehouse_example::warehouse::stock::reserve#take_from_shelf",
+      "clauses": [
+        { "kind": "region", "text": "atomic", "source": "y/src/warehouse.y:171" },
+        {
+          "kind": "region",
+          "text": "waits until enough : holdings.on_shelf.count_of(wanted.sku) >= wanted.quantity",
+          "source": "y/src/warehouse.y:171"
+        }
+      ]
+    },
+    {
+      "kind": "region",
+      "name": "warehouse_example::warehouse::stock::reserve#put_on_backorder",
+      "clauses": [{ "kind": "region", "text": "atomic", "source": "y/src/warehouse.y:174" }]
+    },
+    {
+      "kind": "module",
+      "name": "warehouse_example::warehouse::packing",
+      "visible": "public",
+      "level": "effects"
+    },
     {
       "kind": "type",
       "name": "warehouse_example::warehouse::packing::PackingError",
@@ -322,6 +364,11 @@
       ]
     },
     {
+      "kind": "region",
+      "name": "warehouse_example::warehouse::packing::pack_orders#count_sale",
+      "clauses": [{ "kind": "region", "text": "atomic", "source": "y/src/warehouse.y:212" }]
+    },
+    {
       "kind": "function",
       "name": "warehouse_example::warehouse::packing::pack_day",
       "visible": "public",
@@ -344,7 +391,17 @@
       ],
       "result": { "type": "()", "fails": "PackingError" }
     },
-    { "kind": "module", "name": "warehouse_example::warehouse::receipts", "visible": "public" },
+    {
+      "kind": "region",
+      "name": "warehouse_example::warehouse::packing::pack_day#packing",
+      "clauses": [{ "kind": "region", "text": "within 10s", "source": "y/src/warehouse.y:233" }]
+    },
+    {
+      "kind": "module",
+      "name": "warehouse_example::warehouse::receipts",
+      "visible": "public",
+      "level": "effects"
+    },
     {
       "kind": "type",
       "name": "warehouse_example::warehouse::receipts::Receipt",
@@ -464,6 +521,14 @@
         }
       ],
       "result": { "type": "()", "fails": "StoreError" }
+    },
+    {
+      "kind": "region",
+      "name": "warehouse_example::warehouse::receipts::file_receipts#filing",
+      "clauses": [
+        { "kind": "region", "text": "uncancellable", "source": "y/src/warehouse.y:284" },
+        { "kind": "region", "text": "within 50ms", "source": "y/src/warehouse.y:284" }
+      ]
     }
   ],
   "holes": {
@@ -498,7 +563,7 @@
       }
     },
     "warehouse_example::warehouse::packing::pack_orders": {
-      "locals": { "lines": "list<element_type=Line> as 'List'", "out": "Result<Step<()>, Infallible>" }
+      "locals": { "out": "Result<Step<()>, Infallible>" }
     },
     "warehouse_example::warehouse::packing::pack_day": {
       "locals": {

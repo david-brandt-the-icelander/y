@@ -282,7 +282,7 @@ mod packing {
     /// - `orders`: the orders.
     /// - `holdings`, `sold`: the Y `injected` parameters.
     fn pack_orders(orders, holdings, sold) {
-        let lines = orders.iter().flat_map(lines_of).collect();
+        let lines = orders.iter().flat_map(lines_of).collect_list_line();
         for wanted in &lines { // y: #wanted, else #no_lines
             let reserved = reserve(wanted, holdings);
             if reserved == Reservation::FromShelf { // y: #shelved

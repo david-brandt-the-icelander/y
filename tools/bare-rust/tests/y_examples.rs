@@ -17,8 +17,10 @@
 mod y_lint;
 mod y_paths;
 
+use bare_rust::corpus::{crate_trees, strip_sources};
 use bare_rust::json::canonical;
-use bare_rust::{normalise_nomut, rustfmt, strip, weave};
+use bare_rust::weave::weave_in_crate;
+use bare_rust::{normalise_nomut, rustfmt};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -67,10 +69,11 @@ fn read(p: &Path) -> String {
     fs::read_to_string(p).unwrap_or_else(|e| panic!("{}: {e}", p.display()))
 }
 
-/// The constraint file as strip writes it: no clauses, no module level, and the status strip gives.
+/// The constraint file as strip writes it: no clauses, no module level, no regions, and the status strip gives.
 fn without_lowering(js: &Value) -> Value {
     let mut js = js.clone();
     js["status"] = Value::from("lifted");
+    js["subjects"].as_array_mut().unwrap().retain(|s| s["kind"] != "region");
     for s in js["subjects"].as_array_mut().unwrap() {
         s.as_object_mut().unwrap().remove("clauses");
         s.as_object_mut().unwrap().remove("level");
@@ -113,23 +116,40 @@ fn checkers_bare_files_weave_to_the_committed_rust_and_strip_back() {
     weaves_and_strips_back("checkers", &["checkers", "checkers/tests", "lib", "main"]);
 }
 
+/// Each file of the example weaves to its committed Rust, and the crate's Rust strips back to the bare files. Both are
+/// done to the crate as a whole: a realization (a call with explicit type arguments, language § 3.5) belongs to its
+/// crate, and is listed in the file of the crate's root (`lib` or `main`), not in the file whose body uses it.
 fn weaves_and_strips_back(name: &str, expected: &[&str]) {
     let dir = example(name);
     let mods = modules(&dir);
     assert_eq!(mods, expected);
-    for m in mods {
+    let trees = crate_trees(&dir, false).unwrap();
+    let crate_of = |m: &str| -> PathBuf {
+        let rel = PathBuf::from(format!("src/{m}.rs"));
+        trees.iter().find(|(_, files)| files.contains(&rel)).unwrap_or_else(|| panic!("{m}: in no crate of the package")).0.clone()
+    };
+    let constraints = |m: &str| -> Value { serde_json::from_str(&read(&dir.join(format!("bare/src/{m}.constraints.json")))).unwrap() };
+    let mut sources = vec![];
+    for m in &mods {
         let brs = read(&dir.join(format!("bare/src/{m}.brs")));
         let cjs = read(&dir.join(format!("bare/src/{m}.constraints.json")));
         let js: Value = serde_json::from_str(&cjs).unwrap();
         assert_eq!(canonical(&js), cjs, "{m}: the constraint file is not in canonical form (bare-rust libfmt)");
-        let woven = weave(&brs, &js).unwrap_or_else(|e| panic!("{m}: weave: {e}"));
+        let root = crate_of(m);
+        let root_module = root.with_extension("").strip_prefix("src").unwrap().to_string_lossy().into_owned();
+        let reals = constraints(&root_module)["realizations"].as_object().cloned().unwrap_or_default();
+        let woven = weave_in_crate(&brs, &js, Some(&reals)).unwrap_or_else(|e| panic!("{m}: weave: {}", e.msg)).text;
         let committed = read(&dir.join(format!("src/{m}.rs")));
         let norm = |s: &str| normalise_nomut(s).and_then(|n| rustfmt(&n));
         assert_eq!(norm(&woven).unwrap(), norm(&committed).unwrap(), "{m}: the committed Rust is not the weave of the bare files");
-        let (b2, j2) = strip(&committed, js["crate"].as_str().unwrap(), js["module"].as_str().unwrap())
-            .unwrap_or_else(|e| panic!("{m}: strip: {e}"));
-        assert_eq!(b2, brs, "{m}: strip of the Rust differs from the bare body");
-        assert_eq!(j2, without_lowering(&js), "{m}: strip of the Rust differs from the constraint file in more than clauses and status");
+        sources.push((PathBuf::from(format!("src/{m}.rs")), committed));
+    }
+    let krate = constraints(&mods[0])["crate"].as_str().unwrap().to_string();
+    for (rel, r) in strip_sources(&krate, &sources, &trees) {
+        let m = rel.with_extension("").strip_prefix("src").unwrap().to_string_lossy().into_owned();
+        let (b2, j2) = r.unwrap_or_else(|e| panic!("{m}: strip: {e}"));
+        assert_eq!(b2, read(&dir.join(format!("bare/src/{m}.brs"))), "{m}: strip of the Rust differs from the bare body");
+        assert_eq!(j2, without_lowering(&constraints(&m)), "{m}: strip of the Rust differs from the constraint file in more than clauses and status");
     }
 }
 
@@ -193,6 +213,55 @@ fn constraint_files_are_valid(name: &str) {
         let errors: Vec<String> = bare_rust::libcheck::validate(&js, None).into_iter().filter(|e| !library_only(e)).collect();
         assert!(errors.is_empty(), "{m}: {errors:#?}");
     }
+    // every module with a `level` uses nothing above it (language 6.22)
+    let bodies: Vec<(String, String, Value)> = modules(&dir)
+        .iter()
+        .map(|m| (format!("bare/src/{m}.brs"), read(&dir.join(format!("bare/src/{m}.brs"))), serde_json::from_str(&read(&dir.join(format!("bare/src/{m}.constraints.json")))).unwrap()))
+        .collect();
+    let errors = bare_rust::level::check(&bodies);
+    assert!(errors.is_empty(), "{errors:#?}");
+}
+
+/// Warehouse's regions and levels are enforced, not only accepted: each change below is refused, by validation
+/// (language 6.23's rules), by weave (a region with no marker in its function, or whose marker says other constraints)
+/// or by the level check (language 6.22).
+#[test]
+fn warehouse_regions_and_levels_are_enforced() {
+    let dir = example("warehouse");
+    let brs = read(&dir.join("bare/src/warehouse.brs"));
+    let js: Value = serde_json::from_str(&read(&dir.join("bare/src/warehouse.constraints.json"))).unwrap();
+    let region = |js: &Value, name: &str| -> usize {
+        js["subjects"].as_array().unwrap().iter().position(|s| s["name"] == format!("warehouse_example::warehouse::{name}")).unwrap()
+    };
+    let woven = |js: &Value| weave_in_crate(&brs, js, Some(&serde_json::Map::new())).err().map(|e| e.msg).unwrap_or_default();
+    let validated = |js: &Value| bare_rust::libcheck::validate(js, None).join("\n");
+    assert_eq!(woven(&js), "");
+    // a region its function does not mark
+    let mut renamed = js.clone();
+    let i = region(&mut renamed, "packing::pack_orders#count_sale");
+    renamed["subjects"][i]["name"] = "warehouse_example::warehouse::packing::pack_orders#count_sales".into();
+    assert!(woven(&renamed).contains("has no `// y: region count_sales is …`"), "{}", woven(&renamed));
+    // a region whose clauses leave out what its marker states
+    let mut fewer = js.clone();
+    let i = region(&mut fewer, "receipts::file_receipts#filing");
+    fewer["subjects"][i]["clauses"].as_array_mut().unwrap().remove(0);
+    assert!(woven(&fewer).contains("the bare body's marker says `uncancellable`, and no clause does"), "{}", woven(&fewer));
+    // a region that waits until a condition, and is not atomic
+    let mut waits = js.clone();
+    let i = region(&mut waits, "stock::reserve#take_from_shelf");
+    waits["subjects"][i]["clauses"].as_array_mut().unwrap().remove(0);
+    assert!(validated(&waits).contains("only an atomic region can wait for"), "{}", validated(&waits));
+    // a region in a function the file does not have
+    let mut lost = js.clone();
+    let i = region(&mut lost, "stock::reserve#put_on_backorder");
+    lost["subjects"][i]["name"] = "warehouse_example::warehouse::stock::restock#put_on_backorder".into();
+    assert!(validated(&lost).contains("which is not a function of the file"), "{}", validated(&lost));
+    // `pricing` pinned below what `split` uses
+    let mut low = js.clone();
+    let i = region(&mut low, "pricing");
+    low["subjects"][i]["level"] = "calculations".into();
+    let errors = bare_rust::level::check(&[("warehouse.brs".into(), brs.clone(), low)]).join("\n");
+    assert!(errors.contains("`&mut` in `warehouse_example::warehouse::pricing::split` needs level `structured`, and module `warehouse_example::warehouse::pricing` is at `calculations`"), "{errors}");
 }
 
 #[test]
@@ -289,6 +358,16 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
         let what = c["what"].as_str().unwrap();
         assert!(at(c["y"].as_str().unwrap()).contains(what), "copy of {what}: not at {}", c["y"]);
         assert!(at(c["bare"].as_str().unwrap()).contains("// y: a copy"), "copy of {what}: not marked at {}", c["bare"]);
+    }
+    // each claim (`forever because "…"`, `detach because "…"`) is where the facts say: its Y line gives the reason, and
+    // so does the `// y:` marker of its bare line; no two claims share a line
+    let mut claimed = BTreeSet::new();
+    for c in facts["claims"].as_array().map_or(&[][..], |v| v) {
+        let because = format!("because \"{}\"", c["because"].as_str().unwrap());
+        let (y, bare) = (c["y"].as_str().unwrap(), c["bare"].as_str().unwrap());
+        assert!(at(y).contains(&because), "claim {because}: not at {y}");
+        assert!(at(bare).split_once("// y:").is_some_and(|(_, m)| m.contains(&because)), "claim {because}: not marked at {bare}");
+        assert!(claimed.insert(y.to_string()), "two claims at {y}");
     }
     // each point where the Y source may suspend is where the facts say, and the bare body awaits it there (Y § 3.7)
     for s in facts["suspensions"].as_array().unwrap() {

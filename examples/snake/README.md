@@ -27,7 +27,7 @@ On Linux, Macroquad needs the X11 and OpenGL libraries (`libx11-dev`, `libxi-dev
 |---|---|---|---|
 | Y source | `y/src/snake.y`, `y/src/snake.test.y`, `y/src/main.y` | 399, 730, 24 | hand |
 | Bare bodies | `bare/src/snake.brs`, `bare/src/snake/tests.brs`, `bare/src/main.brs`, `bare/src/lib.brs` | 362, 557, 31, 3 | `bare-rust strip` of the Rust below, which was written as the Y compiler would lower the source |
-| Constraint files | `bare/src/*.constraints.json` (99 subjects, 43 clauses) | 671 | `strip`, plus the clauses and status the Y lowering adds, then `bare-rust libfmt` |
+| Constraint files | `bare/src/*.constraints.json` (100 subjects, 44 clauses) | 738 | `strip`, plus the clauses, region and status the Y lowering adds, then `bare-rust libfmt` |
 | Y facts | `bare/y-facts.json` | 1090 | the same, from the Y source and the bare bodies |
 | Rust | `src/snake.rs`, `src/snake/tests.rs`, `src/main.rs`, `src/lib.rs` | 362, 557, 31, 3 | `bare-rust weave`, which gives back the hand-written Rust exactly |
 
@@ -42,7 +42,7 @@ Macroquad. The clock comes from [`../y-runtime`](../y-runtime/), as the console 
 | `injected window`: a capability that draws, reads keys and waits for the next frame | `window: &mut Window`, last among the parameters | `effects only window` | `y_window::Window` over Macroquad, or a fake for tests |
 | `injected clock`, and `clock.now()` | `clock: &mut Clock`, `clock.now()` | `effects only window, clock, random` on `play` | `y_runtime::Clock`; Y's `instant` and `duration` are `std::time::Instant` and `Duration` |
 | `step_time is duration = 150ms`: a typed literal with a physical unit (Y § 3.3) | `const STEP_TIME = Duration::from_millis(150);` | `y-facts.json` `units` | the same, typed `Duration` |
-| `region frame_shown is forever because "…":` around `window.next_frame()`, a point where `play` may suspend (Y § 3.8: a region with an execution constraint) | `window.next_frame(forever).await` | `y-facts.json` `suspensions` and `claims` | `play` is an `async fn` |
+| `region frame_shown is forever because "…":` around `window.next_frame()`, a point where `play` may suspend (Y § 3.8: a region with an execution constraint) | `window.next_frame(forever).await` | `y-facts.json` `suspensions` and `claims`; the region `play#frame_shown`, `forever because "…"`, in the constraint file (language 6.23) | `play` is an `async fn` |
 | `best = play()` in `main` | `play(…).await` in an `async fn entry` | `y-facts.json` `suspensions` | `y_window::run` opens the window and runs `entry` on Macroquad's executor |
 | `conditional going = heading:` with a condition for each case of a closed type, and no `else` | `match heading`, an arm per case, each marked `// y: #going.…` | `decisions`, kind `conditional` | the same |
 | `while due = (…):` in `catch_up`, with a bare `else not_due`, and the frame loop `while open = (…):` with a bare `else closed_at_once`: each `else` names the case in which the loop never runs | each loop marked `// y: #due, else #not_due` | `decisions`, kind `while` | the same |

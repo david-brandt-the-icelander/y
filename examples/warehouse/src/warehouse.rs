@@ -281,7 +281,7 @@ pub mod packing {
     /// - `orders`: the orders.
     /// - `holdings`, `sold`: the Y `injected` parameters.
     pub fn pack_orders(orders: &List<Order>, holdings: &Shared<Holdings>, sold: &Shared<Bag<Sku>>) {
-        let lines: List<Line> = orders.iter().flat_map(lines_of).collect();
+        let lines = orders.iter().flat_map(lines_of).collect::<List<Line>>();
         for wanted in &lines { // y: #wanted, else #no_lines
             let reserved = reserve(wanted, holdings);
             if reserved == Reservation::FromShelf { // y: #shelved
