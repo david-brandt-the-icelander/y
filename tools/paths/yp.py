@@ -21,95 +21,150 @@ theirs`.
 - `fail not_reachable` and `fail not_implemented` end a path that needs no test.
 
 What a path shows is carried along it as facts: the interval of a number, or of a list's count. They come from the
-branches taken, the conditions found false, `where` preconditions, the `ensures` of a called function, `assert`s and
-constants. A sub-outcome the facts rule out is no path: that is what "proven" means here.
+branches taken, the conditions found false, `where` preconditions, the `ensures` of a called function, and constants.
+A sub-outcome the facts rule out is no path: that is what "proven" means here.
+
+It reads the Y source through its tree (`ytree.py`, from `tools/y-parse`): declarations, statements and expressions
+are its nodes. The facts are kept on expressions by their text, as `text` writes a node: `game.misses.count()`.
+`tools/bare-rust/tests/y_paths/mod.rs` is a port of it to Rust: change both together, and keep their output the same.
 """
 import re, sys
+import ytree
 
 ORDERED = {"int32", "uint32", "uint16", "int64", "uint64", "duration", "instant", "count", "int"}
 UNSIGNED = {"uint32", "uint16", "uint64", "duration", "count"}
 EXEMPT = ("not_reachable", "not_implemented")
+PRECEDENCE = {"or": 1, "and": 2, "==": 4, "!=": 4, "<": 4, "<=": 4, ">": 4, ">=": 4, "+": 5, "-": 5, "*": 6, "/": 6, "%": 6}
 
 
 # ---------------------------------------------------------------------------------------------------------------------
-# Text at the top level of an expression
+# Expressions: nodes of the tree, and nodes made here
 
-def scan(e):
-    """Yields (index, char, depth) for the characters outside strings."""
-    depth, q = 0, False
-    for k, c in enumerate(e):
-        if c == '"':
-            q = not q
-            continue
-        if q:
-            continue
-        if c in "([":
-            depth += 1
-        elif c in ")]":
-            depth -= 1
-        yield k, c, depth
+def name(n):
+    return {"kind": "name", "name": n}
 
 
-def strip_parens(e):
-    e = e.strip()
-    while e.startswith("("):
-        close = next((k for k, c, d in scan(e) if c == ")" and d == 0), -1)
-        if close != len(e) - 1:
-            break
-        e = e[1:-1].strip()
+def member(obj, n):
+    return {"kind": "member", "object": obj, "name": n}
+
+
+def call(callee, args=()):
+    return {"kind": "call", "callee": callee, "args": [{"kind": "arg", "name": None, "value": a} for a in args]}
+
+
+def count(obj):
+    """`obj.count()`."""
+    return call(member(obj, "count"))
+
+
+def text(e, top=True):
+    """An expression as text, the key facts are kept by: brackets where the source has them, but not around the
+    whole."""
+    k = e["kind"]
+    if k == "name":
+        out = e["name"]
+    elif k == "literal":
+        out = e["text"]
+    elif k == "member":
+        out = f"{text(e['object'], False)}.{e['name']}"
+    elif k == "call":
+        args = ", ".join((f"{a['name']}: " if a["name"] else "") + text(a["value"], False) for a in e["args"])
+        out = f"{text(e['callee'], False)}({args})"
+    elif k == "index":
+        out = f"{text(e['object'], False)}[{text(e['index'], False)}]"
+    elif k == "binary":
+        out = f"{text(e['left'], False)} {e['op']} {text(e['right'], False)}"
+    elif k == "unary":
+        out = ("not " if e["op"] == "not" else "-") + text(e["operand"], False)
+    elif k == "list":
+        out = "[" + ", ".join(text(i, False) for i in e["items"]) + "]"
+    elif k in ("mutable", "fake", "compile"):
+        out = f"{k} {text(e['value'], False)}"
+    elif k == "or_fail":
+        out = f"{text(e['value'], False)} or fail"
+    elif k == "forever":
+        out = f"{text(e['value'], False)} forever because \"{e['because']}\""
+    else:
+        raise ValueError(k)
+    return f"({out})" if e.get("parens") and not top else out
+
+
+def chain(e):
+    """A name or a path of names, `game.misses`, as text; None for anything else."""
+    if e["kind"] == "name":
+        return e["name"]
+    if e["kind"] == "member":
+        o = chain(e["object"])
+        return f"{o}.{e['name']}" if o else None
+    return None
+
+
+def root(e):
+    """The name a path of members and indexes starts from: `game` of `game.squares[i]`; None when it starts otherwise."""
+    while e["kind"] in ("member", "index"):
+        e = e["object"]
+    return e["name"] if e["kind"] == "name" else None
+
+
+def method(e, *names, args=None):
+    """`obj` when `e` is `obj.m(…)` for a method `m` among `names` (any, when none are given), with `args` arguments
+    when it says how many; else None."""
+    if e["kind"] == "call" and e["callee"]["kind"] == "member" and (not names or e["callee"]["name"] in names):
+        if args is None or len(e["args"]) == args:
+            return e["callee"]["object"]
+    return None
+
+
+def arg(e, n):
+    """The argument named `n` of a call."""
+    return next((a["value"] for a in e["args"] if a["name"] == n), None)
+
+
+def is_int(e):
+    """A whole number, `6` or `-6`."""
+    if e["kind"] == "unary" and e["op"] == "-":
+        e = e["operand"]
+        return e["kind"] == "literal" and e["type"] == "integer" and not e.get("parens")
+    return e["kind"] == "literal" and e["type"] == "integer"
+
+
+def operands(e, op):
+    """The operands of a chain of `op` (`and` or `or`), as the source groups them: `(a or b) or c` has two."""
+    if e["kind"] == "binary" and e["op"] == op:
+        left = e["left"]
+        return (operands(left, op) if not left.get("parens") else [left]) + [e["right"]]
+    return [e]
+
+
+def unwrap(e):
+    """An expression without its `or fail` and its `forever because "…"`."""
+    while e["kind"] in ("or_fail", "forever"):
+        e = e["value"]
     return e
-
-
-def split_top(e, sep):
-    parts, last = [], 0
-    for k, c, d in scan(e):
-        if d == 0 and k >= last and e.startswith(sep, k):
-            parts.append(e[last:k].strip())
-            last = k + len(sep)
-    parts.append(e[last:].strip())
-    return parts
-
-
-def split_at(e, op):
-    for k, c, d in scan(e):
-        if d == 0 and e.startswith(op, k):
-            return e[:k].strip(), e[k + len(op):].strip()
-    return None
-
-
-def top_comparison(e):
-    for k, c, d in scan(e):
-        if d == 0:
-            for op in (" <= ", " >= ", " == ", " != ", " < ", " > "):
-                if e.startswith(op, k):
-                    return e[:k].strip(), op.strip(), e[k + len(op):].strip()
-    return None
-
-
-def has_top_arith(e):
-    return any(d == 0 and 0 < k < len(e) - 1 and e[k - 1] == " " and c in "+-*/%" and e[k + 1] == " " for k, c, d in scan(e))
-
-
-def split_commas(e):
-    parts, last = [], 0
-    for k, c, d in scan(e):
-        if d == 0 and c == ",":
-            parts.append(e[last:k])
-            last = k + 1
-    parts.append(e[last:])
-    return [p.strip() for p in parts if p.strip()]
 
 
 def norm(e):
     """An expression as facts are kept on it: a count converted to another whole number is the same count."""
-    e = strip_parens(e)
-    m = re.fullmatch(r"(.+\.count\(\))\.to_(?:u?int32)\(\)", e)
-    return m.group(1) if m else e
+    inner = method(e, "to_int32", "to_uint32", args=0)
+    if inner is not None and method(inner, "count", args=0) is not None:
+        return inner
+    return e
 
 
-def root(e):
-    m = re.match(r"\(*\s*(\w+)", e)
-    return m.group(1) if m else ""
+def ty(n):
+    """A type that has no arguments, by its name."""
+    return {"kind": "type", "name": n, "args": [], "text": n}
+
+
+def type_text(t):
+    return t["text"] if t else None
+
+
+def element(t):
+    """The element type of `list<element_type=T>`."""
+    if t and t["name"] == "list" and len(t["args"]) == 1 and t["args"][0]["name"] == "element_type" and t["args"][0]["value"]["kind"] == "type":
+        return t["args"][0]["value"]
+    return None
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -143,166 +198,145 @@ def order_possible(a, b):
 class Module:
     def __init__(self, path, others=()):
         self.path = path
-        self.lines = open(path).read().split("\n")
+        self.tree = ytree.tree(path)
         self.fields, self.constants, self.values, self.results, self.params = {}, {}, {}, {}, {}
         self.contracts = {}
         # a refined type's constraints on its values' counts: {type: [(op, n)]}
         self.refinements = {}
         self.unknown = []
         for p in (path, *others):
-            self.collect(open(p).read().split("\n"))
+            self.collect(ytree.tree(p))
         self.groups = {k.split(".")[0] for k in self.constants}
 
-    def collect(self, raw):
-        lines, k = [], 0
-        while k < len(raw):
-            l = raw[k]
-            k += 1
-            while l.count("[") > l.count("]") and k < len(raw):
-                l = l.rstrip() + " " + raw[k].strip()
-                k += 1
-            lines.append(l)
-        group, kind, doc, in_doc, current = None, None, [], False, None
-        refined = None
-        for l in lines:
-            t = l.strip()
-            if re.fullmatch(r"-{3,}", t):
-                in_doc = not in_doc
-                if in_doc:
-                    doc = []
-                continue
-            if in_doc:
-                doc.append(t)
-                continue
-            m = re.match(r"(?:public )?(constants|structure|type) (\w+)", t)
-            if m:
-                kind, group = m.group(1), m.group(2)
-                refined = group if re.match(r"(?:public )?type \w+ is ", t) else None
-                continue
-            if refined:
-                for op, n in re.findall(r"value\.count\(\) (>=|>|<=|<|==) (\d+)", t):
-                    self.refinements.setdefault(refined, []).append((op, int(n)))
-            m = re.match(r"(\w+) is ([\w<>=, ]+?)(?: = (.*))?$", t)
-            if m and group and l.startswith(" "):
-                name, ty, value = m.groups()
-                if kind == "structure":
-                    self.fields.setdefault(name, ty)
-                elif kind == "constants":
-                    self.constants[f"{group}.{name}"] = ty
-                    if value is not None:
-                        self.values[f"{group}.{name}"] = value
-                continue
-            m = re.match(r"(\w+) = (.*)$", t)
-            if m and kind == "constants" and group and l.startswith(" "):
-                self.constants[f"{group}.{m.group(1)}"] = group
-                continue
-            m = re.match(r"function (\w+)\(([^)]*)\)(?: returns (\w+))?", t)
-            if m:
-                group = None
-                name, params, result = m.groups()
-                current = name
+    def collect(self, tree):
+        for _, d in ytree.declarations(tree):
+            if d["kind"] == "structure":
+                for m in d["members"]:
+                    if m["kind"] == "field":
+                        self.fields.setdefault(m["name"], m["type"])
+            elif d["kind"] == "constants":
+                for c in d["items"]:
+                    key = f"{d['name']}.{c['name']}"
+                    if c["type"]:
+                        self.constants[key] = c["type"]
+                        self.values[key] = c["value"]
+                    else:
+                        self.constants[key] = ty(d["name"])
+            elif d["kind"] == "type_decl" and d["type"]:
+                # `where name = (value.count() >= 4)`: what the refined type allows of its values' counts
+                for w in d["where"]:
+                    for n in ytree.walk(w["condition"]):
+                        if n["kind"] == "binary" and n["op"] in (">=", ">", "<=", "<", "==") and text(n["left"]) == "value.count()" \
+                                and n["right"]["kind"] == "literal" and n["right"]["type"] == "integer":
+                            self.refinements.setdefault(d["name"], []).append((n["op"], int(n["right"]["text"])))
+            elif d["kind"] == "function":
+                # a parameter's or the result's type, from a documentation entry on one line: `name: …, as type.`
                 types = {}
-                for d in doc:
-                    dm = re.match(r"(\w+): .*, as ([\w<>=, ]+)\.$", d)
-                    if dm:
-                        types[dm.group(1)] = dm.group(2)
-                names = [p.strip().split()[-1] for p in params.split(",") if p.strip()]
-                self.params[name] = {p: types.get(p) for p in names}
-                self.results[name] = (result, types.get(result))
-                self.contracts[name] = []
-                continue
-            m = re.match(r"(where|ensures) (\w+) = (.*?):?$", t)
-            if m and current and l.startswith(" "):
-                self.contracts[current].append((m.group(1), m.group(3)))
-                continue
-            if t and not l.startswith(" ") and not t.startswith("--"):
-                group = None
-                current = None
+                for e in (d["doc"] or {}).get("entries", []):
+                    if e["type"] and e["end"] == e["line"] and e["text"].endswith(f", as {e['type']['text']}.") \
+                            and re.fullmatch(r"[\w<>=, ]+", e["type"]["text"]):
+                        types[e["name"]] = e["type"]
+                self.params[d["name"]] = {p["name"]: types.get(p["name"]) for p in d["params"]}
+                self.results[d["name"]] = (d["returns"], types.get(d["returns"]))
+                self.contracts[d["name"]] = [("where", w["condition"]) for w in d["where"]] + [("ensures", w["condition"]) for w in d["ensures"]]
 
     def value(self, e):
         """The constant value of `e`, if it has one."""
-        e = strip_parens(e)
-        if re.fullmatch(r"-?\d+", e):
-            return int(e)
-        if e in self.values:
-            return self.value(self.values[e])
-        for op in (" + ", " - ", " * ", " / "):
-            parts = split_at(e, op)
-            if parts:
-                a, b = self.value(parts[0]), self.value(parts[1])
-                if a is None or b is None:
-                    return None
-                return {"+": a + b, "-": a - b, "*": a * b, "/": a // b if b else None}[op.strip()]
+        if is_int(e):
+            return int(text(e))
+        key = text(e)
+        if key in self.values:
+            return self.value(self.values[key])
+        if e["kind"] == "binary" and e["op"] in ("+", "-", "*", "/"):
+            a, b = self.value(e["left"]), self.value(e["right"])
+            if a is None or b is None:
+                return None
+            return {"+": a + b, "-": a - b, "*": a * b, "/": a // b if b else None}[e["op"]]
         return None
 
     def length(self, e):
         """The constant length of a list, if it has one."""
-        e = strip_parens(e)
-        if e in self.values:
-            e = self.values[e]
-        if e.startswith("[") and e.endswith("]"):
-            inner = e[1:-1].strip()
-            return len(split_commas(inner)) if inner else 0
-        return None
+        e = self.values.get(text(e), e)
+        return len(e["items"]) if e["kind"] == "list" else None
 
     def type_of(self, e, env):
-        e = strip_parens(e)
-        if re.fullmatch(r"-?\d+", e):
-            return "int"
-        if re.fullmatch(r"\d+(ms|s)", e):
-            return "duration"
-        if e.startswith('"'):
-            return "string"
-        if e in ("true", "false"):
-            return "boolean"
-        if e.startswith("not "):
-            return "boolean"
-        if e.startswith("-"):
-            return self.type_of(e[1:], env)
-        if has_top_arith(e):
-            for op in (" + ", " - ", " * ", " / ", " % "):
-                parts = split_at(e, op)
-                if parts:
-                    a, b = self.type_of(parts[0], env), self.type_of(parts[1], env)
-                    if a == "instant" and b == "instant":
-                        return "duration"
-                    return a if a not in (None, "int") else b if b else a
-        if split_top(e, " and ")[1:] or split_top(e, " or ")[1:] or top_comparison(e):
-            return "boolean"
-        if e.endswith(".count()"):
-            return "count"
-        if e == "clock.now()":
-            return "instant"
-        for method, ty in ((".to_int32()", "int32"), (".to_uint32()", "uint32"), (".whole_seconds()", "uint32"),
-                           (".is_empty()", "boolean")):
-            if e.endswith(method):
-                return ty
-        if re.fullmatch(r".+\.contains\(.*\)", e):
-            return "boolean"
-        m = re.fullmatch(r"(.+)\.divided_rounding_up\(.*\)", e) or re.fullmatch(r"(.+)\.(?:min|max)\(.*\)", e)
-        if m:
-            return self.type_of(m.group(1), env)
-        m = re.fullmatch(r"(.+)\.(?:largest|smallest|last)\(\)", e) or re.fullmatch(r"(.+)\.at_number\(.*\)", e) \
-            or re.fullmatch(r"(.+)\[[^\]]*\]", e)
-        if m:
-            inner = self.type_of(m.group(1), env) or ""
-            mm = re.fullmatch(r"list<element_type=(.+)>", inner)
-            return mm.group(1) if mm else None
-        m = re.fullmatch(r"(\w+)\(.*\)", e)
-        if m and m.group(1) in self.results:
-            return self.results[m.group(1)][1]
-        if e in env:
-            return env[e]
-        if e in self.constants:
-            return self.constants[e]
-        m = re.fullmatch(r"[\w.\[\]0-9]+\.(\w+)", e)
-        if m and m.group(1) in self.fields:
-            return self.fields[m.group(1)]
+        k = e["kind"]
+        if is_int(e):
+            return ty("int")
+        if k == "literal":
+            if e["type"] == "duration" and re.fullmatch(r"\d+(ms|s)", e["text"]):
+                return ty("duration")
+            if e["type"] == "string":
+                return ty("string")
+            if e["type"] == "boolean":
+                return ty("boolean")
+            return None
+        if k == "unary":
+            return ty("boolean") if e["op"] == "not" else self.type_of(e["operand"], env)
+        if k == "binary" and e["op"] in ("+", "-", "*", "/", "%"):
+            a, b = self.type_of(e["left"], env), self.type_of(e["right"], env)
+            if type_text(a) == "instant" and type_text(b) == "instant":
+                return ty("duration")
+            return a if type_text(a) not in (None, "int") else b if b else a
+        if k == "binary":
+            return ty("boolean")
+        if method(e, "count", args=0) is not None:
+            return ty("count")
+        if text(e) == "clock.now()":
+            return ty("instant")
+        for m, t in (("to_int32", "int32"), ("to_uint32", "uint32"), ("whole_seconds", "uint32"), ("is_empty", "boolean")):
+            if method(e, m, args=0) is not None:
+                return ty(t)
+        if method(e, "contains") is not None:
+            return ty("boolean")
+        inner = method(e, "divided_rounding_up", "min", "max")
+        if inner is not None:
+            return self.type_of(inner, env)
+        inner = method(e, "largest", "smallest", "last", args=0)
+        if inner is None:
+            inner = method(e, "at_number")
+        if inner is None and k == "index":
+            inner = e["object"]
+        if inner is not None:
+            return element(self.type_of(inner, env))
+        if k == "call" and e["callee"]["kind"] == "name" and e["callee"]["name"] in self.results:
+            return self.results[e["callee"]["name"]][1]
+        key = text(e)
+        if key in env:
+            return env[key]
+        if key in self.constants:
+            return self.constants[key]
+        if k == "member" and simple(e["object"]) and e["name"] in self.fields:
+            return self.fields[e["name"]]
         return None
+
+
+def plain(e):
+    """A path of names and indexes whose index is a plain path or a number: `game.squares[i]`, `a[b.c]`."""
+    if e["kind"] == "name":
+        return True
+    if e["kind"] == "member":
+        return plain(e["object"])
+    if e["kind"] == "index":
+        i = e["index"]
+        return plain(e["object"]) and (plain(i) or (i["kind"] == "literal" and i["type"] == "integer"))
+    return False
+
+
+def simple(e):
+    """A path of names and indexes by a name or a number: `game.squares[i]`, not `f(x).y`."""
+    if e["kind"] == "name":
+        return True
+    if e["kind"] == "member":
+        return simple(e["object"])
+    if e["kind"] == "index":
+        i = e["index"]
+        return simple(e["object"]) and (i["kind"] == "name" or (i["kind"] == "literal" and i["type"] == "integer"))
+    return False
 
 
 # ---------------------------------------------------------------------------------------------------------------------
-# Facts along a path: intervals of numbers, booleans (0 or 1) and counts
+# Facts along a path: intervals of numbers, booleans (0 or 1) and counts, kept by an expression's text
 
 class Facts:
     def __init__(self, module, env, known=None, same=None, differs=None):
@@ -316,7 +350,8 @@ class Facts:
         return Facts(self.module, self.env, self.known, self.same, self.differs)
 
     def is_constant(self, e):
-        return e.startswith(("optional.", "result.")) or e.split(".")[0] in self.module.groups and e not in self.module.values
+        t = text(e)
+        return t.startswith(("optional.", "result.")) or t.split(".")[0] in self.module.groups and t not in self.module.values
 
     def equality(self, left, right, truth):
         """Adds that `left` is, or is not, `right`, for values with no order: False when it cannot be."""
@@ -324,6 +359,7 @@ class Facts:
             left, right = right, left
         if not self.is_constant(right):
             return True
+        left, right = text(left), text(right)
         if truth:
             if self.same.get(left, right) != right or right in self.differs.get(left, set()):
                 return False
@@ -339,103 +375,99 @@ class Facts:
         v = self.module.value(e)
         if v is not None:
             return v, v
-        if e in ("true", "false"):
-            return (1, 1) if e == "true" else (0, 0)
-        m = re.fullmatch(r"(.+)\.count\(\)", e)
-        if m and self.module.length(m.group(1)) is not None:
-            n = self.module.length(m.group(1))
+        if e["kind"] == "literal" and e["type"] == "boolean":
+            return (1, 1) if e["text"] == "true" else (0, 0)
+        counted = method(e, "count", args=0)
+        if counted is not None and self.module.length(counted) is not None:
+            n = self.module.length(counted)
             return n, n
-        i = self.known.get(e, (None, None))
-        m = re.fullmatch(r"(.+)\.(?:runes\(\)\.)?count\(\)", e)
-        if m:
+        i = self.known.get(text(e), (None, None))
+        if counted is not None:
             # a refined type bounds its values' counts
-            for op, n in self.module.refinements.get(self.module.type_of(m.group(1), self.env), []):
+            for op, n in self.module.refinements.get(type_text(self.module.type_of(counted, self.env)), []):
                 i = meet(i, {">=": (n, None), ">": (n + 1, None), "<=": (None, n), "<": (None, n - 1), "==": (n, n)}[op])
-            if m.group(1).endswith(".runes()"):
-                i = meet(i, self.interval(m.group(1)[:-len(".runes()")] + ".count()"))
+            runes = method(counted, "runes", args=0)
+            if runes is not None:
+                i = meet(i, self.interval(count(runes)))
             # the standard library: splitting text gives at least one piece
-            if re.fullmatch(r".+\.split\(.*\)", m.group(1)):
+            if method(counted, "split") is not None:
                 i = meet(i, (1, None))
-        ty = self.module.type_of(e, self.env)
-        if ty in UNSIGNED:
+        t = type_text(self.module.type_of(e, self.env))
+        if t in UNSIGNED:
             i = meet(i, (0, None))
-        if ty == "boolean":
+        if t == "boolean":
             i = meet(i, (0, 1))
         return i
 
     def add(self, e, i):
         e = norm(e)
         new = meet(self.interval(e), i)
-        self.known[e] = new
+        self.known[text(e)] = new
         return not empty(new)
 
-    def forget(self, name):
-        """Forgets what is known of `name`, and of every expression that reads it."""
-        reads = re.compile(rf"(?<![\w.']){re.escape(name)}\b")
+    def forget(self, n):
+        """Forgets what is known of `n`, and of every expression that reads it."""
+        reads = re.compile(rf"(?<![\w.']){re.escape(n)}\b")
         self.known = {k: v for k, v in self.known.items() if not reads.search(k)}
         self.same = {k: v for k, v in self.same.items() if not reads.search(k)}
         self.differs = {k: v for k, v in self.differs.items() if not reads.search(k)}
 
-    def grow(self, name, by):
-        """A list `name` gains `by` elements, or an unknown number when `by` is None."""
-        i = self.known.get(f"{name}.count()")
-        self.forget(name)
+    def grow(self, n, by):
+        """A list `n` gains `by` elements, or an unknown number when `by` is None."""
+        i = self.known.get(f"{n}.count()")
+        self.forget(n)
         if i is not None and by is not None:
-            self.known[f"{name}.count()"] = (None if i[0] is None else i[0] + by, None if i[1] is None else i[1] + by)
+            self.known[f"{n}.count()"] = (None if i[0] is None else i[0] + by, None if i[1] is None else i[1] + by)
 
-    def bind(self, name, rhs):
-        """`name` now stands for `rhs`: it takes on what is known of it, and what the function it calls ensures."""
-        rhs = strip_parens(rhs)
+    def bind(self, n, rhs):
+        """`n` now stands for `rhs`: it takes on what is known of it, and what the function it calls ensures."""
+        r = text(rhs)
         new, same = {}, None
         for k, v in self.known.items():
-            if k == rhs:
-                new[name] = v
-            elif k.startswith(rhs + "."):
-                new[name + k[len(rhs):]] = v
+            if k == r:
+                new[n] = v
+            elif k.startswith(r + "."):
+                new[n + k[len(r):]] = v
         v = self.module.value(rhs)
         if v is not None:
-            new[name] = (v, v)
+            new[n] = (v, v)
         if self.is_constant(rhs):
-            same = rhs
-        elif rhs in self.same:
-            same = self.same[rhs]
+            same = r
+        elif r in self.same:
+            same = self.same[r]
         # arithmetic on what is known
-        for op in (" + ", " - "):
-            parts = split_at(rhs, op)
-            if parts and self.module.value(parts[1]) is not None:
-                i, c = self.interval(parts[0]), self.module.value(parts[1])
-                c = c if op == " + " else -c
-                new[name] = (None if i[0] is None else i[0] + c, None if i[1] is None else i[1] + c)
-        # a negated value, and what the function it calls ensures of it
-        if rhs.startswith("-") and self.module.value(rhs) is None:
+        if rhs["kind"] == "binary" and rhs["op"] in ("+", "-") and self.module.value(rhs["right"]) is not None:
+            i, c = self.interval(rhs["left"]), self.module.value(rhs["right"])
+            c = c if rhs["op"] == "+" else -c
+            new[n] = (None if i[0] is None else i[0] + c, None if i[1] is None else i[1] + c)
+        # a negated value
+        if rhs["kind"] == "unary" and rhs["op"] == "-" and self.module.value(rhs) is None:
             inner = self.copy()
-            inner.bind("negated'value", rhs[1:])
-            i = inner.interval("negated'value")
-            new[name] = (None if i[1] is None else -i[1], None if i[0] is None else -i[0])
+            inner.bind("negated'value", rhs["operand"])
+            i = inner.interval(name("negated'value"))
+            new[n] = (None if i[1] is None else -i[1], None if i[0] is None else -i[0])
         # what the standard library ensures of the lists it makes
-        if rhs in ("list.new()", "[]"):
-            new[f"{name}.count()"] = (0, 0)
-        m = re.fullmatch(r"random\.shuffled\((.+)\)", rhs)
-        if m:
-            new[f"{name}.count()"] = self.interval(f"{m.group(1)}.count()")
-        m = re.fullmatch(r"random\.chosen\(from: .+, count: (.+)\)", rhs)
-        if m:
-            new[f"{name}.count()"] = self.interval(m.group(1))
-        m = re.fullmatch(r"list\.repeated\(.+, times: (.+)\)", rhs)
-        if m:
-            new[f"{name}.count()"] = self.interval(m.group(1))
-        if rhs in ("true", "false"):
-            new[name] = (1, 1) if rhs == "true" else (0, 0)
-        self.forget(name)
+        if r == "list.new()" or (rhs["kind"] == "list" and not rhs["items"]):
+            new[f"{n}.count()"] = (0, 0)
+        if rhs["kind"] == "call" and chain(rhs["callee"]) == "random.shuffled" and len(rhs["args"]) == 1 and rhs["args"][0]["name"] is None:
+            new[f"{n}.count()"] = self.interval(count(rhs["args"][0]["value"]))
+        if rhs["kind"] == "call" and chain(rhs["callee"]) == "random.chosen" and [a["name"] for a in rhs["args"]] == ["from", "count"]:
+            new[f"{n}.count()"] = self.interval(arg(rhs, "count"))
+        if rhs["kind"] == "call" and chain(rhs["callee"]) == "list.repeated" and [a["name"] for a in rhs["args"]] == [None, "times"]:
+            new[f"{n}.count()"] = self.interval(arg(rhs, "times"))
+        if rhs["kind"] == "literal" and rhs["type"] == "boolean":
+            new[n] = (1, 1) if rhs["text"] == "true" else (0, 0)
+        self.forget(n)
         self.known.update(new)
         if same is not None:
-            self.same[name] = same
-        m = re.fullmatch(r"(\w+)\((.*)\)", rhs)
-        if m:
-            result = self.module.results.get(m.group(1), (None, None))[0]
-            for kind, pred in self.module.contracts.get(m.group(1), []):
+            self.same[n] = same
+        # what the function it calls ensures of it
+        if rhs["kind"] == "call" and rhs["callee"]["kind"] == "name":
+            f = rhs["callee"]["name"]
+            result = self.module.results.get(f, (None, None))[0]
+            for kind, pred in self.module.contracts.get(f, []):
                 if kind == "ensures" and result:
-                    alts = assume(self.module, self.env, re.sub(rf"\b{result}\b", name, pred), True, self)
+                    alts = assume(self.module, self.env, renamed(pred, result, n), True, self)
                     if alts:
                         merged = join(alts)
                         self.known, self.same, self.differs = merged.known, merged.same, merged.differs
@@ -444,10 +476,10 @@ class Facts:
         lt, rt = self.module.type_of(left, self.env), self.module.type_of(right, self.env)
         known = [t for t in (lt, rt) if t is not None]
         if not known:
-            if not any(x.startswith(("optional.", "result.")) or x.split(".")[0] in self.module.groups for x in (left, right)):
-                self.module.unknown.append(f"{left} ? {right}")
+            if not any(text(x).startswith(("optional.", "result.")) or text(x).split(".")[0] in self.module.groups for x in (left, right)):
+                self.module.unknown.append(f"{text(left, False)} ? {text(right, False)}")
             return None
-        if not any(t in ORDERED for t in known):
+        if not any(type_text(t) in ORDERED for t in known):
             return None
         return order_possible(self.interval(left), self.interval(right))
 
@@ -463,6 +495,18 @@ class Facts:
                 self.add(right, (None if a[0] is None else a[0] + 1, None))
         return self.add(left, (None if b[0] is None else b[0] + 1, None)) and \
             self.add(right, (None, None if a[1] is None else a[1] - 1))
+
+
+def renamed(e, old, new):
+    """`e` with every name `old`, and every member named `old`, renamed `new`."""
+    if isinstance(e, list):
+        return [renamed(x, old, new) for x in e]
+    if not isinstance(e, dict):
+        return e
+    out = {k: renamed(v, old, new) for k, v in e.items()}
+    if e.get("kind") in ("name", "member") and e.get("name") == old:
+        out["name"] = new
+    return out
 
 
 def join(alternatives):
@@ -487,11 +531,10 @@ ORDERS = {"<": ({"lt"}, {"eq", "gt"}), "<=": ({"lt", "eq"}, {"gt"}), ">": ({"gt"
 
 def outcomes(module, env, e, truth, facts):
     """The sub-outcomes of predicate `e` being `truth`: [(suffix, facts)], each with what it shows; [] when it cannot be."""
-    e = strip_parens(e)
-    if e.startswith("not "):
-        return outcomes(module, env, e[4:], not truth, facts)
-    for word, stops_on in ((" or ", True), (" and ", False)):
-        ops = split_top(e, word)
+    if e["kind"] == "unary" and e["op"] == "not":
+        return outcomes(module, env, e["operand"], not truth, facts)
+    for word, stops_on in (("or", True), ("and", False)):
+        ops = operands(e, word)
         if len(ops) > 1:
             if truth == stops_on:
                 # evaluation stopped at operand k; the ones before it went the other way
@@ -512,9 +555,8 @@ def outcomes(module, env, e, truth, facts):
                 states = [(s + ((f"'{k}" + s2.lstrip("'")) if s2 else ""), f2) for s, f in states
                           for s2, f2 in outcomes(module, env, op, truth, f)]
             return states
-    c = top_comparison(e)
-    if c:
-        left, op, right = c
+    if e["kind"] == "binary" and e["op"] in ORDERS:
+        left, op, right = e["left"], e["op"], e["right"]
         possible = facts.possible_orders(left, right)
         if possible is None:
             if op in ("==", "!="):
@@ -530,12 +572,12 @@ def outcomes(module, env, e, truth, facts):
         if len(out) == 1:
             out = [("", out[0][1])]
         return out
-    m = re.fullmatch(r"(.+)\.is_empty\(\)", e)
-    if m:
+    inner = method(e, "is_empty", args=0)
+    if inner is not None:
         f = facts.copy()
-        return [("", f)] if f.add(f"{m.group(1)}.count()", (0, 0) if truth else (1, None)) else []
+        return [("", f)] if f.add(count(inner), (0, 0) if truth else (1, None)) else []
     f = facts.copy()
-    if module.type_of(e, env) == "boolean" or re.fullmatch(r"[\w.]+", e):
+    if type_text(module.type_of(e, env)) == "boolean" or chain(e) is not None:
         if not f.add(e, (1, 1) if truth else (0, 0)):
             return []
     return [("", f)]
@@ -547,68 +589,93 @@ def assume(module, env, e, truth, facts):
 
 
 # ---------------------------------------------------------------------------------------------------------------------
-# Blocks and statements
+# Statements
 
-def blocks(lines):
-    i = 0
+def own(s):
+    """The expressions a statement writes on its own line, not those of the blocks it opens."""
+    k = s["kind"]
+    fields = {"let": ("value",), "assign": ("target", "value"), "expr": ("value",), "return": ("value",),
+              "fail": ("value",), "if": ("condition",), "while": ("condition",), "for": ("iterable",),
+              "conditional": ("subject",), "compare": ("left", "right"), "condition": ("test",), "task": ("value",)}.get(k, ())
+    out = [s[f] for f in fields if s.get(f)]
+    if k == "inject":
+        out += [b["value"] for b in s["bindings"]]
+    if k == "region":
+        out += [c for c in s["constraints"]]
+    return out
 
-    def parse(ind):
-        nonlocal i
-        out = []
-        while i < len(lines):
-            l = lines[i]
-            d = len(l) - len(l.lstrip())
-            if d < ind:
-                break
-            i += 1
-            text = l.strip()
-            while text.count("(") + text.count("[") > text.count(")") + text.count("]") and i < len(lines):
-                text += " " + lines[i].strip()
-                i += 1
-            text = text.replace("( ", "(").replace("[ ", "[").replace(", )", ")").replace(", ]", "]")
-            kids = []
-            if text.endswith(":") and i < len(lines):
-                nd = len(lines[i]) - len(lines[i].lstrip())
-                if nd > d:
-                    kids = parse(nd)
-            out.append((text, kids))
-        return out
 
-    return parse(len(lines[0]) - len(lines[0].lstrip()) if lines else 0)
+def blocks(s):
+    """The blocks of statements a statement opens, its `else`'s and its conditions' among them."""
+    out = [s.get("body", [])]
+    for c in s.get("conditions", []):
+        out.append(c["body"])
+    if s.get("else"):
+        out.append(s["else"]["body"])
+    for r in s.get("orelse", []):
+        out.append(r["body"])
+    return out
+
+
+def statements(items):
+    """Every statement of a block, and of the blocks inside it, each before the statements inside it."""
+    for s in items:
+        yield s
+        for c in s.get("conditions", []):
+            yield c
+            yield from statements(c["body"])
+        yield from statements(s.get("body", []))
+        if s.get("else"):
+            yield from statements(s["else"]["body"])
+        for r in s.get("orelse", []):
+            yield r
+            yield from statements(r["body"])
+
+
+def mutable_args(s):
+    """The names a statement passes as `mutable`."""
+    return {root(m["value"]) for e in own(s) for m in ytree.walk(e) if m["kind"] == "mutable" and root(m["value"])}
+
+
+def changes(s):
+    """The names a statement changes on its own line."""
+    out = set()
+    if s["kind"] == "assign" and plain(s["target"]):
+        out.add(root(s["target"]))
+    if not (s["kind"] == "let" and s["mutable"]):
+        out |= mutable_args(s)
+    if s["kind"] == "expr":
+        obj = method(unwrap(s["value"]), "push", "extend", "set_number", "insert_first", "clear")
+        if obj is not None and chain(obj):
+            out.add(chain(obj).split(".")[0])
+    if s["kind"] == "let":
+        out.add(s["name"])
+    if s["kind"] == "for":
+        out.add(s["name"])
+    return out
 
 
 def mutated(items):
     """The names a block changes."""
     out = set()
-    for t, kids in items:
-        m = re.match(r"(\w+)[\w.\[\]]* := ", t)
-        if m:
-            out.add(m.group(1))
-        if not t.startswith("mutable "):
-            for mm in re.finditer(r"mutable (\w+)", t):
-                out.add(mm.group(1))
-        m = re.match(r"(\w+)[\w.]*\.(push|extend|set_number|insert_first|clear)\(", t)
-        if m:
-            out.add(m.group(1))
-        m = re.match(r"(?:mutable )?(\w+) = ", t)
-        if m:
-            out.add(m.group(1))
-        m = re.match(r"for (\w+) in", t)
-        if m:
-            out.add(m.group(1))
-        out |= mutated(kids)
+    for s in statements(items):
+        out |= changes(s)
     return out
 
 
 def grown_only(items, names):
     """The names among `names` that a block changes only by adding to them, with `push` or `extend`."""
     other = set()
-    for t, kids in walk(items):
+    for s in statements(items):
         for n in names:
-            if re.match(rf"{n}\.(push|extend)\(", t):
+            obj = method(unwrap(s["value"]), "push", "extend") if s["kind"] == "expr" else None
+            if obj is not None and obj["kind"] == "name" and obj["name"] == n:
                 continue
-            if re.match(rf"(mutable )?{n}\b[\w.\[\]]* :?= ", t) or re.search(rf"mutable {n}\b", t) or \
-                    re.match(rf"{n}[\w.]*\.(set_number|insert_first|clear)\(", t):
+            if (s["kind"] == "let" and s["name"] == n) or (s["kind"] == "assign" and root(s["target"]) == n and plain(s["target"])) \
+                    or n in mutable_args(s):
+                other.add(n)
+            obj = method(unwrap(s["value"]), "set_number", "insert_first", "clear") if s["kind"] == "expr" else None
+            if obj is not None and chain(obj) and chain(obj).split(".")[0] == n:
                 other.add(n)
     return {n for n in names if n not in other}
 
@@ -622,38 +689,52 @@ def widen(facts, names, grown):
             facts.known[f"{n}.count()"] = (keep[0], None)
 
 
-def walk(items):
-    for t, kids in items:
-        yield t, kids
-        yield from walk(kids)
+def last_expression(s):
+    """The expression a statement's line ends with, before any `:`."""
+    field = {"let": "value", "assign": "value", "expr": "value", "return": "value", "task": "value", "fail": "value",
+             "for": "iterable", "conditional": "subject", "compare": "right"}.get(s["kind"])
+    return s.get(field) if field else None
 
 
-def failing_name(text):
-    if not re.search(r" or fail(:)?$", text) or text.startswith(("region ", "within ", "if ", "while ")):
+def failing_name(s):
+    """The name of a statement's `or fail` site: the name it binds, or the method or function it calls; None when it
+    has none."""
+    e = last_expression(s)
+    if e is None or e["kind"] != "or_fail":
         return None
-    m = re.match(r"(?:mutable )?(\w+) :?= ", text)
-    if m:
-        return m.group(1)
-    m = re.match(r"([\w.]+)\(", text)
-    return m.group(1).split(".")[-1] if m else "call"
+    if s["kind"] == "let":
+        return s["name"]
+    if s["kind"] == "assign" and s["target"]["kind"] == "name":
+        return s["target"]["name"]
+    inner = unwrap(e)
+    if s["kind"] in ("expr", "assign") and inner["kind"] == "call" and chain(inner["callee"]):
+        if s["kind"] == "expr":
+            return chain(inner["callee"]).split(".")[-1]
+    return "call"
+
+
+def site(s):
+    """What identifies an `or fail` site: two that read the same are one."""
+    t = s.get("name") if s["kind"] == "let" else text(s["target"]) if s["kind"] == "assign" else None
+    return s["kind"], s.get("mutable"), t, text(last_expression(s))
 
 
 class Function:
-    def __init__(self, module, name, body):
-        self.module, self.name = module, name
-        self.env = {p: t for p, t in module.params.get(name, {}).items() if t}
-        result, rtype = module.results.get(name, (None, None))
+    def __init__(self, module, decl):
+        self.module, self.name = module, decl["name"]
+        self.env = {p: t for p, t in module.params.get(self.name, {}).items() if t}
+        result, rtype = module.results.get(self.name, (None, None))
         if result and rtype:
             self.env[result] = rtype
         self.problems = []
-        items = blocks(body)
+        items = decl["body"]
         self.fails_total, self.fails_seen, self.order = {}, {}, {}
-        for t, _ in walk(items):
-            n = failing_name(t)
+        for s in statements(items):
+            n = failing_name(s)
             if n:
                 self.fails_total[n] = self.fails_total.get(n, 0) + 1
         starts = [Facts(module, self.env)]
-        for kind, pred in module.contracts.get(name, []):
+        for kind, pred in module.contracts.get(self.name, []):
             if kind == "where":
                 starts = [f for s in starts for f in assume(module, self.env, pred, True, s)][:1]
         found = self.seq(items, starts[0]) if starts else []
@@ -664,127 +745,92 @@ class Function:
                 seen.add(key)
                 self.paths.append((kind, steps))
 
-    def problem(self, text):
-        if text not in self.problems:
-            self.problems.append(text)
+    def problem(self, t):
+        if t not in self.problems:
+            self.problems.append(t)
 
-    def note_type(self, text):
-        m = re.match(r"(?:mutable )?(\w+) = (.*)$", text)
-        if m and not text.startswith(("if ", "while ", "conditional ", "compare ", "for ", "return ", "assert ")):
-            name, rhs = m.groups()
-            rhs = re.sub(r" or fail$", "", rhs)
-            rhs = re.sub(r" forever because \".*\"", "", rhs)
-            ty = self.module.type_of(rhs, self.env)
-            if ty == "int":
-                ty = "int32"
-            if ty and name not in self.env:
-                self.env[name] = ty
-        m = re.match(r"for (\w+) in (.*):$", text)
-        if m:
-            src = m.group(2)
-            ty = self.module.type_of(src, self.env) or ""
-            mm = re.fullmatch(r"list<element_type=(.+)>", ty)
-            if mm:
-                self.env[m.group(1)] = mm.group(1)
-            elif src.startswith("range("):
-                ty = self.module.type_of(re.search(r"from: ([^,]+)", src).group(1), self.env) or "int32"
-                self.env[m.group(1)] = "int32" if ty == "int" else ty
+    def note_type(self, s):
+        """The type of a name a statement binds, or of a loop's variable, when it is known."""
+        if s["kind"] == "let":
+            t = self.module.type_of(unwrap(s["value"]), self.env)
+            if type_text(t) == "int":
+                t = ty("int32")
+            if t and s["name"] not in self.env:
+                self.env[s["name"]] = t
+        if s["kind"] == "for":
+            src = s["iterable"]
+            el = element(self.module.type_of(src, self.env))
+            if el:
+                self.env[s["name"]] = el
+            elif src["kind"] == "call" and chain(src["callee"]) == "range":
+                t = self.module.type_of(arg(src, "from"), self.env) or ty("int32")
+                self.env[s["name"]] = ty("int32") if type_text(t) == "int" else t
 
     def seq(self, items, facts):
         """[(kind, steps, facts)] for a block entered with `facts`."""
-        states, done, k = [("next", [], facts)], [], 0
-        while k < len(items):
-            self.note_type(items[k][0])
-            j = k + 1
-            while j < len(items) and items[j][0].startswith(("else ", "orelse ")):
-                j += 1
+        states, done = [("next", [], facts)], []
+        for s in items:
+            self.note_type(s)
             nxt = []
             for kind, steps, f in states:
-                for kind2, steps2, f2 in self.statement(items, k, f.copy()):
+                for kind2, steps2, f2 in self.statement(s, f.copy()):
                     (nxt if kind2 == "next" else done).append((kind2, steps + steps2, f2))
-            states, k = nxt, j
+            states = nxt
         return states + done
 
-    def branch(self, name, pred, truth, body, facts):
+    def branch(self, n, pred, truth, body, facts):
         out = []
         for s, f in outcomes(self.module, self.env, pred, truth, facts):
             for kind, steps, f2 in self.seq(body, f):
-                out.append((kind, [name + s] + steps, f2))
+                out.append((kind, [n + s] + steps, f2))
         return out
 
-    def statement(self, items, k, facts):
-        text, kids = items[k]
-        elses = []
-        j = k + 1
-        while j < len(items) and items[j][0].startswith("else "):
-            elses.append(items[j])
-            j += 1
-        module, env = self.module, self.env
+    def statement(self, s, facts):
+        module, env, k = self.module, self.env, s["kind"]
 
         # `region a is …:` with `orelse region b is …:` after it: a decision whose outcomes are the regions
-        m = re.match(r"region (\w+) is .*:$", text)
-        alternatives = []
-        while m and k + 1 + len(alternatives) < len(items):
-            om = re.match(r"orelse region (\w+) is .*:$", items[k + 1 + len(alternatives)][0])
-            if not om:
-                break
-            alternatives.append((om.group(1), items[k + 1 + len(alternatives)][1]))
-        if alternatives:
+        if k == "region" and s["orelse"]:
             out = []
-            for name, body in [(m.group(1), kids)] + alternatives:
-                out += [(kind, [name] + steps, f2) for kind, steps, f2 in self.seq(body, facts.copy())]
+            for r in [s] + s["orelse"]:
+                out += [(kind, [r["name"]] + steps, f2) for kind, steps, f2 in self.seq(r["body"], facts.copy())]
             return out
 
-        m = re.match(r"if (\w+) = (.*):$", text)
-        if m:
-            name, pred = m.groups()
-            if len(elses) != 1 or not elses[0][0].endswith(":"):
-                self.problem(f"`if {name}` has no named else block")
-                return self.branch(name, pred, True, kids, facts)
-            other = elses[0][0][5:].rstrip(":")
-            return self.branch(name, pred, True, kids, facts) + self.branch(other, pred, False, elses[0][1], facts)
+        if k == "if":
+            if not s["else"]:
+                self.problem(f"`if {s['name']}` has no named else block")
+                return self.branch(s["name"], s["condition"], True, s["body"], facts)
+            return self.branch(s["name"], s["condition"], True, s["body"], facts) + \
+                self.branch(s["else"]["name"], s["condition"], False, s["else"]["body"], facts)
 
-        m = re.match(r"conditional (\w+)(?: = (.*))?:$", text)
-        if m:
-            label = m.group(1)
-            if m.group(2):
-                env.setdefault(label, module.type_of(m.group(2), env))
+        if k == "conditional":
+            label = s["label"]
+            if s["subject"]:
+                env.setdefault(label, module.type_of(s["subject"], env))
             out, rest = [], [facts]
-            for t, body in kids:
-                cm = re.match(r"condition ([\w.]+) = (.*):$", t)
-                if cm:
-                    for f in rest:
-                        out += self.branch(cm.group(1), cm.group(2), True, body, f)
-                    rest = [f2 for f in rest for f2 in assume(module, env, cm.group(2), False, f)]
-                    continue
-                em = re.match(r"else ([\w.]+):$", t)
-                if em:
-                    for f in rest:
-                        out += [(kind, [em.group(1)] + steps, f2) for kind, steps, f2 in self.seq(body, f)]
+            for c in s["conditions"]:
+                for f in rest:
+                    out += self.branch(c["name"], c["test"], True, c["body"], f)
+                rest = [f2 for f in rest for f2 in assume(module, env, c["test"], False, f)]
+            if s["else"]:
+                for f in rest:
+                    out += [(kind, [s["else"]["name"]] + steps, f2) for kind, steps, f2 in self.seq(s["else"]["body"], f)]
             return out
 
-        m = re.match(r"compare (\w+) = (.*) with (.*):$", text)
-        if m:
-            label, a, b = m.groups()
+        if k == "compare":
+            label, a, b = s["label"], s["left"], s["right"]
             possible = facts.possible_orders(a, b)
             if possible is None:
                 self.problem(f"`compare {label}` compares values with no order")
                 possible = {"lt", "eq", "gt"}
             names = {"less": "lt", "equal": "eq", "greater": "gt"}
             out, seen = [], set()
-            for t, body in kids:
-                cm = re.match(r"condition ([\w.]+) = \(?([a-z ]+?)\)?:$", t)
-                em = re.match(r"else ([\w.]+):$", t)
-                if cm:
-                    orders = [names[w] for w in cm.group(2).split(" or ")]
+            for c in s["conditions"] + ([s["else"]] if s["else"] else []):
+                if c["kind"] == "condition":
+                    orders = [names[w["name"]] for w in operands(c["test"], "or")]
                     if seen & set(orders):
                         self.problem(f"`compare {label}`: an order is in two conditions")
-                    name = cm.group(1)
-                elif em:
-                    orders = [o for o in ("lt", "eq", "gt") if o not in seen]
-                    name = em.group(1)
                 else:
-                    continue
+                    orders = [o for o in ("lt", "eq", "gt") if o not in seen]
                 seen |= set(orders)
                 side = []
                 for o in orders:
@@ -792,72 +838,67 @@ class Function:
                     if o in possible and f.constrain(a, b, o):
                         side.append((o, f))
                 for o, f in side:
-                    for kind, steps, f2 in self.seq(body, f):
-                        out.append((kind, [name + (f"'{o}" if len(side) > 1 else "")] + steps, f2))
+                    for kind, steps, f2 in self.seq(c["body"], f):
+                        out.append((kind, [c["name"] + (f"'{o}" if len(side) > 1 else "")] + steps, f2))
             if seen != {"lt", "eq", "gt"}:
                 self.problem(f"`compare {label}` leaves an order out")
             return out
 
-        m = re.match(r"for (\w+) in (.*):$", text)
-        if m:
-            return self.loop(m.group(1), None, m.group(2), kids, elses, facts, f"for {m.group(1)} in {m.group(2)}")
+        if k == "for":
+            return self.loop(s["name"], None, s["iterable"], s, facts, f"for {s['name']} in {text(s['iterable'])}")
 
-        m = re.match(r"while (\w+) = (.*):$", text)
-        if m:
-            return self.loop(m.group(1), m.group(2), None, kids, elses, facts, f"while {m.group(1)}")
+        if k == "while":
+            return self.loop(s["name"], s["condition"], None, s, facts, f"while {s['name']}")
 
-        m = re.match(r"assert \w+ = (.*)$", text)
-        if m:
-            return [("next", [], f) for f in assume(module, env, m.group(1), True, facts)]
-
-        if text.startswith("return"):
+        if k == "return":
             return [("return", [], facts)]
-        if text in ("fail not_reachable", "fail not_implemented"):
-            return [(text[5:], [], facts)]
-        if text.startswith("fail "):
+        if k == "fail" and s["value"] and s["value"]["kind"] == "name" and s["value"]["name"] in EXEMPT:
+            return [(s["value"]["name"], [], facts)]
+        if k == "fail":
             return [("fail", [], facts)]
-        if text in ("continue", "break"):
-            return [(text, [], facts)]
+        if k in ("continue", "break"):
+            return [(k, [], facts)]
 
         outs = [("next", [], facts)]
-        if kids and re.match(r"(region |arena |within |inject\(|inject:)", text):
-            outs = self.seq(kids, facts)
-        n = failing_name(text)
+        if k in ("region", "arena", "inject"):
+            outs = self.seq(s["body"], facts)
+        n = failing_name(s)
         if n:
-            key = (n, text)
+            key = (n, site(s))
             if key not in self.order:
                 self.fails_seen[n] = self.fails_seen.get(n, 0) + 1
                 self.order[key] = self.fails_seen[n]
             label = n if self.fails_total[n] == 1 else f"{n}'{self.order[key]}"
             outs = outs + [("fail", [f"{label}'fails"], facts.copy())]
         # what the statement changes, and what a new name stands for
-        changed = mutated([(text, [])])
-        grown = re.match(r"(\w+)\.(push|extend)\(", text)
-        if grown:
+        changed = changes(s)
+        obj = method(unwrap(s["value"]), "push", "extend") if k == "expr" else None
+        if obj is not None and obj["kind"] == "name":
             for kind, steps, f in outs:
-                f.grow(grown.group(1), 1 if grown.group(2) == "push" else None)
-            changed.discard(grown.group(1))
-        mm = re.match(r"(?:mutable )?(\w+) :?= (.*?)( or fail)?$", text)
-        if mm:
-            changed.discard(mm.group(1))
+                f.grow(obj["name"], 1 if unwrap(s["value"])["callee"]["name"] == "push" else None)
+            changed.discard(obj["name"])
+        bound = s["name"] if k == "let" else s["target"]["name"] if k == "assign" and s["target"]["kind"] == "name" else None
+        if bound:
+            changed.discard(bound)
         for kind, steps, f in outs:
             if kind != "next":
                 continue
-            for name in changed:
-                f.forget(name)
-            if mm and not text.startswith(("if ", "while ", "for ", "conditional ", "compare ", "return ", "assert ")):
-                f.bind(mm.group(1), re.sub(r" forever because \".*\"", "", mm.group(2)))
+            for c in changed:
+                f.forget(c)
+            if bound:
+                f.bind(bound, unwrap(s["value"]))
         return outs
 
     def count_of(self, src, facts):
         """The interval of the number of elements a `for` goes over."""
-        m = re.fullmatch(r"range\(from: (.+), (below|through): (.+)\)", src)
-        if m:
-            a, b = facts.interval(m.group(1)), facts.interval(m.group(3))
-            extra = 1 if m.group(2) == "through" else 0
-            same = split_at(m.group(3), " + ")
-            if same and same[0] == m.group(1).strip() and self.module.value(same[1]) is not None:
-                n = self.module.value(same[1]) + extra
+        if src["kind"] == "call" and chain(src["callee"]) == "range" and len(src["args"]) == 2 and src["args"][0]["name"] == "from" \
+                and src["args"][1]["name"] in ("below", "through"):
+            start, end = src["args"][0]["value"], src["args"][1]["value"]
+            a, b = facts.interval(start), facts.interval(end)
+            extra = 1 if src["args"][1]["name"] == "through" else 0
+            if end["kind"] == "binary" and end["op"] == "+" and not end.get("parens") and text(end["left"], False) == text(start, False) \
+                    and self.module.value(end["right"]) is not None:
+                n = self.module.value(end["right"]) + extra
                 return n, n
             if a[0] is not None and a[0] == a[1]:
                 return (None if b[0] is None else max(0, b[0] - a[0] + extra),
@@ -868,18 +909,19 @@ class Function:
             return n, n
         f = facts.copy()
         f.bind("loop'source", src)
-        return meet(meet(f.interval("loop'source.count()"), facts.interval(f"{src}.count()")), (0, None))
+        return meet(meet(f.interval(count(name("loop'source"))), facts.interval(count(src))), (0, None))
 
-    def loop(self, var, pred, src, kids, elses, facts, what):
+    def loop(self, var, pred, src, s, facts, what):
         module, env = self.module, self.env
         out = []
-        else_name = elses[0][0][5:].rstrip(":") if elses else None
-        else_body = elses[0][1] if elses else []
+        else_name = s["else"]["name"] if s["else"] else None
+        else_body = s["else"]["body"] if s["else"] else []
+        kids = s["body"]
 
         # the loop never runs
         if pred is None:
-            count = self.count_of(src, facts)
-            never = [] if (count[0] or 0) >= 1 else [("", self.with_count(src, facts, (0, 0)))]
+            n = self.count_of(src, facts)
+            never = [] if (n[0] or 0) >= 1 else [("", self.with_count(src, facts, (0, 0)))]
         else:
             never = outcomes(module, env, pred, False, facts)
         if never and else_name is None:
@@ -887,29 +929,29 @@ class Function:
         if not never and else_name is not None:
             self.problem(f"`{what}` runs for sure, and needs no else")
         if else_name is not None:
-            for s, f in never:
+            for suffix, f in never:
                 for kind, steps, f2 in self.seq(else_body, f):
-                    out.append((kind, [else_name + s] + steps, f2))
+                    out.append((kind, [else_name + suffix] + steps, f2))
 
         # the last pass: the first, or a later one, after which the facts on what the body changes no longer hold
         changed = mutated(kids)
         grown = grown_only(kids, changed)
-        count = self.count_of(src, facts) if pred is None else None
+        n = self.count_of(src, facts) if pred is None else None
         for many in (False, True):
             base = facts.copy()
             if many:
                 widen(base, changed, grown)
             if pred is None:
-                if empty(meet(count, (2, None) if many else (1, None))):
+                if empty(meet(n, (2, None) if many else (1, None))):
                     continue
                 entries = [("", self.with_count(src, base, (2, None) if many else (1, None)))]
             else:
                 entries = outcomes(module, env, pred, True, base)
-            for s, f in entries:
+            for suffix, f in entries:
                 f.forget(var)
                 for kind, steps, f2 in self.seq(kids, f):
                     goes_on = kind in ("next", "continue")
-                    if pred is None and goes_on and empty(meet(count, (2, None) if many else (1, 1))):
+                    if pred is None and goes_on and empty(meet(n, (2, None) if many else (1, 1))):
                         # a pass that goes on is the last only when the elements run out
                         continue
                     ends = [f2]
@@ -921,39 +963,24 @@ class Function:
                         ends = assume(module, env, pred, False, f2)[:1]
                     for f3 in ends:
                         out.append(("next" if kind in ("next", "continue", "break") else kind,
-                                    [var + ("'many" if many else "") + s] + steps, f3))
+                                    [var + ("'many" if many else "") + suffix] + steps, f3))
         return out
 
     def with_count(self, src, facts, interval):
         f = facts.copy()
-        if not src.startswith("range("):
-            f.add(f"{src}.count()", interval)
+        if not (src["kind"] == "call" and chain(src["callee"]) == "range"):
+            f.add(count(src), interval)
         return f
 
 
 def functions(module):
-    lines = module.lines
-    i = 0
-    while i < len(lines):
-        m = re.match(r"\s*function (\w+)\(", lines[i])
-        if m:
-            d = len(lines[i]) - len(lines[i].lstrip())
-            j = i
-            while j < len(lines) and not lines[j].rstrip().endswith(":"):
-                j += 1
-            body, j = [], j + 1
-            while j < len(lines) and (not lines[j].strip() or len(lines[j]) - len(lines[j].lstrip()) > d):
-                if lines[j].strip() and not lines[j].strip().startswith("--"):
-                    body.append(lines[j])
-                j += 1
-            yield Function(module, m.group(1), body)
-            i = j
-        else:
-            i += 1
+    for _, d in ytree.declarations(module.tree):
+        if d["kind"] == "function":
+            yield Function(module, d)
 
 
-def path_id(name, steps):
-    return " > ".join([name] + steps)
+def path_id(n, steps):
+    return " > ".join([n] + steps)
 
 
 def all_paths(module):

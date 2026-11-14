@@ -11,6 +11,10 @@
 //! - the paths of each module (`y_paths`, Y § 3.5) are the ones `bare/y-facts.json` lists, every loop that may never
 //!   run has its `else`, and the tests together cover every path that needs a test (Y § 3.14).
 //!
+//! The Y source is read through its tree, from `y-parse` (`tools/y-parse`): for the places the facts give, the regions,
+//! the named decisions, the layout and lint rules and each test's `when` here, and in `y_levels`, `y_lint` and
+//! `y_paths`.
+//!
 //! To refresh the Rust after editing the bare files, from `tools/bare-rust`:
 //! `cargo run -q -- weave ../../examples/<name>/bare --out ../../examples/.woven --crate ../../examples/<name>`, then
 //! copy `.woven/src` over `examples/<name>/src` and delete `.woven`.
@@ -338,11 +342,33 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
     // the example's Y files, from the facts: the source, then the source without its tests
     let all: Vec<String> = facts["modules"].as_array().unwrap().iter().map(|m| m["y"].as_str().unwrap().to_string()).collect();
     let code: Vec<String> = all.iter().filter(|y| !y.ends_with(".test.y")).cloned().collect();
-    // `file:line` to the text of that line
+    // a place in a bare body, `file:line`, to the text of that line
     let at = |place: &str| -> String {
         let (file, line) = place.rsplit_once(':').unwrap();
+        assert!(file.starts_with("bare/"), "{place}: a place in the Y source is read from its tree");
         let n: usize = line.parse().unwrap();
         read(&dir.join(file)).lines().nth(n - 1).unwrap_or_else(|| panic!("{place}: no such line")).to_string()
+    };
+    // a place in the Y source, `file:line`, to the nodes of its tree that start on that line; and whether that line is
+    // in the function `name`
+    let trees: BTreeMap<String, y_parse::Node> = all.iter().map(|y| (y.clone(), y_parse::parse_file(&dir.join(y)).unwrap_or_else(|e| panic!("{e}")))).collect();
+    let place = |p: &str| -> (&y_parse::Node, usize) {
+        let (file, line) = p.rsplit_once(':').unwrap();
+        (trees.get(file).unwrap_or_else(|| panic!("{p}: not a Y file of the example")), line.parse().unwrap())
+    };
+    let nodes_at = |p: &str| -> Vec<&y_parse::Node> {
+        let (tree, line) = place(p);
+        let mut out = vec![];
+        tree.walk(&mut |n: &y_parse::Node| {
+            if n.line == line {
+                out.push(n);
+            }
+        });
+        out
+    };
+    let in_function = |p: &str, name: &str| -> bool {
+        let (tree, line) = place(p);
+        tree.find("function").iter().any(|f| f.str("name") == Some(name) && f.line <= line && f.num("end").is_some_and(|e| line <= e))
     };
     let mut listed = BTreeSet::new();
     for (function, decisions) in facts["decisions"].as_object().unwrap() {
@@ -356,40 +382,42 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
             let branches = d["branches"].as_array().unwrap();
             let least = if kind == "for" || kind == "while" { 1 } else { 2 };
             assert!(branches.len() >= least, "{function}: a decision with one named outcome: {branches:?}");
+            let in_fn = function.rsplit('.').next().unwrap();
             if switch {
-                let label = d["label"].as_str().unwrap();
-                assert!(at(d["y"].as_str().unwrap()).trim_start().starts_with(&format!("{kind} {label}")), "{function}: no `{kind} {label}` at {}", d["y"]);
+                let (label, y) = (d["label"].as_str().unwrap(), d["y"].as_str().unwrap());
+                let head = nodes_at(y).into_iter().any(|n| n.kind == kind && n.str("label") == Some(label));
+                assert!(head && in_function(y, in_fn), "{function}: no `{kind} {label}` at {y}");
             }
+            // the alternatives of an `orelse`: the regions its `orelse region` lines add to the first
+            let alternatives: BTreeSet<(usize, &str)> = trees.values().flat_map(|t| t.find("region")).flat_map(|r| r.nodes("orelse")).map(|a| (a.line, a.str("name").unwrap())).collect();
             for (k, b) in branches.iter().enumerate() {
-                let name = b["name"].as_str().unwrap();
-                let y = at(b["y"].as_str().unwrap());
-                let t = y.trim();
-                let named_else = t == format!("else {name}:") || ((kind == "for" || kind == "while") && t == format!("else {name}"));
+                let (name, y) = (b["name"].as_str().unwrap(), b["y"].as_str().unwrap());
+                let line = y.rsplit_once(':').unwrap().1.parse::<usize>().unwrap();
+                let named = |n: &&y_parse::Node, kinds: &[&str]| kinds.contains(&n.kind) && n.str("name") == Some(name);
+                let here = nodes_at(y);
                 let opens = if kind == "orelse" {
                     // alternatives: `region a is …:`, then `orelse region b is …:`
-                    let head = if k == 0 { format!("region {name} is ") } else { format!("orelse region {name} is ") };
-                    t.starts_with(&head) && t.ends_with(':')
+                    here.iter().any(|n| named(n, &["region"]) && (k > 0) == alternatives.contains(&(line, name)))
                 } else if k > 0 {
-                    named_else || (switch && t.starts_with(&format!("condition {name} = ")) && t.ends_with(':'))
+                    here.iter().any(|n| named(n, if switch { &["else", "condition"] } else { &["else"] }))
                 } else if switch {
-                    t.starts_with(&format!("condition {name} = ")) && t.ends_with(':')
-                } else if kind == "for" {
-                    t.starts_with(&format!("for {name} in ")) && t.ends_with(':')
+                    here.iter().any(|n| named(n, &["condition"]))
                 } else {
-                    t.starts_with(&format!("{kind} {name} = ")) && t.ends_with(':')
+                    here.iter().any(|n| named(n, &[kind]))
                 };
-                assert!(opens, "{function}#{name}: not at {}: `{y}`", b["y"]);
+                assert!(opens && in_function(y, in_fn), "{function}#{name}: not at {y}");
                 assert!(at(b["bare"].as_str().unwrap()).contains(&format!("#{name}")), "{function}#{name}: not at {}", b["bare"]);
-                listed.insert(format!("{}#{name}", function.rsplit('.').next().unwrap()));
+                listed.insert(format!("{in_fn}#{name}"));
             }
             let last = branches.last().unwrap()["y"].as_str().unwrap();
-            assert!(kind != "if" || at(last).trim().starts_with("else "), "{function}: the `if` ends without an `else`");
+            assert!(kind != "if" || nodes_at(last).iter().any(|n| n.kind == "else"), "{function}: the `if` ends without an `else`");
         }
     }
     // each copy the lowering made is where the facts say, in the Y source and in the bare body
     for c in facts["copies"].as_array().unwrap() {
         let what = c["what"].as_str().unwrap();
-        assert!(at(c["y"].as_str().unwrap()).contains(what), "copy of {what}: not at {}", c["y"]);
+        let named = nodes_at(c["y"].as_str().unwrap()).into_iter().any(|n| matches!(n.kind, "name" | "member" | "index") && y_paths::expression_text(n) == what);
+        assert!(named, "copy of {what}: not at {}", c["y"]);
         assert!(at(c["bare"].as_str().unwrap()).contains("// y: a copy"), "copy of {what}: not marked at {}", c["bare"]);
     }
     // each claim outside a region (`console.read_line() forever because "…"`) is where the facts say: its Y line gives
@@ -398,7 +426,9 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
     for c in facts["claims"].as_array().map_or(&[][..], |v| v) {
         let because = format!("because \"{}\"", c["because"].as_str().unwrap());
         let (y, bare) = (c["y"].as_str().unwrap(), c["bare"].as_str().unwrap());
-        assert!(at(y).contains(&because), "claim {because}: not at {y}");
+        // `e forever because "…"`, or a region's constraint with that reason
+        let said = nodes_at(y).into_iter().any(|n| matches!(n.kind, "forever" | "constraint") && n.str("because") == c["because"].as_str());
+        assert!(said, "claim {because}: not at {y}");
         assert!(at(bare).split_once("// y:").is_some_and(|(_, m)| m.contains(&because)), "claim {because}: not marked at {bare}");
         assert!(claimed.insert(y.to_string()), "two claims at {y}");
         assert!(!at(bare).contains("// y: region "), "claim {because} at {bare} is a region's: it is a clause of the region subject");
@@ -406,7 +436,13 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
     // each point where the Y source may suspend is where the facts say, and the bare body awaits it there (Y § 3.7)
     for s in facts["suspensions"].as_array().unwrap() {
         let point = s["point"].as_str().unwrap();
-        assert!(at(s["y"].as_str().unwrap()).contains(point), "suspension at {point}: not at {}", s["y"]);
+        // a call of the function the point names, after a path or not; `f()` is such a call with no arguments
+        let (callee, rest) = point.split_once('(').unwrap();
+        let calls = nodes_at(s["y"].as_str().unwrap()).into_iter().any(|n| {
+            let c = (n.kind == "call").then(|| y_paths::expression_text(n.node("callee").unwrap()));
+            c.is_some_and(|c| c == callee || c.ends_with(&format!(".{callee}"))) && (rest != ")" || n.nodes("args").is_empty())
+        });
+        assert!(calls, "suspension at {point}: not at {}", s["y"]);
         assert!(at(s["bare"].as_str().unwrap()).contains(".await"), "suspension at {point}: not awaited at {}", s["bare"]);
     }
     // a region's constraints, its deadline and its `forever` among them, are its subject's in the constraint files
@@ -433,141 +469,48 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
             })
         })
     };
-    for y in &code {
-        let lines: Vec<String> = read(&dir.join(y)).lines().map(str::to_string).collect();
-        let mut function = String::new();
-        for (i, line) in lines.iter().enumerate() {
-            let t = line.trim_start().trim_start_matches("public ");
-            if let Some(rest) = t.strip_prefix("function ") {
-                function = rest.split('(').next().unwrap().to_string();
-            }
-            if let Some(rest) = t.strip_prefix("orelse ").unwrap_or(t).strip_prefix("region ") {
-                let r = rest.split_whitespace().next().unwrap();
-                let at = line.len() - line.trim_start().len();
-                let next = lines[i + 1..].iter().find(|l| !l.trim().is_empty() && l.len() - l.trim_start().len() <= at);
-                let followed = next.is_some_and(|l| l.len() - l.trim_start().len() == at && !l.trim_start().starts_with("orelse ") && !l.trim_start().starts_with("else "));
-                assert!(!followed || ends_in(&function, r), "{y}:{}: Y statements follow the region {function}#{r} in its block, and the bare body does not mark its end, `// y: end region {r}`", i + 1);
-            }
-        }
-    }
-    for y in &code {
-        let mut function = String::new();
-        for (i, line) in read(&dir.join(y)).lines().enumerate() {
-            let t = line.trim_start().trim_start_matches("public ");
-            if let Some(rest) = t.strip_prefix("function ").or_else(|| t.strip_prefix("rule ")) {
-                function = rest.split('(').next().unwrap().to_string();
-            }
-            if let Some(rest) = t.strip_prefix("orelse ").unwrap_or(t).strip_prefix("region ") {
-                let r = rest.split_whitespace().next().unwrap();
-                assert!(regions.iter().any(|n| n.ends_with(&format!("::{function}#{r}"))), "{y}:{}: the region {function}#{r} has no region subject", i + 1);
-            }
-        }
-    }
-    // every named decision of the Y source is listed: `if name = …:`, `while name = …:`, `for name in …:`, `condition
-    // label.name = …:`, `else name:` and `else name`
+    // the Y source's trees (`tools/y-parse`): each region of a function or a rule, in the block of statements it is in,
+    // and the decisions each function names
     let mut in_source = BTreeSet::new();
     for y in &code {
-        let mut function = String::new();
-        let mut last_region = String::new();
-        for line in read(&dir.join(y)).lines() {
-            let words: Vec<&str> = line.split_whitespace().collect();
-            // `region a is …:` and `orelse region b is …:`: the alternatives of an `orelse` are its outcomes
-            if words.first() == Some(&"region") && words.get(2) == Some(&"is") {
-                last_region = words[1].to_string();
-            }
-            if words.first() == Some(&"orelse") && words.get(1) == Some(&"region") && words.get(3) == Some(&"is") {
-                in_source.insert(format!("{function}#{last_region}"));
-                in_source.insert(format!("{function}#{}", words[2]));
-            }
-            if let Some(i) = words.iter().position(|w| *w == "function") {
-                function = words[i + 1].split('(').next().unwrap().to_string();
-            }
-            for (i, w) in words.iter().enumerate() {
-                if (*w == "if" || *w == "while") && words.get(i + 2) == Some(&"=") && line.trim_end().ends_with(':') {
-                    in_source.insert(format!("{function}#{}", words[i + 1]));
+        let tree = y_parse::parse_file(&dir.join(y)).unwrap_or_else(|e| panic!("{e}"));
+        for f in tree.find("function").into_iter().chain(tree.find("rule")) {
+            let function = f.str("name").unwrap();
+            f.walk(&mut |n: &y_parse::Node| {
+                // a block of statements: each region in it has its subject, and when statements follow it, the bare
+                // body marks its end; of `region a is …:` and `orelse region b is …:`, statements follow only `b`
+                let block = n.nodes("body");
+                for (k, s) in block.iter().enumerate().filter(|(_, s)| s.kind == "region") {
+                    let alternatives: Vec<&y_parse::Node> = std::iter::once(*s).chain(s.nodes("orelse")).collect();
+                    for (j, a) in alternatives.iter().enumerate() {
+                        let r = a.str("name").unwrap();
+                        assert!(regions.iter().any(|x| x.ends_with(&format!("::{function}#{r}"))), "{y}:{}: the region {function}#{r} has no region subject", a.line);
+                        let followed = j + 1 == alternatives.len() && k + 1 < block.len();
+                        assert!(!followed || ends_in(function, r), "{y}:{}: Y statements follow the region {function}#{r} in its block, and the bare body does not mark its end, `// y: end region {r}`", a.line);
+                    }
                 }
-                if i == 0 && *w == "for" && words.get(2) == Some(&"in") && line.trim_end().ends_with(':') {
-                    in_source.insert(format!("{function}#{}", words[1]));
+                // every named decision is listed: `if name = …:`, `while name = …:`, `for name in …:`, `condition
+                // label.name = …:`, `else name:` and `else name`; and the alternatives of an `orelse` are its outcomes
+                let mut named = |x: &y_parse::Node| {
+                    in_source.insert(format!("{function}#{}", x.str("name").unwrap()));
+                };
+                match n.kind {
+                    "if" | "while" | "for" => named(n),
+                    "conditional" | "compare" => n.nodes("conditions").into_iter().for_each(&mut named),
+                    "region" if !n.nodes("orelse").is_empty() => std::iter::once(n).chain(n.nodes("orelse")).for_each(&mut named),
+                    _ => {}
                 }
-                // `else name`, the loop's that may never run
-                if i == 0 && *w == "else" && words.len() == 2 && !words[1].ends_with(':') {
-                    in_source.insert(format!("{function}#{}", words[1]));
+                if matches!(n.kind, "if" | "while" | "for" | "conditional" | "compare") {
+                    n.node("else").into_iter().for_each(&mut named);
                 }
-                if i == 0 && *w == "condition" && words.get(2) == Some(&"=") {
-                    in_source.insert(format!("{function}#{}", words[1]));
-                }
-                // `else name:`
-                if *w == "else" && words.get(i + 1).is_some_and(|x| x.ends_with(':') && *x != "if") {
-                    in_source.insert(format!("{function}#{}", words[i + 1].trim_end_matches(':')));
-                }
-            }
+            });
         }
     }
     assert_eq!(listed, in_source, "y-facts.json and the Y source name different decisions");
-    // two blank lines before every declaration after the imports, at module level and in a facet, never more (a lint
-    // rule of Y § 3.1)
+    // the layout rules of Y § 3.1, on the trees
     for y in &all {
-        let lines: Vec<String> = read(&dir.join(y)).lines().map(str::to_string).collect();
-        let mut inside = false;
-        let mut in_facet = false;
-        for (i, l) in lines.iter().enumerate() {
-            let rule = l.trim().len() >= 3 && l.trim().chars().all(|c| c == '-');
-            if !l.is_empty() && !l.starts_with(' ') && !rule && !inside {
-                in_facet = l.starts_with("public facet ") || l.starts_with("facet ");
-            }
-            let level = !l.starts_with(' ') || (in_facet && l.starts_with("    ") && !l.starts_with("     "));
-            let starts = !inside && !l.is_empty() && level && i > 0 && lines[i - 1].is_empty();
-            if rule {
-                inside = !inside;
-            }
-            if starts && !l.starts_with("from ") && !lines[..i].iter().all(|x| x.is_empty() || x.starts_with("module ")) {
-                let blanks = lines[..i].iter().rev().take_while(|x| x.is_empty()).count();
-                assert_eq!(blanks, 2, "{y}:{}: {blanks} blank lines before a declaration, not 2", i + 1);
-            }
-        }
-    }
-    // a blank line before every flow-control statement that is not the first of its block; comments about the
-    // statement may come between (a lint rule of Y § 3.1)
-    let flow = ["if ", "while ", "for ", "conditional ", "break", "continue", "retry", "region ", "arena "];
-    for y in &all {
-        let lines: Vec<String> = read(&dir.join(y)).lines().map(str::to_string).collect();
-        let mut inside = false;
-        for (i, l) in lines.iter().enumerate() {
-            let t = l.trim();
-            if t.len() >= 3 && t.chars().all(|c| c == '-') {
-                inside = !inside;
-            }
-            let inject_block = t.starts_with("inject(");
-            if inside || !(flow.iter().any(|f| t.starts_with(f)) || inject_block) || t.ends_with("covers") {
-                continue;
-            }
-            let mut k = i;
-            while k > 0 && lines[k - 1].trim().starts_with("--") {
-                k -= 1;
-            }
-            let above = lines[k - 1].trim_end();
-            assert!(above.is_empty() || above.ends_with(':'), "{y}:{}: no blank line before `{t}`", i + 1);
-        }
-    }
-    // a blank line comes before every comment line, unless the line above is a comment too or opens a block; the
-    // lines of a documentation block are not comments in this sense (a lint rule of Y § 3.1)
-    for y in &all {
-        let lines: Vec<String> = read(&dir.join(y)).lines().map(str::to_string).collect();
-        let is_rule = |t: &str| t.len() >= 3 && t.chars().all(|c| c == '-');
-        let mut inside = false;
-        for (i, l) in lines.iter().enumerate() {
-            let t = l.trim();
-            if is_rule(t) {
-                inside = !inside;
-                continue;
-            }
-            if inside || !t.starts_with("--") || i == 0 {
-                continue;
-            }
-            let above = lines[i - 1].trim();
-            let allowed = above.is_empty() || (above.starts_with("--") && !is_rule(above)) || above.ends_with(':');
-            assert!(allowed, "{y}:{}: no blank line before the comment `{t}`", i + 1);
-        }
+        let errors = layout(y, &y_parse::parse_file(&dir.join(y)).unwrap_or_else(|e| panic!("{e}")));
+        assert!(errors.is_empty(), "{errors:#?}");
     }
     // the paths of the module are the ones the facts list, with how each ends; every loop in every Y file that may never
     // run has its `else`, and none that is sure to run has one (Y § 3.5)
@@ -600,155 +543,24 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
     let required: BTreeSet<String> = paths.iter().filter(|(_, k)| !y_paths::EXEMPT.contains(&k.as_str())).map(|(p, _)| p.clone()).collect();
     let covered: BTreeSet<String> = facts["tests"].as_object().unwrap().values().flat_map(|t| t["covers"].as_array().unwrap().iter().map(|c| c.as_str().unwrap().to_string())).collect();
     assert_eq!(covered, required, "the paths the tests cover and the paths of the module differ");
-    // documentation roles of one kind sit together, and one blank line separates the kinds (a lint rule of Y § 3.2)
-    for y in &code {
-        let source = read(&dir.join(y));
-        let lines: Vec<&str> = source.lines().collect();
-        let is_rule = |l: &str| l.trim().len() >= 3 && l.trim().chars().all(|c| c == '-');
-        let mut i = 0;
-        while i < lines.len() {
-            if !is_rule(lines[i]) {
-                i += 1;
-                continue;
-            }
-            let end = i + 1 + lines[i + 1..].iter().position(|l| is_rule(l)).unwrap();
-            let indent = lines[i].len() - lines[i].trim_start().len();
-            let header: Vec<&str> = lines[end + 1..].iter().copied().take_while(|l| !l.trim().is_empty()).scan(false, |done, l| {
-                if *done { return None; }
-                *done = l.trim_end().ends_with(':');
-                Some(l)
-            }).collect();
-            let text = header.join(" ");
-            let params: Vec<String> = text.split_once('(').and_then(|(_, r)| r.split_once(')')).map(|(p, _)| p.split(',').map(|x| x.trim().trim_start_matches("mutable ").to_string()).collect()).unwrap_or_default();
-            let result = text.split_once(" returns ").map(|(_, r)| r.split_whitespace().next().unwrap().to_string());
-            // the capabilities are the parameters marked `injected`
-            let caps: Vec<String> = params.iter().filter_map(|p| p.strip_prefix("injected ").map(str::to_string)).collect();
-            let kind = |l: &str| -> Option<String> {
-                let t = l.trim();
-                if t.starts_with("fails ") {
-                    return Some("fails".into());
-                }
-                let name = t.split_once(':')?.0;
-                if name.is_empty() || !name.chars().all(|c| c.is_ascii_lowercase() || c == '_') {
-                    return None;
-                }
-                Some(if params.iter().any(|p| p == name) { "parameter".into() } else if result.as_deref() == Some(name) { "result".into() } else if caps.iter().any(|c| c == name) { "capability".into() } else { format!("role {name}") })
-            };
-            let (mut previous, mut blanks): (Option<String>, usize) = (None, 0);
-            for (k, l) in lines[i + 1..end].iter().enumerate() {
-                let at = i + 2 + k;
-                if l.trim().is_empty() {
-                    blanks += 1;
-                } else if l.len() - l.trim_start().len() > indent {
-                    blanks = 0;
-                } else if let Some(this) = kind(l) {
-                    if let Some(before) = &previous {
-                        let want = usize::from(*before != this);
-                        assert_eq!(blanks, want, "{y}:{at}: {blanks} blank lines between a {before} and a {this}, not {want}");
-                    }
-                    (previous, blanks) = (Some(this), 0);
-                } else {
-                    (previous, blanks) = (None, 0);
-                }
-            }
-            i = end + 1;
-        }
-    }
-    // no parentheses around a single element: a name, a literal, a field path, an index or a call (a lint rule of Y § 3.1)
+    // the lint rules of Y § 3.1, § 3.2 and § 3.5 the examples keep, on the trees; an `else if` ladder and an `else`
+    // without a name are refused by the parser
     for y in &all {
-        for (n, line) in read(&dir.join(y)).lines().enumerate() {
-            if line.trim_start().starts_with("--") {
-                continue;
-            }
-            let chars: Vec<char> = line.chars().collect();
-            for (k, c) in chars.iter().enumerate() {
-                let opens_group = *c == '(' && (k == 0 || !(chars[k - 1].is_alphanumeric() || "_)]>\"".contains(chars[k - 1])));
-                if !opens_group {
-                    continue;
-                }
-                let (mut depth, mut in_string, mut grouped) = (0, false, false);
-                for d in &chars[k..] {
-                    match d {
-                        '"' => in_string = !in_string,
-                        '(' | '[' if !in_string => depth += 1,
-                        ')' | ']' if !in_string => {
-                            depth -= 1;
-                            if depth == 0 {
-                                break;
-                            }
-                        }
-                        ' ' | ',' if !in_string && depth == 1 => grouped = true,
-                        _ => {}
-                    }
-                }
-                assert!(grouped, "{y}:{}: parentheses around a single element: `{}`", n + 1, line.trim());
-            }
-        }
-    }
-    // a name is changed, by `:=` or as a `mutable` argument, only when it was declared `mutable` (Y § 3.1, § 3.6)
-    for y in &all {
-        let mut declared: BTreeSet<String> = BTreeSet::new();
-        // a migration's body gives each new field its value with `:=` (Y § 3.12), which changes no name
-        let mut migration: Option<usize> = None;
-        for (n, line) in read(&dir.join(y)).lines().enumerate() {
-            let t = line.trim();
-            let indent = line.len() - line.trim_start().len();
-            if migration.is_some_and(|at| !t.is_empty() && indent <= at) {
-                migration = None;
-            }
-            if t.starts_with("migrate ") {
-                migration = Some(indent);
-                continue;
-            }
-            if migration.is_some() {
-                continue;
-            }
-            if t.starts_with("function ") || t.starts_with("test ") {
-                declared.clear();
-                if let Some((_, params)) = t.split_once('(') {
-                    for p in params.split(')').next().unwrap().split(',') {
-                        if let Some(name) = p.trim().trim_start_matches("injected ").strip_prefix("mutable ") {
-                            declared.insert(name.to_string());
-                        }
-                    }
-                }
-            }
-            if let Some((name, _)) = t.strip_prefix("mutable ").and_then(|r| r.split_once(" = ")) {
-                declared.insert(name.to_string());
-            }
-            let mut changed: Vec<String> = Vec::new();
-            if let Some((target, _)) = t.split_once(" := ") {
-                changed.push(target.split('.').next().unwrap().to_string());
-            }
-            for (k, _) in t.match_indices("mutable ") {
-                if k > 0 && (t[..k].ends_with('(') || t[..k].ends_with(", ")) && !t.starts_with("function ") {
-                    changed.push(t[k + 8..].split([',', ')']).next().unwrap().to_string());
-                }
-            }
-            for name in changed {
-                assert!(declared.contains(&name), "{y}:{}: `{name}` changes but is not declared `mutable`", n + 1);
-            }
-        }
-    }
-    // `if` chooses between two ways; a ladder of `else if`s is a lint error, written as a `conditional` (Y § 3.5)
-    for y in &all {
-        for (n, line) in read(&dir.join(y)).lines().enumerate() {
-            assert!(!line.trim_start().starts_with("else if "), "{y}:{}: an `else if` ladder, not a `conditional`", n + 1);
-        }
-    }
-    // no `else` goes without a name
-    for y in &all {
-        assert!(!read(&dir.join(y)).lines().any(|l| l.trim() == "else:"), "{y}: an `else` without a name");
+        let errors = lints(y, &trees[y], code.contains(y));
+        assert!(errors.is_empty(), "{errors:#?}");
     }
     // each test covers what its Y source declares and its Rust comment repeats; a test that covers no path of its own
     // (it checks what the paths do not tell apart, such as which failure a call gives) says nothing of covering
     let test_module = facts["modules"].as_array().unwrap().iter().find(|m| m["y"].as_str().unwrap().ends_with(".test.y")).unwrap();
     let rust_tests = read(&dir.join(test_module["rust"].as_str().unwrap()));
+    let test_tree = y_parse::parse_file(&dir.join(test_module["y"].as_str().unwrap())).unwrap_or_else(|e| panic!("{e}"));
     for (test, t) in facts["tests"].as_object().unwrap() {
         let covers: Vec<&str> = t["covers"].as_array().unwrap().iter().map(|c| c.as_str().unwrap()).collect();
-        let y = at(t["y"].as_str().unwrap());
-        let header = if covers.is_empty() { format!("test {test}:") } else { format!("test {test}") };
-        assert_eq!(y, header, "{test}: not at {}", t["y"]);
+        // the test is at the place the facts give, and covers there what they say
+        let declared = nodes_at(t["y"].as_str().unwrap()).into_iter().find(|n| n.kind == "test" && n.str("name") == Some(test.as_str()));
+        let declared = declared.unwrap_or_else(|| panic!("{test}: not at {}", t["y"]));
+        let in_y: Vec<&str> = declared.node("covers").map(|c| c.str("text").unwrap()).into_iter().collect();
+        assert_eq!(in_y, covers, "{test}: the Y source and y-facts.json cover different paths");
         let body = rust_tests.split(&format!("fn {test}() {{")).nth(1).unwrap_or_else(|| panic!("{test}: no Rust test"));
         let comment: String = body.lines().skip(1).take_while(|l| l.trim_start().starts_with("//")).map(|l| l.trim_start().trim_start_matches("//").trim()).collect::<Vec<_>>().join(" ");
         let rust_covers: Vec<&str> = comment.strip_prefix("y: covers").map_or(vec![], |c| c.split(',').map(str::trim).collect());
@@ -758,30 +570,157 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
         assert!(covers.len() <= 1, "{test}: covers {} paths, not one", covers.len());
         if let Some(path) = covers.first() {
             let function = path.split(" > ").next().unwrap();
-            let when = when_of(&read(&dir.join(test_module["y"].as_str().unwrap())), test);
-            assert_eq!(when.len(), 1, "{test}: `when` holds {} statements, not the one call: {when:?}", when.len());
-            let called = when[0].contains(&format!("{function}(")) && !when[0].contains(&format!(".{function}("));
-            assert!(called, "{test}: covers a path of `{function}`, but `when` does not call it: `{}`", when[0]);
+            let when = when_of(&test_tree, test);
+            let lines: Vec<usize> = when.iter().map(|w| w.line).collect();
+            assert_eq!(when.len(), 1, "{test}: `when` holds {} statements, not the one call, at lines {lines:?}", when.len());
+            // a call of the function by its name, and none of a method of that name
+            let callees: Vec<&y_parse::Node> = when[0].find("call").into_iter().map(|c| c.node("callee").unwrap()).collect();
+            let named = |kind: &str| callees.iter().any(|c| c.kind == kind && c.str("name") == Some(function));
+            assert!(named("name") && !named("member"), "{test}: covers a path of `{function}`, but `when`, at line {}, does not call it", when[0].line);
         }
     }
 }
 
-/// The statements of a test's `when` section, each with the lines it continues onto.
-fn when_of(source: &str, test: &str) -> Vec<String> {
-    let lines: Vec<&str> = source.lines().collect();
-    let start = lines.iter().position(|l| l.starts_with(&format!("test {test}")) && l[5 + test.len()..].trim_start_matches(':').is_empty()).unwrap();
-    let begin = start + lines[start..].iter().position(|l| l.trim() == "when:").unwrap_or_else(|| panic!("{test}: no `when`"));
-    let body: Vec<&str> = lines[begin + 1..].iter().copied().take_while(|l| l.starts_with("        ") || l.trim().is_empty()).filter(|l| !l.trim().is_empty() && !l.trim().starts_with("--")).collect();
-    let indent = body.first().map_or(0, |l| l.len() - l.trim_start().len());
-    let mut out: Vec<String> = vec![];
-    for l in body {
-        if l.len() - l.trim_start().len() == indent {
-            out.push(l.trim().to_string());
-        } else {
-            out.last_mut().unwrap().push_str(&format!(" {}", l.trim()));
+/// The layout rules of Y § 3.1 that the examples keep, read from a file's tree (the blank lines and comments it records):
+///
+/// - two blank lines before every declaration after the imports, at module level and in a facet, never more, when any
+///   blank line comes before it; and so before its documentation block, and before a comment at that level;
+/// - a blank line before every flow-control statement that is not the first of its block (`if`, `while`, `for`,
+///   `conditional`, `region`, `arena`, `inject`, `break`, `continue`, `retry`); comments about the statement may come
+///   between;
+/// - a blank line before every comment line, unless the line above is a comment too or opens a block; the lines of a
+///   documentation block are not comments in this sense.
+fn layout(y: &str, tree: &y_parse::Node) -> Vec<String> {
+    let mut errors = vec![];
+    let decls = tree.nodes("decls");
+    let module = decls.iter().find(|d| d.kind == "module").map(|d| d.line);
+    // a piece of the file that the first rule judges: what is above it is blank, or the `module` line, or more
+    let mut judge = |line: usize, blank: usize| {
+        let above = line - blank - 1;
+        if blank > 0 && above != 0 && Some(above) != module && blank != 2 {
+            errors.push(format!("{y}:{line}: {blank} blank lines before a declaration, not 2"));
+        }
+    };
+    let top: Vec<&y_parse::Node> = decls.iter().flat_map(|d| if d.kind == "facet" { [vec![*d], d.nodes("decls")].concat() } else { vec![*d] }).collect();
+    for d in top.iter().filter(|d| d.kind != "module" && d.kind != "import") {
+        if let Some(doc) = d.node("doc") {
+            judge(doc.line, doc.num("blank").unwrap());
+        }
+        judge(d.line, d.num("blank").unwrap());
+    }
+    // a comment at the level of the declarations: at the left edge, or indented once in a facet
+    let edge: Vec<(usize, bool)> = decls
+        .iter()
+        .map(|d| (d.line, d.kind == "facet"))
+        .chain(tree.nodes("comments").iter().filter(|c| c.flag("alone") && c.num("indent") == Some(0)).map(|c| (c.line, false)))
+        .collect();
+    let in_facet = |line: usize| edge.iter().filter(|(l, _)| *l <= line).max_by_key(|(l, _)| *l).is_some_and(|(_, facet)| *facet);
+    for c in tree.nodes("comments").into_iter().filter(|c| c.flag("alone")) {
+        let indent = c.num("indent").unwrap();
+        if indent == 0 || (indent == 4 && in_facet(c.line)) {
+            judge(c.line, c.num("blank").unwrap());
         }
     }
-    out
+    // a flow-control statement that is not the first of its block
+    let flow = ["if", "while", "for", "conditional", "region", "arena", "inject", "break", "continue", "retry"];
+    tree.walk(&mut |n: &y_parse::Node| {
+        for st in n.nodes("body").iter().skip(1) {
+            if flow.contains(&st.kind) && st.num("gap") == Some(0) {
+                errors.push(format!("{y}:{}: no blank line before the `{}`", st.line, st.kind));
+            }
+        }
+    });
+    // a comment, after a line that is not blank, not a comment and opens no block
+    for c in tree.nodes("comments").into_iter().filter(|c| c.flag("alone") && c.line > 1) {
+        if c.num("blank") == Some(0) && !matches!(c.str("after"), Some("comment" | "head")) {
+            errors.push(format!("{y}:{}: no blank line before the comment `-- {}`", c.line, c.str("text").unwrap()));
+        }
+    }
+    errors.sort_by_key(|e| e.split(':').nth(1).and_then(|l| l.parse::<usize>().ok()));
+    errors
+}
+
+/// The lint rules the examples keep, read from a file's tree:
+///
+/// - in the documentation of a declaration of a module (`code`), the entries of one kind sit together (a parameter, the
+///   result, a capability, a `fails`, or a role of another name), and one blank line separates two kinds (Y § 3.2);
+/// - no brackets around a single element: a name, a literal, a field path, an index, a call, a list or a negative number
+///   (Y § 3.1);
+/// - a name is changed, by `:=` or as a `mutable` argument, only when it was declared `mutable` (Y § 3.1, § 3.6); a
+///   migration's body gives each new field its value with `:=` (Y § 3.12), which changes no name.
+fn lints(y: &str, tree: &y_parse::Node, code: bool) -> Vec<String> {
+    let mut errors = vec![];
+    if code {
+        tree.walk(&mut |owner: &y_parse::Node| {
+            let Some(doc) = owner.node("doc") else { return };
+            let params = owner.nodes("params");
+            let named = |injected: bool, name: &str| params.iter().any(|p| p.flag("injected") == injected && p.str("name") == Some(name));
+            let lines: Vec<&str> = doc.str("text").unwrap().split('\n').collect();
+            let blank = |line: usize| lines.get(line - doc.line - 1).is_some_and(|l| l.trim().is_empty());
+            let mut previous: Option<(String, usize)> = None;
+            for e in doc.nodes("entries") {
+                let name = e.str("name").unwrap();
+                let kind = if name.starts_with("fails ") {
+                    Some("fails".to_string())
+                } else if !name.is_empty() && name.chars().all(|c| c.is_ascii_lowercase() || c == '_') {
+                    Some(if named(false, name) { "parameter".into() } else if owner.str("returns") == Some(name) { "result".into() } else if named(true, name) { "capability".into() } else { format!("role {name}") })
+                } else {
+                    None
+                };
+                // prose between two entries, or an entry of no kind, starts again
+                if let (Some((before, end)), Some(this)) = (&previous, &kind) {
+                    if (end + 1..e.line).all(blank) {
+                        let (blanks, want) = (e.line - end - 1, usize::from(before != this));
+                        if blanks != want {
+                            errors.push(format!("{y}:{}: {blanks} blank lines between a {before} and a {this}, not {want}", e.line));
+                        }
+                    }
+                }
+                previous = kind.map(|k| (k, e.num("end").unwrap()));
+            }
+        });
+    }
+    // no brackets around a single element
+    tree.walk(&mut |n: &y_parse::Node| {
+        let single = matches!(n.kind, "name" | "literal" | "member" | "index" | "call" | "list") || (n.kind == "unary" && n.str("op") == Some("-"));
+        if n.flag("parens") && single {
+            errors.push(format!("{y}:{}: brackets around a single element, a {}", n.line, n.kind));
+        }
+    });
+    // a name changed only when it was declared `mutable`, in each function and test
+    for f in tree.find("function").into_iter().chain(tree.find("test")) {
+        let mut declared: BTreeSet<String> = f.nodes("params").iter().filter(|p| p.flag("mutable")).map(|p| p.str("name").unwrap().to_string()).collect();
+        let root = |e: &y_parse::Node| {
+            let mut e = e;
+            while e.kind == "member" || e.kind == "index" {
+                e = e.node("object").unwrap();
+            }
+            (e.kind == "name").then(|| e.str("name").unwrap().to_string())
+        };
+        f.walk(&mut |n: &y_parse::Node| {
+            let changed = match n.kind {
+                "let" if n.flag("mutable") => {
+                    declared.insert(n.str("name").unwrap().to_string());
+                    None
+                }
+                "assign" => root(n.node("target").unwrap()),
+                "mutable" => root(n.node("value").unwrap()),
+                _ => None,
+            };
+            if let Some(name) = changed.filter(|c| !declared.contains(c)) {
+                errors.push(format!("{y}:{}: `{name}` changes but is not declared `mutable`", n.line));
+            }
+        });
+    }
+    errors.sort_by_key(|e| e.split(':').nth(1).and_then(|l| l.parse::<usize>().ok()));
+    errors
+}
+
+/// The statements of a test's `when` section, from the test file's tree.
+fn when_of<'a>(tree: &'a y_parse::Node, test: &str) -> Vec<&'a y_parse::Node> {
+    let t = tree.nodes("decls").into_iter().find(|d| d.kind == "test" && d.str("name") == Some(test)).unwrap_or_else(|| panic!("{test}: no such test"));
+    let when = t.nodes("sections").into_iter().find(|x| x.str("name") == Some("when")).unwrap_or_else(|| panic!("{test}: no `when`"));
+    when.nodes("body")
 }
 
 /// A function of the path rules' own: a loop that may never run, a comparison of numbers on each side, and a `compare`

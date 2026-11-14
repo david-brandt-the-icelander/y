@@ -10,6 +10,7 @@ E=$Y/examples/$1
 S=$(mktemp -d)
 trap 'rm -rf "$S"' EXIT
 (cd "$B" && cargo build -q --release)
+(cd "$Y/tools/y-parse" && cargo build -q --release)
 "$B/target/release/bare-rust" strip "$E" --out "$S/$1" --src-only | tail -1
 cd "$Y/examples" && { python3 "$P/regen.py" "$1" "$S/$1" > "$S/regen.out" || { cat "$S/regen.out"; exit 1; }; }
 grep -v "^no clauses" "$S/regen.out" || true

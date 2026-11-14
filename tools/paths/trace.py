@@ -7,10 +7,13 @@ its cargo target folder there between runs. It exits with status 1 if anything b
 
 It reports, for each test, the paths it says it covers but did not take; the paths the tests took that the enumerator
 does not know (a fault in the enumerator or in the lowering); and the paths no test took.
+
+It reads the tests and the paths they claim from the test file's tree (`ytree.py`, from `tools/y-parse`); the paths of
+the module come from the enumerator, `yp.py`, which reads the Y as text.
 """
 import os, re, shutil, subprocess, sys, tempfile
 sys.path.insert(0, os.path.dirname(__file__))
-import yp
+import yp, ytree
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRATCH = os.environ.get("YTRACE_WORK") or os.path.join(tempfile.gettempdir(), "y-trace")
@@ -332,23 +335,9 @@ def match_path(statics, raw_steps):
 
 
 def claims(test_file):
-    text = open(test_file).read().split("\n")
-    out, cur, reading = {}, None, False
-    for l in text:
-        m = re.match(r"^test (\w+)", l)
-        if m:
-            cur, reading = m.group(1), False
-            out[cur] = []
-            continue
-        m = re.match(r"^\s+covers (.*)", l)
-        if m and cur is not None:
-            reading = True
-            l = "        " + m.group(1)
-        if cur and reading and l.startswith("        "):
-            out[cur] += [c.strip() for c in l.strip().rstrip(":").split(",") if c.strip()]
-            if l.rstrip().endswith(":"):
-                reading = False
-    return out
+    """Each test of a Y test file, with the paths it says it covers (none, or one), from the file's tree."""
+    tree = ytree.tree(test_file)
+    return {t["name"]: [t["covers"]["text"]] if t["covers"] else [] for t in tree["decls"] if t["kind"] == "test"}
 
 
 def main():
