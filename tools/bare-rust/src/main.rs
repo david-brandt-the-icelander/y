@@ -56,9 +56,14 @@ const USAGE: &str = "usage:
   bare-rust libfmt <library-file>...
   bare-rust libfmt --expand <library-file>     (print what each type's `derive` list expands to)
       rewrite library files in canonical form
-  bare-rust levels <bare-dir>
+  bare-rust levels <bare-dir> [--crate <crate-dir> --out <dir> [--show-calls]]
       the level each module needs (language 6.22: data, calculations, structured, shared, effects), from what the bare
-      bodies under it use, and the level pinned on it; fails on a construct above its module's pinned level, as weave does
+      bodies under it use, and the level pinned on it; fails on a construct above its module's pinned level, as weave does.
+      The calls are read from the bodies' syntax; with --crate, weave with cargo into --out and read the calls rustc
+      resolved there (the first line says which); --show-calls lists them, by bare file and line
+  bare-rust levels --libraries <library-crate-dir>...
+      libraries/levels.json against what each library crate's code calls, read from its MIR: fails on a public
+      function that calls a library at a higher level than the table gives the function, or one the table does not list
   bare-rust libstats <library-file> [--work <dir>] [--no-signatures]
       the counts of a library file (entries and clauses by kind, status and source, the `unexpressed` promises by what
       the language lacks) and, unless --no-signatures, how its signatures checked against the real std
@@ -241,6 +246,20 @@ fn run(args: Vec<String>) -> Result<(), String> {
             println!("libfmt: {} of {} files rewritten", n, paths.len());
             Ok(())
         }
+        Some("levels") if target == "--libraries" => {
+            // the table of library levels against what each library crate calls
+            let tdir = bare_rust::cargo::target_dir(&std::env::current_dir().map_err(|e| e.to_string())?);
+            let mut errs = vec![];
+            for d in args[3..].iter().filter(|a| !a.starts_with("--")) {
+                let found = bare_rust::facts::check_library(&PathBuf::from(d), &tdir)?;
+                println!("{d}: {} public functions above their level, or stale trusted calls, in libraries/levels.json", found.len());
+                errs.extend(found);
+            }
+            for e in &errs {
+                eprintln!("error: {e}");
+            }
+            if errs.is_empty() { Ok(()) } else { Err(format!("levels --libraries: {} functions above the table", errs.len())) }
+        }
         Some("levels") => {
             // each module subject's level, pinned or not, against what the bodies under it need (language 6.22)
             let dir = PathBuf::from(args.get(2).ok_or("levels: a folder of bare files")?);
@@ -253,16 +272,42 @@ fn run(args: Vec<String>) -> Result<(), String> {
                 let js: serde_json::Value = serde_json::from_str(&rd(&cj.display().to_string())?).map_err(|e| format!("{}: {e}", cj.display()))?;
                 files.push((b.strip_prefix(&dir).unwrap_or(b).display().to_string(), rd(&b.display().to_string())?, js));
             }
+            let facts = match arg(&args, "--crate") {
+                Some(c) => {
+                    let out = out_dir.clone().ok_or("levels --crate needs --out <dir>, where the crate is woven")?;
+                    let opts = WeaveOpts {
+                        cargo: true,
+                        crate_dir: Some(PathBuf::from(c)),
+                        target: bare_rust::cargo::target_dir(&std::env::current_dir().map_err(|e| e.to_string())?),
+                        drop_holes: false,
+                        keep: Default::default(),
+                    };
+                    let cw = weave_crate_with(&dir, &out, &opts)?;
+                    println!("calls read from {}", cw.checks_via.clone().unwrap_or_else(|| "rustc".into()));
+                    if args.iter().any(|a| a == "--show-calls") {
+                        for (f, v) in cw.facts.iter().flatten() {
+                            for x in v {
+                                println!("{f}:{}: {}", x.line, x.callee.path);
+                            }
+                        }
+                    }
+                    cw.facts
+                }
+                None => {
+                    println!("calls read from syntax (no --crate)");
+                    None
+                }
+            };
             for (_, _, js) in &files {
                 for s in js["subjects"].as_array().into_iter().flatten().filter(|s| s["kind"] == "module") {
                     let m = s["name"].as_str().unwrap_or("");
                     let pinned = s["level"].as_str().map_or(String::new(), |l| format!(", pinned at {l}"));
-                    let (level, why) = bare_rust::level::needed(&files, m);
+                    let (level, why) = bare_rust::level::needed_with(&files, facts.as_ref(), m);
                     let why = why.map_or(String::new(), |u| format!(": {} in `{}`, {}:{}", u.what.trim_end_matches(','), u.function, u.file, u.line));
                     println!("{m}: needs {level}{pinned}{why}");
                 }
             }
-            let errs = bare_rust::level::check(&files);
+            let errs = bare_rust::level::check_with(&files, facts.as_ref());
             for e in &errs {
                 eprintln!("error: {e}");
             }

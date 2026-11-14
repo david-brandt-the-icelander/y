@@ -18,15 +18,34 @@
 //!   `y_runtime::Deadline`, `std::fs`, …); a wait (`// y: waits until name`); and a region that waits `forever` or
 //!   is detached.
 //!
-//! The library modules' levels are a table, `libraries/levels.json`, and a call is matched to it through the file's
-//! `use` declarations: `atomic(…)` after `use y_runtime::shared::atomic;` is a call of `y_runtime::shared::atomic`.
+//! The library modules' levels are a table, `libraries/levels.json`: a call of a function under a module listed there,
+//! or of a method of a type under it, needs the level of the longest module that matches, and a call into a library
+//! the table does not list needs `effects`. `crate::facts::check_library` (`bare-rust levels --libraries`) checks the
+//! table against what a library crate's code calls.
 //!
 //! A module's level is the highest of anything it declares or imports (Y § 3.19): a call of a function of the crate
 //! needs the level that function needs, so a `calculations` module that calls a `structured` function is
-//! `structured`. A method call (`x.f()`), whose receiver's type the bare body does not say, may be any method `f` of
-//! the crate's types (or, on `self`, its own type's), and a name the crate has more than one function for, out of
-//! reach of the caller, may be any of them: such a call needs the most that any of them needs. An import (`use`) of a
-//! module pinned at a higher level fails too.
+//! `structured`. An import (`use`) of a module pinned at a higher level fails too.
+//!
+//! What a call calls is read one of two ways, and `uses_with` takes, file by file, the first it has:
+//! - **From rustc** (`crate::facts`), when the woven crate builds: weave with cargo reads the crate's MIR, where every
+//!   call names the item it resolved to. A function of the crate is found by its path; a method by its receiver's
+//!   type, which MIR states (`<Tally as Count>::count` is `Tally`'s `count`, whatever names the receiver: a closure's
+//!   parameter, a chained call); a library's function by where it is defined, so a re-export, a renamed import or a
+//!   local that holds the function (`let run = atomic;`) is the function itself. A trait's method called on a type
+//!   parameter may be any impl of the trait in the crate, and needs the most of them; a library's trait method needs
+//!   the level of its type's module and of its trait's.
+//! - **From the syntax**, when there is no build (a unit test, `bare-rust levels` without `--crate`, a crate that does
+//!   not compile): a call is matched through the file's `use` declarations (`atomic(…)` after
+//!   `use y_runtime::shared::atomic;` is `y_runtime::shared::atomic`). A method call whose receiver's type the
+//!   constraint data does not give (a parameter or a typed local) may be any method of that name of the crate's types
+//!   (or, on `self`, its own type's), and a name the crate has more than one function for, out of reach of the
+//!   caller, may be any of them: such a call needs the most that any of them needs. A re-export, a field that holds a
+//!   function and a local alias are not followed.
+//!
+//! Weave says which way it read them (`CrateWeave::checks_via`). Either way, what is not a call (a loop, `&mut`, a
+//! marker, a parameter's type) is read from the syntax and the constraint data, and a macro's calls are not seen.
+use crate::facts::{Callee, Fact, Facts};
 use crate::{parse_bare, text};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -53,8 +72,20 @@ pub struct Use {
 /// The levels of library modules (`libraries/levels.json`): a call into one needs its level.
 const LIBRARY_LEVELS: &str = include_str!("../libraries/levels.json");
 
+/// The calls `libraries/levels.json` trusts a library's function to make though they are above its module's level, by
+/// the function: each a path, or a module or type the call is under (see `crate::facts::check_library`).
+pub(crate) fn trusted_calls(function: &str) -> Vec<String> {
+    let v: Value = serde_json::from_str(LIBRARY_LEVELS).unwrap_or_default();
+    v["trusted"][function]["calls"].as_array().into_iter().flatten().filter_map(|c| c.as_str().map(str::to_string)).collect()
+}
+
+/// Whether the call of `callee` is one of the `trusted` calls: the path itself, or under it.
+pub(crate) fn is_trusted(trusted: &[String], callee: &str) -> bool {
+    trusted.iter().any(|t| callee == t || callee.starts_with(&format!("{t}::")))
+}
+
 /// The level a call of the library path `path` needs, by the longest module of the table it is under.
-fn library_level(path: &str) -> Option<usize> {
+pub(crate) fn library_level(path: &str) -> Option<usize> {
     thread_local! {
         static TABLE: Vec<(String, usize)> = {
             let v: Value = serde_json::from_str(LIBRARY_LEVELS).expect("libraries/levels.json");
@@ -104,19 +135,23 @@ fn use_map(imports: &[Import], file: &str) -> BTreeMap<String, String> {
     out
 }
 
-/// A call as the bare body writes it: a path (`f`, `a::b::f`) or a method (`x.f`, kept as `.f` with its receiver).
+/// A call as the bare body writes it: a path (`f`, `a::b::f`) or a method (`x.f`, kept as `.f` with its receiver); or
+/// as rustc resolved it (`crate::facts`).
 #[derive(Clone)]
 enum Call {
     Path(String),
     Method { name: String, receiver: String, ty: Option<String> },
+    Resolved(Callee),
 }
 
-/// A function of the crate: its path, its file, what it uses itself, and the calls it makes, with their lines.
+/// A function of the crate: its path, its file, what it uses itself, and the calls it makes, with their lines; and,
+/// for a method of an impl of a trait, the trait's name.
 struct Function {
     path: String,
     file: String,
     own: Vec<Use>,
     calls: Vec<(Call, usize)>,
+    trait_name: Option<String>,
 }
 
 /// An import: the module it is in, the path as written, its file and line.
@@ -131,14 +166,33 @@ fn crate_name(js: &Value) -> String {
     js["crate"].as_str().and_then(|k| k.split_whitespace().next()).unwrap_or("crate").replace('-', "_")
 }
 
-/// The functions and imports of one bare body.
-fn read_file(file: &str, brs: &str, js: &Value, fns: &mut Vec<Function>, imports: &mut Vec<Import>) {
+/// The last segment of a path, without its generic arguments: `std::ops::Add<u8>` is `Add`.
+fn last_segment(p: &str) -> String {
+    p.split('<').next().unwrap_or(p).trim().rsplit("::").next().unwrap_or("").to_string()
+}
+
+/// The function among `found` that a byte offset is in: the innermost one.
+fn enclosing(found: &[(String, Node)], offset: usize) -> Option<usize> {
+    found.iter().enumerate().filter(|(_, (_, n))| n.start_byte() <= offset && offset < n.end_byte()).min_by_key(|(_, (_, n))| n.end_byte() - n.start_byte()).map(|(i, _)| i)
+}
+
+/// The functions and imports of one bare body. With `facts`, the calls are the ones rustc resolved in it, each in the
+/// innermost function it is in; without, the ones its syntax shows.
+fn read_file(file: &str, brs: &str, js: &Value, facts: Option<&[Fact]>, fns: &mut Vec<Function>, imports: &mut Vec<Import>) {
     let base = crate::weave::base_path(js);
     let tree = parse_bare(brs);
     let subject = |f: &str| js["subjects"].as_array().into_iter().flatten().find(|s| s["kind"] == "function" && s["name"] == f).cloned();
     let mut found: Vec<(String, Node)> = vec![];
     collect(tree.root_node(), brs, &base, &mut found, imports, file);
-    for (path, node) in found {
+    let first = fns.len();
+    let mut resolved: Vec<Vec<(Call, usize)>> = vec![vec![]; found.len()];
+    for f in facts.into_iter().flatten() {
+        if let Some(i) = enclosing(&found, f.offset) {
+            resolved[i].push((Call::Resolved(f.callee.clone()), f.line));
+        }
+    }
+    for (k, (path, node)) in found.iter().enumerate() {
+        let (path, node) = (path.clone(), *node);
         let line = node.start_position().row + 1;
         let mut own = vec![];
         let mut add = |level: &str, what: String, line: usize| own.push(Use { level: rank(level).unwrap(), what, function: path.clone(), file: file.to_string(), line });
@@ -186,13 +240,21 @@ fn read_file(file: &str, brs: &str, js: &Value, fns: &mut Vec<Function>, imports
                 }
             }
         }
-        fns.push(Function { path: path.clone(), file: file.to_string(), own, calls });
+        if facts.is_some() {
+            calls = std::mem::take(&mut resolved[k]);
+        }
+        let trait_name = node.parent().and_then(|p| p.parent()).filter(|p| p.kind() == "impl_item").and_then(|p| p.child_by_field_name("trait")).map(|t| last_segment(text(t, brs)));
+        fns.push(Function { path: path.clone(), file: file.to_string(), own, calls, trait_name });
+    }
+    if facts.is_some() {
+        // what rustc resolved needs no imports to follow: its library calls are counted with the crate's (`uses_with`)
+        return;
     }
     // a call into a library needs its module's level (`libraries/levels.json`), through the file's imports; a call into a
     // library the table does not know needs `effects`, as nothing says it has none
     let uses = use_map(imports, file);
     let local = local_names(&tree.root_node(), brs, &base);
-    for f in fns.iter_mut().filter(|f| f.file == file) {
+    for f in fns[first..].iter_mut() {
         for (call, line) in &f.calls {
             let (shown, full) = match call {
                 Call::Path(p) => {
@@ -373,6 +435,7 @@ fn resolve(call: &Call, caller: &str, krate: &str, fns: &BTreeMap<String, usize>
             let one = hits.len() == 1;
             (hits, one)
         }
+        Call::Resolved(_) => (vec![], false),
         Call::Method { name, receiver, ty } => {
             if let Some(t) = ty {
                 // the receiver's type is known: its method, if the type is the crate's; else none of the crate's
@@ -394,30 +457,145 @@ fn resolve(call: &Call, caller: &str, krate: &str, fns: &BTreeMap<String, usize>
     }
 }
 
+/// The functions of the crate a call may be, and whether it can be only one.
+type Callees = (Vec<usize>, bool);
+
+/// Where a call rustc resolved goes: functions of the crate (and whether it can be only one), or a library's.
+enum Target {
+    Crate(Vec<usize>, bool),
+    Library(Vec<String>),
+}
+
+/// The functions of the crate, or the library item, a call rustc resolved is a call of. A function of the crate is
+/// found by its path; a method of an impl written in a module other than its type's, by its type and name. A method
+/// called on a type parameter (`<T as Count>::count`), whose impl the caller does not choose, may be the method of any
+/// impl of the trait in the crate, or, for a library's trait, is the trait's. A library's method is counted at the
+/// level of its type's module, and of its trait's.
+fn resolve_fact(c: &Callee, fns: &[Function], index: &BTreeMap<String, usize>, types: &BTreeSet<String>) -> Target {
+    let local_self = c.self_ty.as_ref().is_some_and(|(_, l)| *l);
+    let local_trait = c.trait_path.as_ref().is_some_and(|(_, l)| *l);
+    if !(c.local || local_self || local_trait) {
+        let mut paths = vec![c.path.clone()];
+        if let Some((t, _)) = &c.trait_path {
+            paths.push(format!("{t}::{}", c.name));
+        }
+        return Target::Library(paths);
+    }
+    if let Some(i) = index.get(&c.path) {
+        return Target::Crate(vec![*i], true);
+    }
+    let head = c.self_ty.as_ref().map(|(t, _)| last_segment(t)).unwrap_or_default();
+    let of_trait = |want: &str| -> Vec<usize> {
+        fns.iter().enumerate().filter(|(_, f)| f.trait_name.as_deref() == Some(want) && short(&f.path) == c.name).map(|(i, _)| i).collect()
+    };
+    if local_self && (!c.param || types.contains(&head)) {
+        // a type of the crate: its method, wherever its impl is
+        let hits: Vec<usize> = index.iter().filter(|(p, _)| p.ends_with(&format!("::{head}::{}", c.name))).map(|(_, i)| *i).collect();
+        let one = hits.len() == 1;
+        return Target::Crate(hits, one);
+    }
+    match &c.trait_path {
+        // a type parameter's method: any impl of the crate's trait
+        Some((t, true)) if c.param => Target::Crate(of_trait(&last_segment(t)), false),
+        Some((t, false)) if c.param => Target::Library(vec![format!("{t}::{}", c.name)]),
+        // the crate's trait, for a library's type: the crate's impls of it for that type
+        Some((t, true)) => {
+            let hits: Vec<usize> = of_trait(&last_segment(t)).into_iter().filter(|i| fns[*i].path.ends_with(&format!("::{head}::{}", c.name))).collect();
+            let one = hits.len() == 1;
+            Target::Crate(hits, one)
+        }
+        _ => Target::Crate(vec![], false),
+    }
+}
+
 fn short(path: &str) -> &str {
     path.rsplit("::").next().unwrap_or(path)
 }
 
+/// The names of the types a bare body declares or implements: what a receiver MIR names by one segment may be.
+fn type_names(n: Node, src: &str, out: &mut BTreeSet<String>) {
+    if matches!(n.kind(), "struct_item" | "enum_item" | "type_item" | "union_item" | "trait_item") {
+        if let Some(name) = n.child_by_field_name("name") {
+            out.insert(text(name, src).to_string());
+        }
+    }
+    if n.kind() == "impl_item" {
+        if let Some(t) = n.child_by_field_name("type") {
+            out.insert(last_segment(text(t, src)));
+        }
+    }
+    let mut c = n.walk();
+    for ch in n.named_children(&mut c) {
+        type_names(ch, src, out);
+    }
+}
+
+/// The facts of a file, when rustc gave some: a file it gave none for (its crate did not build, or the file is not in
+/// a target it read) is read from its syntax.
+fn facts_of<'f>(facts: Option<&'f Facts>, file: &str) -> Option<&'f [Fact]> {
+    facts.and_then(|m| m.get(file)).filter(|v| !v.is_empty()).map(Vec::as_slice)
+}
+
 /// What the bare bodies of a crate (`(file, bare body, constraint file)`) use above `data`, calls of the crate's own
-/// functions among them, each at the level its callee needs, and imports of pinned modules.
+/// functions among them, each at the level its callee needs, and imports of pinned modules. The calls are read from
+/// the bodies' syntax: see `uses_with` for the calls rustc resolved.
 pub fn uses(files: &[(String, String, Value)]) -> Vec<Use> {
+    uses_with(files, None)
+}
+
+/// As `uses`, with the calls rustc resolved in the files it gave facts for (`crate::facts`), and the syntax's in the
+/// others.
+pub fn uses_with(files: &[(String, String, Value)], facts: Option<&Facts>) -> Vec<Use> {
     let (mut fns, mut imports) = (vec![], vec![]);
+    let mut types = BTreeSet::new();
     for (file, brs, js) in files {
-        read_file(file, brs, js, &mut fns, &mut imports);
+        read_file(file, brs, js, facts_of(facts, file), &mut fns, &mut imports);
+        type_names(parse_bare(brs).root_node(), brs, &mut types);
     }
     let krate = files.first().map(|f| crate_name(&f.2)).unwrap_or_default();
     let index: BTreeMap<String, usize> = fns.iter().enumerate().map(|(i, f)| (f.path.clone(), i)).collect();
+    // a call rustc resolved into a library needs the level of the library's module, and one into a library the table
+    // does not list needs `effects`
+    let mut targets: Vec<Vec<Option<Callees>>> = vec![];
+    let mut library: Vec<Vec<Use>> = vec![];
+    for f in &fns {
+        let (mut t, mut lib) = (vec![], vec![]);
+        for (c, line) in &f.calls {
+            let Call::Resolved(c) = c else {
+                t.push(None);
+                continue;
+            };
+            match resolve_fact(c, &fns, &index, &types) {
+                Target::Crate(hits, one) => t.push(Some((hits, one))),
+                Target::Library(paths) => {
+                    t.push(Some((vec![], false)));
+                    // a method of a trait needs the level of its type's module and of its trait's
+                    let shown = &c.name;
+                    if let Some(p) = paths.iter().find(|p| library_level(p).is_none()) {
+                        lib.push(Use { level: 4, what: format!("`{shown}` (`{p}`), a library with no level in libraries/levels.json"), function: f.path.clone(), file: f.file.clone(), line: *line });
+                    } else if let Some((l, p)) = paths.iter().filter_map(|p| Some((library_level(p)?, p))).max_by_key(|x| x.0).filter(|x| x.0 >= 2) {
+                        lib.push(Use { level: l, what: format!("`{shown}` (`{p}`)"), function: f.path.clone(), file: f.file.clone(), line: *line });
+                    }
+                }
+            }
+        }
+        targets.push(t);
+        library.push(lib);
+    }
     // each call's possible callees, with its line and whether it can be only one
     let calls: Vec<Vec<(Vec<usize>, usize, bool, String)>> = fns
         .iter()
-        .map(|f| {
+        .enumerate()
+        .map(|(i, f)| {
             f.calls
                 .iter()
-                .map(|(c, line)| {
-                    let (hits, one) = resolve(c, &f.path, &krate, &index);
+                .enumerate()
+                .map(|(k, (c, line))| {
+                    let (hits, one) = targets[i][k].clone().unwrap_or_else(|| resolve(c, &f.path, &krate, &index));
                     let shown = match c {
                         Call::Path(p) => p.clone(),
                         Call::Method { name, .. } => format!(".{name}"),
+                        Call::Resolved(c) => c.name.clone(),
                     };
                     (hits, *line, one, shown)
                 })
@@ -439,7 +617,7 @@ pub fn uses(files: &[(String, String, Value)]) -> Vec<Use> {
         }
         false
     };
-    let mut own: Vec<Vec<Use>> = fns.iter().map(|f| f.own.clone()).collect();
+    let mut own: Vec<Vec<Use>> = fns.iter().zip(library).map(|(f, lib)| f.own.iter().cloned().chain(lib).collect()).collect();
     for (i, f) in fns.iter().enumerate() {
         for &(j, line) in &edges[i] {
             if reaches(j, i) {
@@ -505,9 +683,14 @@ fn in_module(u: &Use, m: &str) -> bool {
 /// The modules with a `level` in the files of a crate (`(bare file, bare body, constraint file)`), and everything in
 /// them that needs more: one message for each, naming the construct, where it is, the level it needs and the module's.
 pub fn check(files: &[(String, String, Value)]) -> Vec<String> {
+    check_with(files, None)
+}
+
+/// As `check`, with the calls rustc resolved (`uses_with`).
+pub fn check_with(files: &[(String, String, Value)], facts: Option<&Facts>) -> Vec<String> {
     let pinned = pinned(files);
     let mut errs = vec![];
-    for u in uses(files) {
+    for u in uses_with(files, facts) {
         for (m, level) in &pinned {
             if in_module(&u, m) && u.level > *level {
                 errs.push(format!("{}:{}: {} in `{}` needs level `{}`, and module `{m}` is at `{}` (language 6.22)", u.file, u.line, u.what, u.function, LEVELS[u.level], LEVELS[*level]));
@@ -522,8 +705,13 @@ pub fn check(files: &[(String, String, Value)]) -> Vec<String> {
 /// The level a module of the crate needs, the highest of the uses under it (`data` if none), with the first use that
 /// needs it. For proposing a level to pin (language 6.22, harvested).
 pub fn needed(files: &[(String, String, Value)], module: &str) -> (&'static str, Option<Use>) {
+    needed_with(files, None, module)
+}
+
+/// As `needed`, with the calls rustc resolved (`uses_with`).
+pub fn needed_with(files: &[(String, String, Value)], facts: Option<&Facts>, module: &str) -> (&'static str, Option<Use>) {
     let mut top: Option<Use> = None;
-    for u in uses(files) {
+    for u in uses_with(files, facts) {
         if in_module(&u, module) && top.as_ref().is_none_or(|t| u.level > t.level) {
             top = Some(u);
         }
@@ -631,5 +819,54 @@ mod tests {
         let of = |f: &str| all.iter().filter(|u| u.function == format!("c::m::m2::{f}")).map(|u| (u.what.clone(), LEVELS[u.level])).collect::<Vec<_>>();
         assert!(of("total").iter().all(|(_, l)| *l == "calculations"), "{:#?}", of("total"));
         assert!(of("guess").iter().any(|(w, l)| w.contains("`rand::random`), a library with no level") && *l == "effects"), "{:#?}", of("guess"));
+    }
+
+    /// A fact as rustc gives it: the call of `mir` (a path as MIR prints it) where `at` first stands in the body.
+    fn fact(brs: &str, at: &str, mir: &str) -> Fact {
+        let offset = brs.find(at).unwrap_or_else(|| panic!("{at}"));
+        let externs = ["y_runtime".to_string(), "rand".to_string()].into_iter().collect();
+        Fact { offset, line: crate::trace::line_col(brs, offset).0, callee: crate::facts::callee(mir, "c", &externs).unwrap() }
+    }
+
+    #[test]
+    fn rustc_resolves_a_method_on_a_closures_parameter_to_its_impl() {
+        // `t.count()` on a closure's parameter: its syntax names no type, so it may be `Ledger`'s, which loops; rustc
+        // says it is `Tally`'s
+        let brs = "mod counts {\n    impl Count for Tally {\n        fn count(self) {\n            self.0\n        }\n    }\n    impl Count for Ledger {\n        fn count(self) {\n            loop {}\n        }\n    }\n}\nmod sums {\n    fn total(xs) {\n        xs.iter().map(|t| t.count()).sum()\n    }\n}\n";
+        let f = pin(&file(brs, json!([pure("c::m::counts::Tally::count"), pure("c::m::counts::Ledger::count"), pure("c::m::sums::total")])), "c::m::sums", "calculations");
+        let errs = check(std::slice::from_ref(&f));
+        assert!(errs.len() == 1 && errs[0].contains("a call of `.count` (it may be `c::m::counts::Ledger::count`"), "{errs:#?}");
+        let facts: Facts = [(
+            "src/m.brs".to_string(),
+            vec![
+                fact(brs, "iter()", "core::slice::<impl [m::counts::Tally]>::iter"),
+                fact(brs, "map(", "<std::slice::Iter<'_, m::counts::Tally> as std::iter::Iterator>::map::<u32, {closure@src/m.rs:15:23: 15:26}>"),
+                fact(brs, "count()", "<m::counts::Tally as m::counts::Count>::count"),
+                fact(brs, "sum()", "<std::iter::Map<std::slice::Iter<'_, m::counts::Tally>, {closure@src/m.rs:15:23: 15:26}> as std::iter::Iterator>::sum::<u32>"),
+            ],
+        )]
+        .into_iter()
+        .collect();
+        assert_eq!(check_with(std::slice::from_ref(&f), Some(&facts)), Vec::<String>::new());
+        // called on a type parameter, it may be the method of any impl of the trait in the crate
+        let generic: Facts = [("src/m.brs".to_string(), vec![fact(brs, "count()", "<T as m::counts::Count>::count")])].into_iter().collect();
+        let errs = check_with(&[f], Some(&generic));
+        assert!(errs.len() == 1 && errs[0].contains("a call of `count` (it may be `c::m::counts::Ledger::count`"), "{errs:#?}");
+    }
+
+    #[test]
+    fn rustc_sees_a_reexported_runtime_function_where_it_is_defined() {
+        // `start` is `y_runtime::task::detach` under another name: by its syntax, a function of the crate, which has none
+        let brs = "mod rt {\n    use y_runtime::task::detach as start;\n}\nmod ticks {\n    fn begin(d) {\n        crate::m::rt::start(d, || 1)\n    }\n}\n";
+        let f = pin(&file(brs, json!([pure("c::m::ticks::begin")])), "c::m::ticks", "calculations");
+        assert_eq!(check(std::slice::from_ref(&f)), Vec::<String>::new());
+        let facts: Facts = [("src/m.brs".to_string(), vec![fact(brs, "crate::m::rt::start", "y_runtime::task::detach::<i32, {closure@src/m.rs:6:32: 6:34}>")])].into_iter().collect();
+        let errs = check_with(&[f], Some(&facts));
+        assert!(errs.len() == 1 && errs[0].contains("`detach` (`y_runtime::task::detach`) in `c::m::ticks::begin` needs level `effects`"), "{errs:#?}");
+        // a library the table does not list needs `effects`, however it is reached
+        let unknown: Facts = [("src/m.brs".to_string(), vec![fact(brs, "crate::m::rt::start", "<rand::rngs::ThreadRng as rand::RngCore>::next_u32")])].into_iter().collect();
+        let f2 = pin(&file(brs, json!([pure("c::m::ticks::begin")])), "c::m::ticks", "calculations");
+        let errs = check_with(&[f2], Some(&unknown));
+        assert!(errs.len() == 1 && errs[0].contains("(`rand::rngs::ThreadRng::next_u32`), a library with no level in libraries/levels.json"), "{errs:#?}");
     }
 }

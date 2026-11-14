@@ -1854,15 +1854,25 @@ prints it under the file's `module` line:
   recursion, direct or through other functions, is `structured`; a parameter the lowering marks `"injected": true`
   whose type is `Shared<…>` is `shared`; any other injected parameter, which is a capability, an `effects only …`
   clause, `async`, `.await`, a wait (`waits until`), or a region that waits `forever` or is detached is `effects`. A
-  call into a library needs the level its module has in a table, `libraries/levels.json` (`y_runtime::shared` is
-  `shared`, `y_runtime::task` and `std::fs` are `effects`), matched through the file's `use` declarations; every
-  library is listed, at least by its crate, and a call into one that is not needs `effects`, as nothing says it has
-  none. A call of a function of the crate needs what that function needs. A method call takes its receiver's type from
-  the constraint data when the receiver is a parameter or a typed local; when the type is unknown, the call, like a
-  name defined more than once out of the caller's reach, needs the most that any function it may be needs. An import of a module pinned higher needs that module's level. Weave fails on anything above its module's
-  level, and `bare-rust levels <bare-dir>` prints the level each module needs and why, with the level pinned on it.
-  Every module of the examples is pinned at the level it needs, and the examples' checks hold each facet's pin to a
-  second inference made from the Y source alone.
+  call of a function of the crate needs what that function needs. A call into a library needs the level its module
+  has in a table, `libraries/levels.json` (`y_runtime::shared` is `shared`, `y_runtime::task` and `std::fs` are
+  `effects`); every library is listed, at least by its crate, and a call into one that is not needs `effects`, as
+  nothing says it has none. Which function a call calls is read one of two ways. Where the woven crate builds, weave
+  with cargo takes it from rustc: the crate's MIR names the item each call resolved to, so a method is its receiver's
+  type's whatever names the receiver (a closure's parameter, a chained call), and a library's function is found where
+  it is defined, through a re-export, a renamed import or a local that holds it. A trait's method called on a type
+  parameter may be any impl of the trait in the crate; a library's trait method needs the level of its type's module
+  and of its trait's. Without a build (a crate that does not compile, a weave without cargo, `bare-rust levels`
+  without `--crate`), a call is matched through the file's `use` declarations, and a method call takes its receiver's
+  type from the constraint data when the receiver is a parameter or a typed local; when the type is unknown, the call,
+  like a name defined more than once out of the caller's reach, needs the most that any function it may be needs.
+  Weave says which way it read the calls. An import of a module pinned higher needs that module's level. Weave fails
+  on anything above its module's level, and `bare-rust levels <bare-dir>` prints the level each module needs and why,
+  with the level pinned on it (with `--crate <dir> --out <dir>`, from rustc's calls). `bare-rust levels --libraries
+  <crate>…` checks the table against a library crate's MIR: a public function that calls a library at a higher level
+  than the table gives the function, or one the table does not list, fails. The table's `trusted` lets a function make
+  the calls it lists, with why, and no others; an entry whose calls the function no longer makes fails too. Every module of the examples is pinned at the level it needs, by either reading, and the examples' checks hold
+  each facet's pin to a second inference made from the Y source alone.
 
 ### 6.23 Regions: how a piece of code may execute
 
@@ -1920,8 +1930,10 @@ region 'memory.setup.new_game#fetch'
   alternative of an `orelse`, `// y: #name`, and a marker that states the constraints states the same ones as the
   clauses. The code the marker starts is what follows it in its block, up to `// y: end region counted` or the block's
   end, or the statement it ends for a marker after code; a region that Y statements follow in its block says where it
-  ends. Weave reads that code's syntax, resolving names through the file's `use` declarations and the constraint
-  data, and holds it to each constraint: an atomic region runs in a transaction of `y_runtime::shared`, and, as it may
+  ends. Weave reads that code's syntax and holds it to each constraint. Which function each call calls it takes from
+  rustc where the woven crate builds, as § 6.22 does, so `atomic` bound to a local or re-exported is still the
+  runtime's transaction; without a build, it resolves the names through the file's `use` declarations and the
+  constraint data. An atomic region runs in a transaction of `y_runtime::shared`, and, as it may
   run again, uses no capability but `shared` state, does not wait, calls no function passed in, and calls nothing
   that needs `effects` (§ 6.22); a snapshot one passes `Isolation::Snapshot`; `within` binds a deadline that every
   wait takes, by whatever name it binds it to; `forever` gives the wait a parameter of type `Forever`;

@@ -288,3 +288,101 @@ fn gated_code_is_checked_in_a_build_that_compiles_it() {
     assert_eq!((r.c2.exact, r.c2.files), (3, 3));
     assert_eq!(r.mut_added, 3);
 }
+
+/// The level check (language 6.22) and the region check (6.23) read what rustc resolved in the woven crate: a method
+/// called on a closure's parameter is its type's, a function re-exported under another name is where it is defined,
+/// and a transaction called through a local is still the runtime's `atomic`. From the bare bodies' syntax alone, the
+/// first is any method of that name, the second is not seen, and the third is no transaction.
+#[test]
+fn levels_and_regions_read_what_rustc_resolved() {
+    let runtime = root().join("../../examples/y-runtime").canonicalize().unwrap();
+    let src = "pub mod rt {\n    pub use y_runtime::task::detach as start_detached;\n}\n\npub mod counts {\n    pub trait Count {\n        fn count(&self) -> u32;\n    }\n    pub struct Tally(pub u32);\n    pub struct Ledger(pub u32);\n    impl Count for Tally {\n        fn count(&self) -> u32 {\n            self.0\n        }\n    }\n    impl Count for Ledger {\n        fn count(&self) -> u32 {\n            let mut n = 0;\n            while n < self.0 {\n                n += 1;\n            }\n            n\n        }\n    }\n}\n\npub mod sums {\n    use crate::counts::{Count, Tally};\n    pub fn total(xs: &[Tally]) -> u32 {\n        xs.iter().map(|t| t.count()).sum()\n    }\n}\n\npub mod ticks {\n    pub fn start(within: std::time::Duration) -> u32 {\n        let _ = crate::rt::start_detached(within, || 1);\n        1\n    }\n}\n\npub mod store {\n    use y_runtime::shared::{atomic, Shared, Step, Tx};\n    fn bump(tx: &mut Tx, count: &Shared<u32>) -> Result<Step<u32>, ()> {\n        Ok(Step::Done(tx.get(count) + 1))\n    }\n    pub fn add(count: &Shared<u32>) -> u32 {\n        let run = atomic;\n        // y: region add is atomic\n        run(\"store::add#add\", None, |tx: &mut Tx| bump(tx, count)).unwrap_or(0)\n    }\n}\n";
+    let top = root().join("target/bare-rust-test/wc_levels");
+    let _ = fs::remove_dir_all(&top);
+    let dir = top.join("crate");
+    fs::create_dir_all(dir.join("src")).unwrap();
+    fs::write(dir.join("Cargo.toml"), format!("[package]\nname = \"wc_levels\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\ny-runtime = {{ path = \"{}\" }}\n", runtime.display())).unwrap();
+    fs::write(dir.join("src/lib.rs"), src).unwrap();
+    let bare = top.join("bare");
+    let results = strip_crate(&dir, &bare, true).unwrap();
+    assert!(results.iter().all(|r| r.outcome.is_ok()), "{:?}", results.iter().map(|r| r.outcome.clone()).collect::<Vec<_>>());
+    // `sums` and `ticks` are pinned at `calculations`; `store::add` has an atomic region
+    let cj = bare.join("src/lib.constraints.json");
+    let mut js: Value = serde_json::from_str(&fs::read_to_string(&cj).unwrap()).unwrap();
+    for s in js["subjects"].as_array_mut().unwrap() {
+        if s["name"] == "wc_levels::sums" || s["name"] == "wc_levels::ticks" {
+            s["level"] = "calculations".into();
+        }
+    }
+    let clauses: Vec<Value> = ["atomic", "may run again", "on failure unchanged"].iter().map(|t| serde_json::json!({"kind": "region", "text": t, "source": "y/src/lib.y:1"})).collect();
+    js["subjects"].as_array_mut().unwrap().push(serde_json::json!({"kind": "region", "name": "wc_levels::store::add#add", "clauses": clauses}));
+    fs::write(&cj, serde_json::to_string_pretty(&js).unwrap()).unwrap();
+    let cw = weave(&dir, &bare, &top.join("woven"), false);
+    assert!(cw.checks_via.as_deref().is_some_and(|v| v.starts_with("rustc (MIR of lib")), "{:?} {:?} {:?} {}", cw.checks_via, cw.weave_errors, cw.errors.iter().map(|e| e.show()).collect::<Vec<_>>(), cw.cargo_stderr);
+    // the re-exported `detach` is `y_runtime::task::detach`, which needs `effects`; the closure's `t.count()` is
+    // `Tally`'s, a calculation; and the region runs in `atomic`, called through `run`
+    let errs: Vec<&String> = cw.weave_errors.iter().map(|(_, e)| e).collect();
+    assert_eq!(errs.len(), 1, "{errs:#?}");
+    assert!(errs[0].contains("`detach` (`y_runtime::task::detach`) in `wc_levels::ticks::start` needs level `effects`, and module `wc_levels::ticks` is at `calculations`"), "{errs:#?}");
+    // the bare bodies' syntax alone sees none of the three
+    let brs = fs::read_to_string(bare.join("src/lib.brs")).unwrap();
+    let syntax = bare_rust::level::check(&[("src/lib.brs".into(), brs.clone(), js.clone())]);
+    assert_eq!(syntax.len(), 1, "{syntax:#?}");
+    assert!(syntax[0].contains("a call of `.count` (it may be `wc_levels::counts::Ledger::count`"), "{syntax:#?}");
+    let region = bare_rust::region::check_body(&brs, &js, "wc_levels::store::add#add").unwrap_err();
+    assert!(region.contains("runs in no transaction"), "{region}");
+    // and with what rustc resolved, the region is kept
+    let facts = cw.facts.as_ref().unwrap();
+    assert_eq!(bare_rust::region::check_body_with(&brs, &js, "wc_levels::store::add#add", Some(&facts["src/lib.brs"])), Ok(()));
+}
+
+/// `libraries/levels.json` against what the library crates of the examples call (`facts::check_library`): no public
+/// function of `y-runtime`, `y-collections` or `y-string` calls more than the table gives it. (`y-http` and `y-window`
+/// are at `effects`, which nothing is above.) A function that calls more is named, with the call.
+#[test]
+fn the_table_of_library_levels_holds_for_the_libraries() {
+    let target = bare_rust::cargo::target_dir(&root());
+    for lib in ["y-runtime", "y-collections", "y-string"] {
+        let dir = root().join("../../examples").join(lib);
+        assert_eq!(bare_rust::facts::check_library(&dir, &target).unwrap(), Vec::<String>::new(), "{lib}");
+    }
+    // a `y_string` that writes a file is above its `calculations`
+    let top = root().join("target/bare-rust-test/wc_table");
+    let _ = fs::remove_dir_all(&top);
+    fs::create_dir_all(top.join("src")).unwrap();
+    fs::write(top.join("Cargo.toml"), "[package]\nname = \"y-string\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n").unwrap();
+    fs::write(top.join("src/lib.rs"), "fn keep(text: &str) {\n    let _ = std::fs::write(\"x\", text);\n}\n\npub fn upper(text: &str) -> String {\n    keep(text);\n    text.to_uppercase()\n}\n").unwrap();
+    let errs = bare_rust::facts::check_library(&top, &target).unwrap();
+    assert_eq!(errs.len(), 1, "{errs:#?}");
+    assert!(errs[0].contains("`y_string::upper` needs `effects`, and libraries/levels.json gives it `calculations`: it calls `y_string::keep`, which needs `effects` (it calls `std::fs::write`)"), "{errs:#?}");
+}
+
+/// A `trusted` entry of `libraries/levels.json` vouches for the calls it lists, and only those: a copy of `y-runtime`
+/// whose `engine` also writes a file is above its module's level, and one whose `engine` no longer reads `Y_ATOMIC`
+/// has an entry that outlived its reason.
+#[test]
+fn a_trusted_function_is_trusted_only_for_the_calls_it_lists() {
+    let target = bare_rust::cargo::target_dir(&root());
+    let runtime = root().join("../../examples/y-runtime");
+    let copy = |name: &str, from: &str, to: &str| -> PathBuf {
+        let dir = root().join("target/bare-rust-test").join(name);
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("src")).unwrap();
+        fs::copy(runtime.join("Cargo.toml"), dir.join("Cargo.toml")).unwrap();
+        for e in fs::read_dir(runtime.join("src")).unwrap() {
+            let p = e.unwrap().path();
+            fs::copy(&p, dir.join("src").join(p.file_name().unwrap())).unwrap();
+        }
+        let shared = fs::read_to_string(dir.join("src/shared.rs")).unwrap();
+        assert!(shared.contains(from), "{from}");
+        fs::write(dir.join("src/shared.rs"), shared.replacen(from, to, 1)).unwrap();
+        dir
+    };
+    let read = "    match std::env::var(\"Y_ATOMIC\").as_deref() {";
+    let more = copy("wc_trust_more", read, &format!("    let _ = std::fs::metadata(\"Y_ATOMIC\");\n{read}"));
+    let errs = bare_rust::facts::check_library(&more, &target).unwrap();
+    assert!(errs.iter().any(|e| e.contains("`y_runtime::shared::engine` needs `effects`, and libraries/levels.json gives it `shared`: it calls `std::fs::metadata`")), "{errs:#?}");
+    let stale = copy("wc_trust_stale", read, "    match Ok::<&str, ()>(\"one lock\") {");
+    let errs = bare_rust::facts::check_library(&stale, &target).unwrap();
+    assert_eq!(errs, vec!["src/shared.rs: libraries/levels.json trusts `y_runtime::shared::engine` to call `std::env::var`, and it no longer does: remove the entry".to_string()]);
+}
