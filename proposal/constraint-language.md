@@ -1866,7 +1866,10 @@ prints it under the file's `module` line:
   without `--crate`), a call is matched through the file's `use` declarations, and a method call takes its receiver's
   type from the constraint data when the receiver is a parameter or a typed local; when the type is unknown, the call,
   like a name defined more than once out of the caller's reach, needs the most that any function it may be needs.
-  Weave says which way it read the calls. An import of a module pinned higher needs that module's level. Weave fails
+  Weave says which way it read the calls. A macro is read from its invocation either way, as rustc places its
+  expansion's calls in the library's source: it needs the level the table gives its path (`std::println` is
+  `effects`; one named alone is the prelude's unless the file imports it), one the crate defines counts as nothing,
+  and the calls in its arguments are the body's. An import of a module pinned higher needs that module's level. Weave fails
   on anything above its module's level, and `bare-rust levels <bare-dir>` prints the level each module needs and why,
   with the level pinned on it (with `--crate <dir> --out <dir>`, from rustc's calls). `bare-rust levels --libraries
   <crate>…` checks the table against a library crate's MIR: a public function that calls a library at a higher level
