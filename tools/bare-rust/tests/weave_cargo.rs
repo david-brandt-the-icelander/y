@@ -361,8 +361,8 @@ fn the_table_of_library_levels_holds_for_the_libraries() {
 }
 
 /// A `trusted` entry of `libraries/levels.json` vouches for the calls it lists, and only those: a copy of `y-runtime`
-/// whose `engine` also writes a file is above its module's level, and one whose `engine` no longer reads `Y_ATOMIC`
-/// has an entry that outlived its reason.
+/// whose `wait` also reads a file's metadata is above its module's level, and one whose `wait` no longer reads its
+/// deadline has an entry that outlived its reason.
 #[test]
 fn a_trusted_function_is_trusted_only_for_the_calls_it_lists() {
     let target = bare_rust::cargo::target_dir(&root());
@@ -381,13 +381,13 @@ fn a_trusted_function_is_trusted_only_for_the_calls_it_lists() {
         fs::write(dir.join("src/shared.rs"), shared.replacen(from, to, 1)).unwrap();
         dir
     };
-    let read = "    match std::env::var(\"Y_ATOMIC\").as_deref() {";
-    let more = copy("wc_trust_more", read, &format!("    let _ = std::fs::metadata(\"Y_ATOMIC\");\n{read}"));
+    let read = "            let left = d.remaining()?;";
+    let more = copy("wc_trust_more", read, &format!("            let _ = std::fs::metadata(\"lock\");\n{read}"));
     let errs = bare_rust::facts::check_library(&more, &target).unwrap();
-    assert!(errs.iter().any(|e| e.contains("`y_runtime::shared::engine` needs `effects`, and libraries/levels.json gives it `shared`: it calls `std::fs::metadata`")), "{errs:#?}");
-    let stale = copy("wc_trust_stale", read, "    match Ok::<&str, ()>(\"one lock\") {");
+    assert!(errs.iter().any(|e| e.contains("`y_runtime::shared::atomic` needs `effects`, and libraries/levels.json gives it `shared`") && e.contains("(it calls `std::fs::metadata`)")), "{errs:#?}");
+    let stale = copy("wc_trust_stale", read, "            let left = Duration::from_secs(d as *const Deadline as usize as u64 % 2);");
     let errs = bare_rust::facts::check_library(&stale, &target).unwrap();
-    assert_eq!(errs, vec!["src/shared.rs: libraries/levels.json trusts `y_runtime::shared::engine` to call `std::env::var`, and it no longer does: remove the entry".to_string()]);
+    assert_eq!(errs, vec!["src/shared.rs: libraries/levels.json trusts `y_runtime::shared::wait` to call `y_runtime::Deadline::remaining`, and it no longer does: remove the entry".to_string()]);
 }
 
 /// The level check reads the MIR of the crate's tests and of every build whose check passes: a function under a

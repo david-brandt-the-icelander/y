@@ -421,7 +421,7 @@ body's, from rustc or, without a build, by reading the arguments as a call's.
 calls (`--show-calls` lists them). `bare-rust levels --libraries <crate>…` checks `libraries/levels.json` against what a
 library crate calls, from its MIR: a public function that reaches a library module above the level the table gives
 the function, or a library the table does not list, fails. The table's `trusted` lets a function make the calls it
-lists there, with why (`"y_runtime::shared::engine": {"calls": ["std::env::var"], "why": "…"}`), and no others: any other
+lists there, with why (`"y_runtime::shared::wait": {"calls": ["y_runtime::Deadline::remaining"], "why": "…"}`), and no others: any other
 call it makes counts, and an entry whose calls the function no longer makes fails as stale.
 
 ```text

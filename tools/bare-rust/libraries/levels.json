@@ -43,12 +43,6 @@
     "std::thread_local": "shared"
   },
   "trusted": {
-    "y_runtime::shared::engine": {
-      "calls": [
-        "std::env::var"
-      ],
-      "why": "reads `Y_ATOMIC`, the runtime's own choice of engine for atomic regions, not the program's environment"
-    },
     "y_runtime::shared::wait": {
       "calls": [
         "y_runtime::Deadline::remaining"
