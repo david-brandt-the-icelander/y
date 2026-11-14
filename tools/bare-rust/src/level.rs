@@ -27,7 +27,7 @@
 //! needs the level that function needs, so a `calculations` module that calls a `structured` function is
 //! `structured`. An import (`use`) of a module pinned at a higher level fails too.
 //!
-//! What a call calls is read one of two ways, and `uses_with` takes, file by file, the first it has:
+//! What a call calls is read one of two ways, and `uses_with` takes, function by function, the first it has:
 //! - **From rustc** (`crate::facts`), when the woven crate builds: weave with cargo reads the crate's MIR, where every
 //!   call names the item it resolved to. A function of the crate is found by its path; a method by its receiver's
 //!   type, which MIR states (`<Tally as Count>::count` is `Tally`'s `count`, whatever names the receiver: a closure's
@@ -35,8 +35,12 @@
 //!   local that holds the function (`let run = atomic;`) is the function itself. A trait's method called on a type
 //!   parameter may be any impl of the trait in the crate, and needs the most of them; a library's trait method needs
 //!   the level of its type's module and of its trait's.
+//!
+//!   rustc's MIR is read for every target of the crate (library, binaries, integration tests), for the library and
+//!   binaries again with their unit tests (`cfg(test)`), and in every build whose check passed (`crate::builds`: its
+//!   target, features, `--cfg` and profile), so code that only a test or another build compiles is read from rustc too.
 //! - **From the syntax**, when there is no build (a unit test, `bare-rust levels` without `--crate`, a crate that does
-//!   not compile): a call is matched through the file's `use` declarations (`atomic(…)` after
+//!   not compile), and for a function rustc said nothing of (one that no build compiles, or that makes no call): a call is matched through the file's `use` declarations (`atomic(…)` after
 //!   `use y_runtime::shared::atomic;` is `y_runtime::shared::atomic`). A method call whose receiver's type the
 //!   constraint data does not give (a parameter or a typed local) may be any method of that name of the crate's types
 //!   (or, on `self`, its own type's), and a name the crate has more than one function for, out of reach of the
@@ -160,6 +164,8 @@ struct Function {
     trait_name: Option<String>,
     /// The macros it invokes, by the path it names them by (`println`, `y_collections::list`), with their lines.
     macros: Vec<(String, usize)>,
+    /// Whether its calls are the ones rustc resolved: rustc gave facts for its file, and some for it.
+    resolved: bool,
 }
 
 /// An import: the module it is in, the path as written, its file and line.
@@ -248,11 +254,14 @@ fn read_file(file: &str, brs: &str, js: &Value, facts: Option<&[Fact]>, fns: &mu
                 }
             }
         }
-        if facts.is_some() {
+        // the calls rustc resolved in it, if it gave some: a function of a file it read that no build compiles (or that
+        // makes no call) keeps the calls its syntax shows
+        let from_rustc = facts.is_some() && !resolved[k].is_empty();
+        if from_rustc {
             calls = std::mem::take(&mut resolved[k]);
         }
         let trait_name = node.parent().and_then(|p| p.parent()).filter(|p| p.kind() == "impl_item").and_then(|p| p.child_by_field_name("trait")).map(|t| last_segment(text(t, brs)));
-        fns.push(Function { path: path.clone(), file: file.to_string(), own, calls, trait_name, macros });
+        fns.push(Function { path: path.clone(), file: file.to_string(), own, calls, trait_name, macros, resolved: from_rustc });
     }
     // a macro needs the level of the library it is from, read from its invocation in either way (`macro_level`)
     let uses = use_map(imports, file);
@@ -264,14 +273,11 @@ fn read_file(file: &str, brs: &str, js: &Value, facts: Option<&[Fact]>, fns: &mu
             }
         }
     }
-    if facts.is_some() {
-        // what rustc resolved needs no imports to follow: its library calls are counted with the crate's (`uses_with`)
-        return;
-    }
     // a call into a library needs its module's level (`libraries/levels.json`), through the file's imports; a call into a
     // library the table does not know needs `effects`, as nothing says it has none
     let local = local_names(&tree.root_node(), brs, &base);
-    for f in fns[first..].iter_mut() {
+    // what rustc resolved needs no imports to follow: its library calls are counted with the crate's (`uses_with`)
+    for f in fns[first..].iter_mut().filter(|f| !f.resolved) {
         for (call, line) in &f.calls {
             let (shown, full) = match call {
                 Call::Path(p) => {
@@ -985,6 +991,17 @@ mod tests {
         let facts: Facts = [("src/m.brs".to_string(), vec![fact(brs, "for x", "<std::ops::Range<u32> as std::iter::IntoIterator>::into_iter")])].into_iter().collect();
         let errs = check_with(&[pin(&f, "c::m::show", "calculations")], Some(&facts));
         assert!(errs.iter().any(|e| e.contains("the macro `println!` (`std::println`) in `c::m::show::show` needs level `effects`")), "{errs:#?}");
+    }
+
+    #[test]
+    fn a_function_rustc_said_nothing_of_keeps_the_calls_its_syntax_shows() {
+        // rustc read `shown` (a build compiles it) and not `gated` (no build does): `gated`'s call of `rand::random` is
+        // still read from its syntax, through the file's import
+        let brs = "use rand::random;\nmod m2 {\n    fn shown(x) {\n        twice(x)\n    }\n    fn twice(x) {\n        x\n    }\n    fn gated() {\n        random()\n    }\n}\n";
+        let f = pin(&file(brs, json!([pure("c::m::m2::shown"), pure("c::m::m2::twice"), pure("c::m::m2::gated")])), "c::m::m2", "calculations");
+        let facts: Facts = [("src/m.brs".to_string(), vec![fact(brs, "twice(x)", "m::m2::twice")])].into_iter().collect();
+        let errs = check_with(&[f], Some(&facts));
+        assert!(errs.len() == 1 && errs[0].contains("`random` (`rand::random`), a library with no level in libraries/levels.json in `c::m::m2::gated`"), "{errs:#?}");
     }
 
     #[test]

@@ -1078,7 +1078,19 @@ pub(crate) fn targets(dir: &Path, all_targets: bool) -> R<Vec<Target>> {
 
 /// The MIR of one target, from `cargo rustc`.
 pub(crate) fn mir_of(dir: &Path, target_dir: &Path, t: &Target, unit_tests: bool) -> R<String> {
-    let mut args = vec!["rustc".to_string(), "--profile=check".into()];
+    mir_in(dir, target_dir, t, unit_tests, None)
+}
+
+/// As `mir_of`, in a build of the crate (`crate::builds`) other than the default one: its target, features and profile,
+/// and its `--cfg` and target features as the flags of every crate, in a target directory of its own.
+pub(crate) fn mir_in(dir: &Path, target_dir: &Path, t: &Target, unit_tests: bool, build: Option<&crate::builds::Build>) -> R<String> {
+    let build = build.filter(|b| !b.is_default());
+    let release = build.is_some_and(|b| b.release);
+    let mut args = vec!["rustc".to_string(), if release { "--release".into() } else { "--profile=check".to_string() }];
+    if let Some(b) = build {
+        // the build's target and features; which targets of the crate are compiled is chosen here
+        args.extend(b.cargo_args().into_iter().filter(|a| !matches!(a.as_str(), "--lib" | "--bins" | "--tests" | "--release")));
+    }
     match t.kind {
         "lib" => args.push("--lib".into()),
         "bin" => args.extend(["--bin".into(), t.name.clone()]),
@@ -1090,6 +1102,10 @@ pub(crate) fn mir_of(dir: &Path, target_dir: &Path, t: &Target, unit_tests: bool
     }
     let mut c = Command::new("cargo");
     c.args(&args).current_dir(dir).env("CARGO_TARGET_DIR", target_dir).env("CARGO_TERM_COLOR", "never").env("RUSTC_BOOTSTRAP", "1");
+    if let Some(b) = build {
+        c.env("CARGO_TARGET_DIR", target_dir.join("builds").join(format!("{}-mir", b.name)));
+        c.env_remove("RUSTFLAGS").env("CARGO_ENCODED_RUSTFLAGS", b.rustflags().join("\x1f"));
+    }
     // The MIR is printed on stdout; a stale check build would print nothing.
     c.env("CARGO_INCREMENTAL", "0");
     let o = c.output().map_err(|e| format!("cargo rustc: {e}"))?;

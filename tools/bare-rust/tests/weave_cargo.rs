@@ -389,3 +389,49 @@ fn a_trusted_function_is_trusted_only_for_the_calls_it_lists() {
     let errs = bare_rust::facts::check_library(&stale, &target).unwrap();
     assert_eq!(errs, vec!["src/shared.rs: libraries/levels.json trusts `y_runtime::shared::engine` to call `std::env::var`, and it no longer does: remove the entry".to_string()]);
 }
+
+/// The level check reads the MIR of the crate's tests and of every build whose check passes: a function under a
+/// feature that only another build turns on, and that calls the runtime's `detach` re-exported under another name, is
+/// above its module's level; without that build, no MIR has it, and its syntax does not show the call for what it is.
+#[test]
+fn gated_and_test_code_is_read_from_rustc() {
+    let runtime = root().join("../../examples/y-runtime").canonicalize().unwrap();
+    let src = "pub mod rt {\n    pub use y_runtime::task::detach as start_detached;\n}\n\npub mod ticks {\n    #[cfg(feature = \"extra\")]\n    pub fn start(within: std::time::Duration) -> u32 {\n        let _ = crate::rt::start_detached(within, || 1);\n        1\n    }\n\n    pub fn one() -> u32 {\n        1\n    }\n}\n\n#[cfg(test)]\nmod tests {\n    #[test]\n    fn one() {\n        assert_eq!(crate::ticks::one(), 1);\n    }\n}\n";
+    let top = root().join("target/bare-rust-test/wc_gated");
+    let _ = fs::remove_dir_all(&top);
+    let dir = top.join("crate");
+    fs::create_dir_all(dir.join("src")).unwrap();
+    fs::write(dir.join("Cargo.toml"), format!("[package]\nname = \"wc_gated\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[features]\nextra = []\n\n[dependencies]\ny-runtime = {{ path = \"{}\" }}\n", runtime.display())).unwrap();
+    fs::write(dir.join("src/lib.rs"), src).unwrap();
+    let bare = top.join("bare");
+    let results = strip_crate(&dir, &bare, true).unwrap();
+    assert!(results.iter().all(|r| r.outcome.is_ok()), "{:?}", results.iter().map(|r| r.outcome.clone()).collect::<Vec<_>>());
+    let cj = bare.join("src/lib.constraints.json");
+    let mut js: Value = serde_json::from_str(&fs::read_to_string(&cj).unwrap()).unwrap();
+    for s in js["subjects"].as_array_mut().unwrap() {
+        if s["name"] == "wc_gated::ticks" {
+            s["level"] = "calculations".into();
+        }
+    }
+    fs::write(&cj, serde_json::to_string_pretty(&js).unwrap()).unwrap();
+    // strip found the build that turns the feature on; in the default build alone, `start` is compiled by nothing: its
+    // syntax is read, and passes
+    assert!(fs::read_to_string(bare.join("builds.json")).unwrap().contains("feature-extra"));
+    fs::write(bare.join("builds.json"), r#"{"builds": [{"name": "default"}]}"#).unwrap();
+    let cw = weave(&dir, &bare, &top.join("woven"), false);
+    let via = cw.checks_via.clone().unwrap_or_default();
+    assert!(via.starts_with("rustc (MIR of lib, lib tests") && !via.contains("build feature-extra"), "{via}");
+    assert!(cw.weave_errors.is_empty(), "{:#?}", cw.weave_errors);
+    // the test's call is one rustc resolved
+    let facts = &cw.facts.as_ref().unwrap()["src/lib.brs"];
+    let test_line = fs::read_to_string(bare.join("src/lib.brs")).unwrap().lines().position(|l| l.contains("crate::ticks::one()")).unwrap() + 1;
+    assert!(facts.iter().any(|f| f.line == test_line && f.callee.path == "wc_gated::ticks::one"), "{facts:#?}");
+    // with the build that turns the feature on, its MIR has `start`, and the call of `detach`
+    fs::write(bare.join("builds.json"), r#"{"builds": [{"name": "default"}, {"name": "feature-extra", "features": ["extra"]}]}"#).unwrap();
+    let cw = weave(&dir, &bare, &top.join("woven2"), false);
+    let via = cw.checks_via.clone().unwrap_or_default();
+    assert!(via.contains("build feature-extra: lib, lib tests"), "{via}");
+    let errs: Vec<&String> = cw.weave_errors.iter().map(|(_, e)| e).collect();
+    assert_eq!(errs.len(), 1, "{errs:#?}");
+    assert!(errs[0].contains("`detach` (`y_runtime::task::detach`) in `wc_gated::ticks::start` needs level `effects`, and module `wc_gated::ticks` is at `calculations`"), "{errs:#?}");
+}

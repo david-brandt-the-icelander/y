@@ -403,9 +403,11 @@ regions checked from …`, and `checks_via` in `--json`):
   type's whatever names the receiver (`|t| t.count()` is `Tally`'s `count` when `t` is a `Tally`), and a library's
   function is found where it is defined, so a re-export, a renamed import or a local that holds the function (`let
   run = atomic; run(…)`) is that function. A trait's method called on a type parameter may be any impl of the trait in
-  the crate.
+  the crate. Weave reads the MIR of every target (library, binaries, integration tests), of the library and binaries
+  with their unit tests, and of every build in `builds.json` whose check passed, each with its target, features,
+  `--cfg` and profile; it names what it read, and any build or target whose MIR it could not read, with why.
 - **From the syntax**, when there is no build: a weave without cargo, a crate that does not compile, a file weave
-  refused, or a call rustc said nothing of. A name is resolved through the file's `use` declarations; a method's
+  refused, a function no build compiles (rustc said nothing of it), or a call rustc said nothing of. A name is resolved through the file's `use` declarations; a method's
   receiver type comes from the constraint data when the receiver is a parameter or a typed local, and is otherwise
   unknown, so the call counts as the most demanding method of that name in the crate.
 
