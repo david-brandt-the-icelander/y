@@ -1,5 +1,5 @@
 //! The execution paths through each function of a Y module, under the path rules of Y § 3.5 and § 3.14. There is no Y
-//! compiler yet; this is what its path enumeration would give, written over the Y text as the examples use it.
+//! compiler yet; this is what its path enumeration would give, over the Y's tree from `y-parse` (`tools/y-parse`).
 //!
 //! A path is the sequence of named outcomes one call passes through, written as breadcrumbs: `own_pieces > placed'many >
 //! theirs`.
@@ -22,19 +22,14 @@
 //! - `fail not_reachable` and `fail not_implemented` end a path that needs no test.
 //!
 //! What a path shows is carried along it as facts: the interval of a number, or of a list's count. They come from the
-//! branches taken, the conditions found false, `where` preconditions, the `ensures` of a called function, `assert`s and
+//! branches taken, the conditions found false, `where` preconditions, the `ensures` of a called function, and
 //! constants. A sub-outcome the facts rule out is no path: that is what "proven" means here.
-use regex::Regex;
+//!
+//! The facts are kept on expressions by their text, as `text` writes a node: `game.misses.count()`. This is a port of
+//! `tools/paths/yp.py`: change both together, and keep their output the same.
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::sync::LazyLock;
-
-macro_rules! re {
-    ($s:expr) => {{
-        static R: LazyLock<Regex> = LazyLock::new(|| Regex::new($s).unwrap());
-        &*R
-    }};
-}
+use y_parse::{Node, Value};
 
 const ORDERED: [&str; 9] = ["int32", "uint32", "uint16", "int64", "uint64", "duration", "instant", "count", "int"];
 const UNSIGNED: [&str; 5] = ["uint32", "uint16", "uint64", "duration", "count"];
@@ -43,98 +38,212 @@ pub const EXEMPT: [&str; 2] = ["not_reachable", "not_implemented"];
 const ORDERS3: [&str; 3] = ["lt", "eq", "gt"];
 
 // ---------------------------------------------------------------------------------------------------------------------
-// Text at the top level of an expression
+// Expressions: nodes of the tree, and nodes made here
 
-/// (byte index, char, depth) for the characters outside strings.
-fn scan(e: &str) -> Vec<(usize, char, i32)> {
-    let (mut depth, mut quoted, mut out) = (0, false, vec![]);
-    for (k, c) in e.char_indices() {
-        if c == '"' {
-            quoted = !quoted;
-            continue;
-        }
-        if quoted {
-            continue;
-        }
-        if c == '(' || c == '[' {
-            depth += 1;
-        } else if c == ')' || c == ']' {
-            depth -= 1;
-        }
-        out.push((k, c, depth));
-    }
-    out
+fn name_node(n: &str) -> Node {
+    Node::new("name", 0).with("name", n)
 }
 
-fn strip_parens(e: &str) -> String {
-    let mut e = e.trim().to_string();
-    while e.starts_with('(') {
-        let close = scan(&e).into_iter().find(|&(_, c, d)| c == ')' && d == 0).map(|x| x.0);
-        if close != Some(e.len() - 1) {
-            break;
+fn member_node(obj: Node, n: &str) -> Node {
+    Node::new("member", 0).with("object", obj).with("name", n)
+}
+
+fn call_node(callee: Node) -> Node {
+    Node::new("call", 0).with("callee", callee).with("args", Vec::<Node>::new())
+}
+
+/// `obj.count()`.
+fn count(obj: &Node) -> Node {
+    call_node(member_node(obj.clone(), "count"))
+}
+
+fn s<'a>(e: &'a Node, key: &str) -> &'a str {
+    e.str(key).unwrap_or("")
+}
+
+fn n<'a>(e: &'a Node, key: &str) -> &'a Node {
+    e.node(key).unwrap_or_else(|| panic!("a {} with no {key}", e.kind))
+}
+
+/// An expression as text, the key facts are kept by: brackets where the source has them, but not around the whole.
+fn text(e: &Node, top: bool) -> String {
+    let out = match e.kind {
+        "name" => s(e, "name").to_string(),
+        "literal" => s(e, "text").to_string(),
+        "member" => format!("{}.{}", text(n(e, "object"), false), s(e, "name")),
+        "call" => {
+            let args: Vec<String> = e
+                .nodes("args")
+                .iter()
+                .map(|a| format!("{}{}", a.str("name").map_or(String::new(), |x| format!("{x}: ")), text(n(a, "value"), false)))
+                .collect();
+            format!("{}({})", text(n(e, "callee"), false), args.join(", "))
         }
-        e = e[1..e.len() - 1].trim().to_string();
+        "index" => format!("{}[{}]", text(n(e, "object"), false), text(n(e, "index"), false)),
+        "binary" => format!("{} {} {}", text(n(e, "left"), false), s(e, "op"), text(n(e, "right"), false)),
+        "unary" => format!("{}{}", if s(e, "op") == "not" { "not " } else { "-" }, text(n(e, "operand"), false)),
+        "list" => format!("[{}]", e.nodes("items").iter().map(|i| text(i, false)).collect::<Vec<_>>().join(", ")),
+        "mutable" | "fake" | "compile" => format!("{} {}", e.kind, text(n(e, "value"), false)),
+        "or_fail" => format!("{} or fail", text(n(e, "value"), false)),
+        "forever" => format!("{} forever because \"{}\"", text(n(e, "value"), false), s(e, "because")),
+        k => panic!("no text for a {k}"),
+    };
+    if e.flag("parens") && !top {
+        format!("({out})")
+    } else {
+        out
+    }
+}
+
+fn t(e: &Node) -> String {
+    text(e, true)
+}
+
+/// A name or a path of names, `game.misses`, as text; None for anything else.
+fn chain(e: &Node) -> Option<String> {
+    match e.kind {
+        "name" => Some(s(e, "name").to_string()),
+        "member" => Some(format!("{}.{}", chain(n(e, "object"))?, s(e, "name"))),
+        _ => None,
+    }
+}
+
+/// The name a path of members and indexes starts from: `game` of `game.squares[i]`; None when it starts otherwise.
+fn root(e: &Node) -> Option<String> {
+    let mut e = e;
+    while e.kind == "member" || e.kind == "index" {
+        e = n(e, "object");
+    }
+    (e.kind == "name").then(|| s(e, "name").to_string())
+}
+
+/// `obj` when `e` is `obj.m(…)` for a method `m` among `names` (any, when there are none), with `args` arguments when
+/// it says how many; else None.
+fn method<'a>(e: &'a Node, names: &[&str], args: Option<usize>) -> Option<&'a Node> {
+    if e.kind != "call" {
+        return None;
+    }
+    let callee = n(e, "callee");
+    let named = names.is_empty() || names.contains(&s(callee, "name"));
+    (callee.kind == "member" && named && args.is_none_or(|k| e.nodes("args").len() == k)).then(|| n(callee, "object"))
+}
+
+/// The argument named `name` of a call.
+fn arg<'a>(e: &'a Node, name: &str) -> Option<&'a Node> {
+    e.nodes("args").into_iter().find(|a| a.str("name") == Some(name)).map(|a| n(a, "value"))
+}
+
+/// The arguments' names of a call, `None` for one without.
+fn arg_names(e: &Node) -> Vec<Option<&str>> {
+    e.nodes("args").iter().map(|a| a.str("name")).collect()
+}
+
+fn is_literal(e: &Node, ty: &str) -> bool {
+    e.kind == "literal" && s(e, "type") == ty
+}
+
+/// A whole number, `6` or `-6`.
+fn is_int(e: &Node) -> bool {
+    if e.kind == "unary" && s(e, "op") == "-" {
+        let o = n(e, "operand");
+        return is_literal(o, "integer") && !o.flag("parens");
+    }
+    is_literal(e, "integer")
+}
+
+/// The operands of a chain of `op` (`and` or `or`), as the source groups them: `(a or b) or c` has two.
+fn operands<'a>(e: &'a Node, op: &str) -> Vec<&'a Node> {
+    if e.kind == "binary" && s(e, "op") == op {
+        let left = n(e, "left");
+        let mut out = if left.flag("parens") { vec![left] } else { operands(left, op) };
+        out.push(n(e, "right"));
+        return out;
+    }
+    vec![e]
+}
+
+/// An expression without its `or fail` and its `forever because "…"`.
+fn unwrap(e: &Node) -> &Node {
+    let mut e = e;
+    while e.kind == "or_fail" || e.kind == "forever" {
+        e = n(e, "value");
     }
     e
 }
 
-fn split_top(e: &str, sep: &str) -> Vec<String> {
-    let (mut parts, mut last) = (vec![], 0);
-    for (k, _, d) in scan(e) {
-        if d == 0 && k >= last && e[k..].starts_with(sep) {
-            parts.push(e[last..k].trim().to_string());
-            last = k + sep.len();
+/// An expression as facts are kept on it: a count converted to another whole number is the same count.
+fn norm(e: &Node) -> &Node {
+    match method(e, &["to_int32", "to_uint32"], Some(0)) {
+        Some(inner) if method(inner, &["count"], Some(0)).is_some() => inner,
+        _ => e,
+    }
+}
+
+/// A type that has no arguments, by its name.
+fn ty(name: &str) -> Node {
+    Node::new("type", 0).with("name", name).with("args", Vec::<Node>::new()).with("text", name)
+}
+
+fn type_text(t: &Option<Node>) -> Option<&str> {
+    t.as_ref().map(|t| s(t, "text"))
+}
+
+/// The element type of `list<element_type=T>`.
+fn element(t: &Option<Node>) -> Option<Node> {
+    let t = t.as_ref()?;
+    let args = t.nodes("args");
+    (s(t, "name") == "list" && args.len() == 1 && s(args[0], "name") == "element_type" && n(args[0], "value").kind == "type")
+        .then(|| n(args[0], "value").clone())
+}
+
+/// A path of names and indexes whose index is a plain path or a number: `game.squares[i]`, `a[b.c]`.
+fn plain(e: &Node) -> bool {
+    match e.kind {
+        "name" => true,
+        "member" => plain(n(e, "object")),
+        "index" => {
+            let i = n(e, "index");
+            plain(n(e, "object")) && (plain(i) || is_literal(i, "integer"))
+        }
+        _ => false,
+    }
+}
+
+/// A path of names and indexes by a name or a number: `game.squares[i]`, not `f(x).y`.
+fn simple(e: &Node) -> bool {
+    match e.kind {
+        "name" => true,
+        "member" => simple(n(e, "object")),
+        "index" => {
+            let i = n(e, "index");
+            simple(n(e, "object")) && (i.kind == "name" || is_literal(i, "integer"))
+        }
+        _ => false,
+    }
+}
+
+/// `e` with every name `old`, and every member named `old`, renamed `new`.
+fn renamed(e: &Node, old: &str, new: &str) -> Node {
+    fn fix(v: &mut Value, old: &str, new: &str) {
+        match v {
+            Value::Node(x) => fix_node(x, old, new),
+            Value::List(vs) => vs.iter_mut().for_each(|v| fix(v, old, new)),
+            _ => {}
         }
     }
-    parts.push(e[last..].trim().to_string());
-    parts
-}
-
-fn split_at(e: &str, op: &str) -> Option<(String, String)> {
-    scan(e).into_iter().find(|&(k, _, d)| d == 0 && e[k..].starts_with(op)).map(|(k, _, _)| (e[..k].trim().to_string(), e[k + op.len()..].trim().to_string()))
-}
-
-fn top_comparison(e: &str) -> Option<(String, String, String)> {
-    for (k, _, d) in scan(e) {
-        if d == 0 {
-            for op in [" <= ", " >= ", " == ", " != ", " < ", " > "] {
-                if e[k..].starts_with(op) {
-                    return Some((e[..k].trim().to_string(), op.trim().to_string(), e[k + op.len()..].trim().to_string()));
-                }
+    fn fix_node(x: &mut Node, old: &str, new: &str) {
+        let rename = (x.kind == "name" || x.kind == "member") && x.str("name") == Some(old);
+        for (k, v) in x.fields.iter_mut() {
+            if *k == "name" && rename {
+                *v = Value::Str(new.to_string());
+            } else {
+                fix(v, old, new);
             }
         }
     }
-    None
-}
-
-fn has_top_arith(e: &str) -> bool {
-    let b = e.as_bytes();
-    scan(e).into_iter().any(|(k, c, d)| d == 0 && 0 < k && k + 1 < e.len() && b[k - 1] == b' ' && "+-*/%".contains(c) && b[k + 1] == b' ')
-}
-
-fn split_commas(e: &str) -> Vec<String> {
-    let (mut parts, mut last) = (vec![], 0);
-    for (k, c, d) in scan(e) {
-        if d == 0 && c == ',' {
-            parts.push(e[last..k].to_string());
-            last = k + 1;
-        }
-    }
-    parts.push(e[last..].to_string());
-    parts.into_iter().map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect()
-}
-
-/// An expression as facts are kept on it: a count converted to another whole number is the same count.
-fn norm(e: &str) -> String {
-    let e = strip_parens(e);
-    match re!(r"^(.+\.count\(\))\.to_(?:u?int32)\(\)$").captures(&e) {
-        Some(m) => m[1].to_string(),
-        None => e,
-    }
-}
-
-fn cap(m: &regex::Captures, k: usize) -> String {
-    m.get(k).map_or(String::new(), |x| x.as_str().to_string())
+    let mut out = e.clone();
+    fix_node(&mut out, old, new);
+    out
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -190,25 +299,32 @@ fn floor_div(a: i64, b: i64) -> i64 {
 // ---------------------------------------------------------------------------------------------------------------------
 // A module's declarations
 
-type Env = HashMap<String, String>;
+/// What a name's type is known to be; a name with `None` is known, and its type is not.
+type Env = HashMap<String, Option<Node>>;
 
 pub struct Module {
-    lines: Vec<String>,
-    fields: HashMap<String, String>,
-    constants: HashMap<String, String>,
-    values: HashMap<String, String>,
-    results: HashMap<String, (Option<String>, Option<String>)>,
-    params: HashMap<String, Vec<(String, Option<String>)>>,
-    contracts: HashMap<String, Vec<(String, String)>>,
+    tree: Node,
+    fields: HashMap<String, Node>,
+    constants: HashMap<String, Node>,
+    values: HashMap<String, Node>,
+    results: HashMap<String, (Option<String>, Option<Node>)>,
+    params: HashMap<String, Vec<(String, Option<Node>)>>,
+    contracts: HashMap<String, Vec<(&'static str, Node)>>,
     /// a refined type's constraints on its values' counts: {type: [(op, n)]}
     refinements: HashMap<String, Vec<(String, i64)>>,
     groups: HashSet<String>,
 }
 
+/// Each declaration of a file, in a facet or not.
+fn declarations(tree: &Node) -> Vec<&Node> {
+    tree.nodes("decls").into_iter().flat_map(|d| if d.kind == "facet" { d.nodes("decls") } else { vec![d] }).collect()
+}
+
 impl Module {
     pub fn new(text: &str) -> Module {
+        let tree = y_parse::parse(text).unwrap_or_else(|e| panic!("the Y source does not parse: {e}"));
         let mut m = Module {
-            lines: text.split('\n').map(str::to_string).collect(),
+            tree: Node::new("file", 1),
             fields: HashMap::new(),
             constants: HashMap::new(),
             values: HashMap::new(),
@@ -218,204 +334,164 @@ impl Module {
             refinements: HashMap::new(),
             groups: HashSet::new(),
         };
-        m.collect();
+        m.collect(&tree);
+        m.tree = tree;
         m.groups = m.constants.keys().map(|k| k.split('.').next().unwrap().to_string()).collect();
         m
     }
 
-    fn collect(&mut self) {
-        let raw = self.lines.clone();
-        let (mut lines, mut k) = (vec![], 0);
-        while k < raw.len() {
-            let mut l = raw[k].clone();
-            k += 1;
-            while l.matches('[').count() > l.matches(']').count() && k < raw.len() {
-                l = format!("{} {}", l.trim_end(), raw[k].trim());
-                k += 1;
-            }
-            lines.push(l);
-        }
-        let (mut group, mut kind, mut doc, mut in_doc, mut current): (Option<String>, Option<String>, Vec<String>, bool, Option<String>) = (None, None, vec![], false, None);
-        let mut refined: Option<String> = None;
-        for l in &lines {
-            let t = l.trim();
-            if re!(r"^-{3,}$").is_match(t) {
-                in_doc = !in_doc;
-                if in_doc {
-                    doc.clear();
+    fn collect(&mut self, tree: &Node) {
+        for d in declarations(tree) {
+            let name = s(d, "name");
+            match d.kind {
+                "structure" => {
+                    for f in d.nodes("members").into_iter().filter(|f| f.kind == "field") {
+                        self.fields.entry(s(f, "name").to_string()).or_insert_with(|| n(f, "type").clone());
+                    }
                 }
-                continue;
-            }
-            if in_doc {
-                doc.push(t.to_string());
-                continue;
-            }
-            if let Some(m) = re!(r"^(?:public )?(constants|structure|type) (\w+)").captures(t) {
-                kind = Some(cap(&m, 1));
-                group = Some(cap(&m, 2));
-                refined = if re!(r"^(?:public )?type \w+ is ").is_match(t) { group.clone() } else { None };
-                continue;
-            }
-            if let Some(r) = &refined {
-                for m in re!(r"value\.count\(\) (>=|>|<=|<|==) (\d+)").captures_iter(t) {
-                    self.refinements.entry(r.clone()).or_default().push((cap(&m, 1), m[2].parse().unwrap()));
-                }
-            }
-            if let Some(m) = re!(r"^(\w+) is ([\w<>=, ]+?)(?: = (.*))?$").captures(t) {
-                if let (Some(g), true) = (&group, l.starts_with(' ')) {
-                    let (name, ty) = (cap(&m, 1), cap(&m, 2));
-                    if kind.as_deref() == Some("structure") {
-                        self.fields.entry(name).or_insert(ty);
-                    } else if kind.as_deref() == Some("constants") {
-                        self.constants.insert(format!("{g}.{name}"), ty);
-                        if let Some(v) = m.get(3) {
-                            self.values.insert(format!("{g}.{name}"), v.as_str().to_string());
+                "constants" => {
+                    for c in d.nodes("items") {
+                        let key = format!("{name}.{}", s(c, "name"));
+                        match c.node("type") {
+                            Some(t) => {
+                                self.constants.insert(key.clone(), t.clone());
+                                self.values.insert(key, n(c, "value").clone());
+                            }
+                            None => {
+                                self.constants.insert(key, ty(name));
+                            }
                         }
                     }
-                    continue;
                 }
-            }
-            if let Some(m) = re!(r"^(\w+) = (.*)$").captures(t) {
-                if let (Some(g), Some("constants"), true) = (&group, kind.as_deref(), l.starts_with(' ')) {
-                    self.constants.insert(format!("{g}.{}", &m[1]), g.clone());
-                    continue;
-                }
-            }
-            if let Some(m) = re!(r"^function (\w+)\(([^)]*)\)(?: returns (\w+))?").captures(t) {
-                group = None;
-                let name = cap(&m, 1);
-                current = Some(name.clone());
-                let mut types = HashMap::new();
-                for d in &doc {
-                    if let Some(dm) = re!(r"^(\w+): .*, as ([\w<>=, ]+)\.$").captures(d) {
-                        types.insert(cap(&dm, 1), cap(&dm, 2));
+                "type_decl" if d.node("type").is_some() => {
+                    // `where name = (value.count() >= 4)`: what the refined type allows of its values' counts
+                    for w in d.nodes("where") {
+                        n(w, "condition").walk(&mut |x: &Node| {
+                            let op = s(x, "op");
+                            if x.kind == "binary" && [">=", ">", "<=", "<", "=="].contains(&op) && t(n(x, "left")) == "value.count()" && is_literal(n(x, "right"), "integer") {
+                                let k: i64 = s(n(x, "right"), "text").parse().unwrap();
+                                self.refinements.entry(name.to_string()).or_default().push((op.to_string(), k));
+                            }
+                        });
                     }
                 }
-                let names: Vec<String> = m[2].split(',').filter(|p| !p.trim().is_empty()).map(|p| p.split_whitespace().last().unwrap().to_string()).collect();
-                self.params.insert(name.clone(), names.iter().map(|p| (p.clone(), types.get(p).cloned())).collect());
-                let result = m.get(3).map(|r| r.as_str().to_string());
-                let rtype = result.as_ref().and_then(|r| types.get(r).cloned());
-                self.results.insert(name.clone(), (result, rtype));
-                self.contracts.insert(name, vec![]);
-                continue;
-            }
-            if let Some(m) = re!(r"^(where|ensures) (\w+) = (.*?):?$").captures(t) {
-                if let (Some(c), true) = (&current, l.starts_with(' ')) {
-                    self.contracts.get_mut(c).unwrap().push((cap(&m, 1), cap(&m, 3)));
-                    continue;
+                "function" => {
+                    // a parameter's or the result's type, from a documentation entry on one line: `name: …, as type.`
+                    let mut types: HashMap<&str, Node> = HashMap::new();
+                    for e in d.node("doc").map(|doc| doc.nodes("entries")).unwrap_or_default() {
+                        let Some(et) = e.node("type") else { continue };
+                        let tt = s(et, "text");
+                        let one_line = e.num("end") == Some(e.line);
+                        let chars = tt.chars().all(|c| c.is_alphanumeric() || "_<>=, ".contains(c));
+                        if one_line && chars && s(e, "text").ends_with(&format!(", as {tt}.")) {
+                            types.insert(s(e, "name"), et.clone());
+                        }
+                    }
+                    let params = d.nodes("params").iter().map(|p| (s(p, "name").to_string(), types.get(s(p, "name")).cloned())).collect();
+                    self.params.insert(name.to_string(), params);
+                    let returns = d.str("returns").map(str::to_string);
+                    let rtype = returns.as_deref().and_then(|r| types.get(r).cloned());
+                    self.results.insert(name.to_string(), (returns, rtype));
+                    let mut contracts: Vec<(&'static str, Node)> = d.nodes("where").iter().map(|w| ("where", n(w, "condition").clone())).collect();
+                    contracts.extend(d.nodes("ensures").iter().map(|w| ("ensures", n(w, "condition").clone())));
+                    self.contracts.insert(name.to_string(), contracts);
                 }
-            }
-            if !t.is_empty() && !l.starts_with(' ') && !t.starts_with("--") {
-                group = None;
-                current = None;
+                _ => {}
             }
         }
     }
 
     /// The constant value of `e`, if it has one.
-    fn value(&self, e: &str) -> Option<i64> {
-        let e = strip_parens(e);
-        if re!(r"^-?\d+$").is_match(&e) {
-            return e.parse().ok();
+    fn value(&self, e: &Node) -> Option<i64> {
+        if is_int(e) {
+            return t(e).parse().ok();
         }
-        if let Some(v) = self.values.get(&e) {
+        if let Some(v) = self.values.get(&t(e)) {
             return self.value(v);
         }
-        for op in [" + ", " - ", " * ", " / "] {
-            if let Some((a, b)) = split_at(&e, op) {
-                let (a, b) = (self.value(&a)?, self.value(&b)?);
-                return match op.trim() {
-                    "+" => Some(a + b),
-                    "-" => Some(a - b),
-                    "*" => Some(a * b),
-                    _ => (b != 0).then(|| floor_div(a, b)),
-                };
-            }
+        if e.kind == "binary" && ["+", "-", "*", "/"].contains(&s(e, "op")) {
+            let (a, b) = (self.value(n(e, "left"))?, self.value(n(e, "right"))?);
+            return match s(e, "op") {
+                "+" => Some(a + b),
+                "-" => Some(a - b),
+                "*" => Some(a * b),
+                _ => (b != 0).then(|| floor_div(a, b)),
+            };
         }
         None
     }
 
     /// The constant length of a list, if it has one.
-    fn length(&self, e: &str) -> Option<i64> {
-        let mut e = strip_parens(e);
-        if let Some(v) = self.values.get(&e) {
-            e = v.clone();
-        }
-        if e.starts_with('[') && e.ends_with(']') {
-            let inner = e[1..e.len() - 1].trim();
-            return Some(if inner.is_empty() { 0 } else { split_commas(inner).len() as i64 });
-        }
-        None
+    fn length(&self, e: &Node) -> Option<i64> {
+        let e = self.values.get(&t(e)).unwrap_or(e);
+        (e.kind == "list").then(|| e.nodes("items").len() as i64)
     }
 
-    fn type_of(&self, e: &str, env: &Env) -> Option<String> {
-        let e = strip_parens(e);
-        let s = |x: &str| Some(x.to_string());
-        if re!(r"^-?\d+$").is_match(&e) {
-            return s("int");
+    fn type_of(&self, e: &Node, env: &Env) -> Option<Node> {
+        let k = e.kind;
+        if is_int(e) {
+            return Some(ty("int"));
         }
-        if re!(r"^\d+(ms|s)$").is_match(&e) {
-            return s("duration");
+        if k == "literal" {
+            let unit = s(e, "text").trim_start_matches(|c: char| c.is_ascii_digit());
+            return match s(e, "type") {
+                "duration" if s(e, "text").starts_with(|c: char| c.is_ascii_digit()) && (unit == "ms" || unit == "s") => Some(ty("duration")),
+                "string" => Some(ty("string")),
+                "boolean" => Some(ty("boolean")),
+                _ => None,
+            };
         }
-        if e.starts_with('"') {
-            return s("string");
+        if k == "unary" {
+            return if s(e, "op") == "not" { Some(ty("boolean")) } else { self.type_of(n(e, "operand"), env) };
         }
-        if e == "true" || e == "false" || e.starts_with("not ") {
-            return s("boolean");
+        if k == "binary" && ["+", "-", "*", "/", "%"].contains(&s(e, "op")) {
+            let (a, b) = (self.type_of(n(e, "left"), env), self.type_of(n(e, "right"), env));
+            if type_text(&a) == Some("instant") && type_text(&b) == Some("instant") {
+                return Some(ty("duration"));
+            }
+            return if !matches!(type_text(&a), None | Some("int")) { a } else if b.is_some() { b } else { a };
         }
-        if let Some(rest) = e.strip_prefix('-') {
-            return self.type_of(rest, env);
+        if k == "binary" {
+            return Some(ty("boolean"));
         }
-        if has_top_arith(&e) {
-            for op in [" + ", " - ", " * ", " / ", " % "] {
-                if let Some((l, r)) = split_at(&e, op) {
-                    let (a, b) = (self.type_of(&l, env), self.type_of(&r, env));
-                    if a.as_deref() == Some("instant") && b.as_deref() == Some("instant") {
-                        return s("duration");
-                    }
-                    return if a.is_some() && a.as_deref() != Some("int") { a } else if b.is_some() { b } else { a };
-                }
+        if method(e, &["count"], Some(0)).is_some() {
+            return Some(ty("count"));
+        }
+        if t(e) == "clock.now()" {
+            return Some(ty("instant"));
+        }
+        for (m, name) in [("to_int32", "int32"), ("to_uint32", "uint32"), ("whole_seconds", "uint32"), ("is_empty", "boolean")] {
+            if method(e, &[m], Some(0)).is_some() {
+                return Some(ty(name));
             }
         }
-        if split_top(&e, " and ").len() > 1 || split_top(&e, " or ").len() > 1 || top_comparison(&e).is_some() {
-            return s("boolean");
+        if method(e, &["contains"], None).is_some() {
+            return Some(ty("boolean"));
         }
-        if e.ends_with(".count()") {
-            return s("count");
+        if let Some(inner) = method(e, &["divided_rounding_up", "min", "max"], None) {
+            return self.type_of(inner, env);
         }
-        if e == "clock.now()" {
-            return s("instant");
+        let inner = method(e, &["largest", "smallest", "last"], Some(0))
+            .or_else(|| method(e, &["at_number"], None))
+            .or_else(|| (k == "index").then(|| n(e, "object")));
+        if let Some(inner) = inner {
+            return element(&self.type_of(inner, env));
         }
-        for (method, ty) in [(".to_int32()", "int32"), (".to_uint32()", "uint32"), (".whole_seconds()", "uint32"), (".is_empty()", "boolean")] {
-            if e.ends_with(method) {
-                return s(ty);
+        if k == "call" && n(e, "callee").kind == "name" {
+            if let Some((_, rtype)) = self.results.get(s(n(e, "callee"), "name")) {
+                return rtype.clone();
             }
         }
-        if re!(r"^.+\.contains\(.*\)$").is_match(&e) {
-            return s("boolean");
+        let key = t(e);
+        if let Some(found) = env.get(&key) {
+            return found.clone();
         }
-        if let Some(m) = re!(r"^(.+)\.divided_rounding_up\(.*\)$").captures(&e).or_else(|| re!(r"^(.+)\.(?:min|max)\(.*\)$").captures(&e)) {
-            return self.type_of(&m[1], env);
+        if let Some(c) = self.constants.get(&key) {
+            return Some(c.clone());
         }
-        let element = re!(r"^(.+)\.(?:largest|smallest|last)\(\)$").captures(&e).or_else(|| re!(r"^(.+)\.at_number\(.*\)$").captures(&e)).or_else(|| re!(r"^(.+)\[[^\]]*\]$").captures(&e));
-        if let Some(m) = element {
-            let inner = self.type_of(&m[1], env).unwrap_or_default();
-            return re!(r"^list<element_type=(.+)>$").captures(&inner).map(|mm| cap(&mm, 1));
-        }
-        if let Some(m) = re!(r"^(\w+)\(.*\)$").captures(&e) {
-            if let Some((_, ty)) = self.results.get(&m[1]) {
-                return ty.clone();
-            }
-        }
-        if let Some(t) = env.get(&e) {
-            return Some(t.clone());
-        }
-        if let Some(t) = self.constants.get(&e) {
-            return Some(t.clone());
-        }
-        if let Some(m) = re!(r"^[\w.\[\]0-9]+\.(\w+)$").captures(&e) {
-            if let Some(t) = self.fields.get(&m[1]) {
-                return Some(t.clone());
+        if k == "member" && simple(n(e, "object")) {
+            if let Some(f) = self.fields.get(s(e, "name")) {
+                return Some(f.clone());
             }
         }
         None
@@ -423,7 +499,7 @@ impl Module {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// Facts along a path: intervals of numbers, booleans (0 or 1) and counts
+// Facts along a path: intervals of numbers, booleans (0 or 1) and counts, kept by an expression's text
 
 #[derive(Clone, Default)]
 struct Facts {
@@ -444,12 +520,13 @@ fn reads(key: &str, name: &str) -> bool {
 }
 
 impl Facts {
-    fn is_constant(&self, m: &Module, e: &str) -> bool {
-        e.starts_with("optional.") || e.starts_with("result.") || (m.groups.contains(e.split('.').next().unwrap()) && !m.values.contains_key(e))
+    fn is_constant(&self, m: &Module, e: &Node) -> bool {
+        let e = t(e);
+        e.starts_with("optional.") || e.starts_with("result.") || (m.groups.contains(e.split('.').next().unwrap()) && !m.values.contains_key(&e))
     }
 
     /// Adds that `left` is, or is not, `right`, for values with no order: false when it cannot be.
-    fn equality(&mut self, m: &Module, left: &str, right: &str, truth: bool) -> bool {
+    fn equality(&mut self, m: &Module, left: &Node, right: &Node, truth: bool) -> bool {
         let (mut left, mut right) = (left, right);
         if self.is_constant(m, left) && !self.is_constant(m, right) {
             (left, right) = (right, left);
@@ -457,67 +534,68 @@ impl Facts {
         if !self.is_constant(m, right) {
             return true;
         }
+        let (left, right) = (t(left), t(right));
         if truth {
-            if self.same.get(left).is_some_and(|s| s != right) || self.differs.get(left).is_some_and(|d| d.contains(right)) {
+            if self.same.get(&left).is_some_and(|s| *s != right) || self.differs.get(&left).is_some_and(|d| d.contains(&right)) {
                 return false;
             }
-            self.same.insert(left.to_string(), right.to_string());
+            self.same.insert(left, right);
             return true;
         }
-        if self.same.get(left).is_some_and(|s| s == right) {
+        if self.same.get(&left).is_some_and(|s| *s == right) {
             return false;
         }
-        self.differs.entry(left.to_string()).or_default().insert(right.to_string());
+        self.differs.entry(left).or_default().insert(right);
         true
     }
 
-    fn interval(&self, m: &Module, env: &Env, e: &str) -> I {
+    fn interval(&self, m: &Module, env: &Env, e: &Node) -> I {
         let e = norm(e);
-        if let Some(v) = m.value(&e) {
+        if let Some(v) = m.value(e) {
             return (Some(v), Some(v));
         }
-        if e == "true" || e == "false" {
-            let v = i64::from(e == "true");
+        if is_literal(e, "boolean") {
+            let v = i64::from(s(e, "text") == "true");
             return (Some(v), Some(v));
         }
-        if let Some(n) = re!(r"^(.+)\.count\(\)$").captures(&e).and_then(|c| m.length(&c[1])) {
-            return (Some(n), Some(n));
+        let counted = method(e, &["count"], Some(0));
+        if let Some(k) = counted.and_then(|c| m.length(c)) {
+            return (Some(k), Some(k));
         }
-        let mut i = self.known.get(&e).copied().unwrap_or(ANY);
-        if let Some(c) = re!(r"^(.+)\.(?:runes\(\)\.)?count\(\)$").captures(&e) {
-            let counted = cap(&c, 1);
+        let mut i = self.known.get(&t(e)).copied().unwrap_or(ANY);
+        if let Some(counted) = counted {
             // a refined type bounds its values' counts
-            if let Some(ty) = m.type_of(&counted, env) {
-                for (op, n) in m.refinements.get(&ty).into_iter().flatten() {
-                    let n = *n;
+            if let Some(name) = type_text(&m.type_of(counted, env)) {
+                for (op, k) in m.refinements.get(name).into_iter().flatten() {
+                    let k = *k;
                     i = meet(i, match op.as_str() {
-                        ">=" => (Some(n), None),
-                        ">" => (Some(n + 1), None),
-                        "<=" => (None, Some(n)),
-                        "<" => (None, Some(n - 1)),
-                        _ => (Some(n), Some(n)),
+                        ">=" => (Some(k), None),
+                        ">" => (Some(k + 1), None),
+                        "<=" => (None, Some(k)),
+                        "<" => (None, Some(k - 1)),
+                        _ => (Some(k), Some(k)),
                     });
                 }
             }
-            if let Some(text) = counted.strip_suffix(".runes()") {
-                i = meet(i, self.interval(m, env, &format!("{text}.count()")));
+            if let Some(runes) = method(counted, &["runes"], Some(0)) {
+                i = meet(i, self.interval(m, env, &count(runes)));
             }
             // the standard library: splitting text gives at least one piece
-            if re!(r"^.+\.split\(.*\)$").is_match(&counted) {
+            if method(counted, &["split"], None).is_some() {
                 i = meet(i, (Some(1), None));
             }
         }
-        match m.type_of(&e, env).as_deref() {
-            Some(t) if UNSIGNED.contains(&t) => meet(i, (Some(0), None)),
+        match type_text(&m.type_of(e, env)) {
+            Some(x) if UNSIGNED.contains(&x) => meet(i, (Some(0), None)),
             Some("boolean") => meet(i, (Some(0), Some(1))),
             _ => i,
         }
     }
 
-    fn add(&mut self, m: &Module, env: &Env, e: &str, i: I) -> bool {
+    fn add(&mut self, m: &Module, env: &Env, e: &Node, i: I) -> bool {
         let e = norm(e);
-        let new = meet(self.interval(m, env, &e), i);
-        self.known.insert(e, new);
+        let new = meet(self.interval(m, env, e), i);
+        self.known.insert(t(e), new);
         !empty(new)
     }
 
@@ -538,70 +616,75 @@ impl Facts {
     }
 
     /// `name` now stands for `rhs`: it takes on what is known of it, and what the function it calls ensures.
-    fn bind(&mut self, m: &Module, env: &Env, name: &str, rhs: &str) {
-        let rhs = strip_parens(rhs);
+    fn bind(&mut self, m: &Module, env: &Env, name: &str, rhs: &Node) {
+        let r = t(rhs);
         let mut new: BTreeMap<String, I> = BTreeMap::new();
         let mut same = None;
         for (k, v) in &self.known {
-            if *k == rhs {
+            if *k == r {
                 new.insert(name.to_string(), *v);
-            } else if let Some(rest) = k.strip_prefix(&format!("{rhs}.")) {
+            } else if let Some(rest) = k.strip_prefix(&format!("{r}.")) {
                 new.insert(format!("{name}.{rest}"), *v);
             }
         }
-        if let Some(v) = m.value(&rhs) {
+        if let Some(v) = m.value(rhs) {
             new.insert(name.to_string(), (Some(v), Some(v)));
         }
-        if self.is_constant(m, &rhs) {
-            same = Some(rhs.clone());
-        } else if let Some(s) = self.same.get(&rhs) {
-            same = Some(s.clone());
+        if self.is_constant(m, rhs) {
+            same = Some(r.clone());
+        } else if let Some(x) = self.same.get(&r) {
+            same = Some(x.clone());
         }
         // arithmetic on what is known
-        for (op, sign) in [(" + ", 1), (" - ", -1)] {
-            if let Some((a, b)) = split_at(&rhs, op) {
-                if let Some(c) = m.value(&b) {
-                    new.insert(name.to_string(), shift(self.interval(m, env, &a), sign * c));
-                }
+        if rhs.kind == "binary" && ["+", "-"].contains(&s(rhs, "op")) {
+            if let Some(c) = m.value(n(rhs, "right")) {
+                let c = if s(rhs, "op") == "+" { c } else { -c };
+                new.insert(name.to_string(), shift(self.interval(m, env, n(rhs, "left")), c));
             }
         }
-        // a negated value, and what the function it calls ensures of it
-        if rhs.starts_with('-') && m.value(&rhs).is_none() {
+        // a negated value
+        if rhs.kind == "unary" && s(rhs, "op") == "-" && m.value(rhs).is_none() {
             let mut inner = self.clone();
-            inner.bind(m, env, "negated'value", &rhs[1..]);
-            let i = inner.interval(m, env, "negated'value");
+            inner.bind(m, env, "negated'value", n(rhs, "operand"));
+            let i = inner.interval(m, env, &name_node("negated'value"));
             new.insert(name.to_string(), (i.1.map(|x| -x), i.0.map(|x| -x)));
         }
         // what the standard library ensures of the lists it makes
-        let count = format!("{name}.count()");
-        if rhs == "list.new()" || rhs == "[]" {
-            new.insert(count.clone(), (Some(0), Some(0)));
+        let counted = format!("{name}.count()");
+        if r == "list.new()" || (rhs.kind == "list" && rhs.nodes("items").is_empty()) {
+            new.insert(counted.clone(), (Some(0), Some(0)));
         }
-        if let Some(c) = re!(r"^random\.shuffled\((.+)\)$").captures(&rhs) {
-            new.insert(count.clone(), self.interval(m, env, &format!("{}.count()", &c[1])));
+        if rhs.kind == "call" {
+            let callee = chain(n(rhs, "callee"));
+            match (callee.as_deref(), arg_names(rhs).as_slice()) {
+                (Some("random.shuffled"), [None]) => {
+                    new.insert(counted.clone(), self.interval(m, env, &count(n(rhs.nodes("args")[0], "value"))));
+                }
+                (Some("random.chosen"), [Some("from"), Some("count")]) => {
+                    new.insert(counted.clone(), self.interval(m, env, arg(rhs, "count").unwrap()));
+                }
+                (Some("list.repeated"), [None, Some("times")]) => {
+                    new.insert(counted.clone(), self.interval(m, env, arg(rhs, "times").unwrap()));
+                }
+                _ => {}
+            }
         }
-        if let Some(c) = re!(r"^random\.chosen\(from: .+, count: (.+)\)$").captures(&rhs) {
-            new.insert(count.clone(), self.interval(m, env, &c[1]));
-        }
-        if let Some(c) = re!(r"^list\.repeated\(.+, times: (.+)\)$").captures(&rhs) {
-            new.insert(count.clone(), self.interval(m, env, &c[1]));
-        }
-        if rhs == "true" || rhs == "false" {
-            let v = i64::from(rhs == "true");
+        if is_literal(rhs, "boolean") {
+            let v = i64::from(s(rhs, "text") == "true");
             new.insert(name.to_string(), (Some(v), Some(v)));
         }
         self.forget(name);
         self.known.extend(new);
-        if let Some(s) = same {
-            self.same.insert(name.to_string(), s);
+        if let Some(x) = same {
+            self.same.insert(name.to_string(), x);
         }
-        if let Some(c) = re!(r"^(\w+)\((.*)\)$").captures(&rhs) {
-            let callee = cap(&c, 1);
-            let result = m.results.get(&callee).and_then(|r| r.0.clone());
-            for (kind, pred) in m.contracts.get(&callee).into_iter().flatten() {
-                if let (true, Some(result)) = (kind == "ensures", &result) {
-                    let said = Regex::new(&format!(r"\b{}\b", regex::escape(result))).unwrap().replace_all(pred, name).to_string();
-                    let alts = assume(m, env, &said, true, self);
+        // what the function it calls ensures of it
+        if rhs.kind == "call" && n(rhs, "callee").kind == "name" {
+            let callee = s(n(rhs, "callee"), "name");
+            let result = m.results.get(callee).and_then(|r| r.0.clone());
+            for (kind, pred) in m.contracts.get(callee).into_iter().flatten() {
+                if let (true, Some(result)) = (*kind == "ensures", &result) {
+                    let alts = assume(m, env, &renamed(pred, result, name), true, self);
                     if !alts.is_empty() {
                         *self = join(&alts);
                     }
@@ -610,16 +693,16 @@ impl Facts {
         }
     }
 
-    fn possible_orders(&self, m: &Module, env: &Env, left: &str, right: &str) -> Option<BTreeSet<&'static str>> {
-        let known: Vec<String> = [m.type_of(left, env), m.type_of(right, env)].into_iter().flatten().collect();
-        if known.is_empty() || !known.iter().any(|t| ORDERED.contains(&t.as_str())) {
+    fn possible_orders(&self, m: &Module, env: &Env, left: &Node, right: &Node) -> Option<BTreeSet<&'static str>> {
+        let known: Vec<Node> = [m.type_of(left, env), m.type_of(right, env)].into_iter().flatten().collect();
+        if known.is_empty() || !known.iter().any(|x| ORDERED.contains(&s(x, "text"))) {
             return None;
         }
         Some(order_possible(self.interval(m, env, left), self.interval(m, env, right)))
     }
 
     /// Adds what order `o` of `left` to `right` shows: false when it cannot be.
-    fn constrain(&mut self, m: &Module, env: &Env, left: &str, right: &str, o: &str) -> bool {
+    fn constrain(&mut self, m: &Module, env: &Env, left: &Node, right: &Node, o: &str) -> bool {
         let (a, b) = (self.interval(m, env, left), self.interval(m, env, right));
         if !order_possible(a, b).contains(o) {
             return false;
@@ -678,13 +761,12 @@ fn orders(op: &str, truth: bool) -> &'static [&'static str] {
 }
 
 /// The sub-outcomes of predicate `e` being `truth`: [(suffix, facts)], each with what it shows; [] when it cannot be.
-fn outcomes(m: &Module, env: &Env, e: &str, truth: bool, facts: &Facts) -> Vec<(String, Facts)> {
-    let e = strip_parens(e);
-    if let Some(rest) = e.strip_prefix("not ") {
-        return outcomes(m, env, rest, !truth, facts);
+fn outcomes(m: &Module, env: &Env, e: &Node, truth: bool, facts: &Facts) -> Vec<(String, Facts)> {
+    if e.kind == "unary" && s(e, "op") == "not" {
+        return outcomes(m, env, n(e, "operand"), !truth, facts);
     }
-    for (word, stops_on) in [(" or ", true), (" and ", false)] {
-        let ops = split_top(&e, word);
+    for (word, stops_on) in [("or", true), ("and", false)] {
+        let ops = operands(e, word);
         if ops.len() < 2 {
             continue;
         }
@@ -697,8 +779,8 @@ fn outcomes(m: &Module, env: &Env, e: &str, truth: bool, facts: &Facts) -> Vec<(
                     befores = befores.iter().flat_map(|f| outcomes(m, env, prior, !truth, f).into_iter().map(|x| x.1)).collect();
                 }
                 for f in &befores {
-                    for (s, f2) in outcomes(m, env, op, truth, f) {
-                        let suffix = format!("'{}{}", k + 1, s.trim_start_matches('\''));
+                    for (suffix, f2) in outcomes(m, env, op, truth, f) {
+                        let suffix = format!("'{}{}", k + 1, suffix.trim_start_matches('\''));
                         if seen.insert(suffix.clone()) {
                             out.push((suffix, f2));
                         }
@@ -711,29 +793,31 @@ fn outcomes(m: &Module, env: &Env, e: &str, truth: bool, facts: &Facts) -> Vec<(
         for (k, op) in ops.iter().enumerate() {
             states = states
                 .iter()
-                .flat_map(|(s, f)| {
+                .flat_map(|(sofar, f)| {
                     outcomes(m, env, op, truth, f).into_iter().map(move |(s2, f2)| {
                         let part = if s2.is_empty() { String::new() } else { format!("'{}{}", k + 1, s2.trim_start_matches('\'')) };
-                        (format!("{s}{part}"), f2)
+                        (format!("{sofar}{part}"), f2)
                     })
                 })
                 .collect();
         }
         return states;
     }
-    if let Some((left, op, right)) = top_comparison(&e) {
-        let Some(possible) = facts.possible_orders(m, env, &left, &right) else {
+    let op = s(e, "op");
+    if e.kind == "binary" && ["<", "<=", ">", ">=", "==", "!="].contains(&op) {
+        let (left, right) = (n(e, "left"), n(e, "right"));
+        let Some(possible) = facts.possible_orders(m, env, left, right) else {
             if op == "==" || op == "!=" {
                 let mut f = facts.clone();
-                return if f.equality(m, &left, &right, truth == (op == "==")) { vec![(String::new(), f)] } else { vec![] };
+                return if f.equality(m, left, right, truth == (op == "==")) { vec![(String::new(), f)] } else { vec![] };
             }
             return vec![(String::new(), facts.clone())];
         };
         let mut out = vec![];
         for o in ORDERS3 {
-            if orders(&op, truth).contains(&o) && possible.contains(o) {
+            if orders(op, truth).contains(&o) && possible.contains(o) {
                 let mut f = facts.clone();
-                if f.constrain(m, env, &left, &right, o) {
+                if f.constrain(m, env, left, right, o) {
                     out.push((format!("'{o}"), f));
                 }
             }
@@ -743,15 +827,15 @@ fn outcomes(m: &Module, env: &Env, e: &str, truth: bool, facts: &Facts) -> Vec<(
         }
         return out;
     }
-    if let Some(c) = re!(r"^(.+)\.is_empty\(\)$").captures(&e) {
+    if let Some(inner) = method(e, &["is_empty"], Some(0)) {
         let mut f = facts.clone();
         let i = if truth { (Some(0), Some(0)) } else { (Some(1), None) };
-        return if f.add(m, env, &format!("{}.count()", &c[1]), i) { vec![(String::new(), f)] } else { vec![] };
+        return if f.add(m, env, &count(inner), i) { vec![(String::new(), f)] } else { vec![] };
     }
     let mut f = facts.clone();
-    if m.type_of(&e, env).as_deref() == Some("boolean") || re!(r"^[\w.]+$").is_match(&e) {
+    if type_text(&m.type_of(e, env)) == Some("boolean") || chain(e).is_some() {
         let v = i64::from(truth);
-        if !f.add(m, env, &e, (Some(v), Some(v))) {
+        if !f.add(m, env, e, (Some(v), Some(v))) {
             return vec![];
         }
     }
@@ -759,133 +843,182 @@ fn outcomes(m: &Module, env: &Env, e: &str, truth: bool, facts: &Facts) -> Vec<(
 }
 
 /// The facts after `e` is found `truth`, one set for each way it can be.
-fn assume(m: &Module, env: &Env, e: &str, truth: bool, facts: &Facts) -> Vec<Facts> {
+fn assume(m: &Module, env: &Env, e: &Node, truth: bool, facts: &Facts) -> Vec<Facts> {
     outcomes(m, env, e, truth, facts).into_iter().map(|x| x.1).collect()
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// Blocks and statements
+// Statements
 
-#[derive(Clone)]
-struct Item {
-    text: String,
-    kids: Vec<Item>,
+/// The expressions a statement writes on its own line, not those of the blocks it opens.
+fn own(st: &Node) -> Vec<&Node> {
+    let fields: &[&str] = match st.kind {
+        "let" | "expr" | "return" | "fail" | "task" => &["value"],
+        "assign" => &["target", "value"],
+        "if" | "while" => &["condition"],
+        "for" => &["iterable"],
+        "conditional" => &["subject"],
+        "compare" => &["left", "right"],
+        "condition" => &["test"],
+        _ => &[],
+    };
+    let mut out: Vec<&Node> = fields.iter().filter_map(|f| st.node(f)).collect();
+    if st.kind == "inject" {
+        out.extend(st.nodes("bindings").into_iter().map(|b| n(b, "value")));
+    }
+    if st.kind == "region" {
+        out.extend(st.nodes("constraints"));
+    }
+    out
 }
 
-fn indent(l: &str) -> usize {
-    l.len() - l.trim_start().len()
+/// Every statement of a block, and of the blocks inside it, each before the statements inside it.
+fn statements(items: &[&Node]) -> Vec<Node> {
+    fn go<'a>(items: &[&'a Node], out: &mut Vec<&'a Node>) {
+        for st in items {
+            out.push(st);
+            for c in st.nodes("conditions") {
+                out.push(c);
+                go(&c.nodes("body"), out);
+            }
+            go(&st.nodes("body"), out);
+            if let Some(e) = st.node("else") {
+                go(&e.nodes("body"), out);
+            }
+            for r in st.nodes("orelse") {
+                out.push(r);
+                go(&r.nodes("body"), out);
+            }
+        }
+    }
+    let mut out = vec![];
+    go(items, &mut out);
+    out.into_iter().cloned().collect()
 }
 
-fn blocks(lines: &[String]) -> Vec<Item> {
-    fn parse(lines: &[String], i: &mut usize, ind: usize) -> Vec<Item> {
-        let mut out = vec![];
-        while *i < lines.len() {
-            let l = &lines[*i];
-            let d = indent(l);
-            if d < ind {
-                break;
-            }
-            *i += 1;
-            let mut text = l.trim().to_string();
-            let open = |t: &str| t.matches('(').count() + t.matches('[').count() > t.matches(')').count() + t.matches(']').count();
-            while open(&text) && *i < lines.len() {
-                text = format!("{text} {}", lines[*i].trim());
-                *i += 1;
-            }
-            let text = text.replace("( ", "(").replace("[ ", "[").replace(", )", ")").replace(", ]", "]");
-            let mut kids = vec![];
-            if text.ends_with(':') && *i < lines.len() {
-                let nd = indent(&lines[*i]);
-                if nd > d {
-                    kids = parse(lines, i, nd);
+/// The names a statement passes as `mutable`.
+fn mutable_args(st: &Node) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    for e in own(st) {
+        e.walk(&mut |x: &Node| {
+            if x.kind == "mutable" {
+                if let Some(r) = root(n(x, "value")) {
+                    out.insert(r);
                 }
             }
-            out.push(Item { text, kids });
-        }
-        out
+        });
     }
-    let mut i = 0;
-    parse(lines, &mut i, lines.first().map_or(0, |l| indent(l)))
+    out
 }
 
-fn walk(items: &[Item]) -> Vec<&Item> {
-    let mut out = vec![];
-    for it in items {
-        out.push(it);
-        out.extend(walk(&it.kids));
+/// The value of an expression statement, without its `or fail`; None for any other statement.
+fn expr_value(st: &Node) -> Option<&Node> {
+    (st.kind == "expr").then(|| unwrap(n(st, "value")))
+}
+
+/// The names a statement changes on its own line.
+fn changes(st: &Node) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    if st.kind == "assign" && plain(n(st, "target")) {
+        out.extend(root(n(st, "target")));
+    }
+    if !(st.kind == "let" && st.flag("mutable")) {
+        out.extend(mutable_args(st));
+    }
+    if let Some(obj) = expr_value(st).and_then(|v| method(v, &["push", "extend", "set_number", "insert_first", "clear"], None)) {
+        if let Some(c) = chain(obj) {
+            out.insert(c.split('.').next().unwrap().to_string());
+        }
+    }
+    if st.kind == "let" || st.kind == "for" {
+        out.insert(s(st, "name").to_string());
     }
     out
 }
 
 /// The names a block changes.
-fn mutated(items: &[Item]) -> BTreeSet<String> {
-    let mut out = BTreeSet::new();
-    for it in items {
-        let t = it.text.as_str();
-        if let Some(c) = re!(r"^(\w+)[\w.\[\]]* := ").captures(t) {
-            out.insert(cap(&c, 1));
-        }
-        if !t.starts_with("mutable ") {
-            for c in re!(r"mutable (\w+)").captures_iter(t) {
-                out.insert(cap(&c, 1));
-            }
-        }
-        for r in [re!(r"^(\w+)[\w.]*\.(push|extend|set_number|insert_first|clear)\("), re!(r"^(?:mutable )?(\w+) = "), re!(r"^for (\w+) in")] {
-            if let Some(c) = r.captures(t) {
-                out.insert(cap(&c, 1));
-            }
-        }
-        out.extend(mutated(&it.kids));
-    }
-    out
+fn mutated(items: &[&Node]) -> BTreeSet<String> {
+    statements(items).iter().flat_map(changes).collect()
 }
 
 /// The names among `names` that a block changes only by adding to them, with `push` or `extend`.
-fn grown_only(items: &[Item], names: &BTreeSet<String>) -> BTreeSet<String> {
+fn grown_only(items: &[&Node], names: &BTreeSet<String>) -> BTreeSet<String> {
     let mut other = BTreeSet::new();
-    for it in walk(items) {
-        let t = it.text.as_str();
-        for n in names {
-            if t.starts_with(&format!("{n}.push(")) || t.starts_with(&format!("{n}.extend(")) {
+    for st in statements(items) {
+        for name in names {
+            let grows = expr_value(&st).and_then(|v| method(v, &["push", "extend"], None));
+            if grows.is_some_and(|o| o.kind == "name" && s(o, "name") == name) {
                 continue;
             }
-            let n_ = regex::escape(n);
-            let assigned = Regex::new(&format!(r"^(mutable )?{n_}\b[\w.\[\]]* :?= ")).unwrap().is_match(t);
-            let passed = Regex::new(&format!(r"mutable {n_}\b")).unwrap().is_match(t);
-            let changed = Regex::new(&format!(r"^{n_}[\w.]*\.(set_number|insert_first|clear)\(")).unwrap().is_match(t);
-            if assigned || passed || changed {
-                other.insert(n.clone());
+            let binds = (st.kind == "let" && s(&st, "name") == name) || (st.kind == "assign" && root(n(&st, "target")).as_deref() == Some(name) && plain(n(&st, "target")));
+            if binds || mutable_args(&st).contains(name) {
+                other.insert(name.clone());
+            }
+            let changes = expr_value(&st).and_then(|v| method(v, &["set_number", "insert_first", "clear"], None));
+            if changes.and_then(chain).is_some_and(|c| c.split('.').next() == Some(name)) {
+                other.insert(name.clone());
             }
         }
     }
-    names.difference(&other).cloned().collect()
+    names.iter().filter(|x| !other.contains(*x)).cloned().collect()
 }
 
-/// Forgets what passes of a loop may have changed; a list that only grows keeps its least count.
 fn widen(facts: &mut Facts, names: &BTreeSet<String>, grown: &BTreeSet<String>) {
-    for n in names {
-        let keep = if grown.contains(n) { facts.known.get(&format!("{n}.count()")).copied() } else { None };
-        facts.forget(n);
-        if let Some(keep) = keep {
-            facts.known.insert(format!("{n}.count()"), (keep.0, None));
+    for name in names {
+        let keep = if grown.contains(name) { facts.known.get(&format!("{name}.count()")).copied() } else { None };
+        facts.forget(name);
+        if let Some(k) = keep {
+            facts.known.insert(format!("{name}.count()"), (k.0, None));
         }
     }
 }
 
-fn failing_name(text: &str) -> Option<String> {
-    if !re!(r" or fail(:)?$").is_match(text) || ["region ", "within ", "if ", "while "].iter().any(|p| text.starts_with(p)) {
+/// The expression a statement's line ends with, before any `:`.
+fn last_expression(st: &Node) -> Option<&Node> {
+    let field = match st.kind {
+        "let" | "assign" | "expr" | "return" | "task" | "fail" => "value",
+        "for" => "iterable",
+        "conditional" => "subject",
+        "compare" => "right",
+        _ => return None,
+    };
+    st.node(field)
+}
+
+/// The name of a statement's `or fail` site: the name it binds, or the method or function it calls; None when it has
+/// none.
+fn failing_name(st: &Node) -> Option<String> {
+    let e = last_expression(st)?;
+    if e.kind != "or_fail" {
         return None;
     }
-    if let Some(c) = re!(r"^(?:mutable )?(\w+) :?= ").captures(text) {
-        return Some(cap(&c, 1));
+    if st.kind == "let" {
+        return Some(s(st, "name").to_string());
     }
-    Some(re!(r"^([\w.]+)\(").captures(text).map_or("call".to_string(), |c| c[1].rsplit('.').next().unwrap().to_string()))
+    if st.kind == "assign" && n(st, "target").kind == "name" {
+        return Some(s(n(st, "target"), "name").to_string());
+    }
+    let inner = unwrap(e);
+    if st.kind == "expr" && inner.kind == "call" {
+        if let Some(c) = chain(n(inner, "callee")) {
+            return Some(c.rsplit('.').next().unwrap().to_string());
+        }
+    }
+    Some("call".to_string())
+}
+
+/// What identifies an `or fail` site: two that read the same are one.
+fn site(st: &Node) -> String {
+    let bound = match st.kind {
+        "let" => s(st, "name").to_string(),
+        "assign" => t(n(st, "target")),
+        _ => String::new(),
+    };
+    format!("{}|{}|{bound}|{}", st.kind, st.flag("mutable"), last_expression(st).map(t).unwrap_or_default())
 }
 
 /// How a path ends, and the named outcomes along it.
 type State = (String, Vec<String>, Facts);
-
-const NOT_BOUND: [&str; 7] = ["if ", "while ", "for ", "conditional ", "compare ", "return ", "assert "];
 
 struct Function<'m> {
     module: &'m Module,
@@ -899,16 +1032,17 @@ struct Function<'m> {
 }
 
 impl<'m> Function<'m> {
-    fn new(module: &'m Module, name: &str, body: &[String]) -> Function<'m> {
-        let mut env: Env = module.params.get(name).into_iter().flatten().filter_map(|(p, t)| Some((p.clone(), t.clone()?))).collect();
+    fn new(module: &'m Module, decl: &Node) -> Function<'m> {
+        let name = s(decl, "name");
+        let mut env: Env = module.params.get(name).into_iter().flatten().filter(|(_, x)| x.is_some()).map(|(p, x)| (p.clone(), x.clone())).collect();
         if let Some((Some(result), Some(rtype))) = module.results.get(name) {
-            env.insert(result.clone(), rtype.clone());
+            env.insert(result.clone(), Some(rtype.clone()));
         }
-        let items = blocks(body);
+        let items = decl.nodes("body");
         let mut fails_total = HashMap::new();
-        for it in walk(&items) {
-            if let Some(n) = failing_name(&it.text) {
-                *fails_total.entry(n).or_insert(0) += 1;
+        for st in statements(&items) {
+            if let Some(f) = failing_name(&st) {
+                *fails_total.entry(f).or_insert(0) += 1;
             }
         }
         let mut f = Function {
@@ -923,13 +1057,13 @@ impl<'m> Function<'m> {
         };
         let mut starts = vec![Facts::default()];
         for (kind, pred) in module.contracts.get(name).into_iter().flatten() {
-            if kind == "where" {
+            if *kind == "where" {
                 let env = f.env.borrow().clone();
-                starts = starts.iter().flat_map(|s| assume(module, &env, pred, true, s)).take(1).collect();
+                starts = starts.iter().flat_map(|x| assume(module, &env, pred, true, x)).take(1).collect();
             }
         }
         let found = match starts.into_iter().next() {
-            Some(s) => f.seq(&items, s),
+            Some(x) => f.seq(&items, x),
             None => vec![],
         };
         let mut seen = HashSet::new();
@@ -948,52 +1082,46 @@ impl<'m> Function<'m> {
         }
     }
 
-    fn outcomes(&self, e: &str, truth: bool, facts: &Facts) -> Vec<(String, Facts)> {
+    fn outcomes(&self, e: &Node, truth: bool, facts: &Facts) -> Vec<(String, Facts)> {
         outcomes(self.module, &self.env.borrow(), e, truth, facts)
     }
 
-    fn assume(&self, e: &str, truth: bool, facts: &Facts) -> Vec<Facts> {
+    fn assume(&self, e: &Node, truth: bool, facts: &Facts) -> Vec<Facts> {
         assume(self.module, &self.env.borrow(), e, truth, facts)
     }
 
-    fn note_type(&self, text: &str) {
+    /// The type of a name a statement binds, or of a loop's variable, when it is known.
+    fn note_type(&self, st: &Node) {
         let m = self.module;
-        if let Some(c) = re!(r"^(?:mutable )?(\w+) = (.*)$").captures(text) {
-            if !NOT_BOUND.iter().any(|p| text.starts_with(p)) && !text.starts_with("while ") {
-                let rhs = re!(r" or fail$").replace(&c[2], "").to_string();
-                let rhs = re!(r#" forever because ".*""#).replace(&rhs, "").to_string();
-                let ty = m.type_of(&rhs, &self.env.borrow()).map(|t| if t == "int" { "int32".to_string() } else { t });
-                let mut env = self.env.borrow_mut();
-                if let (Some(ty), false) = (ty, env.contains_key(&c[1])) {
-                    env.insert(cap(&c, 1), ty);
-                }
+        if st.kind == "let" {
+            let found = m.type_of(unwrap(n(st, "value")), &self.env.borrow());
+            let found = if type_text(&found) == Some("int") { Some(ty("int32")) } else { found };
+            let mut env = self.env.borrow_mut();
+            if found.is_some() && !env.contains_key(s(st, "name")) {
+                env.insert(s(st, "name").to_string(), found);
             }
         }
-        if let Some(c) = re!(r"^for (\w+) in (.*):$").captures(text) {
-            let src = cap(&c, 2);
-            let ty = m.type_of(&src, &self.env.borrow()).unwrap_or_default();
-            if let Some(mm) = re!(r"^list<element_type=(.+)>$").captures(&ty) {
-                self.env.borrow_mut().insert(cap(&c, 1), cap(&mm, 1));
-            } else if src.starts_with("range(") {
-                let from = re!(r"from: ([^,]+)").captures(&src).map(|x| cap(&x, 1)).unwrap_or_default();
-                let ty = m.type_of(&from, &self.env.borrow()).unwrap_or_else(|| "int32".to_string());
-                self.env.borrow_mut().insert(cap(&c, 1), if ty == "int" { "int32".to_string() } else { ty });
+        if st.kind == "for" {
+            let src = n(st, "iterable");
+            let el = element(&m.type_of(src, &self.env.borrow()));
+            if el.is_some() {
+                self.env.borrow_mut().insert(s(st, "name").to_string(), el);
+            } else if src.kind == "call" && chain(n(src, "callee")).as_deref() == Some("range") {
+                let from = arg(src, "from").and_then(|x| m.type_of(x, &self.env.borrow())).unwrap_or_else(|| ty("int32"));
+                let from = if s(&from, "text") == "int" { ty("int32") } else { from };
+                self.env.borrow_mut().insert(s(st, "name").to_string(), Some(from));
             }
         }
     }
 
     /// The states a block entered with `facts` ends in.
-    fn seq(&self, items: &[Item], facts: Facts) -> Vec<State> {
-        let (mut states, mut done, mut k) = (vec![("next".to_string(), vec![], facts)], vec![], 0);
-        while k < items.len() {
-            self.note_type(&items[k].text);
-            let mut j = k + 1;
-            while j < items.len() && (items[j].text.starts_with("else ") || items[j].text.starts_with("orelse ")) {
-                j += 1;
-            }
+    fn seq(&self, items: &[&Node], facts: Facts) -> Vec<State> {
+        let (mut states, mut done) = (vec![("next".to_string(), vec![], facts)], vec![]);
+        for st in items {
+            self.note_type(st);
             let mut next = vec![];
             for (_, steps, f) in &states {
-                for (kind2, steps2, f2) in self.statement(items, k, f.clone()) {
+                for (kind2, steps2, f2) in self.statement(st, f.clone()) {
                     let all = [steps.clone(), steps2].concat();
                     if kind2 == "next" {
                         next.push((kind2, all, f2));
@@ -1002,123 +1130,108 @@ impl<'m> Function<'m> {
                     }
                 }
             }
-            (states, k) = (next, j);
+            states = next;
         }
         states.extend(done);
         states
     }
 
-    fn branch(&self, name: &str, pred: &str, truth: bool, body: &[Item], facts: &Facts) -> Vec<State> {
+    fn branch(&self, name: &str, pred: &Node, truth: bool, body: &[&Node], facts: &Facts) -> Vec<State> {
         let mut out = vec![];
-        for (s, f) in self.outcomes(pred, truth, facts) {
+        for (suffix, f) in self.outcomes(pred, truth, facts) {
             for (kind, steps, f2) in self.seq(body, f) {
-                out.push((kind, [vec![format!("{name}{s}")], steps].concat(), f2));
+                out.push((kind, [vec![format!("{name}{suffix}")], steps].concat(), f2));
             }
         }
         out
     }
 
-    fn statement(&self, items: &[Item], k: usize, facts: Facts) -> Vec<State> {
-        let (text, kids) = (items[k].text.as_str(), &items[k].kids);
-        let elses: Vec<&Item> = items[k + 1..].iter().take_while(|it| it.text.starts_with("else ")).collect();
+    /// The states of a block, each with `name` before its steps.
+    fn named(&self, name: &str, body: &[&Node], facts: Facts) -> Vec<State> {
+        self.seq(body, facts).into_iter().map(|(kind, steps, f2)| (kind, [vec![name.to_string()], steps].concat(), f2)).collect()
+    }
+
+    fn statement(&self, st: &Node, facts: Facts) -> Vec<State> {
         let m = self.module;
-        let say = |s: &str| s.to_string();
+        let k = st.kind;
 
         // `region a is …:` with `orelse region b is …:` after it: a decision whose outcomes are the regions
-        if let Some(c) = re!(r"^region (\w+) is .*:$").captures(text) {
-            let mut alternatives: Vec<(String, &[Item])> = vec![];
-            for it in &items[k + 1..] {
-                match re!(r"^orelse region (\w+) is .*:$").captures(&it.text) {
-                    Some(o) => alternatives.push((cap(&o, 1), &it.kids)),
-                    None => break,
-                }
+        if k == "region" && !st.nodes("orelse").is_empty() {
+            let mut out = vec![];
+            for r in [st].into_iter().chain(st.nodes("orelse")) {
+                out.extend(self.named(s(r, "name"), &r.nodes("body"), facts.clone()));
             }
-            if !alternatives.is_empty() {
-                let mut out = vec![];
-                for (name, body) in [(cap(&c, 1), &kids[..])].into_iter().chain(alternatives) {
-                    for (kind, steps, f2) in self.seq(body, facts.clone()) {
-                        out.push((kind, [vec![name.clone()], steps].concat(), f2));
-                    }
-                }
-                return out;
-            }
+            return out;
         }
 
-        if let Some(c) = re!(r"^if (\w+) = (.*):$").captures(text) {
-            let (name, pred) = (cap(&c, 1), cap(&c, 2));
-            if elses.len() != 1 || !elses[0].text.ends_with(':') {
+        if k == "if" {
+            let (name, pred, body) = (s(st, "name"), n(st, "condition"), st.nodes("body"));
+            let Some(other) = st.node("else") else {
                 self.problem(format!("`if {name}` has no named else block"));
-                return self.branch(&name, &pred, true, kids, &facts);
-            }
-            let other = elses[0].text[5..].trim_end_matches(':').to_string();
-            return [self.branch(&name, &pred, true, kids, &facts), self.branch(&other, &pred, false, &elses[0].kids, &facts)].concat();
+                return self.branch(name, pred, true, &body, &facts);
+            };
+            return [self.branch(name, pred, true, &body, &facts), self.branch(s(other, "name"), pred, false, &other.nodes("body"), &facts)].concat();
         }
 
-        if let Some(c) = re!(r"^conditional (\w+)(?: = (.*))?:$").captures(text) {
-            if let Some(subject) = c.get(2) {
-                let ty = m.type_of(subject.as_str(), &self.env.borrow());
-                if let Some(ty) = ty {
-                    self.env.borrow_mut().entry(cap(&c, 1)).or_insert(ty);
-                }
+        if k == "conditional" {
+            if let Some(subject) = st.node("subject") {
+                let found = m.type_of(subject, &self.env.borrow());
+                self.env.borrow_mut().entry(s(st, "label").to_string()).or_insert(found);
             }
             let (mut out, mut rest) = (vec![], vec![facts]);
-            for it in kids {
-                if let Some(cm) = re!(r"^condition ([\w.]+) = (.*):$").captures(&it.text) {
-                    for f in &rest {
-                        out.extend(self.branch(&cm[1], &cm[2], true, &it.kids, f));
-                    }
-                    rest = rest.iter().flat_map(|f| self.assume(&cm[2], false, f)).collect();
-                    continue;
+            for c in st.nodes("conditions") {
+                for f in &rest {
+                    out.extend(self.branch(s(c, "name"), n(c, "test"), true, &c.nodes("body"), f));
                 }
-                if let Some(em) = re!(r"^else ([\w.]+):$").captures(&it.text) {
-                    for f in &rest {
-                        for (kind, steps, f2) in self.seq(&it.kids, f.clone()) {
-                            out.push((kind, [vec![cap(&em, 1)], steps].concat(), f2));
-                        }
-                    }
+                rest = rest.iter().flat_map(|f| self.assume(n(c, "test"), false, f)).collect();
+            }
+            if let Some(e) = st.node("else") {
+                for f in rest {
+                    out.extend(self.named(s(e, "name"), &e.nodes("body"), f));
                 }
             }
             return out;
         }
 
-        if let Some(c) = re!(r"^compare (\w+) = (.*) with (.*):$").captures(text) {
-            let (label, a, b) = (cap(&c, 1), cap(&c, 2), cap(&c, 3));
-            let possible = facts.possible_orders(m, &self.env.borrow(), &a, &b).unwrap_or_else(|| {
-                self.problem(format!("`compare {label}` compares values with no order"));
-                ORDERS3.into_iter().collect()
-            });
-            let word = |w: &str| match w {
-                "less" => "lt",
-                "equal" => "eq",
-                _ => "gt",
+        if k == "compare" {
+            let (label, a, b) = (s(st, "label"), n(st, "left"), n(st, "right"));
+            let possible = match facts.possible_orders(m, &self.env.borrow(), a, b) {
+                Some(p) => p,
+                None => {
+                    self.problem(format!("`compare {label}` compares values with no order"));
+                    ORDERS3.into_iter().collect()
+                }
             };
             let (mut out, mut seen) = (vec![], BTreeSet::new());
-            for it in kids {
-                let (ords, name): (Vec<&str>, String) = if let Some(cm) = re!(r"^condition ([\w.]+) = \(?([a-z ]+?)\)?:$").captures(&it.text) {
-                    let ords: Vec<&str> = cm[2].split(" or ").map(word).collect();
-                    if ords.iter().any(|o| seen.contains(o)) {
+            for c in st.nodes("conditions").into_iter().chain(st.node("else")) {
+                let orders: Vec<&str> = if c.kind == "condition" {
+                    let words: Vec<&str> = operands(n(c, "test"), "or")
+                        .iter()
+                        .map(|w| match s(w, "name") {
+                            "less" => "lt",
+                            "equal" => "eq",
+                            _ => "gt",
+                        })
+                        .collect();
+                    if words.iter().any(|o| seen.contains(o)) {
                         self.problem(format!("`compare {label}`: an order is in two conditions"));
                     }
-                    (ords, cap(&cm, 1))
-                } else if let Some(em) = re!(r"^else ([\w.]+):$").captures(&it.text) {
-                    (ORDERS3.into_iter().filter(|o| !seen.contains(o)).collect(), cap(&em, 1))
+                    words
                 } else {
-                    continue;
+                    ORDERS3.into_iter().filter(|o| !seen.contains(o)).collect()
                 };
-                seen.extend(ords.iter().copied());
+                seen.extend(orders.iter().copied());
                 let mut side = vec![];
-                for o in &ords {
+                for o in &orders {
                     let mut f = facts.clone();
-                    if possible.contains(o) && f.constrain(m, &self.env.borrow(), &a, &b, o) {
+                    if possible.contains(o) && f.constrain(m, &self.env.borrow(), a, b, o) {
                         side.push((*o, f));
                     }
                 }
                 let split = side.len() > 1;
                 for (o, f) in side {
-                    for (kind, steps, f2) in self.seq(&it.kids, f) {
-                        let step = if split { format!("{name}'{o}") } else { name.clone() };
-                        out.push((kind, [vec![step], steps].concat(), f2));
-                    }
+                    let name = format!("{}{}", s(c, "name"), if split { format!("'{o}") } else { String::new() });
+                    out.extend(self.named(&name, &c.nodes("body"), f));
                 }
             }
             if seen.len() != 3 {
@@ -1127,88 +1240,86 @@ impl<'m> Function<'m> {
             return out;
         }
 
-        if let Some(c) = re!(r"^for (\w+) in (.*):$").captures(text) {
-            return self.run_loop(&c[1], None, Some(&c[2]), kids, &elses, facts, &format!("for {} in {}", &c[1], &c[2]));
+        if k == "for" {
+            let what = format!("for {} in {}", s(st, "name"), t(n(st, "iterable")));
+            return self.run_loop(s(st, "name"), None, Some(n(st, "iterable")), st, facts, &what);
+        }
+        if k == "while" {
+            let what = format!("while {}", s(st, "name"));
+            return self.run_loop(s(st, "name"), Some(n(st, "condition")), None, st, facts, &what);
         }
 
-        if let Some(c) = re!(r"^while (\w+) = (.*):$").captures(text) {
-            return self.run_loop(&c[1], Some(&c[2]), None, kids, &elses, facts, &format!("while {}", &c[1]));
+        if k == "return" {
+            return vec![("return".to_string(), vec![], facts)];
+        }
+        if k == "fail" {
+            let exempt = st.node("value").filter(|v| v.kind == "name" && EXEMPT.contains(&s(v, "name")));
+            return vec![(exempt.map_or("fail".to_string(), |v| s(v, "name").to_string()), vec![], facts)];
+        }
+        if k == "continue" || k == "break" {
+            return vec![(k.to_string(), vec![], facts)];
         }
 
-        if let Some(c) = re!(r"^assert \w+ = (.*)$").captures(text) {
-            return self.assume(&c[1], true, &facts).into_iter().map(|f| (say("next"), vec![], f)).collect();
-        }
-
-        if text.starts_with("return") {
-            return vec![(say("return"), vec![], facts)];
-        }
-        if text == "fail not_reachable" || text == "fail not_implemented" {
-            return vec![(text[5..].to_string(), vec![], facts)];
-        }
-        if text.starts_with("fail ") {
-            return vec![(say("fail"), vec![], facts)];
-        }
-        if text == "continue" || text == "break" {
-            return vec![(text.to_string(), vec![], facts)];
-        }
-
-        let mut outs = if !kids.is_empty() && re!(r"^(region |arena |within |inject\(|inject:)").is_match(text) {
-            self.seq(kids, facts.clone())
-        } else {
-            vec![(say("next"), vec![], facts.clone())]
-        };
-        if let Some(n) = failing_name(text) {
-            let key = (n.clone(), text.to_string());
+        let mut outs = if ["region", "arena", "inject"].contains(&k) { self.seq(&st.nodes("body"), facts.clone()) } else { vec![("next".to_string(), vec![], facts.clone())] };
+        if let Some(name) = failing_name(st) {
+            let key = (name.clone(), site(st));
             let mut order = self.order.borrow_mut();
             if !order.contains_key(&key) {
                 let mut seen = self.fails_seen.borrow_mut();
-                let count = seen.entry(n.clone()).or_insert(0);
-                *count += 1;
-                order.insert(key.clone(), *count);
+                let c = seen.entry(name.clone()).or_insert(0);
+                *c += 1;
+                order.insert(key.clone(), *c);
             }
-            let label = if self.fails_total[&n] == 1 { n.clone() } else { format!("{n}'{}", order[&key]) };
-            outs.push((say("fail"), vec![format!("{label}'fails")], facts.clone()));
+            let label = if self.fails_total[&name] == 1 { name.clone() } else { format!("{name}'{}", order[&key]) };
+            outs.push(("fail".to_string(), vec![format!("{label}'fails")], facts.clone()));
         }
         // what the statement changes, and what a new name stands for
-        let mut changed = mutated(&[Item { text: text.to_string(), kids: vec![] }]);
-        if let Some(g) = re!(r"^(\w+)\.(push|extend)\(").captures(text) {
-            for (_, _, f) in &mut outs {
-                f.grow(&g[1], if &g[2] == "push" { Some(1) } else { None });
+        let mut changed = changes(st);
+        if let Some(v) = expr_value(st) {
+            if let Some(obj) = method(v, &["push", "extend"], None).filter(|o| o.kind == "name") {
+                let by = (s(n(v, "callee"), "name") == "push").then_some(1);
+                for (_, _, f) in outs.iter_mut() {
+                    f.grow(s(obj, "name"), by);
+                }
+                changed.remove(s(obj, "name"));
             }
-            changed.remove(&g[1]);
         }
-        let bound = re!(r"^(?:mutable )?(\w+) :?= (.*?)( or fail)?$").captures(text);
-        if let Some(b) = &bound {
-            changed.remove(&b[1]);
+        let bound = match k {
+            "let" => Some(s(st, "name")),
+            "assign" if n(st, "target").kind == "name" => Some(s(n(st, "target"), "name")),
+            _ => None,
+        };
+        if let Some(b) = bound {
+            changed.remove(b);
         }
         let env = self.env.borrow();
-        for (kind, _, f) in &mut outs {
+        for (kind, _, f) in outs.iter_mut() {
             if kind != "next" {
                 continue;
             }
-            for name in &changed {
-                f.forget(name);
+            for c in &changed {
+                f.forget(c);
             }
-            if let (Some(b), false) = (&bound, NOT_BOUND.iter().any(|p| text.starts_with(p))) {
-                let rhs = re!(r#" forever because ".*""#).replace(&b[2], "").to_string();
-                f.bind(m, &env, &b[1], &rhs);
+            if let Some(b) = bound {
+                f.bind(m, &env, b, unwrap(n(st, "value")));
             }
         }
         outs
     }
 
     /// The interval of the number of elements a `for` goes over.
-    fn count_of(&self, src: &str, facts: &Facts) -> I {
+    fn count_of(&self, src: &Node, facts: &Facts) -> I {
         let m = self.module;
         let env = self.env.borrow();
-        if let Some(c) = re!(r"^range\(from: (.+), (below|through): (.+)\)$").captures(src) {
-            let (a, b) = (facts.interval(m, &env, &c[1]), facts.interval(m, &env, &c[3]));
-            let extra = i64::from(&c[2] == "through");
-            if let Some((base, plus)) = split_at(&c[3], " + ") {
-                if base == c[1].trim() {
-                    if let Some(n) = m.value(&plus) {
-                        return (Some(n + extra), Some(n + extra));
-                    }
+        let args = src.nodes("args");
+        let range = src.kind == "call" && chain(n(src, "callee")).as_deref() == Some("range");
+        if range && args.len() == 2 && args[0].str("name") == Some("from") && matches!(args[1].str("name"), Some("below" | "through")) {
+            let (start, end) = (n(args[0], "value"), n(args[1], "value"));
+            let (a, b) = (facts.interval(m, &env, start), facts.interval(m, &env, end));
+            let extra = i64::from(args[1].str("name") == Some("through"));
+            if end.kind == "binary" && s(end, "op") == "+" && !end.flag("parens") && text(n(end, "left"), false) == text(start, false) {
+                if let Some(k) = m.value(n(end, "right")) {
+                    return (Some(k + extra), Some(k + extra));
                 }
             }
             if let (Some(lo), Some(hi)) = a {
@@ -1218,37 +1329,37 @@ impl<'m> Function<'m> {
             }
             return (Some(0), None);
         }
-        if let Some(n) = m.length(src) {
-            return (Some(n), Some(n));
+        if let Some(k) = m.length(src) {
+            return (Some(k), Some(k));
         }
         let mut f = facts.clone();
         f.bind(m, &env, "loop'source", src);
-        meet(meet(f.interval(m, &env, "loop'source.count()"), facts.interval(m, &env, &format!("{src}.count()"))), (Some(0), None))
+        meet(meet(f.interval(m, &env, &count(&name_node("loop'source"))), facts.interval(m, &env, &count(src))), (Some(0), None))
     }
 
-    fn with_count(&self, src: &str, facts: &Facts, interval: I) -> Facts {
+    fn with_count(&self, src: &Node, facts: &Facts, interval: I) -> Facts {
         let mut f = facts.clone();
-        if !src.starts_with("range(") {
-            f.add(self.module, &self.env.borrow(), &format!("{src}.count()"), interval);
+        if !(src.kind == "call" && chain(n(src, "callee")).as_deref() == Some("range")) {
+            f.add(self.module, &self.env.borrow(), &count(src), interval);
         }
         f
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn run_loop(&self, var: &str, pred: Option<&str>, src: Option<&str>, kids: &[Item], elses: &[&Item], facts: Facts, what: &str) -> Vec<State> {
+    fn run_loop(&self, var: &str, pred: Option<&Node>, src: Option<&Node>, st: &Node, facts: Facts, what: &str) -> Vec<State> {
         let mut out = vec![];
-        let else_name = elses.first().map(|e| e.text[5..].trim_end_matches(':').to_string());
-        let else_body: &[Item] = elses.first().map_or(&[], |e| &e.kids);
-        let count = src.map(|s| self.count_of(s, &facts));
+        let else_name = st.node("else").map(|e| s(e, "name").to_string());
+        let else_body = st.node("else").map(|e| e.nodes("body")).unwrap_or_default();
+        let kids = st.nodes("body");
+        let counted = src.map(|x| self.count_of(x, &facts));
 
         // the loop never runs
-        let never = match (pred, src, count) {
+        let never = match (pred, src, counted) {
             (Some(p), _, _) => self.outcomes(p, false, &facts),
-            (None, Some(s), Some(c)) => {
+            (None, Some(x), Some(c)) => {
                 if c.0.unwrap_or(0) >= 1 {
                     vec![]
                 } else {
-                    vec![(String::new(), self.with_count(s, &facts, (Some(0), Some(0))))]
+                    vec![(String::new(), self.with_count(x, &facts, (Some(0), Some(0))))]
                 }
             }
             _ => unreachable!(),
@@ -1260,39 +1371,39 @@ impl<'m> Function<'m> {
             self.problem(format!("`{what}` runs for sure, and needs no else"));
         }
         if let Some(name) = &else_name {
-            for (s, f) in never {
-                for (kind, steps, f2) in self.seq(else_body, f) {
-                    out.push((kind, [vec![format!("{name}{s}")], steps].concat(), f2));
+            for (suffix, f) in never {
+                for (kind, steps, f2) in self.seq(&else_body, f) {
+                    out.push((kind, [vec![format!("{name}{suffix}")], steps].concat(), f2));
                 }
             }
         }
 
         // the pass the path shows: the first, or a later one, after which the facts on what the body changes no longer
         // hold
-        let changed = mutated(kids);
-        let grown = grown_only(kids, &changed);
+        let changed = mutated(&kids);
+        let grown = grown_only(&kids, &changed);
         for many in [false, true] {
             let mut base = facts.clone();
             if many {
                 widen(&mut base, &changed, &grown);
             }
             let runs = if many { (Some(2), None) } else { (Some(1), None) };
-            let entries = match (pred, src, count) {
+            let entries = match (pred, src, counted) {
                 (Some(p), _, _) => self.outcomes(p, true, &base),
-                (None, Some(s), Some(c)) => {
+                (None, Some(x), Some(c)) => {
                     if empty(meet(c, runs)) {
                         continue;
                     }
-                    vec![(String::new(), self.with_count(s, &base, runs))]
+                    vec![(String::new(), self.with_count(x, &base, runs))]
                 }
                 _ => unreachable!(),
             };
-            for (s, mut f) in entries {
+            for (suffix, mut f) in entries {
                 f.forget(var);
-                for (kind, steps, mut f2) in self.seq(kids, f) {
+                for (kind, steps, mut f2) in self.seq(&kids, f) {
                     let goes_on = kind == "next" || kind == "continue";
                     let last = if many { (Some(2), None) } else { (Some(1), Some(1)) };
-                    if let (Some(c), true) = (count, goes_on) {
+                    if let (Some(c), true) = (counted, goes_on) {
                         // a pass that goes on is the last only when the elements run out
                         if empty(meet(c, last)) {
                             continue;
@@ -1310,7 +1421,7 @@ impl<'m> Function<'m> {
                     };
                     let kind = if ["next", "continue", "break"].contains(&kind.as_str()) { "next".to_string() } else { kind };
                     for f3 in ends {
-                        let step = format!("{var}{}{s}", if many { "'many" } else { "" });
+                        let step = format!("{var}{}{suffix}", if many { "'many" } else { "" });
                         out.push((kind.clone(), [vec![step], steps.clone()].concat(), f3));
                     }
                 }
@@ -1321,30 +1432,7 @@ impl<'m> Function<'m> {
 }
 
 fn functions(module: &Module) -> Vec<Function<'_>> {
-    let lines = &module.lines;
-    let (mut i, mut out) = (0, vec![]);
-    while i < lines.len() {
-        let Some(c) = re!(r"^\s*function (\w+)\(").captures(&lines[i]) else {
-            i += 1;
-            continue;
-        };
-        let d = indent(&lines[i]);
-        let mut j = i;
-        while j < lines.len() && !lines[j].trim_end().ends_with(':') {
-            j += 1;
-        }
-        let mut body = vec![];
-        j += 1;
-        while j < lines.len() && (lines[j].trim().is_empty() || indent(&lines[j]) > d) {
-            if !lines[j].trim().is_empty() && !lines[j].trim().starts_with("--") {
-                body.push(lines[j].clone());
-            }
-            j += 1;
-        }
-        out.push(Function::new(module, &c[1], &body));
-        i = j;
-    }
-    out
+    declarations(&module.tree).into_iter().filter(|d| d.kind == "function").map(|d| Function::new(module, d)).collect()
 }
 
 /// A path's identifier: the function, then each named outcome along it.

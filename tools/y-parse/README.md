@@ -43,7 +43,7 @@ documentation block above it) and its `comment` (the `--` lines right above it).
 | `function` | `name`, `params` (`param` nodes: `name`, `injected`, `mutable`, `type`), `returns`, `fails` (a list of names), `where` and `ensures` (clauses: `name`, `condition`), `body` |
 | `rule` | `name`, `params`, `value` |
 | `test` | `name`, `covers` (a `path` node with its `text` and its `steps`, or null), `sections` (`section` nodes: `name` is `given`, `inject`, `when` or `then`, and `body`) |
-| `doc` | `text`, its lines without the rules' indentation; `entries`: a line that starts with a name and `: ` (`game: The game, as game.`, `fails guess_error.empty: …`), with the indented lines that continue it, as `doc_entry` nodes with `name`, `text`, and `type`, the type after its last word `as`, or null when it does not end in `as type.` |
+| `doc` | `text`, its lines without the rules' indentation; `entries`: a line that starts with a name and `: ` (`game: The game, as game.`, `fails guess_error.empty: …`), with the indented lines that continue it, as `doc_entry` nodes with `name`, `text`, `end`, and `type`, the type after its last word `as`, or null when it does not end in `as type.` |
 | `let` | `name`, `mutable`, `value`: `a = …`, `mutable a = …`, and a test's `then:` condition |
 | `assign`, `expr` | `target` and `value` (`a.b := …`); `value` (a statement that is an expression) |
 | `if`, `while` | `name`, `condition`, `body`, `else` |
@@ -60,6 +60,7 @@ documentation block above it) and its `comment` (the `--` lines right above it).
 | `binary`, `unary` | `op`, `left`, `right`; `op` (`not` or `-`), `operand` |
 | `literal` | `type` (`integer`, `decimal`, `duration`, `string`, `character`, `boolean`, `path`, `pattern`, `url`), `text` as written, and for a string or a character its `value`, the text between the quotes |
 | `list` | `items` |
+| (any expression) | `parens`, true when it is written in brackets, `(a or b)`; the tree has no node for brackets |
 | `or_fail`, `forever` | `value` (`e or fail`); `value`, `because` (`e forever because "…"`) |
 | `mutable`, `fake`, `compile` | `value`: an argument `mutable g`, a test's `fake store(…)`, `main`'s `compile f(…)` |
 | `type` | `name`, `args` (`type_arg` nodes: `name`, `value`, a type or a literal, and `text`, the value as written), `text` as written |
@@ -115,12 +116,15 @@ checks on the text.
 - `tools/paths/pathfacts.py` reads it for the decisions of each function, the functions with injected capabilities,
   and the tests and the path each covers; `tools/paths/places.py` finds the Y places of the other facts in it (a
   facet, a function's head, a claim, a call that may suspend, a `compile`, a unit's constant or constraint).
+- The path enumerator, `tools/paths/yp.py`, and its Rust port `tools/bare-rust/tests/y_paths/mod.rs`, read every
+  declaration, statement and expression of a module from the tree. They keep facts on expressions by a text they
+  write from the nodes, `game.misses.count()`, and the brackets the source writes (`parens`) decide how `and` and
+  `or` split.
 - `tools/paths/trace.py` reads the tests and the path each claims to cover from the test file's tree.
 - The lint `type_argument_name`, `tools/paths/ylint.py` and its twin `tools/bare-rust/tests/y_lint/mod.rs`, reads the
   type arguments in the code and in the types documentation entries end with, the declarations, and the comments that
   suppress it.
 
-The other tools still read Y as text: the path enumerator `tools/paths/yp.py` and its Rust port
-`tools/bare-rust/tests/y_paths/mod.rs`, whose paths `pathfacts.py`, `trace.py` and the checks use, and the layout
-checks of `y_examples.rs`. When `pathfacts.py` finds no node for a fact, it falls back to the text the fact's line had
-in git's `HEAD` (`places.by_text`).
+Only the layout checks of `y_examples.rs` (blank lines and comments, which a tree does not keep) still read Y as text.
+When `pathfacts.py` finds no node for a fact, it falls back to the text the fact's line had in git's `HEAD`
+(`places.by_text`).

@@ -103,7 +103,7 @@ fn a_documentation_block_and_its_entries() {
     let d = f.node("doc").unwrap();
     assert_eq!((d.line, d.num("end")), (1, Some(8)));
     let e = d.nodes("entries");
-    assert_eq!((s(e[0], "name"), s(e[0], "text"), e[0].line), ("text", "The words, as string.", 4));
+    assert_eq!((s(e[0], "name"), s(e[0], "text"), e[0].line, e[0].num("end")), ("text", "The words, as string.", 4, Some(5)));
     assert_eq!(s(e[1], "name"), "fails list_error.empty");
     assert!(s(d, "text").starts_with("Reads a list."));
     let ty = e[0].node("type").unwrap();
@@ -192,6 +192,10 @@ fn expressions() {
     assert_eq!((s(e, "op"), s(e.node("left").unwrap(), "op")), ("or", "and"));
     assert_eq!(e.node("left").unwrap().node("left").unwrap().kind, "unary");
     assert_eq!(b[2].node("value").unwrap().kind, "compile");
+    // the brackets the source writes are kept as a mark: `(a or b) or c` is two operands of `or`, `a or b or c` three
+    let b = body("x = (a or b) or c\ny = a or b or c");
+    let (x, y) = (b[0].node("value").unwrap(), b[1].node("value").unwrap());
+    assert!(x.node("left").unwrap().flag("parens") && !y.node("left").unwrap().flag("parens"));
 }
 
 #[test]

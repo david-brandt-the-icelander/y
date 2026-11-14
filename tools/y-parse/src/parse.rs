@@ -349,7 +349,8 @@ impl<'a> P<'a> {
                 self.i += 1;
                 let e = self.expr()?;
                 self.expect(")")?;
-                Ok(e)
+                // the tree has no node for brackets, but `(a or b) or c` is two operands, and `a or b or c` three
+                Ok(e.with("parens", true))
             }
             Kind::Punct if t.text == "[" => {
                 self.i += 1;
@@ -470,7 +471,7 @@ fn doc_node(d: &Doc) -> Node {
             }
         }
     }
-    let entries: Vec<Node> = entries.into_iter().map(|(e, pieces)| e.with("type", entry_type(&pieces))).collect();
+    let entries: Vec<Node> = entries.into_iter().map(|(e, pieces)| e.with("end", pieces.last().unwrap().0).with("type", entry_type(&pieces))).collect();
     Node::new("doc", d.line).with("end", d.end).with("text", text).with("entries", entries)
 }
 
