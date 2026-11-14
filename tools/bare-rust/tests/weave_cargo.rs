@@ -356,3 +356,33 @@ fn the_table_of_library_levels_holds_for_the_libraries() {
     assert_eq!(errs.len(), 1, "{errs:#?}");
     assert!(errs[0].contains("`y_string::upper` needs `effects`, and libraries/levels.json gives it `calculations`: it calls `y_string::keep`, which needs `effects` (it calls `std::fs::write`)"), "{errs:#?}");
 }
+
+/// A `trusted` entry of `libraries/levels.json` vouches for the calls it lists, and only those: a copy of `y-runtime`
+/// whose `engine` also writes a file is above its module's level, and one whose `engine` no longer reads `Y_ATOMIC`
+/// has an entry that outlived its reason.
+#[test]
+fn a_trusted_function_is_trusted_only_for_the_calls_it_lists() {
+    let target = bare_rust::cargo::target_dir(&root());
+    let runtime = root().join("../../examples/y-runtime");
+    let copy = |name: &str, from: &str, to: &str| -> PathBuf {
+        let dir = root().join("target/bare-rust-test").join(name);
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("src")).unwrap();
+        fs::copy(runtime.join("Cargo.toml"), dir.join("Cargo.toml")).unwrap();
+        for e in fs::read_dir(runtime.join("src")).unwrap() {
+            let p = e.unwrap().path();
+            fs::copy(&p, dir.join("src").join(p.file_name().unwrap())).unwrap();
+        }
+        let shared = fs::read_to_string(dir.join("src/shared.rs")).unwrap();
+        assert!(shared.contains(from), "{from}");
+        fs::write(dir.join("src/shared.rs"), shared.replacen(from, to, 1)).unwrap();
+        dir
+    };
+    let read = "    match std::env::var(\"Y_ATOMIC\").as_deref() {";
+    let more = copy("wc_trust_more", read, &format!("    let _ = std::fs::metadata(\"Y_ATOMIC\");\n{read}"));
+    let errs = bare_rust::facts::check_library(&more, &target).unwrap();
+    assert!(errs.iter().any(|e| e.contains("`y_runtime::shared::engine` needs `effects`, and libraries/levels.json gives it `shared`: it calls `std::fs::metadata`")), "{errs:#?}");
+    let stale = copy("wc_trust_stale", read, "    match Ok::<&str, ()>(\"one lock\") {");
+    let errs = bare_rust::facts::check_library(&stale, &target).unwrap();
+    assert_eq!(errs, vec!["src/shared.rs: libraries/levels.json trusts `y_runtime::shared::engine` to call `std::env::var`, and it no longer does: remove the entry".to_string()]);
+}

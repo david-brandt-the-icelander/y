@@ -366,8 +366,9 @@ fn library_functions(dir: &Path, krate: &str) -> R<(Vec<LibFn>, BTreeMap<String,
 /// table gives them; a library the table does not list needs `effects`) and of the crate's own functions it calls. One
 /// message for each public function that needs more than the table gives it, naming the call that needs it. What
 /// the crate does itself (its loops, its own state) is not counted: the table says what a call into the library needs,
-/// and the library is trusted for the rest. A function the table's `trusted` names is held at its module's level,
-/// whatever it calls.
+/// and the library is trusted for the rest. A function the table's `trusted` names may make the calls it lists there
+/// without their counting; any other call it makes counts as any function's does. An entry for a function of the
+/// crate that makes none of the calls it lists is reported too, so that an entry does not outlive its reason.
 pub fn check_library(dir: &Path, target: &Path) -> R<Vec<String>> {
     let info = crate::corpus::crate_info(dir)?;
     let krate = info.name.replace('-', "_");
@@ -379,15 +380,25 @@ pub fn check_library(dir: &Path, target: &Path) -> R<Vec<String>> {
     // each function's own calls into other libraries, and the crate's functions it calls
     let mut own: Vec<(usize, String)> = vec![(0, String::new()); fns.len()];
     let mut edges: Vec<Vec<usize>> = vec![vec![]; fns.len()];
+    let trusted: Vec<Vec<String>> = fns.iter().map(|f| crate::level::trusted_calls(&f.path)).collect();
+    // the trusted calls each function was seen to make
+    let mut vouched: Vec<BTreeSet<String>> = vec![BTreeSet::new(); fns.len()];
     for c in &calls {
         let Some(off) = texts.get(&c.file).and_then(|t| offset_of(t, c.line, c.col)) else { continue };
         let Some(i) = fns.iter().enumerate().filter(|(_, f)| f.file == c.file && f.range.0 <= off && off < f.range.1).min_by_key(|(_, f)| f.range.1 - f.range.0).map(|(i, _)| i) else { continue };
         let k = &c.callee;
         if k.local || k.self_ty.as_ref().is_some_and(|t| t.1) {
             let head = k.self_ty.as_ref().map(|(t, _)| t.rsplit("::").next().unwrap_or("").to_string()).unwrap_or_default();
-            match index.get(k.path.as_str()) {
-                Some(j) => edges[i].push(*j),
-                None => edges[i].extend(fns.iter().enumerate().filter(|(_, f)| !head.is_empty() && f.path.ends_with(&format!("::{head}::{}", k.name))).map(|(j, _)| j)),
+            let callees: Vec<usize> = match index.get(k.path.as_str()) {
+                Some(j) => vec![*j],
+                None => fns.iter().enumerate().filter(|(_, f)| !head.is_empty() && f.path.ends_with(&format!("::{head}::{}", k.name))).map(|(j, _)| j).collect(),
+            };
+            for j in callees {
+                if crate::level::is_trusted(&trusted[i], &fns[j].path) {
+                    vouched[i].insert(fns[j].path.clone());
+                } else {
+                    edges[i].push(j);
+                }
             }
             continue;
         }
@@ -395,18 +406,16 @@ pub fn check_library(dir: &Path, target: &Path) -> R<Vec<String>> {
         if let Some((t, _)) = &k.trait_path {
             paths.push(format!("{t}::{}", k.name));
         }
+        if let Some(p) = paths.iter().find(|p| crate::level::is_trusted(&trusted[i], p)) {
+            vouched[i].insert(p.clone());
+            continue;
+        }
         let (level, why) = match paths.iter().find(|p| crate::level::library_level(p).is_none()) {
             Some(p) => (4, format!("it calls `{p}`, of a library with no level in libraries/levels.json")),
             None => paths.iter().filter_map(|p| Some((crate::level::library_level(p)?, p))).max_by_key(|x| x.0).map(|(l, p)| (l, format!("it calls `{p}`"))).unwrap_or_default(),
         };
-        if level > own[i].0 && crate::level::trusted(&fns[i].path).is_none() {
+        if level > own[i].0 {
             own[i] = (level, why);
-        }
-    }
-    // a function the table trusts is held at its module's level: nothing it calls counts
-    for (i, f) in fns.iter().enumerate() {
-        if crate::level::trusted(&f.path).is_some() {
-            edges[i].clear();
         }
     }
     // to a fixed point: a function needs what the crate's functions it calls need
@@ -430,6 +439,11 @@ pub fn check_library(dir: &Path, target: &Path) -> R<Vec<String>> {
         let table = crate::level::library_level(&f.path).unwrap_or(4);
         if need[i].0 > table {
             out.push(format!("{}: `{}` needs `{}`, and libraries/levels.json gives it `{}`: {}", f.file, f.path, crate::level::LEVELS[need[i].0], crate::level::LEVELS[table], need[i].1));
+        }
+    }
+    for (i, f) in fns.iter().enumerate() {
+        for t in trusted[i].iter().filter(|t| !vouched[i].iter().any(|v| crate::level::is_trusted(std::slice::from_ref(t), v))) {
+            out.push(format!("{}: libraries/levels.json trusts `{}` to call `{t}`, and it no longer does: remove the entry", f.file, f.path));
         }
     }
     Ok(out)

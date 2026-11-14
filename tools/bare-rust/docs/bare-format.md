@@ -412,7 +412,9 @@ regions checked from …`, and `checks_via` in `--json`):
 `bare-rust levels <bare-dir> --crate <crate-dir> --out <dir>` weaves with cargo and prints the levels from rustc's
 calls (`--show-calls` lists them). `bare-rust levels --libraries <crate>…` checks `libraries/levels.json` against what a
 library crate calls, from its MIR: a public function that reaches a library module above the level the table gives
-the function, or a library the table does not list, fails, unless the table's `trusted` names the function with why.
+the function, or a library the table does not list, fails. The table's `trusted` lets a function make the calls it
+lists there, with why (`"y_runtime::shared::engine": {"calls": ["std::env::var"], "why": "…"}`), and no others: any other
+call it makes counts, and an entry whose calls the function no longer makes fails as stale.
 
 ```text
 { "kind": "region", "name": "shop::checkout::hold#hold_one", "clauses": [ { "kind": "region", "text": "atomic", "source": "y/src/checkout.y:12" } ] }

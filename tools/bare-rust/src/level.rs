@@ -72,11 +72,16 @@ pub struct Use {
 /// The levels of library modules (`libraries/levels.json`): a call into one needs its level.
 const LIBRARY_LEVELS: &str = include_str!("../libraries/levels.json");
 
-/// The functions of libraries that `libraries/levels.json` trusts at their module's level, though they call more, with
-/// why (see `crate::facts::check_library`).
-pub(crate) fn trusted(path: &str) -> Option<String> {
-    let v: Value = serde_json::from_str(LIBRARY_LEVELS).ok()?;
-    v["trusted"][path].as_str().map(str::to_string)
+/// The calls `libraries/levels.json` trusts a library's function to make though they are above its module's level, by
+/// the function: each a path, or a module or type the call is under (see `crate::facts::check_library`).
+pub(crate) fn trusted_calls(function: &str) -> Vec<String> {
+    let v: Value = serde_json::from_str(LIBRARY_LEVELS).unwrap_or_default();
+    v["trusted"][function]["calls"].as_array().into_iter().flatten().filter_map(|c| c.as_str().map(str::to_string)).collect()
+}
+
+/// Whether the call of `callee` is one of the `trusted` calls: the path itself, or under it.
+pub(crate) fn is_trusted(trusted: &[String], callee: &str) -> bool {
+    trusted.iter().any(|t| callee == t || callee.starts_with(&format!("{t}::")))
 }
 
 /// The level a call of the library path `path` needs, by the longest module of the table it is under.

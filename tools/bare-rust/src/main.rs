@@ -252,7 +252,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
             let mut errs = vec![];
             for d in args[3..].iter().filter(|a| !a.starts_with("--")) {
                 let found = bare_rust::facts::check_library(&PathBuf::from(d), &tdir)?;
-                println!("{d}: {} public functions above their level in libraries/levels.json", found.len());
+                println!("{d}: {} public functions above their level, or stale trusted calls, in libraries/levels.json", found.len());
                 errs.extend(found);
             }
             for e in &errs {

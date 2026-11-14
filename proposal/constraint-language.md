@@ -1870,8 +1870,8 @@ prints it under the file's `module` line:
   on anything above its module's level, and `bare-rust levels <bare-dir>` prints the level each module needs and why,
   with the level pinned on it (with `--crate <dir> --out <dir>`, from rustc's calls). `bare-rust levels --libraries
   <crate>…` checks the table against a library crate's MIR: a public function that calls a library at a higher level
-  than the table gives the function, or one the table does not list, fails, unless the table's `trusted` names it with
-  why. Every module of the examples is pinned at the level it needs, by either reading, and the examples' checks hold
+  than the table gives the function, or one the table does not list, fails. The table's `trusted` lets a function make
+  the calls it lists, with why, and no others; an entry whose calls the function no longer makes fails too. Every module of the examples is pinned at the level it needs, by either reading, and the examples' checks hold
   each facet's pin to a second inference made from the Y source alone.
 
 ### 6.23 Regions: how a piece of code may execute
