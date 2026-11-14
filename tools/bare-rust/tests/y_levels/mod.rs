@@ -54,7 +54,7 @@ fn function(d: &Node, facet: Option<&str>) -> Function {
                     "assign" => f.up(2, at("`:=`")),
                     "arena" => f.up(3, at("an arena")),
                     "task" | "inject" => f.up(4, at(&format!("`{}`", n.kind))),
-                    "constraint" => match n.str("kind").unwrap() {
+                    "constraint" => match n.str("word").unwrap() {
                         "atomic" => f.up(3, at("an atomic region")),
                         k @ ("within" | "forever" | "detach" | "waits" | "uncancellable") => f.up(4, at(&format!("a region that is `{k}`"))),
                         _ => {}

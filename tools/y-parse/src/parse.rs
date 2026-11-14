@@ -921,7 +921,7 @@ fn region(p: &mut P, e: &Entry, src: &str, line: usize) -> Result<Node, Error> {
         let start = p.i;
         let cline = p.here();
         let kind = p.ident()?;
-        let mut c = Node::new("constraint", cline).with("kind", kind.clone());
+        let mut c = Node::new("constraint", cline).with("word", kind.clone());
         match kind.as_str() {
             "waits" => {
                 p.expect("until")?;

@@ -155,7 +155,7 @@ fn regions_and_their_alternatives() {
     let r = &b[0];
     assert_eq!((s(r, "name"), r.nodes("orelse").len(), s(r.nodes("orelse")[0], "name"), r.num("end")), ("take", 1, "later", Some(5)));
     let cs = r.nodes("constraints");
-    assert_eq!((s(cs[1], "kind"), s(cs[1], "name"), s(cs[1], "text")), ("waits", "enough", "waits until enough = (n >= 2)"));
+    assert_eq!((s(cs[1], "word"), s(cs[1], "name"), s(cs[1], "text")), ("waits", "enough", "waits until enough = (n >= 2)"));
     let cs = b[1].nodes("constraints");
     assert_eq!(cs.iter().map(|c| s(c, "text")).collect::<Vec<_>>(), ["detach because \"why, then\"", "within 1min or fail", "supervise(at_most: 2)", "isolation snapshot"]);
     assert_eq!((s(cs[0], "because"), cs[1].flag("or_fail"), s(cs[3], "level")), ("why, then", true, "snapshot"));

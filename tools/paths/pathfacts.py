@@ -4,10 +4,12 @@ the text it had.
 
     python3 tools/paths/pathfacts.py <example folder>
 
-Places move by comparing the files with the ones in git's HEAD, so run it on uncommitted edits (`rebare.sh` does)."""
+It reads the Y source through its tree (`ytree.py`, from `tools/y-parse`): the decisions, the functions with injected
+capabilities, the tests and what they cover, and the places of the other facts (`places.py`). Places that no fact's
+words find move by comparing the files with the ones in git's HEAD, so run it on uncommitted edits (`rebare.sh` does)."""
 import json, os, re, subprocess, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import places, yp
+import places, yp, ytree
 
 root = sys.argv[1]
 ex = os.path.basename(os.path.abspath(root))
@@ -20,6 +22,16 @@ test = next(m for m in mods if m["y"].endswith(".test.y"))
 
 def lines(p):
     return open(f"{root}/{p}").read().split("\n")
+
+
+def tree(p):
+    """The tree of a Y file, by its place in the example; None for a bare body."""
+    return ytree.tree(f"{root}/{p}") if p.startswith("y/") else None
+
+
+def functions(p):
+    """The functions of a Y file, each with the facet it is in or None."""
+    return [(facet, d) for facet, d in ytree.declarations(tree(p)) if d["kind"] == "function"]
 
 
 old = {}
@@ -65,12 +77,12 @@ def relocate(v):
 
 
 def enclosing(path, n):
-    """The name of the function, rule or `fn` the line is in, and the line it starts at."""
-    head = re.compile(r"^\s*(?:public |private )?(?:function|rule|test) (\w+)\(|^\s*(?:pub(?:\(\w+\))? )?(?:async )?fn (\w+)[<(]")
+    """The name of the `fn` a line of a bare body is in, and the line it starts at."""
+    head = re.compile(r"^\s*(?:pub(?:\(\w+\))? )?(?:async )?fn (\w+)[<(]")
     for i in range(n, 0, -1):
         m = head.match(lines(path)[i - 1])
         if m:
-            return m.group(1) or m.group(2), i
+            return m.group(1), i
     return None, 0
 
 
@@ -84,7 +96,7 @@ def find(kind, found, keep=()):
                 groups.setdefault((key, path), []).append((f, field, int(n), test))
     done = set()
     for (key, path), group in groups.items():
-        for (f, field, _, _), hit in zip(group, places.locate([(n, t) for _, _, n, t in group], lines(path))):
+        for (f, field, _, _), hit in zip(group, places.locate([(n, t) for _, _, n, t in group], lines(path), tree(path))):
             if hit is not None:
                 f[field] = f"{path}:{hit}"
                 done.add((id(f), field))
@@ -114,12 +126,8 @@ for c in found:
     groups.setdefault((c["y"].rsplit(":", 1)[0], name, c["what"]), []).append(c)
 for (ypath, name, what), cs in groups.items():
     cs.sort(key=lambda c: int(c["bare"].rsplit(":", 1)[1]))
-    starts = [i for i, l in enumerate(lines(ypath), 1) if re.match(rf"^\s*(?:public |private )?(?:function|rule) {name}\(", l)]
-    hits = []
-    for start in starts:
-        ends = [i for i, l in enumerate(lines(ypath), 1) if i > start and re.match(r"^\s*(?:public |private )?(?:function|rule|test|type|facet|structure|constants) ", l)]
-        end = ends[0] if ends else len(lines(ypath)) + 1
-        hits += [i for i in range(start + 1, end) if what in lines(ypath)[i - 1]]
+    # the lines of the bodies of the functions of that name, after their heads
+    hits = [i for _, f in functions(ypath) if f["name"] == name for i in range(f["line"] + 1, f["end"] + 1) if what in lines(ypath)[i - 1]]
     words = lambda t: set(re.findall(r"[A-Za-z_]\w*", t.split("// y:")[0])) - {"let", "mutable", "clone", "return"}
     taken = set()
     for k, c in enumerate(cs):
@@ -163,64 +171,35 @@ for dirpath, _, files in os.walk(f"{root}/bare/src"):
                 if sj["kind"] == "function":
                     subjects.setdefault(sj["name"].rsplit("::", 1)[1], sj["name"])
 for m in code:
-    for i, l in enumerate(lines(m["y"]), 1):
-        mm = re.match(r"\s*function (\w+)\(([^)]*)\)", l)
-        if mm and "injected" in mm.group(2) and mm.group(1) not in listed:
-            caps = [p.split()[-1] for p in mm.group(2).split(",") if "injected" in p]
-            facts["capabilities"].append({"subject": subjects[mm.group(1)], "injected": [f"{c} as {c}" for c in caps],
-                                          "lowered": COUNT[len(caps)], "y": f"{m['y']}:{i}"})
+    for _, f in functions(m["y"]):
+        caps = [p["name"] for p in f["params"] if p["injected"]]
+        if caps and f["name"] not in listed:
+            facts["capabilities"].append({"subject": subjects[f["name"]], "injected": [f"{c} as {c}" for c in caps],
+                                          "lowered": COUNT[len(caps)], "y": f"{m['y']}:{f['line']}"})
 facts["capabilities"].sort(key=lambda c: (c["y"].endswith(("main.y",) ) or "main.y:" in c["y"], int(c["y"].rsplit(":", 1)[1])))
 
 # the decisions: `if a = (…):` / `else b:`; `conditional l:` and `compare l = a with b:`, with `condition l.x = …:` and
-# `else l.y:`; `for x in …:` and `while x = (…):`, with `else y` or `else y:` when the loop may never run
-ydecl = re.compile(r"^\s*(function|test) (\w+)")
+# `else l.y:`; `for x in …:` and `while x = (…):`, with `else y` or `else y:` when the loop may never run; and `region a
+# is …:` with `orelse region b is …:`, whose alternatives are its branches. A function's decisions are in the order of
+# the lines that open them: an `orelse`'s is its first `orelse region`.
 decisions = {}
 for m in code:
     yp_, mod = m["y"], m["module"]
-    cur, open_at, regions = None, {}, {}
-    for i, l in enumerate(lines(yp_), 1):
-        d = ydecl.match(l)
-        if d:
-            cur, open_at, regions = d.group(2), {}, {}
-        ind = len(l) - len(l.lstrip())
-        t = l.strip()
-        here = f"{yp_}:{i}"
-        mm = re.match(r"(if|while) (\w+) = .*:$", t) or re.match(r"(for) (\w+) in .*:$", t)
-        if mm:
-            group = {"kind": mm.group(1), "branches": [{"name": mm.group(2), "y": here}]}
-            decisions.setdefault(f"{mod}.{cur}", []).append(group)
-            open_at[ind] = group
-            continue
-        # `region a is …:` then `orelse region b is …:`: alternatives, named by their regions
-        mm = re.match(r"orelse region (\w+) is .*:$", t)
-        if mm:
-            if ind in open_at and open_at[ind]["kind"] == "orelse":
-                open_at[ind]["branches"].append({"name": mm.group(1), "y": here})
-            elif ind in regions:
-                first, at = regions[ind]
-                group = {"kind": "orelse", "branches": [{"name": first, "y": at}, {"name": mm.group(1), "y": here}]}
-                decisions.setdefault(f"{mod}.{cur}", []).append(group)
-                open_at[ind] = group
-            continue
-        mm = re.match(r"region (\w+) is .*:$", t)
-        if mm:
-            regions[ind] = (mm.group(1), here)
-        mm = re.match(r"(conditional|compare) (\w+)", t)
-        if mm:
-            group = {"kind": mm.group(1), "label": mm.group(2), "y": here, "branches": []}
-            decisions.setdefault(f"{mod}.{cur}", []).append(group)
-            open_at[ind + 4] = group
-            continue
-        mm = re.match(r"else ([\w.]+):?$", t) or re.match(r"condition (\w+\.\w+) = ", t)
-        if mm and ind in open_at:
-            open_at[ind]["branches"].append({"name": mm.group(1), "y": here})
-            if not t.startswith("condition "):
-                del open_at[ind]
-            continue
-        # a statement at the indentation of an open loop or `if` closes it
-        if t and not t.startswith("--"):
-            for k in [k for k in open_at if k >= ind and open_at[k]["kind"] not in ("conditional", "compare")]:
-                del open_at[k]
+    for _, f in functions(yp_):
+        opened = []
+        for n in ytree.walk(f):
+            branch = lambda b: {"name": b["name"], "y": f"{yp_}:{b['line']}"}
+            if n["kind"] in ("if", "while", "for"):
+                group = {"kind": n["kind"], "branches": [branch(n)] + [branch(e) for e in ytree.nodes(n, "else")]}
+                opened.append((n["line"], group))
+            elif n["kind"] in ("conditional", "compare"):
+                group = {"kind": n["kind"], "label": n["label"], "y": f"{yp_}:{n['line']}",
+                         "branches": [branch(c) for c in n["conditions"] + ytree.nodes(n, "else")]}
+                opened.append((n["line"], group))
+            elif n["kind"] == "region" and n["orelse"]:
+                opened.append((n["orelse"][0]["line"], {"kind": "orelse", "branches": [branch(r) for r in [n] + n["orelse"]]}))
+        if opened:
+            decisions[f"{mod}.{f['name']}"] = [g for _, g in sorted(opened, key=lambda o: o[0])]
 # where the bare bodies take each branch: the next `#name` in the function not yet given to a branch
 bdecl = re.compile(r"^\s*(?:pub )?(?:async )?fn (\w+)[<(]")
 for m in code:
@@ -249,20 +228,11 @@ ends = {"next": "returns", "return": "returns", "continue": "returns", "break": 
         "not_reachable": "not_reachable", "not_implemented": "not_implemented"}
 paths = [{"path": p, "ends": ends[k]} for p, k in statics.items()]
 
-tests, cur, reading = {}, None, False
-for i, l in enumerate(lines(test["y"]), 1):
-    mm = re.match(r"^test (\w+)", l)
-    if mm:
-        cur = mm.group(1)
-        tests[cur] = {"y": f"{test['y']}:{i}", "rust": f"{facts['facets'][0]['rust'].rsplit('::', 2)[0]}::{module}::tests::{cur}" if facts["facets"] else None, "covers": []}
-    mm = re.match(r"^\s+covers (.*)", l)
-    if mm and cur:
-        reading = True
-    if cur and reading and l.startswith("        "):
-        text = mm.group(1) if mm else l.strip()
-        tests[cur]["covers"] += [c.strip() for c in text.rstrip(":").split(",") if c.strip()]
-        if l.rstrip().endswith(":"):
-            reading = False
+# the tests, and the path each covers
+tests = {}
+for t in tree(test["y"])["decls"]:
+    if t["kind"] == "test":
+        tests[t["name"]] = {"y": f"{test['y']}:{t['line']}", "rust": None, "covers": [t["covers"]["text"]] if t["covers"] else []}
 krate = re.search(r'^name = "([^"]+)"', open(f"{root}/Cargo.toml").read(), re.M).group(1).replace("-", "_")
 for name, t in tests.items():
     t["rust"] = f"{krate}::{module}::tests::{name}"

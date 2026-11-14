@@ -52,7 +52,7 @@ documentation block above it) and its `comment` (the `--` lines right above it).
 | `conditional` | `label`, `subject` (or null), `conditions` (`condition` nodes: `name` such as `judged.hanged`, `test`, `body`), `else` |
 | `compare` | `label`, `left`, `right`, `conditions` (each `test` is `equal`, `less` or `greater`), `else` |
 | `region` | `name`, `constraints`, `body`, `orelse` (the regions of its `orelse region` lines) |
-| `constraint` | `kind`, its first word; `text`, as written; and for some kinds more: `waits` has `name` and `condition`, `within` has `bound` and `or_fail`, `detach` has `because`, `isolation` has `level`, a call such as `supervise(…)` has `args` |
+| `constraint` | `word`, its first word; `text`, as written; and for some words more: `waits` has `name` and `condition`, `within` has `bound` and `or_fail`, `detach` has `because`, `isolation` has `level`, a call such as `supervise(…)` has `args` |
 | `arena`, `task`, `inject` | `name`, `body`; `name`, `value`; `bindings` (`binding` nodes: `name`, `value`), `body` |
 | `return`, `fail` | `name` and `value`, both optional; `value`, optional |
 | `continue`, `break`, `retry` | none |
@@ -112,10 +112,14 @@ checks on the text.
   the end of one that statements follow) and for the decisions a module names.
 - `tools/paths/regen.py` reads it, through `tools/paths/ytree.py`, for the functions, rules and derived values and
   their facets, their `where` and `ensures` clauses, invariants, `injected` parameters, and regions.
+- `tools/paths/pathfacts.py` reads it for the decisions of each function, the functions with injected capabilities,
+  and the tests and the path each covers; `tools/paths/places.py` finds the Y places of the other facts in it (a
+  facet, a function's head, a claim, a call that may suspend, a `compile`, a unit's constant or constraint).
 - The lint `type_argument_name`, `tools/paths/ylint.py` and its twin `tools/bare-rust/tests/y_lint/mod.rs`, reads the
   type arguments in the code and in the types documentation entries end with, the declarations, and the comments that
   suppress it.
 
 The other tools still read Y as text: the path enumerator `tools/paths/yp.py` and its Rust port
-`tools/bare-rust/tests/y_paths/mod.rs`, `tools/paths/pathfacts.py`, `tools/paths/places.py` and
-`tools/paths/trace.py`, and the layout checks of `y_examples.rs`.
+`tools/bare-rust/tests/y_paths/mod.rs`, `tools/paths/trace.py`, and the layout checks of `y_examples.rs`. When
+`pathfacts.py` finds no node for a fact, it falls back to the text the fact's line had in git's `HEAD`
+(`places.by_text`).

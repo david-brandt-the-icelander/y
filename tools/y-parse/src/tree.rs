@@ -72,6 +72,7 @@ impl Node {
     }
 
     pub fn set(&mut self, key: &'static str, v: impl Into<Value>) {
+        assert!(key != "kind" && key != "line", "`{key}` is every node's own, and no field's name");
         let v = v.into();
         match self.fields.iter_mut().find(|(k, _)| *k == key) {
             Some(f) => f.1 = v,
