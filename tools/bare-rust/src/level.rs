@@ -52,9 +52,16 @@
 //!
 //! A macro is read from the syntax either way, as rustc places the calls of a macro's expansion in the library's
 //! source, not at the invocation: an invocation needs the level the table gives the macro's path (`std::println` is
-//! `effects`), named through the file's imports or, alone, as the prelude's (`macro_level`). A macro the crate defines
-//! counts as nothing, and one the table cannot place needs `effects`. The calls in a macro's arguments are the body's:
-//! rustc places them in the bare file, and the syntax reads the arguments as a call's (`macro_arguments`).
+//! `effects`), named through the file's imports or, alone, as the prelude's (`macro_level`), and one the table cannot
+//! place needs `effects`. The calls in a macro's arguments are the body's: rustc places them in the bare file, and the
+//! syntax reads the arguments as a call's (`macro_arguments`).
+//!
+//! A macro the crate defines (`macro_rules! name`) is read as a function of the crate, `module::name!`, whose body is
+//! what its rules expand to: rustc places the calls of its expansions in its definition, in the bare file, and the
+//! syntax reads each rule's right side as code (`macro_body`, with `$x` as `x` and a repetition as a block of what it
+//! repeats). An invocation of it is a call of it, and needs what it needs; one that expands to itself is not recursion
+//! at run time. Its body counts in the module it is defined in, as a function's does. What a rule's right side builds
+//! from tokens it is given (`$body` that is code) is the invocation's, through the arguments.
 use crate::facts::{Callee, Fact, Facts};
 use crate::{parse_bare, text};
 use serde_json::Value;
@@ -152,6 +159,8 @@ enum Call {
     Path(String),
     Method { name: String, receiver: String, ty: Option<String> },
     Resolved(Callee),
+    /// An invocation of a macro the crate defines, by its name.
+    Macro(String),
 }
 
 /// A function of the crate: its path, its file, what it uses itself, and the calls it makes, with their lines; and,
@@ -166,6 +175,8 @@ struct Function {
     macros: Vec<(String, usize)>,
     /// Whether its calls are the ones rustc resolved: rustc gave facts for its file, and some for it.
     resolved: bool,
+    /// Whether it is a macro the crate defines (`macro_rules! name`, kept as `module::name!`): what its rules expand to.
+    is_macro: bool,
 }
 
 /// An import: the module it is in, the path as written, its file and line.
@@ -192,7 +203,7 @@ fn enclosing(found: &[(String, Node)], offset: usize) -> Option<usize> {
 
 /// The functions and imports of one bare body. With `facts`, the calls are the ones rustc resolved in it, each in the
 /// innermost function it is in; without, the ones its syntax shows.
-fn read_file(file: &str, brs: &str, js: &Value, facts: Option<&[Fact]>, fns: &mut Vec<Function>, imports: &mut Vec<Import>) {
+fn read_file(file: &str, brs: &str, js: &Value, facts: Option<&[Fact]>, crate_macros: &BTreeSet<String>, fns: &mut Vec<Function>, imports: &mut Vec<Import>) {
     let base = crate::weave::base_path(js);
     let tree = parse_bare(brs);
     let subject = |f: &str| js["subjects"].as_array().into_iter().flatten().find(|s| s["kind"] == "function" && s["name"] == f).cloned();
@@ -210,6 +221,23 @@ fn read_file(file: &str, brs: &str, js: &Value, facts: Option<&[Fact]>, fns: &mu
         let line = node.start_position().row + 1;
         let mut own = vec![];
         let mut add = |level: &str, what: String, line: usize| own.push(Use { level: rank(level).unwrap(), what, function: path.clone(), file: file.to_string(), line });
+        let is_macro = node.kind() == "macro_definition";
+        if is_macro {
+            // what each rule expands to, read as a function's body
+            let (mut calls, mut macros) = (vec![], vec![]);
+            let mut c = node.walk();
+            for rule in node.named_children(&mut c).filter(|r| r.kind() == "macro_rule") {
+                if let Some(tt) = rule.child_by_field_name("right") {
+                    macro_body(tt, brs, &mut add, &mut calls, &mut macros);
+                }
+            }
+            let from_rustc = facts.is_some() && !resolved[k].is_empty();
+            if from_rustc {
+                calls = std::mem::take(&mut resolved[k]);
+            }
+            fns.push(Function { path: path.clone(), file: file.to_string(), own, calls, trait_name: None, macros, resolved: from_rustc, is_macro });
+            continue;
+        }
         if node.child_by_field_name("body").is_some() {
             add("calculations", "a function body".into(), line);
         }
@@ -261,15 +289,18 @@ fn read_file(file: &str, brs: &str, js: &Value, facts: Option<&[Fact]>, fns: &mu
             calls = std::mem::take(&mut resolved[k]);
         }
         let trait_name = node.parent().and_then(|p| p.parent()).filter(|p| p.kind() == "impl_item").and_then(|p| p.child_by_field_name("trait")).map(|t| last_segment(text(t, brs)));
-        fns.push(Function { path: path.clone(), file: file.to_string(), own, calls, trait_name, macros, resolved: from_rustc });
+        fns.push(Function { path: path.clone(), file: file.to_string(), own, calls, trait_name, macros, resolved: from_rustc, is_macro });
     }
-    // a macro needs the level of the library it is from, read from its invocation in either way (`macro_level`)
+    // a macro needs the level of the library it is from, read from its invocation in either way (`macro_level`); one the
+    // crate defines is called, as a function is, and needs what its rules expand to
     let uses = use_map(imports, file);
-    let defined = macro_names(tree.root_node(), brs);
     for f in fns[first..].iter_mut() {
-        for (m, line) in &f.macros {
-            if let Some((l, what)) = macro_level(m, &uses, &defined) {
-                f.own.push(Use { level: l, what, function: f.path.clone(), file: file.to_string(), line: *line });
+        for (m, line) in f.macros.clone() {
+            let name = ["::", "$crate::", "crate::", "self::"].iter().fold(m.as_str(), |n, p| n.strip_prefix(p).unwrap_or(n));
+            if !name.contains("::") && crate_macros.contains(name) && !uses.contains_key(name) {
+                f.calls.push((Call::Macro(name.to_string()), line));
+            } else if let Some((l, what)) = macro_level(&m, &uses, crate_macros) {
+                f.own.push(Use { level: l, what, function: f.path.clone(), file: file.to_string(), line });
             }
         }
     }
@@ -352,6 +383,76 @@ fn macro_level(m: &str, uses: &BTreeMap<String, String>, defined: &BTreeSet<Stri
         Some(_) => None,
         None => Some((4, format!("the macro `{m}!` (`{full}`), from a library with no level in libraries/levels.json"))),
     }
+}
+
+/// What one rule of a macro the crate defines expands to (its right side), read as a function's body: a metavariable
+/// (`$x`) stands for a name, a repetition (`$( … ),*`) for what it repeats, and `$crate` for `crate`. What does not
+/// parse after that is not read.
+fn macro_body(tt: Node, src: &str, add: &mut impl FnMut(&str, String, usize), calls: &mut Vec<(Call, usize)>, macros: &mut Vec<(String, usize)>) {
+    let t = text(tt, src);
+    if t.len() < 2 {
+        return;
+    }
+    let inner = unrepeat(&t[1..t.len() - 1].replace("$crate", "crate"));
+    let frag = format!("fn __m() {{ {inner} }}");
+    let tree = parse_bare(&frag);
+    let mut stack = vec![tree.root_node()];
+    while let Some(n) = stack.pop() {
+        if n.kind() == "function_item" {
+            if let Some(body) = n.child_by_field_name("body") {
+                let mut c = body.walk();
+                for ch in body.children(&mut c) {
+                    walk(ch, &frag, tt.start_position().row, add, calls, macros);
+                }
+            }
+            return;
+        }
+        let mut c = n.walk();
+        stack.extend(n.named_children(&mut c));
+    }
+}
+
+/// A macro rule's right side as code: `$( … )` with its separator and operator (`$( f($x); )*`, `$( $x ),+`) as a
+/// block of what it repeats, and `$x` as `x`. Lines stay where they were.
+fn unrepeat(t: &str) -> String {
+    let b: Vec<char> = t.chars().collect();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == '$' && b.get(i + 1) == Some(&'(') {
+            // the group, to its matching `)`
+            let (mut depth, mut j) = (0, i + 1);
+            while j < b.len() {
+                match b[j] {
+                    '(' => depth += 1,
+                    ')' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+                j += 1;
+            }
+            out.push('{');
+            out.push_str(&unrepeat(&b[i + 2..j.min(b.len())].iter().collect::<String>()));
+            out.push('}');
+            i = j + 1;
+            // a separator and the operator: `,*`, `;+`, `*`
+            if b.get(i).is_some_and(|c| !"*+?".contains(*c) && !c.is_whitespace()) && b.get(i + 1).is_some_and(|c| "*+?".contains(*c)) {
+                i += 2;
+            } else if b.get(i).is_some_and(|c| "*+?".contains(*c)) {
+                i += 1;
+            }
+            continue;
+        }
+        if b[i] != '$' {
+            out.push(b[i]);
+        }
+        i += 1;
+    }
+    out
 }
 
 /// The arguments of a macro, read as the arguments of a call (`f(a, b)`), so that the calls in them are seen: a
@@ -459,6 +560,11 @@ fn collect<'t>(n: Node<'t>, src: &str, path: &str, fns: &mut Vec<(String, Node<'
                     }
                 }
             }
+            "macro_definition" => {
+                if let Some(name) = ch.child_by_field_name("name") {
+                    fns.push((format!("{path}::{}!", text(name, src)), ch));
+                }
+            }
             "use_declaration" => {
                 if let Some(arg) = ch.child_by_field_name("argument") {
                     imports.push(Import { module: path.to_string(), path: text(arg, src).to_string(), file: file.to_string(), line: ch.start_position().row + 1 });
@@ -556,6 +662,11 @@ fn resolve(call: &Call, caller: &str, krate: &str, fns: &BTreeMap<String, usize>
             (hits, one)
         }
         Call::Resolved(_) => (vec![], false),
+        Call::Macro(name) => {
+            let hits: Vec<usize> = fns.iter().filter(|(p, _)| p.ends_with(&format!("::{name}!"))).map(|(_, i)| *i).collect();
+            let one = hits.len() == 1;
+            (hits, one)
+        }
         Call::Method { name, receiver, ty } => {
             if let Some(t) = ty {
                 // the receiver's type is known: its method, if the type is the crate's; else none of the crate's
@@ -668,8 +779,9 @@ pub fn uses(files: &[(String, String, Value)]) -> Vec<Use> {
 pub fn uses_with(files: &[(String, String, Value)], facts: Option<&Facts>) -> Vec<Use> {
     let (mut fns, mut imports) = (vec![], vec![]);
     let mut types = BTreeSet::new();
+    let crate_macros: BTreeSet<String> = files.iter().flat_map(|(_, brs, _)| macro_names(parse_bare(brs).root_node(), brs)).collect();
     for (file, brs, js) in files {
-        read_file(file, brs, js, facts_of(facts, file), &mut fns, &mut imports);
+        read_file(file, brs, js, facts_of(facts, file), &crate_macros, &mut fns, &mut imports);
         type_names(parse_bare(brs).root_node(), brs, &mut types);
     }
     let krate = files.first().map(|f| crate_name(&f.2)).unwrap_or_default();
@@ -716,6 +828,7 @@ pub fn uses_with(files: &[(String, String, Value)], facts: Option<&Facts>) -> Ve
                         Call::Path(p) => p.clone(),
                         Call::Method { name, .. } => format!(".{name}"),
                         Call::Resolved(c) => c.name.clone(),
+                        Call::Macro(m) => format!("{m}!"),
                     };
                     (hits, *line, one, shown)
                 })
@@ -740,7 +853,8 @@ pub fn uses_with(files: &[(String, String, Value)], facts: Option<&Facts>) -> Ve
     let mut own: Vec<Vec<Use>> = fns.iter().zip(library).map(|(f, lib)| f.own.iter().cloned().chain(lib).collect()).collect();
     for (i, f) in fns.iter().enumerate() {
         for &(j, line) in &edges[i] {
-            if reaches(j, i) {
+            // a macro that expands to itself is not recursion at run time
+            if !f.is_macro && !fns[j].is_macro && reaches(j, i) {
                 let what = if i == j { format!("a call of `{}` inside it", short(&f.path)) } else { format!("recursion through `{}`", short(&fns[j].path)) };
                 own[i].push(Use { level: 2, what, function: f.path.clone(), file: f.file.clone(), line });
             }
@@ -1002,6 +1116,33 @@ mod tests {
         let facts: Facts = [("src/m.brs".to_string(), vec![fact(brs, "twice(x)", "m::m2::twice")])].into_iter().collect();
         let errs = check_with(&[f], Some(&facts));
         assert!(errs.len() == 1 && errs[0].contains("`random` (`rand::random`), a library with no level in libraries/levels.json in `c::m::m2::gated`"), "{errs:#?}");
+    }
+
+    #[test]
+    fn a_macro_the_crate_defines_is_followed_into_its_body() {
+        // `count_up!` loops, `shout!` prints, `price!` calls a function that loops, `munch!` expands to itself, and
+        // `scaled!` multiplies, in a group that is not a repetition
+        let brs = "macro_rules! count_up {\n    ($n:expr) => {{\n        let i = 0;\n        while i < $n {\n            i += 1;\n        }\n        i\n    }};\n}\nmacro_rules! shout {\n    ($($x:expr),+) => {\n        $( println!(\"{}\", $x); )+\n    };\n}\nmacro_rules! price {\n    ($x:expr) => {\n        $crate::m::sums::total($x)\n    };\n}\nmacro_rules! munch {\n    () => { 0 };\n    ($x:tt $($rest:tt)*) => { 1 + munch!($($rest)*) };\n}\nmacro_rules! scaled {\n    ($x:expr) => { ($x)*2 };\n}\nmod sums {\n    fn total(xs) {\n        for x in xs {\n            x;\n        }\n    }\n}\nmod calc {\n    fn a(n) {\n        count_up!(n)\n    }\n    fn b(n) {\n        shout!(n, n)\n    }\n    fn c(xs) {\n        price!(xs)\n    }\n    fn d() {\n        munch!(a b c) + scaled!(3)\n    }\n}\n";
+        let names = ["sums::total", "calc::a", "calc::b", "calc::c", "calc::d"];
+        let f = pin(&file(brs, json!(names.iter().map(|n| pure(&format!("c::m::{n}"))).collect::<Vec<_>>())), "c::m::calc", "calculations");
+        let errs = check(std::slice::from_ref(&f));
+        let of = |g: &str| errs.iter().filter(|e| e.contains(&format!("in `c::m::calc::{g}`"))).cloned().collect::<Vec<_>>();
+        assert!(of("a").len() == 1 && of("a")[0].contains("a call of `count_up!`, which needs `structured`"), "{errs:#?}");
+        assert!(of("b").len() == 1 && of("b")[0].contains("a call of `shout!`, which needs `effects`"), "{errs:#?}");
+        assert!(of("c").len() == 1 && of("c")[0].contains("a call of `price!`, which needs `structured`"), "{errs:#?}");
+        assert_eq!(of("d"), Vec::<String>::new());
+        // what a macro's own body uses is at its line, in the macro
+        let all = uses(std::slice::from_ref(&f));
+        assert!(all.iter().any(|u| u.function == "c::m::count_up!" && u.what == "a loop" && u.line == 4), "{all:#?}");
+        assert!(all.iter().any(|u| u.function == "c::m::shout!" && u.what.contains("`println!`") && u.line == 12), "{all:#?}");
+        // with what rustc resolved in an expansion: a call in the macro's body is the macro's
+        let brs2 = "macro_rules! later {\n    ($d:expr) => { crate::m::rt::start($d, || 1) };\n}\nmod calc {\n    fn e(d) {\n        later!(d)\n    }\n}\n";
+        let f2 = pin(&file(brs2, json!([pure("c::m::calc::e")])), "c::m::calc", "calculations");
+        assert_eq!(check(std::slice::from_ref(&f2)), Vec::<String>::new());
+        let facts: Facts = [("src/m.brs".to_string(), vec![fact(brs2, "crate::m::rt::start", "y_runtime::task::detach::<i32, {closure@src/m.rs:2:46: 2:48}>")])].into_iter().collect();
+        let errs = check_with(&[f2], Some(&facts));
+        assert!(errs.len() == 1 && errs[0].contains("a call of `later!`, which needs `effects`, in `c::m::calc::e`"), "{errs:#?}");
+        assert_eq!(unrepeat("$( f($x); )* ($y)*2 $( $z ),+"), "{ f(x); } (y)*2 { z }");
     }
 
     #[test]

@@ -413,9 +413,12 @@ regions checked from …`, and `checks_via` in `--json`):
 
 A macro is read from its invocation either way, because rustc places the calls of its expansion in the library's
 source, not at the invocation. `println!` needs the level `libraries/levels.json` gives `std::println` (`effects`); a
-macro named alone is the prelude's unless the file imports it (`use y_collections::list;`), one the crate defines
-counts as nothing, and one the table cannot place counts as `effects`. The calls in a macro's arguments are the
-body's, from rustc or, without a build, by reading the arguments as a call's.
+macro named alone is the prelude's unless the file imports it (`use y_collections::list;`), and one the table cannot
+place counts as `effects`. The calls in a macro's arguments are the body's, from rustc or, without a build, by reading
+the arguments as a call's. A macro the crate defines (`macro_rules! name`) is read as one of its functions, whose body
+is what its rules expand to: the calls rustc places in its definition, or, without a build, each rule's right side
+read as code (`$x` as `x`, a repetition as a block of what it repeats). An invocation of it is a call of it and needs
+what it needs, and a macro that expands to itself is not recursion.
 
 `bare-rust levels <bare-dir> --crate <crate-dir> --out <dir>` weaves with cargo and prints the levels from rustc's
 calls (`--show-calls` lists them). `bare-rust levels --libraries <crate>…` checks `libraries/levels.json` against what a
