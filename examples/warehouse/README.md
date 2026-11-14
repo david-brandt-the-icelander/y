@@ -83,7 +83,8 @@ The program writes `receipts.store` beside it.
   lowered from Y: under the optimistic engine, another task's reservation commits between a reservation's read and its
   commit (the runtime's `after_next_read` puts it there), and the reservation runs again, every time.
   `cargo test --features y-runtime/optimistic` runs the Y tests with the optimistic engine too; a program run with
-  `Y_ATOMIC=optimistic` chooses it through its root capability.
+  `Y_ATOMIC=optimistic` chooses it through its root capability, which it must do before its first atomic region
+  runs: a later switch to the other engine is a fault.
 - `tools/paths/rebare.sh warehouse`: 10 decisions, 26 paths, 26 tests, `uncovered: [] unknown: []`, and the example's
   checks in `tools/bare-rust/tests/y_examples.rs`, which pass.
 - `python3 tools/paths/trace.py examples/warehouse warehouse`: every path is taken by the test that claims it, the two
