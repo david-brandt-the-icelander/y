@@ -123,12 +123,14 @@ checks on the text.
   write from the nodes, `game.misses.count()`, and the brackets the source writes (`parens`) decide how `and` and
   `or` split.
 - `tools/bare-rust/tests/y_examples.rs` checks the layout rules of § 3.1 on the blank lines and comments the tree
-  records, and reads each test's `when` from it, to check that the test calls the function whose path it covers.
+  records, reads each test's `when` from it, to check that the test calls the function whose path it covers, and
+  finds there the node at each place a fact in `y-facts.json` gives.
 - `tools/paths/trace.py` reads the tests and the path each claims to cover from the test file's tree.
 - The lint `type_argument_name`, `tools/paths/ylint.py` and its twin `tools/bare-rust/tests/y_lint/mod.rs`, reads the
   type arguments in the code and in the types documentation entries end with, the declarations, and the comments that
   suppress it.
 
-No tool reads Y as text any more, except where the text itself is what is checked: `y_examples.rs` opens the line a
-fact names, to check that it holds what the fact says; and when `pathfacts.py` finds no node for a fact, it falls back
-to the text the fact's line had in git's `HEAD` (`places.by_text`).
+Five lint rules in `y_examples.rs` still read Y as lines: documentation roles grouped by kind, no brackets around a
+single element, a name changed only when it is `mutable`, no `else if`, and no `else` without a name. Besides them,
+when `pathfacts.py` finds no node for a fact, it falls back to the text the fact's line had in git's `HEAD`
+(`places.by_text`).

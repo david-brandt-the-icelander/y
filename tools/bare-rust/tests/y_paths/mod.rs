@@ -99,6 +99,11 @@ fn t(e: &Node) -> String {
     text(e, true)
 }
 
+/// An expression as text, as the facts are kept on it: `game.misses.count()`, `words[chosen]`.
+pub fn expression_text(e: &Node) -> String {
+    text(e, true)
+}
+
 /// A name or a path of names, `game.misses`, as text; None for anything else.
 fn chain(e: &Node) -> Option<String> {
     match e.kind {
