@@ -1862,8 +1862,10 @@ prints it under the file's `module` line:
   type's whatever names the receiver (a closure's parameter, a chained call), and a library's function is found where
   it is defined, through a re-export, a renamed import or a local that holds it. A trait's method called on a type
   parameter may be any impl of the trait in the crate; a library's trait method needs the level of its type's module
-  and of its trait's. Without a build (a crate that does not compile, a weave without cargo, `bare-rust levels`
-  without `--crate`), a call is matched through the file's `use` declarations, and a method call takes its receiver's
+  and of its trait's. rustc reads every target of the crate, its unit tests, and every build of it whose check passes
+  (another target, features, `--cfg`, a release build), so code that only a test or another build compiles is read
+  from it too. Without a build (a crate that does not compile, a weave without cargo, `bare-rust levels` without
+  `--crate`), and for a function no build compiles, a call is matched through the file's `use` declarations, and a method call takes its receiver's
   type from the constraint data when the receiver is a parameter or a typed local; when the type is unknown, the call,
   like a name defined more than once out of the caller's reach, needs the most that any function it may be needs.
   Weave says which way it read the calls. A macro is read from its invocation either way, as rustc places its

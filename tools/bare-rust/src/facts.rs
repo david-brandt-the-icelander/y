@@ -307,16 +307,41 @@ fn dependencies(dir: &Path) -> R<BTreeSet<String>> {
     Ok(out)
 }
 
-/// The facts of a woven crate (at `dir`, built in `target`) whose crate is named `krate`: the MIR of its library and
-/// binaries, without their tests, mapped to the bare files. With the targets it read, as `lib`, `bin name`.
-pub fn of_crate(dir: &Path, target: &Path, krate: &str, files: &[Woven]) -> R<(Facts, Vec<String>)> {
+/// The facts of a woven crate (at `dir`, built in `target`) whose crate is named `krate`, mapped to the bare files:
+/// the MIR of each of its targets (library, binaries, integration tests), and of the library and binaries again with
+/// their unit tests (`cfg(test)`), in each of `builds` (`crate::builds`: the default one first, then others with their
+/// own target, features, `--cfg` and profile). With what it read, as `lib`, `lib tests`, `bin x`, `test y`, and
+/// `build name: …` for a build other than the default; a build or a target whose MIR could not be read is named with
+/// why, and only the default build's library and binaries must be read.
+pub fn of_crate(dir: &Path, target: &Path, krate: &str, files: &[Woven], builds: &[crate::builds::Build]) -> R<(Facts, Vec<String>)> {
     let externs = dependencies(dir)?;
     let mut calls = vec![];
     let mut read = vec![];
-    for t in crate::externals::targets(dir, false)? {
-        let mir = crate::externals::mir_of(dir, target, &t, false)?;
-        calls.extend(read_mir(&mir, krate, &externs));
-        read.push(if t.kind == "lib" { "lib".to_string() } else { format!("{} {}", t.kind, t.name) });
+    let default = crate::builds::Build::default_build();
+    let builds: Vec<&crate::builds::Build> = std::iter::once(&default).chain(builds.iter().filter(|b| !b.is_default())).collect();
+    for b in builds {
+        let mut got = vec![];
+        let mut missed = vec![];
+        for t in crate::externals::targets(dir, !b.lib_only)? {
+            let plain = if t.kind == "lib" { "lib".to_string() } else { format!("{} {}", t.kind, t.name) };
+            let variants: &[bool] = if t.kind == "test" || b.lib_only { &[false] } else { &[false, true] };
+            for &tests in variants {
+                let name = if tests { format!("{plain} tests") } else { plain.clone() };
+                match crate::externals::mir_in(dir, target, &t, tests, Some(b)) {
+                    Ok(mir) => {
+                        calls.extend(read_mir(&mir, krate, &externs));
+                        got.push(name);
+                    }
+                    Err(e) if b.is_default() && !tests && t.kind != "test" => return Err(e),
+                    Err(e) => missed.push(format!("{name} ({})", e.chars().take(200).collect::<String>())),
+                }
+            }
+        }
+        let shown = if b.is_default() { got.join(", ") } else { format!("build {}: {}", b.name, if got.is_empty() { "nothing".into() } else { got.join(", ") }) };
+        read.push(shown);
+        if !missed.is_empty() {
+            read.push(format!("{}not read: {}", if b.is_default() { String::new() } else { format!("build {}, ", b.name) }, missed.join(", ")));
+        }
     }
     Ok((to_bare(&calls, files), read))
 }

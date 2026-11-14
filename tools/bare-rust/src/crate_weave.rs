@@ -772,7 +772,9 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
                 .iter()
                 .map(|f| crate::facts::Woven { rel: f.rel.to_string_lossy().replace('\\', "/"), text: &f.woven.text, map: &f.woven.map, bare_name: f.bare_name(), bare: &f.woven.bare })
                 .collect();
-            crate::facts::of_crate(out, &o.target, &krate, &woven)
+            // every build whose check passed: a build's code that only it compiles is read from its MIR
+            let passed: Vec<crate::builds::Build> = cw.reach.builds.iter().filter(|b| cw.runs.iter().any(|(n, ds)| *n == b.name && !ds.iter().any(Diag::is_error))).cloned().collect();
+            crate::facts::of_crate(out, &o.target, &krate, &woven, &passed)
         } else {
             Err("the woven crate does not build".into())
         };
