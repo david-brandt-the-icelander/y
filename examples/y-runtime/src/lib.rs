@@ -236,17 +236,22 @@ pub struct System {
 
 impl System {
     /// The root, made once by the generated entry point. It chooses the engine of the program's atomic regions from the
-    /// environment, once: `Y_ATOMIC=optimistic` is the optimistic one (`shared`).
+    /// environment, once: `Y_ATOMIC=optimistic` is the optimistic one (`shared`). Made after a region ran with another
+    /// engine, it is a fault.
     pub fn root() -> System {
+        let system = System { _private: () };
         if std::env::var("Y_ATOMIC").as_deref() == Ok("optimistic") {
-            shared::set_engine(shared::Engine::Optimistic);
+            system.use_engine(shared::Engine::Optimistic);
         }
-        System { _private: () }
+        system
     }
 
-    /// Chooses the engine of the program's atomic regions (`shared`), before the first one runs.
+    /// Chooses the engine of the program's atomic regions (`shared`). It is chosen before the first one runs: after it,
+    /// choosing another engine is a fault, as a region already ran with the one in use.
     pub fn use_engine(&self, engine: shared::Engine) {
-        shared::set_engine(engine);
+        if let Err(why) = shared::set_engine(engine) {
+            fault("y_runtime::System::use_engine", &why);
+        }
     }
 
     pub fn console(&self) -> Console {

@@ -8,7 +8,8 @@
 //!
 //! Two engines keep the same constraints, and one is chosen for the whole program, before its first region runs: by
 //! the root capability, `System::root` (from the environment's `Y_ATOMIC`) or `System::use_engine`, or else by the
-//! crate's feature `optimistic` (`cargo test --features y-runtime/optimistic`). An atomic region reads the choice, and
+//! crate's feature `optimistic` (`cargo test --features y-runtime/optimistic`). Once a region has run, the engine is
+//! fixed: choosing another is a fault. An atomic region reads the choice, and
 //! not the environment: running one is `shared`, not `effects` (Y § 3.19).
 //!
 //! - **One lock** (the default, the first backend's): every atomic region takes one global lock for its whole run, so
@@ -53,23 +54,64 @@ pub enum Engine {
     Optimistic,
 }
 
-/// The engine chosen for the program (`set_engine`): 0 for none yet, then 1 for one lock, 2 for optimistic.
-static ENGINE: AtomicU8 = AtomicU8::new(0);
+/// The engine chosen for the program (`set_engine`): `NONE` for none yet, `ONE_LOCK`, or `OPTIMISTIC`; with `RAN` once
+/// an atomic region has run, after which the engine is fixed. One atomic value holds both, so that a choice and the
+/// first region cannot pass each other.
+static ENGINE: AtomicU8 = AtomicU8::new(NONE);
+const NONE: u8 = 0;
+const ONE_LOCK: u8 = 1;
+const OPTIMISTIC: u8 = 2;
+const RAN: u8 = 4;
 
-/// The engine the program's atomic regions run with: the one chosen through the root capability (`System::root`,
-/// `System::use_engine`), or else the crate's feature `optimistic`'s, or else one lock.
-pub fn engine() -> Engine {
-    match ENGINE.load(Ordering::SeqCst) {
-        1 => Engine::OneLock,
-        2 => Engine::Optimistic,
+/// The engine a value of `ENGINE` stands for: the one chosen, or else the crate's feature `optimistic`'s, or else one
+/// lock.
+fn engine_of(v: u8) -> Engine {
+    match v & !RAN {
+        ONE_LOCK => Engine::OneLock,
+        OPTIMISTIC => Engine::Optimistic,
         _ if cfg!(feature = "optimistic") => Engine::Optimistic,
         _ => Engine::OneLock,
     }
 }
 
-/// Chooses the program's engine. Only the root capability chooses it (`crate::System`), before the first region runs.
-pub(crate) fn set_engine(engine: Engine) {
-    ENGINE.store(if engine == Engine::Optimistic { 2 } else { 1 }, Ordering::SeqCst);
+fn code(engine: Engine) -> u8 {
+    if engine == Engine::Optimistic { OPTIMISTIC } else { ONE_LOCK }
+}
+
+/// The engine the program's atomic regions run with: the one chosen through the root capability (`System::root`,
+/// `System::use_engine`), or else the crate's feature `optimistic`'s, or else one lock.
+pub fn engine() -> Engine {
+    engine_of(ENGINE.load(Ordering::SeqCst))
+}
+
+/// The engine for a region about to run: from now on, the program's engine is fixed.
+fn engine_for_a_run() -> Engine {
+    run_with(&ENGINE)
+}
+
+fn run_with(cell: &AtomicU8) -> Engine {
+    engine_of(cell.fetch_or(RAN, Ordering::SeqCst))
+}
+
+/// Chooses the program's engine. Only the root capability chooses it (`crate::System`), and only before the first
+/// atomic region runs: then a region ran with another engine, and switching would mix the two (their locking and their
+/// validation do not see each other's commits), so a choice of another engine fails. Choosing the engine already in
+/// use does not.
+pub(crate) fn set_engine(engine: Engine) -> Result<(), String> {
+    choose(&ENGINE, engine)
+}
+
+fn choose(cell: &AtomicU8, engine: Engine) -> Result<(), String> {
+    let mut v = cell.load(Ordering::SeqCst);
+    loop {
+        if v & RAN != 0 {
+            return if engine_of(v) == engine { Ok(()) } else { Err(format!("an atomic region already ran with the engine {:?}, and the program's engine is fixed once one has", engine_of(v))) };
+        }
+        match cell.compare_exchange(v, code(engine), Ordering::SeqCst, Ordering::SeqCst) {
+            Ok(_) => return Ok(()),
+            Err(now) => v = now,
+        }
+    }
 }
 
 thread_local! {
@@ -292,7 +334,7 @@ pub fn orelse_with<R, E>(
     isolation: Isolation,
     mut alternatives: Vec<Alternative<'_, R, E>>,
 ) -> Result<R, Aborted<E>> {
-    match engine() {
+    match engine_for_a_run() {
         Engine::OneLock => one_lock(deadline, &mut alternatives),
         Engine::Optimistic => optimistic(deadline, isolation, &mut alternatives),
     }
@@ -472,8 +514,9 @@ mod tests {
     /// sees the engine change under it.
     fn optimistically<R>(f: impl FnOnce() -> R) -> R {
         let _g = CHOSEN.lock().unwrap_or_else(|e| e.into_inner());
+        // the tests switch the engine between their regions, which a program may not: around the check
         let before = ENGINE.load(Ordering::SeqCst);
-        set_engine(Engine::Optimistic);
+        ENGINE.store((before & RAN) | OPTIMISTIC, Ordering::SeqCst);
         let r = f();
         ENGINE.store(before, Ordering::SeqCst);
         r
@@ -488,6 +531,30 @@ mod tests {
         assert_eq!(unchosen() == Engine::Optimistic, cfg!(feature = "optimistic"));
         assert_eq!(optimistically(engine), Engine::Optimistic);
         assert_eq!(unchosen() == Engine::Optimistic, cfg!(feature = "optimistic"), "the choice is restored");
+    }
+
+    #[test]
+    fn the_engine_is_fixed_once_a_region_ran() {
+        let cell = AtomicU8::new(NONE);
+        // before any region, the engine may change, as often as the program likes
+        assert_eq!(choose(&cell, Engine::Optimistic), Ok(()));
+        assert_eq!(choose(&cell, Engine::OneLock), Ok(()));
+        assert_eq!(run_with(&cell), Engine::OneLock);
+        // after one, choosing the same engine is no change, and choosing another fails
+        assert_eq!(choose(&cell, Engine::OneLock), Ok(()));
+        assert!(choose(&cell, Engine::Optimistic).unwrap_err().contains("already ran with the engine OneLock"));
+        assert_eq!(engine_of(cell.load(Ordering::SeqCst)), Engine::OneLock);
+        // and the root capability makes it a fault: once this region ran, the other engine is refused
+        let _g = CHOSEN.lock().unwrap_or_else(|e| e.into_inner());
+        let r: Result<u32, Aborted<()>> = atomic("first", None, |_| Ok(Step::Done(1)));
+        assert_eq!(r, Ok(1));
+        let now = engine();
+        let other = if now == Engine::OneLock { Engine::Optimistic } else { Engine::OneLock };
+        crate::System::root().use_engine(now);
+        let late = std::panic::catch_unwind(|| crate::System::root().use_engine(other));
+        let why = late.unwrap_err().downcast::<String>().map(|s| *s).unwrap_or_default();
+        assert!(why.contains("fault at y_runtime::System::use_engine: an atomic region already ran"), "{why}");
+        assert_eq!(engine(), now);
     }
 
     /// A run reads `a`, another region commits a write to `read_by_other`, and the run then writes `b`. Returns how many
