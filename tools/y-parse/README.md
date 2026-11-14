@@ -115,11 +115,12 @@ checks on the text.
 - `tools/paths/pathfacts.py` reads it for the decisions of each function, the functions with injected capabilities,
   and the tests and the path each covers; `tools/paths/places.py` finds the Y places of the other facts in it (a
   facet, a function's head, a claim, a call that may suspend, a `compile`, a unit's constant or constraint).
+- `tools/paths/trace.py` reads the tests and the path each claims to cover from the test file's tree.
 - The lint `type_argument_name`, `tools/paths/ylint.py` and its twin `tools/bare-rust/tests/y_lint/mod.rs`, reads the
   type arguments in the code and in the types documentation entries end with, the declarations, and the comments that
   suppress it.
 
 The other tools still read Y as text: the path enumerator `tools/paths/yp.py` and its Rust port
-`tools/bare-rust/tests/y_paths/mod.rs`, `tools/paths/trace.py`, and the layout checks of `y_examples.rs`. When
-`pathfacts.py` finds no node for a fact, it falls back to the text the fact's line had in git's `HEAD`
-(`places.by_text`).
+`tools/bare-rust/tests/y_paths/mod.rs`, whose paths `pathfacts.py`, `trace.py` and the checks use, and the layout
+checks of `y_examples.rs`. When `pathfacts.py` finds no node for a fact, it falls back to the text the fact's line had
+in git's `HEAD` (`places.by_text`).
