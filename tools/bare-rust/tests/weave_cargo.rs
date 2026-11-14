@@ -296,7 +296,7 @@ fn gated_code_is_checked_in_a_build_that_compiles_it() {
 #[test]
 fn levels_and_regions_read_what_rustc_resolved() {
     let runtime = root().join("../../examples/y-runtime").canonicalize().unwrap();
-    let src = "pub mod rt {\n    pub use y_runtime::task::detach as start_detached;\n}\n\npub mod counts {\n    pub trait Count {\n        fn count(&self) -> u32;\n    }\n    pub struct Tally(pub u32);\n    pub struct Ledger(pub u32);\n    impl Count for Tally {\n        fn count(&self) -> u32 {\n            self.0\n        }\n    }\n    impl Count for Ledger {\n        fn count(&self) -> u32 {\n            let mut n = 0;\n            while n < self.0 {\n                n += 1;\n            }\n            n\n        }\n    }\n}\n\npub mod sums {\n    use crate::counts::{Count, Tally};\n    pub fn total(xs: &[Tally]) -> u32 {\n        xs.iter().map(|t| t.count()).sum()\n    }\n    pub fn shout(xs: &[Tally]) {\n        println!(\"{}\", total(xs));\n    }\n}\n\npub mod ticks {\n    pub fn start(within: std::time::Duration) -> u32 {\n        let _ = crate::rt::start_detached(within, || 1);\n        1\n    }\n}\n\npub mod store {\n    use y_runtime::shared::{atomic, Shared, Step, Tx};\n    fn bump(tx: &mut Tx, count: &Shared<u32>) -> Result<Step<u32>, ()> {\n        Ok(Step::Done(tx.get(count) + 1))\n    }\n    pub fn add(count: &Shared<u32>) -> u32 {\n        let run = atomic;\n        // y: region add is atomic\n        run(\"store::add#add\", None, |tx: &mut Tx| bump(tx, count)).unwrap_or(0)\n    }\n}\n";
+    let src = "macro_rules! later {\n    ($d:expr) => {\n        crate::rt::start_detached($d, || 2)\n    };\n}\n\npub mod rt {\n    pub use y_runtime::task::detach as start_detached;\n}\n\npub mod waits {\n    pub fn wait(within: std::time::Duration) -> u32 {\n        let _ = later!(within);\n        1\n    }\n}\n\npub mod counts {\n    pub trait Count {\n        fn count(&self) -> u32;\n    }\n    pub struct Tally(pub u32);\n    pub struct Ledger(pub u32);\n    impl Count for Tally {\n        fn count(&self) -> u32 {\n            self.0\n        }\n    }\n    impl Count for Ledger {\n        fn count(&self) -> u32 {\n            let mut n = 0;\n            while n < self.0 {\n                n += 1;\n            }\n            n\n        }\n    }\n}\n\npub mod sums {\n    use crate::counts::{Count, Tally};\n    pub fn total(xs: &[Tally]) -> u32 {\n        xs.iter().map(|t| t.count()).sum()\n    }\n    pub fn shout(xs: &[Tally]) {\n        println!(\"{}\", total(xs));\n    }\n}\n\npub mod ticks {\n    pub fn start(within: std::time::Duration) -> u32 {\n        let _ = crate::rt::start_detached(within, || 1);\n        1\n    }\n}\n\npub mod store {\n    use y_runtime::shared::{atomic, Shared, Step, Tx};\n    fn bump(tx: &mut Tx, count: &Shared<u32>) -> Result<Step<u32>, ()> {\n        Ok(Step::Done(tx.get(count) + 1))\n    }\n    pub fn add(count: &Shared<u32>) -> u32 {\n        let run = atomic;\n        // y: region add is atomic\n        run(\"store::add#add\", None, |tx: &mut Tx| bump(tx, count)).unwrap_or(0)\n    }\n}\n";
     let top = root().join("target/bare-rust-test/wc_levels");
     let _ = fs::remove_dir_all(&top);
     let dir = top.join("crate");
@@ -310,7 +310,7 @@ fn levels_and_regions_read_what_rustc_resolved() {
     let cj = bare.join("src/lib.constraints.json");
     let mut js: Value = serde_json::from_str(&fs::read_to_string(&cj).unwrap()).unwrap();
     for s in js["subjects"].as_array_mut().unwrap() {
-        if s["name"] == "wc_levels::sums" || s["name"] == "wc_levels::ticks" {
+        if s["name"] == "wc_levels::sums" || s["name"] == "wc_levels::ticks" || s["name"] == "wc_levels::waits" {
             s["level"] = "calculations".into();
         }
     }
@@ -320,10 +320,12 @@ fn levels_and_regions_read_what_rustc_resolved() {
     let cw = weave(&dir, &bare, &top.join("woven"), false);
     assert!(cw.checks_via.as_deref().is_some_and(|v| v.starts_with("rustc (MIR of lib")), "{:?} {:?} {:?} {}", cw.checks_via, cw.weave_errors, cw.errors.iter().map(|e| e.show()).collect::<Vec<_>>(), cw.cargo_stderr);
     // the re-exported `detach` is `y_runtime::task::detach`, which needs `effects`; the closure's `t.count()` is
-    // `Tally`'s, a calculation; the region runs in `atomic`, called through `run`; and `println!`, which rustc does not
-    // place in the bare body, is read from it
+    // `Tally`'s, a calculation; the region runs in `atomic`, called through `run`; `println!`, which rustc does not
+    // place in the bare body, is read from it; and `later!`, the crate's own macro, expands to a call of `detach`
     let mut errs: Vec<&String> = cw.weave_errors.iter().map(|(_, e)| e).collect();
     errs.sort();
+    assert!(errs.iter().any(|e| e.contains("a call of `later!`, which needs `effects`, in `wc_levels::waits::wait` needs level `effects`")), "{errs:#?}");
+    errs.retain(|e| !e.contains("waits::wait"));
     assert_eq!(errs.len(), 2, "{errs:#?}");
     assert!(errs[0].contains("the macro `println!` (`std::println`) in `wc_levels::sums::shout` needs level `effects`, and module `wc_levels::sums` is at `calculations`"), "{errs:#?}");
     assert!(errs[1].contains("`detach` (`y_runtime::task::detach`) in `wc_levels::ticks::start` needs level `effects`, and module `wc_levels::ticks` is at `calculations`"), "{errs:#?}");
@@ -331,7 +333,7 @@ fn levels_and_regions_read_what_rustc_resolved() {
     let brs = fs::read_to_string(bare.join("src/lib.brs")).unwrap();
     let syntax = bare_rust::level::check(&[("src/lib.brs".into(), brs.clone(), js.clone())]);
     assert!(syntax.iter().any(|e| e.contains("a call of `.count` (it may be `wc_levels::counts::Ledger::count`") && e.contains("in `wc_levels::sums::total`")), "{syntax:#?}");
-    assert!(!syntax.iter().any(|e| e.contains("ticks")), "{syntax:#?}");
+    assert!(!syntax.iter().any(|e| e.contains("ticks") || e.contains("waits")), "{syntax:#?}");
     let region = bare_rust::region::check_body(&brs, &js, "wc_levels::store::add#add").unwrap_err();
     assert!(region.contains("runs in no transaction"), "{region}");
     // and with what rustc resolved, the region is kept
