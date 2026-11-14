@@ -309,6 +309,66 @@ fn link_workspace(crate_dir: &Path, out: &Path) -> R<()> {
     Ok(())
 }
 
+/// The directories outside the crate that its manifest names by a relative path (`y-parse = { path = "../y-parse" }`),
+/// linked at the same relative path beside the woven crate, so that cargo finds them from there as it does from the
+/// crate. A path that stays inside the crate (`[lib] path = "src/lib.rs"`) is copied with it, and one that already
+/// exists beside the woven crate is left as it is.
+fn link_path_dependencies(crate_dir: &Path, out: &Path) -> R<()> {
+    let Ok(manifest) = fs::read_to_string(crate_dir.join("Cargo.toml")) else { return Ok(()) };
+    for rel in path_values(&manifest).into_iter().filter(|p| p.starts_with("..")) {
+        let from = crate_dir.join(&rel);
+        let Ok(from) = fs::canonicalize(&from) else { continue };
+        let to = lexical(&out.join(&rel));
+        if to.exists() || fs::symlink_metadata(&to).is_ok() {
+            continue;
+        }
+        if let Some(parent) = to.parent() {
+            fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        }
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&from, &to).map_err(|e| format!("{}: {e}", to.display()))?;
+    }
+    Ok(())
+}
+
+/// The values of the `path` keys of a manifest: `path = "…"`, alone on its line or in an inline table.
+fn path_values(manifest: &str) -> Vec<String> {
+    let mut out = vec![];
+    for line in manifest.lines() {
+        let line = line.split('#').next().unwrap_or("");
+        let mut rest = line;
+        while let Some(i) = rest.find("path") {
+            let before = rest[..i].chars().last();
+            let after = rest[i + 4..].trim_start();
+            rest = &rest[i + 4..];
+            if before.is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+                continue;
+            }
+            if let Some(v) = after.strip_prefix('=').map(str::trim_start).and_then(|v| v.strip_prefix('"')) {
+                if let Some(end) = v.find('"') {
+                    out.push(v[..end].to_string());
+                }
+            }
+        }
+    }
+    out
+}
+
+/// A path with its `.` and `..` resolved by its text: `a/b/../c` is `a/c`.
+fn lexical(p: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for c in p.components() {
+        match c {
+            std::path::Component::ParentDir => {
+                out.pop();
+            }
+            std::path::Component::CurDir => {}
+            c => out.push(c),
+        }
+    }
+    out
+}
+
 fn prepare_out(out: &Path, dirs: &[&Path]) -> R<()> {
     let canon = |p: &Path| fs::canonicalize(p).unwrap_or(p.to_path_buf());
     if out.exists() {
@@ -709,6 +769,7 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
     copy_tree(&crate_dir, &crate_dir, out, &woven_set)?;
     link_corpora(&crate_dir, out)?;
     link_workspace(&crate_dir, out)?;
+    link_path_dependencies(&crate_dir, out)?;
     // The build goes to a target directory of its own; a test that writes under `target/`, as a crate's own build
     // would have made it, finds the directory there.
     fs::create_dir_all(out.join("target")).map_err(|e| format!("{}: {e}", out.display()))?;
@@ -829,6 +890,13 @@ fn push_checks(cw: &mut CrateWeave, errs: Vec<(PathBuf, String, bool)>) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_manifests_relative_paths_are_found() {
+        let m = "[package]\nname = \"x\"\n[lib]\npath = \"src/lib.rs\"\n[dev-dependencies]\ny-parse = { path = \"../y-parse\" } # the parser\nregex = \"1\"\n[dependencies.z]\npath=\"../../z\"\nclasspath = \"no\"\n";
+        assert_eq!(super::path_values(m), ["src/lib.rs", "../y-parse", "../../z"]);
+        assert_eq!(super::lexical(std::path::Path::new("/a/woven/../y-parse")), std::path::PathBuf::from("/a/y-parse"));
+    }
+
     #[test]
     fn the_binding_a_use_names_is_the_one_in_scope_there() {
         // `pre.as_mut()` is the outer `pre`: the pattern binds only in the `if let`'s block.

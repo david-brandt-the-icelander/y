@@ -6,11 +6,14 @@
 //! - `waits until p` and `retry` wait on one condition variable, which every commit notifies, until the region's
 //!   deadline. A wait that the deadline ends is the failure `expired`.
 //!
-//! Two engines keep the same constraints, and `Y_ATOMIC` chooses between them for the whole program:
+//! Two engines keep the same constraints, and one is chosen for the whole program, before its first region runs: by
+//! the root capability, `System::root` (from the environment's `Y_ATOMIC`) or `System::use_engine`, or else by the
+//! crate's feature `optimistic` (`cargo test --features y-runtime/optimistic`). An atomic region reads the choice, and
+//! not the environment: running one is `shared`, not `effects` (Y § 3.19).
 //!
 //! - **One lock** (the default, the first backend's): every atomic region takes one global lock for its whole run, so
 //!   regions are serializable by construction and none is ever re-run.
-//! - **Optimistic** (`Y_ATOMIC=optimistic`): a region runs without the lock against the versions committed when it
+//! - **Optimistic** (`Y_ATOMIC=optimistic`, or the feature `optimistic`): a region runs without the lock against the versions committed when it
 //!   started, and takes the lock only to commit. A commit checks the versions the run depended on: every state it read
 //!   or wrote, for `isolation serializable`; only what it wrote, first committer wins, for `isolation snapshot`, which
 //!   may suffer write skew. A run that a commit invalidated is run again. This is what `may run again` permits, and why
@@ -23,7 +26,7 @@ use super::{Deadline, Expired};
 use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::Duration;
 
@@ -50,12 +53,23 @@ pub enum Engine {
     Optimistic,
 }
 
-/// The engine `Y_ATOMIC` names: `optimistic`, or else one lock.
+/// The engine chosen for the program (`set_engine`): 0 for none yet, then 1 for one lock, 2 for optimistic.
+static ENGINE: AtomicU8 = AtomicU8::new(0);
+
+/// The engine the program's atomic regions run with: the one chosen through the root capability (`System::root`,
+/// `System::use_engine`), or else the crate's feature `optimistic`'s, or else one lock.
 pub fn engine() -> Engine {
-    match std::env::var("Y_ATOMIC").as_deref() {
-        Ok("optimistic") => Engine::Optimistic,
+    match ENGINE.load(Ordering::SeqCst) {
+        1 => Engine::OneLock,
+        2 => Engine::Optimistic,
+        _ if cfg!(feature = "optimistic") => Engine::Optimistic,
         _ => Engine::OneLock,
     }
+}
+
+/// Chooses the program's engine. Only the root capability chooses it (`crate::System`), before the first region runs.
+pub(crate) fn set_engine(engine: Engine) {
+    ENGINE.store(if engine == Engine::Optimistic { 2 } else { 1 }, Ordering::SeqCst);
 }
 
 thread_local! {
@@ -451,15 +465,29 @@ mod tests {
         assert_eq!(counter.snapshot(), 4000);
     }
 
-    /// Runs `f` with the optimistic engine. The tests that set `Y_ATOMIC` hold this lock, so that no other test of the
-    /// file sees the variable change under it.
+    /// Held by a test that chooses the engine, or reads which is chosen.
+    static CHOSEN: Mutex<()> = Mutex::new(());
+
+    /// Runs `f` with the optimistic engine. The tests that choose it hold this lock, so that no other test of the file
+    /// sees the engine change under it.
     fn optimistically<R>(f: impl FnOnce() -> R) -> R {
-        static ENV: Mutex<()> = Mutex::new(());
-        let _g = ENV.lock().unwrap_or_else(|e| e.into_inner());
-        std::env::set_var("Y_ATOMIC", "optimistic");
+        let _g = CHOSEN.lock().unwrap_or_else(|e| e.into_inner());
+        let before = ENGINE.load(Ordering::SeqCst);
+        set_engine(Engine::Optimistic);
         let r = f();
-        std::env::remove_var("Y_ATOMIC");
+        ENGINE.store(before, Ordering::SeqCst);
         r
+    }
+
+    #[test]
+    fn the_engine_is_the_one_chosen_or_else_the_features() {
+        let unchosen = || {
+            let _g = CHOSEN.lock().unwrap_or_else(|e| e.into_inner());
+            engine()
+        };
+        assert_eq!(unchosen() == Engine::Optimistic, cfg!(feature = "optimistic"));
+        assert_eq!(optimistically(engine), Engine::Optimistic);
+        assert_eq!(unchosen() == Engine::Optimistic, cfg!(feature = "optimistic"), "the choice is restored");
     }
 
     /// A run reads `a`, another region commits a write to `read_by_other`, and the run then writes `b`. Returns how many

@@ -1496,7 +1496,7 @@ instead. Values from the clock or randomness are drawn before the transaction an
 waits on its condition variable, so every region is serializable by construction and none is ever re-run. Optimistic
 concurrency with first-committer-wins, as the July 2026 C spike built it, keeps the same constraints with more
 concurrency, and is the first to re-run a region: the examples' runtime has it as a second engine
-(`Y_ATOMIC=optimistic`), which runs each region without the lock, validates what it read (serializable) or only what
+(`Y_ATOMIC=optimistic`, which the root capability reads once at startup), which runs each region without the lock, validates what it read (serializable) or only what
 it wrote (snapshot) when it commits, and runs it again when a commit invalidated it. The difference from the YAPL-era runtime is scope:
 that runtime put *every* variable under MVCC, and Y puts only what is shared under any of them.
 

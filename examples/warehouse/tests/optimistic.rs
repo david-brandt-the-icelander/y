@@ -1,11 +1,13 @@
-//! Warehouse's atomic regions under the optimistic engine (`Y_ATOMIC=optimistic`), which may run a region again (Y § 3.8).
+//! Warehouse's atomic regions under the optimistic engine (chosen with `System::use_engine`), which may run a region
+//! again (Y § 3.8).
 //! This is not a lowered Y test: it makes another task's commit land between a region's read and its commit, with the
 //! runtime's `after_next_read`, so the re-run happens every time and not only when the scheduler gives one.
 use warehouse_example::warehouse::catalogue::{Price, Rate, Sku};
 use warehouse_example::warehouse::pricing::{Line, Quantity};
 use warehouse_example::warehouse::stock::{reserve, Holdings, Reservation};
 use y_collections::Queue;
-use y_runtime::shared::{after_next_read, reruns, Shared};
+use y_runtime::shared::{after_next_read, reruns, Engine, Shared};
+use y_runtime::System;
 
 fn teas(quantity: i128) -> Line {
     let sku = Sku::new("tea-1").expect("a stock-keeping unit");
@@ -14,7 +16,7 @@ fn teas(quantity: i128) -> Line {
 
 #[test]
 fn a_reservation_runs_again_when_another_commits_first() {
-    std::env::set_var("Y_ATOMIC", "optimistic");
+    System::root().use_engine(Engine::Optimistic);
     let tea = Sku::new("tea-1").expect("a stock-keeping unit");
     let holdings = Shared::new(Holdings { on_shelf: [tea.clone(), tea.clone(), tea.clone()].into_iter().collect(), backordered: Queue::new() });
     let other = holdings.clone();

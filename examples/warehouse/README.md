@@ -57,7 +57,7 @@ The program writes `receipts.store` beside it.
 |---|---|---|
 | `shared<value_type=holdings>`, and a region that is `atomic` | `Shared<Holdings>`, and a closure over a `Tx` that reads with `tx.get` and writes with `tx.set` | `y_runtime::shared`: every atomic region takes one global lock, so regions are serializable by construction and none is ever re-run. Writes are buffered and applied when the region ends, so a failure leaves no trace |
 | `region counted is atomic, isolation snapshot:` in `units_on_shelf` | `atomic_with(…, Isolation::Snapshot, …)` | the region reads one consistent snapshot; under the optimistic engine a commit to what it only read does not make it run again (first committer wins on what it writes) |
-| what `atomic` implies, unwritten in Y (§ 3.8): the region may run again, and a failure leaves no trace | the region subject's clauses `may run again` and `on failure unchanged` | `y_runtime::shared` keeps `atomic` with one lock by default; `Y_ATOMIC=optimistic` runs each region without the lock and runs it again when a commit invalidated it, so weave refuses an atomic region whose code uses a capability other than `shared` state, or waits |
+| what `atomic` implies, unwritten in Y (§ 3.8): the region may run again, and a failure leaves no trace | the region subject's clauses `may run again` and `on failure unchanged` | `y_runtime::shared` keeps `atomic` with one lock by default; the optimistic engine (`Y_ATOMIC=optimistic`, read once by the root capability, or the feature `y-runtime/optimistic`) runs each region without the lock and runs it again when a commit invalidated it, so weave refuses an atomic region whose code uses a capability other than `shared` state, or waits |
 | `waits until enough = (…)` on the region `take_from_shelf` | the closure returns `Step::Retry` when the condition does not hold, marked `// y: waits until enough` | the region waits on one condition variable, which every commit notifies |
 | `region take_from_shelf is …:` `orelse region put_on_backorder is …:` | one closure per alternative, each marked `// y: #name`, passed in order to `orelse` | the alternatives run left to right under one hold of the lock; the first that does not retry commits. The path tools count the alternatives as a decision whose outcomes are the regions' names, and `trace.py` records an alternative where it commits |
 | `region packing is within 10s or fail, supervise(restart: restart_policy.each_failed, at_most: 2, per: 1min):`, with `task first_half = …` and `task second_half = …` | a `Deadline`, and two `TaskBody` closures run by `supervised` | `y_runtime::task::supervised`: a thread per task; the region ends when all have; a failed task is restarted as the policy allows |
@@ -82,7 +82,8 @@ The program writes `receipts.store` beside it.
 - `cargo test`: the 26 lowered Y tests, one for each of the module's 26 paths, and `tests/optimistic.rs`, which is not
   lowered from Y: under the optimistic engine, another task's reservation commits between a reservation's read and its
   commit (the runtime's `after_next_read` puts it there), and the reservation runs again, every time.
-  `Y_ATOMIC=optimistic cargo test` runs the Y tests with the optimistic engine too.
+  `cargo test --features y-runtime/optimistic` runs the Y tests with the optimistic engine too; a program run with
+  `Y_ATOMIC=optimistic` chooses it through its root capability.
 - `tools/paths/rebare.sh warehouse`: 10 decisions, 26 paths, 26 tests, `uncovered: [] unknown: []`, and the example's
   checks in `tools/bare-rust/tests/y_examples.rs`, which pass.
 - `python3 tools/paths/trace.py examples/warehouse warehouse`: every path is taken by the test that claims it, the two
