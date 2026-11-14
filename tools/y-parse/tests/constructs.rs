@@ -198,6 +198,19 @@ fn expressions() {
     assert!(x.node("left").unwrap().flag("parens") && !y.node("left").unwrap().flag("parens"));
 }
 
+/// The blank lines and comments a tree records, for the layout rules of Y § 3.1.
+#[test]
+fn the_layout_is_recorded() {
+    let t = tree("module m\n\n\n-- one\n------\nDoes it.\n------\nfunction f():\n    a = 1\n\n    -- why\n    if b = c:\n        d()\n    else e:\n        -- first\n        g()\n");
+    let f = t.nodes("decls")[1];
+    assert_eq!((f.num("blank"), f.node("doc").unwrap().num("blank")), (Some(0), Some(0)));
+    let body = f.nodes("body");
+    assert_eq!((body[1].num("blank"), body[1].num("gap")), (Some(0), Some(1)));
+    let cs = t.nodes("comments");
+    assert_eq!(cs.iter().map(|c| (c.line, c.num("blank").unwrap(), c.num("indent").unwrap(), c.str("after"))).collect::<Vec<_>>(),
+        [(4, 2, 0, Some("code")), (11, 1, 4, Some("code")), (15, 0, 8, Some("head"))]);
+}
+
 #[test]
 fn comments_are_kept_with_their_lines() {
     let t = tree("-- one\nmodule m\n\n-- two\nfunction f():\n    -- three\n    a = 1  -- four\n");

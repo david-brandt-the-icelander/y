@@ -53,7 +53,7 @@ pub fn parse(src: &str) -> Result<Node, Error> {
         return Err(Error::new(lines[pos].line, "indented less than its block, and more than the block that holds it"));
     }
     let decls = decls(&entries, src, Context::File)?;
-    let comments: Vec<Node> = comments.into_iter().map(|c| Node::new("comment", c.line).with("text", c.text).with("alone", c.alone)).collect();
+    let comments: Vec<Node> = comments.into_iter().map(|c| Node::new("comment", c.line).with("text", c.text).with("alone", c.alone).with("indent", c.indent).with("blank", c.blank).with("after", c.after)).collect();
     Ok(Node::new("file", 1).with("decls", decls).with("comments", comments))
 }
 
@@ -472,7 +472,7 @@ fn doc_node(d: &Doc) -> Node {
         }
     }
     let entries: Vec<Node> = entries.into_iter().map(|(e, pieces)| e.with("end", pieces.last().unwrap().0).with("type", entry_type(&pieces))).collect();
-    Node::new("doc", d.line).with("end", d.end).with("text", text).with("entries", entries)
+    Node::new("doc", d.line).with("end", d.end).with("blank", d.blank).with("text", text).with("entries", entries)
 }
 
 /// The type an entry ends with, `… as list<element_type=word>.`; `None` when it ends otherwise. Only the text after
@@ -503,6 +503,8 @@ fn entry_type(pieces: &[(usize, String)]) -> Option<Node> {
 fn declared(mut n: Node, e: &Entry, public: Option<&str>) -> Node {
     n.set("visibility", public);
     n.set("end", e.end());
+    n.set("blank", e.line.blank);
+    n.set("gap", e.line.gap);
     n.set("doc", e.line.doc.as_ref().map(doc_node));
     let comment = e.line.comments.iter().map(|c| c.text.as_str()).collect::<Vec<_>>().join("\n");
     n.set("comment", (!e.line.comments.is_empty()).then_some(comment));
@@ -906,7 +908,7 @@ fn stmts(entries: &[Entry], src: &str) -> Result<Vec<Node>, Error> {
             }
         };
         let n = if block && n.get("body").is_none() && n.get("conditions").is_none() { return Err(Error::new(line, "this statement opens no block")) } else { n };
-        out.push(n.with("end", e.end()));
+        out.push(n.with("end", e.end()).with("blank", e.line.blank).with("gap", e.line.gap));
     }
     Ok(out)
 }

@@ -27,13 +27,15 @@ need.
 
 Every node is an object with a `kind`, a `line` (from 1), and the fields of its kind. A node that takes several lines
 has an `end`, its last line. A declaration also has its `visibility` (`public`, `private` or null), its `doc` (the
-documentation block above it) and its `comment` (the `--` lines right above it). In Rust a node is a
-[`Node`](src/tree.rs), whose `str`, `flag`, `node`, `nodes`, `walk` and `find` read it; in Python a node is a dict, and
-`ytree.walk` and `ytree.nodes` read it.
+documentation block above it, with the `blank` lines above that) and its `comment` (the `--` lines right above it). A
+declaration and a statement have their `blank`, the blank lines right above their first line, and their `gap`, the
+blank lines above the comment lines right above them (their `blank` when there are none), for the layout rules of
+§ 3.1. In Rust a node is a [`Node`](src/tree.rs), whose `str`, `flag`, `node`, `nodes`, `walk` and `find` read it; in
+Python a node is a dict, and `ytree.walk` and `ytree.nodes` read it.
 
 | Kind | Fields |
 |---|---|
-| `file` | `decls`; `comments`, every comment of the file as `comment` nodes with their `text`, and `alone`, whether no code is before it on its line |
+| `file` | `decls`; `comments`, every comment of the file as `comment` nodes with their `text`; `alone`, whether no code is before it on its line; `indent`; `blank`, the blank lines right above it; and `after`, what the nearest line above that is not blank is: `comment`, `head` (code that ends in `:`), `doc` (the rule that closes a documentation block), `code`, or null for none |
 | `module`, `import` | `name`; `from` and `names` |
 | `facet` | `name`, `decls` |
 | `constants`, `service` | `name`, `items`: `constant` or `setting` nodes with `name`, `type` (or null) and `value` |
@@ -120,11 +122,12 @@ checks on the text.
   declaration, statement and expression of a module from the tree. They keep facts on expressions by a text they
   write from the nodes, `game.misses.count()`, and the brackets the source writes (`parens`) decide how `and` and
   `or` split.
+- `tools/bare-rust/tests/y_examples.rs` checks the layout rules of § 3.1 on the blank lines and comments the tree
+  records.
 - `tools/paths/trace.py` reads the tests and the path each claims to cover from the test file's tree.
 - The lint `type_argument_name`, `tools/paths/ylint.py` and its twin `tools/bare-rust/tests/y_lint/mod.rs`, reads the
   type arguments in the code and in the types documentation entries end with, the declarations, and the comments that
   suppress it.
 
-Only the layout checks of `y_examples.rs` (blank lines and comments, which a tree does not keep) still read Y as text.
-When `pathfacts.py` finds no node for a fact, it falls back to the text the fact's line had in git's `HEAD`
-(`places.by_text`).
+No tool reads Y as text any more, except where a fact must be found by its text: when `pathfacts.py` finds no node for
+a fact, it falls back to the text the fact's line had in git's `HEAD` (`places.by_text`).

@@ -38,6 +38,12 @@ pub struct Comment {
     pub text: String,
     /// Whether it is alone on its line, not after code.
     pub alone: bool,
+    /// The blank lines right above it.
+    pub blank: usize,
+    pub indent: usize,
+    /// What the nearest line above that is not blank is: `comment`, `head` (code that ends in `:`), `doc` (the rule
+    /// that closes a documentation block) or `code`; `None` when there is none.
+    pub after: Option<&'static str>,
 }
 
 /// The lines between two dashed rules, without the indentation of the rules.
@@ -46,6 +52,8 @@ pub struct Doc {
     pub line: usize,
     pub end: usize,
     pub lines: Vec<(usize, String)>,
+    /// The blank lines right above its opening rule.
+    pub blank: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -59,6 +67,11 @@ pub struct Line {
     pub doc: Option<Doc>,
     /// The comment lines right above it (after its documentation block).
     pub comments: Vec<Comment>,
+    /// The blank lines right above it.
+    pub blank: usize,
+    /// The blank lines right above it and the comment lines right above it: its `blank` when no comment is right
+    /// above it.
+    pub gap: usize,
 }
 
 impl Line {
@@ -105,13 +118,13 @@ pub fn lines(src: &str) -> Result<(Vec<Line>, Vec<Comment>), Error> {
                 .iter()
                 .map(|(n, _, l)| (*n, if indent_of(l) >= ind { l[ind..].to_string() } else { l.trim_start().to_string() }))
                 .collect();
-            doc = Some(Doc { line: no, end: phys[j].0, lines });
+            doc = Some(Doc { line: no, end: phys[j].0, lines, blank: blanks(&phys, i) });
             comments.clear();
             i = j + 1;
             continue;
         }
         if let Some(rest) = t.strip_prefix("--") {
-            let c = Comment { line: no, text: rest.trim().to_string(), alone: true };
+            let c = Comment { line: no, text: rest.trim().to_string(), alone: true, blank: 0, indent: 0, after: None };
             all_comments.push(c.clone());
             comments.push(c);
             i += 1;
@@ -142,7 +155,7 @@ pub fn lines(src: &str) -> Result<(Vec<Line>, Vec<Comment>), Error> {
             if k < phys.len() && !is_rule(phys[k].2.trim()) && indent_of(phys[k].2) > indent {
                 for &(n, _, l) in &phys[i..k] {
                     if !l.trim().is_empty() {
-                        all_comments.push(Comment { line: n, text: l.trim()[2..].trim().to_string(), alone: true });
+                        all_comments.push(Comment { line: n, text: l.trim()[2..].trim().to_string(), alone: true, blank: 0, indent: 0, after: None });
                     }
                 }
                 i = k;
@@ -150,9 +163,46 @@ pub fn lines(src: &str) -> Result<(Vec<Line>, Vec<Comment>), Error> {
             }
             break;
         }
-        out.push(Line { indent, line: no, end, toks, doc: doc.take(), comments: std::mem::take(&mut comments) });
+        let first = no - 1;
+        let (blank, gap) = (blanks(&phys, first), gap(&phys, first));
+        out.push(Line { indent, line: no, end, toks, doc: doc.take(), comments: std::mem::take(&mut comments), blank, gap });
+    }
+    // each comment's layout: whether it is alone on its line, its indentation, and what is above it
+    for c in all_comments.iter_mut() {
+        let k = c.line - 1;
+        let text = phys[k].2;
+        c.alone = text.trim_start().starts_with("--");
+        c.indent = indent_of(text);
+        c.blank = blanks(&phys, k);
+        let above = k - c.blank;
+        c.after = (above > 0).then(|| {
+            let t = phys[above - 1].2.trim();
+            if is_rule(t) {
+                "doc"
+            } else if t.starts_with("--") {
+                "comment"
+            } else if t.ends_with(':') {
+                "head"
+            } else {
+                "code"
+            }
+        });
     }
     Ok((out, all_comments))
+}
+
+/// The blank lines right above the physical line at index `i`.
+fn blanks(phys: &[(usize, usize, &str)], i: usize) -> usize {
+    (0..i).rev().take_while(|&k| phys[k].2.trim().is_empty()).count()
+}
+
+/// The blank lines right above the comment lines right above the physical line at index `i`.
+fn gap(phys: &[(usize, usize, &str)], i: usize) -> usize {
+    let mut k = i;
+    while k > 0 && phys[k - 1].2.trim().starts_with("--") && !is_rule(phys[k - 1].2.trim()) {
+        k -= 1;
+    }
+    blanks(phys, k)
 }
 
 /// The tokens of one physical line, appended to `toks`; a comment at its end goes to `comments`.
@@ -165,7 +215,7 @@ pub fn lex(l: &str, no: usize, off: usize, toks: &mut Vec<Token>, depth: &mut i3
         if c == b' ' || c == b'\t' {
             i += 1;
         } else if c == b'-' && b.get(i + 1) == Some(&b'-') {
-            comments.push(Comment { line: no, text: l[i + 2..].trim().to_string(), alone: false });
+            comments.push(Comment { line: no, text: l[i + 2..].trim().to_string(), alone: false, blank: 0, indent: 0, after: None });
             break;
         } else if c.is_ascii_alphabetic() || c == b'_' {
             let s = i;

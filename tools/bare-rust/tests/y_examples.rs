@@ -11,8 +11,8 @@
 //! - the paths of each module (`y_paths`, Y § 3.5) are the ones `bare/y-facts.json` lists, every loop that may never
 //!   run has its `else`, and the tests together cover every path that needs a test (Y § 3.14).
 //!
-//! The Y source is read through its tree, from `y-parse` (`tools/y-parse`), for the regions and the named decisions, in
-//! `y_levels`, `y_lint` and `y_paths`; only the layout rules (blank lines and comments) read it as text.
+//! The Y source is read through its tree, from `y-parse` (`tools/y-parse`): for the regions, the named decisions and the
+//! layout rules here, and in `y_levels`, `y_lint` and `y_paths`.
 //!
 //! To refresh the Rust after editing the bare files, from `tools/bare-rust`:
 //! `cargo run -q -- weave ../../examples/<name>/bare --out ../../examples/.woven --crate ../../examples/<name>`, then
@@ -474,70 +474,10 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
         }
     }
     assert_eq!(listed, in_source, "y-facts.json and the Y source name different decisions");
-    // two blank lines before every declaration after the imports, at module level and in a facet, never more (a lint
-    // rule of Y § 3.1)
+    // the layout rules of Y § 3.1, on the trees
     for y in &all {
-        let lines: Vec<String> = read(&dir.join(y)).lines().map(str::to_string).collect();
-        let mut inside = false;
-        let mut in_facet = false;
-        for (i, l) in lines.iter().enumerate() {
-            let rule = l.trim().len() >= 3 && l.trim().chars().all(|c| c == '-');
-            if !l.is_empty() && !l.starts_with(' ') && !rule && !inside {
-                in_facet = l.starts_with("public facet ") || l.starts_with("facet ");
-            }
-            let level = !l.starts_with(' ') || (in_facet && l.starts_with("    ") && !l.starts_with("     "));
-            let starts = !inside && !l.is_empty() && level && i > 0 && lines[i - 1].is_empty();
-            if rule {
-                inside = !inside;
-            }
-            if starts && !l.starts_with("from ") && !lines[..i].iter().all(|x| x.is_empty() || x.starts_with("module ")) {
-                let blanks = lines[..i].iter().rev().take_while(|x| x.is_empty()).count();
-                assert_eq!(blanks, 2, "{y}:{}: {blanks} blank lines before a declaration, not 2", i + 1);
-            }
-        }
-    }
-    // a blank line before every flow-control statement that is not the first of its block; comments about the
-    // statement may come between (a lint rule of Y § 3.1)
-    let flow = ["if ", "while ", "for ", "conditional ", "break", "continue", "retry", "region ", "arena "];
-    for y in &all {
-        let lines: Vec<String> = read(&dir.join(y)).lines().map(str::to_string).collect();
-        let mut inside = false;
-        for (i, l) in lines.iter().enumerate() {
-            let t = l.trim();
-            if t.len() >= 3 && t.chars().all(|c| c == '-') {
-                inside = !inside;
-            }
-            let inject_block = t.starts_with("inject(");
-            if inside || !(flow.iter().any(|f| t.starts_with(f)) || inject_block) || t.ends_with("covers") {
-                continue;
-            }
-            let mut k = i;
-            while k > 0 && lines[k - 1].trim().starts_with("--") {
-                k -= 1;
-            }
-            let above = lines[k - 1].trim_end();
-            assert!(above.is_empty() || above.ends_with(':'), "{y}:{}: no blank line before `{t}`", i + 1);
-        }
-    }
-    // a blank line comes before every comment line, unless the line above is a comment too or opens a block; the
-    // lines of a documentation block are not comments in this sense (a lint rule of Y § 3.1)
-    for y in &all {
-        let lines: Vec<String> = read(&dir.join(y)).lines().map(str::to_string).collect();
-        let is_rule = |t: &str| t.len() >= 3 && t.chars().all(|c| c == '-');
-        let mut inside = false;
-        for (i, l) in lines.iter().enumerate() {
-            let t = l.trim();
-            if is_rule(t) {
-                inside = !inside;
-                continue;
-            }
-            if inside || !t.starts_with("--") || i == 0 {
-                continue;
-            }
-            let above = lines[i - 1].trim();
-            let allowed = above.is_empty() || (above.starts_with("--") && !is_rule(above)) || above.ends_with(':');
-            assert!(allowed, "{y}:{}: no blank line before the comment `{t}`", i + 1);
-        }
+        let errors = layout(y, &y_parse::parse_file(&dir.join(y)).unwrap_or_else(|e| panic!("{e}")));
+        assert!(errors.is_empty(), "{errors:#?}");
     }
     // the paths of the module are the ones the facts list, with how each ends; every loop in every Y file that may never
     // run has its `else`, and none that is sure to run has one (Y § 3.5)
@@ -734,6 +674,65 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
             assert!(called, "{test}: covers a path of `{function}`, but `when` does not call it: `{}`", when[0]);
         }
     }
+}
+
+/// The layout rules of Y § 3.1 that the examples keep, read from a file's tree (the blank lines and comments it records):
+///
+/// - two blank lines before every declaration after the imports, at module level and in a facet, never more, when any
+///   blank line comes before it; and so before its documentation block, and before a comment at that level;
+/// - a blank line before every flow-control statement that is not the first of its block (`if`, `while`, `for`,
+///   `conditional`, `region`, `arena`, `inject`, `break`, `continue`, `retry`); comments about the statement may come
+///   between;
+/// - a blank line before every comment line, unless the line above is a comment too or opens a block; the lines of a
+///   documentation block are not comments in this sense.
+fn layout(y: &str, tree: &y_parse::Node) -> Vec<String> {
+    let mut errors = vec![];
+    let decls = tree.nodes("decls");
+    let module = decls.iter().find(|d| d.kind == "module").map(|d| d.line);
+    // a piece of the file that the first rule judges: what is above it is blank, or the `module` line, or more
+    let mut judge = |line: usize, blank: usize| {
+        let above = line - blank - 1;
+        if blank > 0 && above != 0 && Some(above) != module && blank != 2 {
+            errors.push(format!("{y}:{line}: {blank} blank lines before a declaration, not 2"));
+        }
+    };
+    let top: Vec<&y_parse::Node> = decls.iter().flat_map(|d| if d.kind == "facet" { [vec![*d], d.nodes("decls")].concat() } else { vec![*d] }).collect();
+    for d in top.iter().filter(|d| d.kind != "module" && d.kind != "import") {
+        if let Some(doc) = d.node("doc") {
+            judge(doc.line, doc.num("blank").unwrap());
+        }
+        judge(d.line, d.num("blank").unwrap());
+    }
+    // a comment at the level of the declarations: at the left edge, or indented once in a facet
+    let edge: Vec<(usize, bool)> = decls
+        .iter()
+        .map(|d| (d.line, d.kind == "facet"))
+        .chain(tree.nodes("comments").iter().filter(|c| c.flag("alone") && c.num("indent") == Some(0)).map(|c| (c.line, false)))
+        .collect();
+    let in_facet = |line: usize| edge.iter().filter(|(l, _)| *l <= line).max_by_key(|(l, _)| *l).is_some_and(|(_, facet)| *facet);
+    for c in tree.nodes("comments").into_iter().filter(|c| c.flag("alone")) {
+        let indent = c.num("indent").unwrap();
+        if indent == 0 || (indent == 4 && in_facet(c.line)) {
+            judge(c.line, c.num("blank").unwrap());
+        }
+    }
+    // a flow-control statement that is not the first of its block
+    let flow = ["if", "while", "for", "conditional", "region", "arena", "inject", "break", "continue", "retry"];
+    tree.walk(&mut |n: &y_parse::Node| {
+        for st in n.nodes("body").iter().skip(1) {
+            if flow.contains(&st.kind) && st.num("gap") == Some(0) {
+                errors.push(format!("{y}:{}: no blank line before the `{}`", st.line, st.kind));
+            }
+        }
+    });
+    // a comment, after a line that is not blank, not a comment and opens no block
+    for c in tree.nodes("comments").into_iter().filter(|c| c.flag("alone") && c.line > 1) {
+        if c.num("blank") == Some(0) && !matches!(c.str("after"), Some("comment" | "head")) {
+            errors.push(format!("{y}:{}: no blank line before the comment `-- {}`", c.line, c.str("text").unwrap()));
+        }
+    }
+    errors.sort_by_key(|e| e.split(':').nth(1).and_then(|l| l.parse::<usize>().ok()));
+    errors
 }
 
 /// The statements of a test's `when` section, each with the lines it continues onto.
