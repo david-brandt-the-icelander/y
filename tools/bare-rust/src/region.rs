@@ -29,7 +29,8 @@
 //! cargo checks the regions after the build, so `atomic` bound to a local, renamed or re-exported is still the
 //! runtime's transaction, and a method is its receiver's type's. Without a build (`check_body`, a weave without
 //! cargo, a crate that does not compile), a call's function is the path it names, through the file's `use`
-//! declarations. A call rustc said nothing of (in a test, in a macro) is read the second way. The rest is syntax either
+//! declarations. A call rustc said nothing of (in a test) is read the second way, and a macro is read from its
+//! invocation either way (`crate::level`): `println!` in an atomic region is an effect. The rest is syntax either
 //! way: the capabilities used, by parameter name; the function passed in that is called, by name; the deadline a wait
 //! takes; `Isolation::Snapshot` and `Step::Retry`, by path.
 use crate::{parse_bare, text};
@@ -584,6 +585,15 @@ mod tests {
         // an `atomic` that is not the runtime's is no transaction
         let other = brs.replace("use y_runtime::shared::{atomic, Step};", "use mylib::atomic;\nuse y_runtime::shared::Step;");
         assert!(check_body(&other, &js, "c::m::apply#add").unwrap_err().contains("runs in no transaction"));
+    }
+
+    #[test]
+    fn an_atomic_region_prints_nothing() {
+        let brs = "use y_runtime::shared::{atomic, Step};\nfn add(count) {\n    // y: region add is atomic\n    atomic(\"m::add#add\", None, |tx| { println!(\"adding\"); Ok(Step::Done(tx.get(count))) })\n}\n";
+        let add = serde_json::json!({"kind": "function", "name": "c::m::add", "params": [{"name": "count", "type": "Shared<u32>", "injected": true}]});
+        let js = constraints(serde_json::json!([add, region("c::m::add#add", &["atomic", "may run again", "on failure unchanged"])]));
+        let err = check_body(brs, &js, "c::m::add#add").unwrap_err();
+        assert!(err.contains("it has the macro `println!` (`std::println`) at line 4"), "{err}");
     }
 
     #[test]

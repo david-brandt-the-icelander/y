@@ -409,6 +409,12 @@ regions checked from …`, and `checks_via` in `--json`):
   receiver type comes from the constraint data when the receiver is a parameter or a typed local, and is otherwise
   unknown, so the call counts as the most demanding method of that name in the crate.
 
+A macro is read from its invocation either way, because rustc places the calls of its expansion in the library's
+source, not at the invocation. `println!` needs the level `libraries/levels.json` gives `std::println` (`effects`); a
+macro named alone is the prelude's unless the file imports it (`use y_collections::list;`), one the crate defines
+counts as nothing, and one the table cannot place counts as `effects`. The calls in a macro's arguments are the
+body's, from rustc or, without a build, by reading the arguments as a call's.
+
 `bare-rust levels <bare-dir> --crate <crate-dir> --out <dir>` weaves with cargo and prints the levels from rustc's
 calls (`--show-calls` lists them). `bare-rust levels --libraries <crate>…` checks `libraries/levels.json` against what a
 library crate calls, from its MIR: a public function that reaches a library module above the level the table gives

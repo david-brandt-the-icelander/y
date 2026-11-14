@@ -44,7 +44,13 @@
 //!   function and a local alias are not followed.
 //!
 //! Weave says which way it read them (`CrateWeave::checks_via`). Either way, what is not a call (a loop, `&mut`, a
-//! marker, a parameter's type) is read from the syntax and the constraint data, and a macro's calls are not seen.
+//! marker, a parameter's type) is read from the syntax and the constraint data.
+//!
+//! A macro is read from the syntax either way, as rustc places the calls of a macro's expansion in the library's
+//! source, not at the invocation: an invocation needs the level the table gives the macro's path (`std::println` is
+//! `effects`), named through the file's imports or, alone, as the prelude's (`macro_level`). A macro the crate defines
+//! counts as nothing, and one the table cannot place needs `effects`. The calls in a macro's arguments are the body's:
+//! rustc places them in the bare file, and the syntax reads the arguments as a call's (`macro_arguments`).
 use crate::facts::{Callee, Fact, Facts};
 use crate::{parse_bare, text};
 use serde_json::Value;
@@ -152,6 +158,8 @@ struct Function {
     own: Vec<Use>,
     calls: Vec<(Call, usize)>,
     trait_name: Option<String>,
+    /// The macros it invokes, by the path it names them by (`println`, `y_collections::list`), with their lines.
+    macros: Vec<(String, usize)>,
 }
 
 /// An import: the module it is in, the path as written, its file and line.
@@ -223,9 +231,9 @@ fn read_file(file: &str, brs: &str, js: &Value, facts: Option<&[Fact]>, fns: &mu
                 }
             }
         }
-        let mut calls = vec![];
+        let (mut calls, mut macros) = (vec![], vec![]);
         if let Some(body) = node.child_by_field_name("body") {
-            walk(body, brs, &mut add, &mut calls);
+            walk(body, brs, 0, &mut add, &mut calls, &mut macros);
         }
         // a method's receiver, when it is a parameter or a local whose type the constraint data gives: its type's name
         let typed = |name: &str| -> Option<String> {
@@ -244,7 +252,17 @@ fn read_file(file: &str, brs: &str, js: &Value, facts: Option<&[Fact]>, fns: &mu
             calls = std::mem::take(&mut resolved[k]);
         }
         let trait_name = node.parent().and_then(|p| p.parent()).filter(|p| p.kind() == "impl_item").and_then(|p| p.child_by_field_name("trait")).map(|t| last_segment(text(t, brs)));
-        fns.push(Function { path: path.clone(), file: file.to_string(), own, calls, trait_name });
+        fns.push(Function { path: path.clone(), file: file.to_string(), own, calls, trait_name, macros });
+    }
+    // a macro needs the level of the library it is from, read from its invocation in either way (`macro_level`)
+    let uses = use_map(imports, file);
+    let defined = macro_names(tree.root_node(), brs);
+    for f in fns[first..].iter_mut() {
+        for (m, line) in &f.macros {
+            if let Some((l, what)) = macro_level(m, &uses, &defined) {
+                f.own.push(Use { level: l, what, function: f.path.clone(), file: file.to_string(), line: *line });
+            }
+        }
     }
     if facts.is_some() {
         // what rustc resolved needs no imports to follow: its library calls are counted with the crate's (`uses_with`)
@@ -252,7 +270,6 @@ fn read_file(file: &str, brs: &str, js: &Value, facts: Option<&[Fact]>, fns: &mu
     }
     // a call into a library needs its module's level (`libraries/levels.json`), through the file's imports; a call into a
     // library the table does not know needs `effects`, as nothing says it has none
-    let uses = use_map(imports, file);
     let local = local_names(&tree.root_node(), brs, &base);
     for f in fns[first..].iter_mut() {
         for (call, line) in &f.calls {
@@ -282,6 +299,91 @@ fn read_file(file: &str, brs: &str, js: &Value, facts: Option<&[Fact]>, fns: &mu
                 None => f.own.push(Use { level: 4, what: format!("`{shown}` (`{full}`), a library with no level in libraries/levels.json"), function: f.path.clone(), file: file.to_string(), line: *line }),
             }
         }
+    }
+}
+
+/// The macros of the standard library's prelude: a macro named by one of these alone is `std`'s.
+const STD_MACROS: &[&str] = &[
+    "assert", "assert_eq", "assert_ne", "debug_assert", "debug_assert_eq", "debug_assert_ne", "format", "format_args", "vec", "write", "writeln",
+    "print", "println", "eprint", "eprintln", "dbg", "panic", "unreachable", "unimplemented", "todo", "matches", "concat", "stringify", "include",
+    "include_str", "include_bytes", "env", "option_env", "line", "column", "file", "module_path", "cfg", "compile_error", "thread_local",
+];
+
+/// The names of the macros a bare body defines (`macro_rules! name`).
+fn macro_names(n: Node, src: &str) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    if n.kind() == "macro_definition" {
+        if let Some(name) = n.child_by_field_name("name") {
+            out.insert(text(name, src).to_string());
+        }
+    }
+    let mut c = n.walk();
+    for ch in n.named_children(&mut c) {
+        out.extend(macro_names(ch, src));
+    }
+    out
+}
+
+/// The level a macro's invocation needs, and what to call it, when above `calculations`: the level of the library it
+/// is from (`libraries/levels.json`, where `std::println` is `effects`). The macro is named through the file's imports
+/// (`list!` after `use y_collections::list;`), by its path, or, alone, as one of the prelude's (`STD_MACROS`); one the
+/// crate defines is not a library's, and one that is none of these needs `effects`, as nothing says it has none.
+/// rustc says nothing of a macro (its expansion's calls are in the library's source), so this is read from the syntax
+/// in either way the calls are read; the calls in its arguments are the body's.
+fn macro_level(m: &str, uses: &BTreeMap<String, String>, defined: &BTreeSet<String>) -> Option<(usize, String)> {
+    let m = m.trim_start_matches("::").trim_start_matches("$crate::");
+    let first = m.split("::").next().unwrap_or("");
+    let full = match uses.get(first) {
+        Some(p) => format!("{p}{}", &m[first.len()..]),
+        None if m.contains("::") => m.to_string(),
+        None if defined.contains(m) => return None,
+        None if STD_MACROS.contains(&m) => format!("std::{m}"),
+        None => return Some((4, format!("the macro `{m}!`, from a library with no level in libraries/levels.json"))),
+    };
+    let full = ["core::", "alloc::"].iter().find_map(|r| full.strip_prefix(r)).map_or(full.clone(), |rest| format!("std::{rest}"));
+    match library_level(&full) {
+        Some(l) if l >= 2 => Some((l, format!("the macro `{m}!` (`{full}`)"))),
+        Some(_) => None,
+        None => Some((4, format!("the macro `{m}!` (`{full}`), from a library with no level in libraries/levels.json"))),
+    }
+}
+
+/// The arguments of a macro, read as the arguments of a call (`f(a, b)`), so that the calls in them are seen: a
+/// format string, expressions, `name = value` (whose value is read), and `x; n` (as `x, n`). What does not parse as
+/// arguments is not read.
+fn macro_arguments(tt: Node, src: &str, base: usize, add: &mut impl FnMut(&str, String, usize), calls: &mut Vec<(Call, usize)>, macros: &mut Vec<(String, usize)>) {
+    let t = text(tt, src);
+    if t.len() < 2 || !(t.starts_with('(') || t.starts_with('[')) {
+        return;
+    }
+    let mut depth = 0;
+    let inner: String = t[1..t.len() - 1]
+        .chars()
+        .map(|c| {
+            match c {
+                '(' | '[' | '{' => depth += 1,
+                ')' | ']' | '}' => depth -= 1,
+                _ => {}
+            }
+            if c == ';' && depth == 0 { ',' } else { c }
+        })
+        .collect();
+    let frag = format!("fn __m() {{ __m({inner}); }}");
+    let tree = parse_bare(&frag);
+    let mut stack = vec![tree.root_node()];
+    while let Some(n) = stack.pop() {
+        if n.kind() == "call_expression" && n.child_by_field_name("function").is_some_and(|f| text(f, &frag) == "__m") {
+            let Some(args) = n.child_by_field_name("arguments") else { return };
+            let mut c = args.walk();
+            for a in args.named_children(&mut c) {
+                // `name = value` names a format argument: only its value is code
+                let a = if a.kind() == "assignment_expression" { a.child_by_field_name("right").unwrap_or(a) } else { a };
+                walk(a, &frag, base + tt.start_position().row, add, calls, macros);
+            }
+            return;
+        }
+        let mut c = n.walk();
+        stack.extend(n.named_children(&mut c));
     }
 }
 
@@ -361,8 +463,10 @@ fn collect<'t>(n: Node<'t>, src: &str, path: &str, fns: &mut Vec<(String, Node<'
     }
 }
 
-fn walk(n: Node, src: &str, add: &mut impl FnMut(&str, String, usize), calls: &mut Vec<(Call, usize)>) {
-    let line = n.start_position().row + 1;
+/// What a function's body uses, from its syntax: `base` is the line the text `src` starts at (0 for a file; a macro's
+/// arguments are read from a text of their own).
+fn walk(n: Node, src: &str, base: usize, add: &mut impl FnMut(&str, String, usize), calls: &mut Vec<(Call, usize)>, macros: &mut Vec<(String, usize)>) {
+    let line = base + n.start_position().row + 1;
     match n.kind() {
         // a function inside this one is read as its own
         "function_item" => return,
@@ -378,6 +482,16 @@ fn walk(n: Node, src: &str, add: &mut impl FnMut(&str, String, usize), calls: &m
             if t.starts_with("// y: waits until ") {
                 add("effects", format!("a wait, `{}`", t.trim_start_matches("// y: ")), line);
             }
+        }
+        "macro_invocation" => {
+            if let Some(m) = n.child_by_field_name("macro") {
+                macros.push((text(m, src).to_string(), line));
+            }
+            let mut c = n.walk();
+            if let Some(tt) = n.named_children(&mut c).find(|c| c.kind() == "token_tree") {
+                macro_arguments(tt, src, base, add, calls, macros);
+            }
+            return;
         }
         "call_expression" => {
             if let Some(f) = n.child_by_field_name("function") {
@@ -396,7 +510,7 @@ fn walk(n: Node, src: &str, add: &mut impl FnMut(&str, String, usize), calls: &m
     }
     let mut c = n.walk();
     for ch in n.children(&mut c) {
-        walk(ch, src, add, calls);
+        walk(ch, src, base, add, calls, macros);
     }
 }
 
@@ -852,6 +966,25 @@ mod tests {
         let generic: Facts = [("src/m.brs".to_string(), vec![fact(brs, "count()", "<T as m::counts::Count>::count")])].into_iter().collect();
         let errs = check_with(&[f], Some(&generic));
         assert!(errs.len() == 1 && errs[0].contains("a call of `count` (it may be `c::m::counts::Ledger::count`"), "{errs:#?}");
+    }
+
+    #[test]
+    fn a_macro_needs_the_level_of_its_library_and_its_arguments_are_read() {
+        // `show` prints, which is an effect; `label` formats, which is a calculation, but calls `total`, which loops,
+        // in the format's arguments (as a named argument, which is not an assignment)
+        let brs = "use y_collections::list;\nmod sums {\n    fn total(xs) {\n        for x in xs {\n            x;\n        }\n    }\n}\nmod show {\n    macro_rules! twice {\n        ($x:expr) => { $x * 2 };\n    }\n    fn show(x) {\n        println!(\"{}\", x)\n    }\n    fn label(xs) {\n        format!(\"{n}\", n = crate::m::sums::total(xs))\n    }\n    fn plain(x) {\n        let v = vec![x; 3];\n        let l = list![x, twice!(x)];\n        assert!(v.len() == 3, \"{}\", x);\n        v\n    }\n    fn odd(x) {\n        sparkle!(x)\n    }\n}\n";
+        let f = file(brs, json!([pure("c::m::sums::total"), pure("c::m::show::show"), pure("c::m::show::label"), pure("c::m::show::plain"), pure("c::m::show::odd")]));
+        let all = uses(std::slice::from_ref(&f));
+        let of = |g: &str| all.iter().filter(|u| u.function == format!("c::m::show::{g}") && u.level >= 2).map(|u| (u.what.clone(), LEVELS[u.level], u.line)).collect::<Vec<_>>();
+        assert_eq!(of("show"), vec![("the macro `println!` (`std::println`)".to_string(), "effects", 14)]);
+        assert_eq!(of("label"), vec![("a call of `total`, which needs `structured`,".to_string(), "structured", 17)]);
+        // the standard library's `vec!` and `assert!`, an imported `list!` and the crate's own `twice!` are calculations
+        assert_eq!(of("plain"), vec![]);
+        assert_eq!(of("odd"), vec![("the macro `sparkle!`, from a library with no level in libraries/levels.json".to_string(), "effects", 26)]);
+        // with what rustc resolved, the macro is still read from the syntax
+        let facts: Facts = [("src/m.brs".to_string(), vec![fact(brs, "for x", "<std::ops::Range<u32> as std::iter::IntoIterator>::into_iter")])].into_iter().collect();
+        let errs = check_with(&[pin(&f, "c::m::show", "calculations")], Some(&facts));
+        assert!(errs.iter().any(|e| e.contains("the macro `println!` (`std::println`) in `c::m::show::show` needs level `effects`")), "{errs:#?}");
     }
 
     #[test]

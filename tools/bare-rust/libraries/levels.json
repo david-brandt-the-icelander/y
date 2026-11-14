@@ -1,5 +1,5 @@
 {
-  "about": "The level (constraint language 6.22, Y \u00a7 3.19) a call into each library needs, by module path: a call of a function under a path listed here, or of a method of a type under it, needs that level, and the longest path that matches wins. Every library a body calls into is listed, at least by its crate: a call into a library with no entry needs `effects`, since nothing says it has none. `bare-rust` takes the function a call resolves to from rustc where the woven crate builds (`crate::facts`), and else resolves it through the file's `use` declarations, and a method through its receiver's type when the constraint data gives it. A method of a trait needs the level of its type's module and of its trait's. `bare-rust levels --libraries <crate>...` checks the table against what a library crate's code calls; `trusted` names the functions of a library that call more than their module's level for the library's own sake: each with the calls it vouches for (a path, or a module or type the call is under) and why. Only those calls are not counted; anything else the function calls is, and an entry whose calls the function no longer makes is reported.",
+  "about": "The level (constraint language 6.22, Y \u00a7 3.19) a call into each library needs, by module path: a call of a function under a path listed here, or of a method of a type under it, needs that level, and the longest path that matches wins. Every library a body calls into is listed, at least by its crate: a call into a library with no entry needs `effects`, since nothing says it has none. `bare-rust` takes the function a call resolves to from rustc where the woven crate builds (`crate::facts`), and else resolves it through the file's `use` declarations, and a method through its receiver's type when the constraint data gives it. A method of a trait needs the level of its type's module and of its trait's. A macro is listed by its path (`std::println`), and an invocation of it needs that level; a macro named alone is the prelude's (`std::\u2026`) unless the file imports it. `bare-rust levels --libraries <crate>...` checks the table against what a library crate's code calls; `trusted` names the functions of a library that call more than their module's level for the library's own sake: each with the calls it vouches for (a path, or a module or type the call is under) and why. Only those calls are not counted; anything else the function calls is, and an entry whose calls the function no longer makes is reported.",
   "modules": {
     "std": "calculations",
     "core": "calculations",
@@ -34,7 +34,13 @@
     "std::env": "effects",
     "std::process": "effects",
     "std::time::Instant": "effects",
-    "std::time::SystemTime": "effects"
+    "std::time::SystemTime": "effects",
+    "std::println": "effects",
+    "std::print": "effects",
+    "std::eprintln": "effects",
+    "std::eprint": "effects",
+    "std::dbg": "effects",
+    "std::thread_local": "shared"
   },
   "trusted": {
     "y_runtime::shared::engine": {
