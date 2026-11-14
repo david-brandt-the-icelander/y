@@ -132,5 +132,6 @@ refuse two forms the lint rules forbid, with an error of their own: an `else if`
   type arguments in the code and in the types documentation entries end with, the declarations, and the comments that
   suppress it.
 
-No tool reads Y as lines any more. Where a fact must be found again by what it said, and no node says it,
-`pathfacts.py` falls back to the text the fact's line had in git's `HEAD` (`places.by_text`).
+No tool reads Y as lines any more. Where a fact must be found again and no finder places it, `pathfacts.py` and
+`regen.py` parse the file as git's `HEAD` has it, and find the node that started on the fact's old line again in the
+current tree (`places.same_node`).

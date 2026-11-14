@@ -7,14 +7,15 @@ subject`, language 6.23) after its function's subject, with its constraints as c
     python3 tools/paths/regen.py <example folder> <strip output> ['{"crate::module::function": [clause, ...]}']
 
 The strip output is what `bare-rust strip <example> --out <dir> --src-only` writes. A clause's line is found by what
-the clause says (see `place`), so edits to the Y source do not lose it; only an invariant's falls back to the text its
-line had in git's HEAD. It prints the functions left with no clauses: give them some with `extra`.
+the clause says (see `place`), so edits to the Y source do not lose it; an invariant's is first the node its line
+had in git's HEAD, found again in the tree (`places.same_node`). It prints the functions left with no clauses: give
+them some with `extra`.
 
 It reads the Y source through its tree (`ytree.py`, from `tools/y-parse`): the functions, rules and derived values and
 their facets, their `where` and `ensures` clauses, types' `where` clauses and structures' invariants, `injected`
 parameters, and regions with their constraints as written."""
 import json, os, re, shutil, subprocess, sys
-import ytree
+import places, ytree
 root, stripped = sys.argv[1], sys.argv[2]
 extra = json.loads(sys.argv[3]) if len(sys.argv) > 3 else {}
 ys = [f"y/src/{f}" for f in sorted(os.listdir(f"{root}/y/src")) if f.endswith(".y") and not f.endswith(".test.y")]
@@ -27,26 +28,19 @@ HEADS = [(y, facet, n) for y in ys for facet, d in ytree.declarations(TREES[y])
 HEAD_AT = {(y, d["line"]): d for y, _, d in HEADS}
 INVARIANT_WHERES = {id(w) for y in ys for n in ytree.walk(TREES[y]) if n["kind"] == "type_decl" for w in ytree.nodes(n, "where")}
 
-def at(needle):
-    hits = [(y, i) for y in ys for i, l in enumerate(src[y], 1) if needle in l]
-    assert len(hits) == 1, (needle, hits)
-    return f"{hits[0][0]}:{hits[0][1]}"
-
 ex = os.path.basename(os.path.abspath(root))
 old_src = {}
 
 def moved(source):
-    """The line in the new Y source with the text the old source had at `source`; the nearest one if several."""
+    """Where the node that started at `source` in git's `HEAD` is in the new Y source: found again in its tree by what
+    it is (`places.same_node`); None when it is gone."""
     y, n = source.rsplit(":", 1)
     if y not in old_src:
         shown = subprocess.run(["git", "show", f"HEAD:examples/{ex}/{y}"], capture_output=True, text=True)
         # a file not committed yet, in a new example, has not moved
-        old_src[y] = shown.stdout.split("\n") if shown.returncode == 0 else src[y]
-    text = old_src[y][int(n) - 1]
-    hits = [i for i, l in enumerate(src[y], 1) if l == text]
-    if not hits:
-        return None
-    return f"{y}:{min(hits, key=lambda i: abs(i - int(n)))}"
+        old_src[y] = ytree.parse_text(shown.stdout) if shown.returncode == 0 else TREES[y]
+    hit = places.same_node(old_src[y], TREES[y], int(n))
+    return f"{y}:{hit}" if hit else None
 
 def heads(subject):
     """The Y lines where the subject's function, rule or derived value starts; in its facet, when the subject names
@@ -91,7 +85,7 @@ def place(subject, c):
         return near(heads(subject), source)
     if source and moved(source):
         return moved(source)
-    return at(f"function {fn}(")
+    raise SystemExit(f"{subject}: no function, rule or derived value of that name in the Y source")
 
 
 def y_functions():

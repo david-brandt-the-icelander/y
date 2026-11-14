@@ -18,8 +18,10 @@ take. They need Python 3 and a Rust toolchain, and nothing else. Each reads the 
 | [`trace.py`](trace.py) | `python3 tools/paths/trace.py examples/<example> <module>`: runs the example's tests with every decision of the module instrumented (by [`ytrace.rs`](ytrace.rs)), and reports a test that does not take the path it claims, a path no test takes or claims, and a path taken that the enumerator does not know. The checks in `y_examples.rs` only see what the tests claim; this sees what they do |
 
 So an edit may change or move the lines a fact is about, and the fact follows. Only a fact no key finds (a copy's Y
-line when its function was renamed, an invariant's clause) falls back to the text its line had in git's `HEAD`, so run
-the scripts on uncommitted edits, as `rebare.sh` does, and commit the result with the edits.
+line when its function was renamed, an invariant's clause) falls back to where its old line went: in the Y source, the
+node that started on that line in git's `HEAD`, found again in the tree by its kind, its name or what it writes, and the
+declarations it is in (`places.same_node`); in a bare body, the line with the text it had. So run the scripts on
+uncommitted edits, as `rebare.sh` does, and commit the result with the edits.
 
 `trace.py` works on a copy of the example in `$YTRACE_WORK` (by default `y-trace` in the system's temporary folder) and
 keeps its cargo target folder there between runs. It exits with status 1 if it reports anything.

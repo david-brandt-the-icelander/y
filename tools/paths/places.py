@@ -8,10 +8,11 @@ the file's tree (`ytree.py`, from `tools/y-parse`); a place in a bare body, by i
 
 When several facts share a finder (two regions `frame_shown is forever because "…"`), they take its lines in order: the
 first fact, by its old line, the first line. When the number of lines and of facts differ, each fact takes the line
-nearest its old one. A fact with no finder, or none that finds a line, falls back to its old line's text (see
+nearest its old one. A fact with no finder, or none that finds a line, falls back to where its old line went: in the Y
+source, the node that started on it, found again in the tree (see `same_node`); in a bare body, its line's text (see
 `by_text`)."""
 import re
-import ytree
+import yp, ytree
 
 
 def _bare_marker(line):
@@ -113,9 +114,81 @@ def locate(group, lines, tree=None):
     return [min(hits, key=lambda i: abs(i - n)) for n, _ in group]
 
 
+DECLARATIONS = ("facet", "function", "rule", "test", "structure", "schema", "constants", "service", "type_decl", "migrate")
+
+
+def ident(node):
+    """What tells a node from the others of its kind: its name or label, a comment's text, a documentation block's first
+    line, or an expression as text; a statement adds the expressions it writes on its own line (`yp.own`)."""
+    k = node["kind"]
+    if k == "schema":
+        return f"{node['name']} {node['version']}"
+    if k in ("comment", "path", "constraint"):
+        return node["text"]
+    if k == "doc":
+        return node["text"].split("\n")[0]
+    if k == "import":
+        return f"{node['from']} {node['names']}"
+    named = node.get("name") if isinstance(node.get("name"), str) else node.get("label") if isinstance(node.get("label"), str) else ""
+    if k in ("binding", "arg", "constant", "setting", "derived", "invariant", "where", "ensures"):
+        value = node.get("value") or node.get("condition")
+        return f"{named} {yp.text(value) if value else ''}"
+    own = yp.own(node)
+    if own or k in ("let", "assign", "expr", "return", "fail", "task", "if", "while", "for", "conditional", "compare",
+                    "condition", "region", "inject", "else", "arena", "continue", "break", "retry"):
+        return " ".join([named] + [yp.text(e) if e["kind"] != "constraint" else e["text"] for e in own])
+    if named:
+        return named
+    try:
+        return yp.text(node)
+    except (ValueError, KeyError):
+        return ""
+
+
+def located(tree):
+    """Each node of a tree with the declarations it is in, as [(node, ((kind, name), …))], in source order."""
+    out = []
+
+    def go(node, outer):
+        out.append((node, outer))
+        inner = outer + ((node["kind"], node["name"]),) if node["kind"] in DECLARATIONS else outer
+        for v in node.values():
+            for x in (v if isinstance(v, list) else [v]):
+                if isinstance(x, dict) and "kind" in x:
+                    go(x, inner)
+
+    go(tree, ())
+    return out
+
+
+def same_node(old, new, n):
+    """The line in the tree `new` of the node that started at line `n` of the tree `old`: the first node there, found
+    again by its kind and what tells it from others (`ident`), in the same declarations, else in any. When several are
+    found, and the old tree has as many such nodes there, the one in the same place among them; else the nearest to
+    `n`. None when no node started at `n`, or none is found again."""
+    if old is None or new is None:
+        return None
+    before, after = located(old), located(new)
+    at = [(node, outer) for node, outer in before if node.get("line") == n and node["kind"] != "file"]
+    if not at:
+        return None
+    node, outer = at[0]
+    key = (node["kind"], ident(node))
+    for same_place in (True, False):
+        def like(m, o):
+            return m["kind"] != "file" and (m["kind"], ident(m)) == key and (o == outer or not same_place)
+        was = [m for m, o in before if like(m, o)]
+        hits = [m["line"] for m, o in after if like(m, o)]
+        if hits:
+            if len(was) == len(hits):
+                return hits[next(i for i, m in enumerate(was) if m is node)]
+            return min(hits, key=lambda i: (abs(i - n), i))
+    return None
+
+
 def by_text(old, new, n, path=""):
-    """The line in `new` with the text `old` had at line `n`, the nearest if several; the same number if the file kept
-    its length; else None."""
+    """The line of a bare body `new` with the text `old` had at line `n`, the nearest if several; the same number if the
+    file kept its length; else None."""
     text = old[n - 1] if n - 1 < len(old) else ""
     for same in (lambda l: l == text, lambda l: l.strip() == text.strip() and text.strip()):
         hits = [i for i, l in enumerate(new, 1) if same(l)]

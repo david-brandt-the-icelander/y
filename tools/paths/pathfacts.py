@@ -5,8 +5,9 @@ the text it had.
     python3 tools/paths/pathfacts.py <example folder>
 
 It reads the Y source through its tree (`ytree.py`, from `tools/y-parse`): the decisions, the functions with injected
-capabilities, the tests and what they cover, and the places of the other facts (`places.py`). Places that no fact's
-words find move by comparing the files with the ones in git's HEAD, so run it on uncommitted edits (`rebare.sh` does)."""
+capabilities, the tests and what they cover, and the places of the other facts (`places.py`). A place that no fact's
+words find moves with what was on its line in git's HEAD: in the Y source, the node found again in the tree; in a bare
+body, the line's text. So run it on uncommitted edits (`rebare.sh` does)."""
 import json, os, re, subprocess, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import places, yp, ytree
@@ -45,20 +46,29 @@ def old_lines(path):
     return old[path]
 
 
+old_trees = {}
+
+
+def old_tree(path):
+    """The tree of a Y file as git's `HEAD` has it; None when it does not parse."""
+    if path not in old_trees:
+        old_trees[path] = ytree.parse_text("\n".join(old_lines(path)))
+    return old_trees[path]
+
+
 def moved(place):
-    """A place found by its old line's text: for facts no test finds (see places.py)."""
+    """Where a place went, for facts no finder places (see places.py): in the Y source, the node that started on its
+    old line, found again in the tree; in a bare body, the line with its old text. A file that kept its length keeps
+    the number."""
     path, n = place.rsplit(":", 1)
-    hit = places.by_text(old_lines(path), lines(path), int(n))
+    if path.startswith("y/"):
+        hit = places.same_node(old_tree(path), tree(path), int(n))
+        if hit is None and len(old_lines(path)) == len(lines(path)):
+            hit = int(n)
+    else:
+        hit = places.by_text(old_lines(path), lines(path), int(n))
     if hit is None:
-        text = old_lines(path)[int(n) - 1] if int(n) <= len(old_lines(path)) else ""
-        # a line taken into a region's header keeps its text there: `within d or fail:` in `region r is within d or
-        # fail:`, or a claim's `because "…"`
-        because = re.search(r'because ".*"', text)
-        key = because.group(0) if because else text.strip()
-        hits = [i for i, l in enumerate(lines(path), 1) if key and "region " in l and key in l]
-        hit = min(hits, key=lambda i: abs(i - int(n))) if hits else None
-    if hit is None:
-        raise SystemExit(f"{place}: `{old_lines(path)[int(n) - 1]}` is gone")
+        raise SystemExit(f"{place}: what was there is gone")
     return f"{path}:{hit}"
 
 

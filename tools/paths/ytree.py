@@ -27,6 +27,17 @@ def tree(path):
     return trees([path])[path]
 
 
+def parse_text(text):
+    """The tree of a Y source given as text, such as a file as git's `HEAD` has it; None when it does not parse."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "source.y")
+        with open(p, "w") as fh:
+            fh.write(text)
+        run = subprocess.run(["cargo", "run", "-q", "--release", "--manifest-path", MANIFEST, "--", p], capture_output=True, text=True)
+        return json.loads(run.stdout)[p] if run.returncode == 0 else None
+
+
 def nodes(node, key):
     """The nodes of a field: those of a list, or the one node it holds; none when it is missing or null."""
     v = node.get(key)
