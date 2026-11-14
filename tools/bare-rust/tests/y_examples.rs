@@ -11,8 +11,9 @@
 //! - the paths of each module (`y_paths`, Y § 3.5) are the ones `bare/y-facts.json` lists, every loop that may never
 //!   run has its `else`, and the tests together cover every path that needs a test (Y § 3.14).
 //!
-//! The Y source is read through its tree, from `y-parse` (`tools/y-parse`): for the regions, the named decisions and the
-//! layout rules here, and in `y_levels`, `y_lint` and `y_paths`.
+//! The Y source is read through its tree, from `y-parse` (`tools/y-parse`): for the regions, the named decisions, the
+//! layout rules and each test's `when` here, and in `y_levels`, `y_lint` and `y_paths`. Only the checks that a fact's
+//! place holds what the fact says open the line it names.
 //!
 //! To refresh the Rust after editing the bare files, from `tools/bare-rust`:
 //! `cargo run -q -- weave ../../examples/<name>/bare --out ../../examples/.woven --crate ../../examples/<name>`, then
@@ -654,6 +655,7 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
     // (it checks what the paths do not tell apart, such as which failure a call gives) says nothing of covering
     let test_module = facts["modules"].as_array().unwrap().iter().find(|m| m["y"].as_str().unwrap().ends_with(".test.y")).unwrap();
     let rust_tests = read(&dir.join(test_module["rust"].as_str().unwrap()));
+    let test_tree = y_parse::parse_file(&dir.join(test_module["y"].as_str().unwrap())).unwrap_or_else(|e| panic!("{e}"));
     for (test, t) in facts["tests"].as_object().unwrap() {
         let covers: Vec<&str> = t["covers"].as_array().unwrap().iter().map(|c| c.as_str().unwrap()).collect();
         let y = at(t["y"].as_str().unwrap());
@@ -668,10 +670,13 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
         assert!(covers.len() <= 1, "{test}: covers {} paths, not one", covers.len());
         if let Some(path) = covers.first() {
             let function = path.split(" > ").next().unwrap();
-            let when = when_of(&read(&dir.join(test_module["y"].as_str().unwrap())), test);
-            assert_eq!(when.len(), 1, "{test}: `when` holds {} statements, not the one call: {when:?}", when.len());
-            let called = when[0].contains(&format!("{function}(")) && !when[0].contains(&format!(".{function}("));
-            assert!(called, "{test}: covers a path of `{function}`, but `when` does not call it: `{}`", when[0]);
+            let when = when_of(&test_tree, test);
+            let lines: Vec<usize> = when.iter().map(|w| w.line).collect();
+            assert_eq!(when.len(), 1, "{test}: `when` holds {} statements, not the one call, at lines {lines:?}", when.len());
+            // a call of the function by its name, and none of a method of that name
+            let callees: Vec<&y_parse::Node> = when[0].find("call").into_iter().map(|c| c.node("callee").unwrap()).collect();
+            let named = |kind: &str| callees.iter().any(|c| c.kind == kind && c.str("name") == Some(function));
+            assert!(named("name") && !named("member"), "{test}: covers a path of `{function}`, but `when`, at line {}, does not call it", when[0].line);
         }
     }
 }
@@ -735,22 +740,11 @@ fn layout(y: &str, tree: &y_parse::Node) -> Vec<String> {
     errors
 }
 
-/// The statements of a test's `when` section, each with the lines it continues onto.
-fn when_of(source: &str, test: &str) -> Vec<String> {
-    let lines: Vec<&str> = source.lines().collect();
-    let start = lines.iter().position(|l| l.starts_with(&format!("test {test}")) && l[5 + test.len()..].trim_start_matches(':').is_empty()).unwrap();
-    let begin = start + lines[start..].iter().position(|l| l.trim() == "when:").unwrap_or_else(|| panic!("{test}: no `when`"));
-    let body: Vec<&str> = lines[begin + 1..].iter().copied().take_while(|l| l.starts_with("        ") || l.trim().is_empty()).filter(|l| !l.trim().is_empty() && !l.trim().starts_with("--")).collect();
-    let indent = body.first().map_or(0, |l| l.len() - l.trim_start().len());
-    let mut out: Vec<String> = vec![];
-    for l in body {
-        if l.len() - l.trim_start().len() == indent {
-            out.push(l.trim().to_string());
-        } else {
-            out.last_mut().unwrap().push_str(&format!(" {}", l.trim()));
-        }
-    }
-    out
+/// The statements of a test's `when` section, from the test file's tree.
+fn when_of<'a>(tree: &'a y_parse::Node, test: &str) -> Vec<&'a y_parse::Node> {
+    let t = tree.nodes("decls").into_iter().find(|d| d.kind == "test" && d.str("name") == Some(test)).unwrap_or_else(|| panic!("{test}: no such test"));
+    let when = t.nodes("sections").into_iter().find(|x| x.str("name") == Some("when")).unwrap_or_else(|| panic!("{test}: no `when`"));
+    when.nodes("body")
 }
 
 /// A function of the path rules' own: a loop that may never run, a comparison of numbers on each side, and a `compare`
