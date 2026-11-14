@@ -104,8 +104,8 @@ The proposal has forms that no example uses, and the parser rejects them, or rea
 `submit`; `native because "…"` in place of a body, and `native` types; `assume`, `allow` and `reveal`; a test's
 `faults`; `log` and `metric`; a collection's `ordered by`, `unique` and the other words of its declaration; `policy`
 and `compensate`. It does not check that a name is a reserved word used where only that word may stand, nor the layout
-rules of § 3.1 (two blank lines between declarations, and the rest), which `tools/bare-rust/tests/y_examples.rs`
-checks on the text.
+and lint rules of § 3.1, § 3.2 and § 3.5, which `tools/bare-rust/tests/y_examples.rs` checks on the tree. It does
+refuse two forms the lint rules forbid, with an error of their own: an `else if` ladder, and an `else` without a name.
 
 ## Who uses it
 
@@ -123,14 +123,14 @@ checks on the text.
   write from the nodes, `game.misses.count()`, and the brackets the source writes (`parens`) decide how `and` and
   `or` split.
 - `tools/bare-rust/tests/y_examples.rs` checks the layout rules of § 3.1 on the blank lines and comments the tree
-  records, reads each test's `when` from it, to check that the test calls the function whose path it covers, and
-  finds there the node at each place a fact in `y-facts.json` gives.
+  records, and its lint rules on the tree: the roles of a documentation block grouped by kind, no brackets around a
+  single element, a name changed only when it is `mutable`. It reads each test's `when` from the tree, to check that
+  the test calls the function whose path it covers, and finds there the node at each place a fact in `y-facts.json`
+  gives.
 - `tools/paths/trace.py` reads the tests and the path each claims to cover from the test file's tree.
 - The lint `type_argument_name`, `tools/paths/ylint.py` and its twin `tools/bare-rust/tests/y_lint/mod.rs`, reads the
   type arguments in the code and in the types documentation entries end with, the declarations, and the comments that
   suppress it.
 
-Five lint rules in `y_examples.rs` still read Y as lines: documentation roles grouped by kind, no brackets around a
-single element, a name changed only when it is `mutable`, no `else if`, and no `else` without a name. Besides them,
-when `pathfacts.py` finds no node for a fact, it falls back to the text the fact's line had in git's `HEAD`
-(`places.by_text`).
+No tool reads Y as lines any more. Where a fact must be found again by what it said, and no node says it,
+`pathfacts.py` falls back to the text the fact's line had in git's `HEAD` (`places.by_text`).

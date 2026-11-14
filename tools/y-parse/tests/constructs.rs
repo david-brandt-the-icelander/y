@@ -244,7 +244,10 @@ fn the_json_has_kind_line_and_fields() {
 /// Malformed sources: each error names the line where it went wrong.
 #[test]
 fn a_malformed_file_gives_an_error_with_its_line() {
-    let cases: [(&str, usize, &str); 12] = [
+    let cases: [(&str, usize, &str); 15] = [
+        ("module m\n\nfunction f(x):\n    if a = b:\n        c()\n    else if d = e:\n        c()\n", 6, "`else if` ladder"),
+        ("module m\n\nfunction f(x):\n    if a = b:\n        c()\n    else:\n        c()\n", 6, "`else` without a name"),
+        ("module m\n\nfunction f(x):\n    conditional j:\n        condition j.a = b:\n            c()\n        else:\n            c()\n", 7, "`else` without a name"),
         ("module m\n\nfunction f(x:\n", 3, "bracket"),
         ("module m\n\nfunction f(x):\n    a = \"open\n", 4, "string"),
         ("module m\n\nfunction f(x):\n    a = 1 +\n", 4, "expected an expression"),

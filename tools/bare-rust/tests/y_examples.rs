@@ -12,9 +12,8 @@
 //!   run has its `else`, and the tests together cover every path that needs a test (Y § 3.14).
 //!
 //! The Y source is read through its tree, from `y-parse` (`tools/y-parse`): for the places the facts give, the regions,
-//! the named decisions, the layout rules and each test's `when` here, and in `y_levels`, `y_lint` and `y_paths`. Five
-//! lint rules here still read its lines: documentation roles grouped by kind, no brackets around a single element, a
-//! name changed only when `mutable`, no `else if`, and no `else` without a name.
+//! the named decisions, the layout and lint rules and each test's `when` here, and in `y_levels`, `y_lint` and
+//! `y_paths`.
 //!
 //! To refresh the Rust after editing the bare files, from `tools/bare-rust`:
 //! `cargo run -q -- weave ../../examples/<name>/bare --out ../../examples/.woven --crate ../../examples/<name>`, then
@@ -544,145 +543,11 @@ fn facts_match_the_y_source_and_the_bare_bodies(name: &str) {
     let required: BTreeSet<String> = paths.iter().filter(|(_, k)| !y_paths::EXEMPT.contains(&k.as_str())).map(|(p, _)| p.clone()).collect();
     let covered: BTreeSet<String> = facts["tests"].as_object().unwrap().values().flat_map(|t| t["covers"].as_array().unwrap().iter().map(|c| c.as_str().unwrap().to_string())).collect();
     assert_eq!(covered, required, "the paths the tests cover and the paths of the module differ");
-    // documentation roles of one kind sit together, and one blank line separates the kinds (a lint rule of Y § 3.2)
-    for y in &code {
-        let source = read(&dir.join(y));
-        let lines: Vec<&str> = source.lines().collect();
-        let is_rule = |l: &str| l.trim().len() >= 3 && l.trim().chars().all(|c| c == '-');
-        let mut i = 0;
-        while i < lines.len() {
-            if !is_rule(lines[i]) {
-                i += 1;
-                continue;
-            }
-            let end = i + 1 + lines[i + 1..].iter().position(|l| is_rule(l)).unwrap();
-            let indent = lines[i].len() - lines[i].trim_start().len();
-            let header: Vec<&str> = lines[end + 1..].iter().copied().take_while(|l| !l.trim().is_empty()).scan(false, |done, l| {
-                if *done { return None; }
-                *done = l.trim_end().ends_with(':');
-                Some(l)
-            }).collect();
-            let text = header.join(" ");
-            let params: Vec<String> = text.split_once('(').and_then(|(_, r)| r.split_once(')')).map(|(p, _)| p.split(',').map(|x| x.trim().trim_start_matches("mutable ").to_string()).collect()).unwrap_or_default();
-            let result = text.split_once(" returns ").map(|(_, r)| r.split_whitespace().next().unwrap().to_string());
-            // the capabilities are the parameters marked `injected`
-            let caps: Vec<String> = params.iter().filter_map(|p| p.strip_prefix("injected ").map(str::to_string)).collect();
-            let kind = |l: &str| -> Option<String> {
-                let t = l.trim();
-                if t.starts_with("fails ") {
-                    return Some("fails".into());
-                }
-                let name = t.split_once(':')?.0;
-                if name.is_empty() || !name.chars().all(|c| c.is_ascii_lowercase() || c == '_') {
-                    return None;
-                }
-                Some(if params.iter().any(|p| p == name) { "parameter".into() } else if result.as_deref() == Some(name) { "result".into() } else if caps.iter().any(|c| c == name) { "capability".into() } else { format!("role {name}") })
-            };
-            let (mut previous, mut blanks): (Option<String>, usize) = (None, 0);
-            for (k, l) in lines[i + 1..end].iter().enumerate() {
-                let at = i + 2 + k;
-                if l.trim().is_empty() {
-                    blanks += 1;
-                } else if l.len() - l.trim_start().len() > indent {
-                    blanks = 0;
-                } else if let Some(this) = kind(l) {
-                    if let Some(before) = &previous {
-                        let want = usize::from(*before != this);
-                        assert_eq!(blanks, want, "{y}:{at}: {blanks} blank lines between a {before} and a {this}, not {want}");
-                    }
-                    (previous, blanks) = (Some(this), 0);
-                } else {
-                    (previous, blanks) = (None, 0);
-                }
-            }
-            i = end + 1;
-        }
-    }
-    // no parentheses around a single element: a name, a literal, a field path, an index or a call (a lint rule of Y § 3.1)
+    // the lint rules of Y § 3.1, § 3.2 and § 3.5 the examples keep, on the trees; an `else if` ladder and an `else`
+    // without a name are refused by the parser
     for y in &all {
-        for (n, line) in read(&dir.join(y)).lines().enumerate() {
-            if line.trim_start().starts_with("--") {
-                continue;
-            }
-            let chars: Vec<char> = line.chars().collect();
-            for (k, c) in chars.iter().enumerate() {
-                let opens_group = *c == '(' && (k == 0 || !(chars[k - 1].is_alphanumeric() || "_)]>\"".contains(chars[k - 1])));
-                if !opens_group {
-                    continue;
-                }
-                let (mut depth, mut in_string, mut grouped) = (0, false, false);
-                for d in &chars[k..] {
-                    match d {
-                        '"' => in_string = !in_string,
-                        '(' | '[' if !in_string => depth += 1,
-                        ')' | ']' if !in_string => {
-                            depth -= 1;
-                            if depth == 0 {
-                                break;
-                            }
-                        }
-                        ' ' | ',' if !in_string && depth == 1 => grouped = true,
-                        _ => {}
-                    }
-                }
-                assert!(grouped, "{y}:{}: parentheses around a single element: `{}`", n + 1, line.trim());
-            }
-        }
-    }
-    // a name is changed, by `:=` or as a `mutable` argument, only when it was declared `mutable` (Y § 3.1, § 3.6)
-    for y in &all {
-        let mut declared: BTreeSet<String> = BTreeSet::new();
-        // a migration's body gives each new field its value with `:=` (Y § 3.12), which changes no name
-        let mut migration: Option<usize> = None;
-        for (n, line) in read(&dir.join(y)).lines().enumerate() {
-            let t = line.trim();
-            let indent = line.len() - line.trim_start().len();
-            if migration.is_some_and(|at| !t.is_empty() && indent <= at) {
-                migration = None;
-            }
-            if t.starts_with("migrate ") {
-                migration = Some(indent);
-                continue;
-            }
-            if migration.is_some() {
-                continue;
-            }
-            if t.starts_with("function ") || t.starts_with("test ") {
-                declared.clear();
-                if let Some((_, params)) = t.split_once('(') {
-                    for p in params.split(')').next().unwrap().split(',') {
-                        if let Some(name) = p.trim().trim_start_matches("injected ").strip_prefix("mutable ") {
-                            declared.insert(name.to_string());
-                        }
-                    }
-                }
-            }
-            if let Some((name, _)) = t.strip_prefix("mutable ").and_then(|r| r.split_once(" = ")) {
-                declared.insert(name.to_string());
-            }
-            let mut changed: Vec<String> = Vec::new();
-            if let Some((target, _)) = t.split_once(" := ") {
-                changed.push(target.split('.').next().unwrap().to_string());
-            }
-            for (k, _) in t.match_indices("mutable ") {
-                if k > 0 && (t[..k].ends_with('(') || t[..k].ends_with(", ")) && !t.starts_with("function ") {
-                    changed.push(t[k + 8..].split([',', ')']).next().unwrap().to_string());
-                }
-            }
-            for name in changed {
-                assert!(declared.contains(&name), "{y}:{}: `{name}` changes but is not declared `mutable`", n + 1);
-            }
-        }
-    }
-    // `if` chooses between two ways; a ladder of `else if`s is a lint error, written as a `conditional` (Y § 3.5)
-    for y in &all {
-        for (n, line) in read(&dir.join(y)).lines().enumerate() {
-            assert!(!line.trim_start().starts_with("else if "), "{y}:{}: an `else if` ladder, not a `conditional`", n + 1);
-        }
-    }
-    // no `else` goes without a name
-    for y in &all {
-        assert!(!read(&dir.join(y)).lines().any(|l| l.trim() == "else:"), "{y}: an `else` without a name");
+        let errors = lints(y, &trees[y], code.contains(y));
+        assert!(errors.is_empty(), "{errors:#?}");
     }
     // each test covers what its Y source declares and its Rust comment repeats; a test that covers no path of its own
     // (it checks what the paths do not tell apart, such as which failure a call gives) says nothing of covering
@@ -770,6 +635,82 @@ fn layout(y: &str, tree: &y_parse::Node) -> Vec<String> {
         if c.num("blank") == Some(0) && !matches!(c.str("after"), Some("comment" | "head")) {
             errors.push(format!("{y}:{}: no blank line before the comment `-- {}`", c.line, c.str("text").unwrap()));
         }
+    }
+    errors.sort_by_key(|e| e.split(':').nth(1).and_then(|l| l.parse::<usize>().ok()));
+    errors
+}
+
+/// The lint rules the examples keep, read from a file's tree:
+///
+/// - in the documentation of a declaration of a module (`code`), the entries of one kind sit together (a parameter, the
+///   result, a capability, a `fails`, or a role of another name), and one blank line separates two kinds (Y § 3.2);
+/// - no brackets around a single element: a name, a literal, a field path, an index, a call, a list or a negative number
+///   (Y § 3.1);
+/// - a name is changed, by `:=` or as a `mutable` argument, only when it was declared `mutable` (Y § 3.1, § 3.6); a
+///   migration's body gives each new field its value with `:=` (Y § 3.12), which changes no name.
+fn lints(y: &str, tree: &y_parse::Node, code: bool) -> Vec<String> {
+    let mut errors = vec![];
+    if code {
+        tree.walk(&mut |owner: &y_parse::Node| {
+            let Some(doc) = owner.node("doc") else { return };
+            let params = owner.nodes("params");
+            let named = |injected: bool, name: &str| params.iter().any(|p| p.flag("injected") == injected && p.str("name") == Some(name));
+            let lines: Vec<&str> = doc.str("text").unwrap().split('\n').collect();
+            let blank = |line: usize| lines.get(line - doc.line - 1).is_some_and(|l| l.trim().is_empty());
+            let mut previous: Option<(String, usize)> = None;
+            for e in doc.nodes("entries") {
+                let name = e.str("name").unwrap();
+                let kind = if name.starts_with("fails ") {
+                    Some("fails".to_string())
+                } else if !name.is_empty() && name.chars().all(|c| c.is_ascii_lowercase() || c == '_') {
+                    Some(if named(false, name) { "parameter".into() } else if owner.str("returns") == Some(name) { "result".into() } else if named(true, name) { "capability".into() } else { format!("role {name}") })
+                } else {
+                    None
+                };
+                // prose between two entries, or an entry of no kind, starts again
+                if let (Some((before, end)), Some(this)) = (&previous, &kind) {
+                    if (end + 1..e.line).all(blank) {
+                        let (blanks, want) = (e.line - end - 1, usize::from(before != this));
+                        if blanks != want {
+                            errors.push(format!("{y}:{}: {blanks} blank lines between a {before} and a {this}, not {want}", e.line));
+                        }
+                    }
+                }
+                previous = kind.map(|k| (k, e.num("end").unwrap()));
+            }
+        });
+    }
+    // no brackets around a single element
+    tree.walk(&mut |n: &y_parse::Node| {
+        let single = matches!(n.kind, "name" | "literal" | "member" | "index" | "call" | "list") || (n.kind == "unary" && n.str("op") == Some("-"));
+        if n.flag("parens") && single {
+            errors.push(format!("{y}:{}: brackets around a single element, a {}", n.line, n.kind));
+        }
+    });
+    // a name changed only when it was declared `mutable`, in each function and test
+    for f in tree.find("function").into_iter().chain(tree.find("test")) {
+        let mut declared: BTreeSet<String> = f.nodes("params").iter().filter(|p| p.flag("mutable")).map(|p| p.str("name").unwrap().to_string()).collect();
+        let root = |e: &y_parse::Node| {
+            let mut e = e;
+            while e.kind == "member" || e.kind == "index" {
+                e = e.node("object").unwrap();
+            }
+            (e.kind == "name").then(|| e.str("name").unwrap().to_string())
+        };
+        f.walk(&mut |n: &y_parse::Node| {
+            let changed = match n.kind {
+                "let" if n.flag("mutable") => {
+                    declared.insert(n.str("name").unwrap().to_string());
+                    None
+                }
+                "assign" => root(n.node("target").unwrap()),
+                "mutable" => root(n.node("value").unwrap()),
+                _ => None,
+            };
+            if let Some(name) = changed.filter(|c| !declared.contains(c)) {
+                errors.push(format!("{y}:{}: `{name}` changes but is not declared `mutable`", n.line));
+            }
+        });
     }
     errors.sort_by_key(|e| e.split(':').nth(1).and_then(|l| l.parse::<usize>().ok()));
     errors

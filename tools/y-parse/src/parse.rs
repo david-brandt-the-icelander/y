@@ -114,6 +114,17 @@ impl<'a> P<'a> {
             self.err(&format!("`{s}`"))
         }
     }
+    /// After `else`: an `else` names its outcome, and does not open an `if` (Y § 3.5).
+    fn else_named(&self) -> Result<(), Error> {
+        if self.is("if") {
+            return Err(Error::new(self.here(), "an `else if` ladder: write a `conditional`, which names each outcome"));
+        }
+        if self.done() || self.is(":") {
+            return Err(Error::new(self.here(), "an `else` without a name: name the outcome it stands for"));
+        }
+        Ok(())
+    }
+
     fn ident(&mut self) -> Result<String, Error> {
         if self.ident_at(0) {
             Ok(self.next().text.clone())
@@ -727,6 +738,7 @@ fn stmts(entries: &[Entry], src: &str) -> Result<Vec<Node>, Error> {
         let block = !e.children.is_empty();
         if p.is("else") {
             p.i += 1;
+            p.else_named()?;
             let name = p.ident()?;
             p.finish(block)?;
             let els = Node::new("else", line).with("name", name).with("end", e.end()).with("body", stmts(&e.children, src)?);
@@ -795,7 +807,9 @@ fn stmts(entries: &[Entry], src: &str) -> Result<Vec<Node>, Error> {
                         return Err(Error::new(cline, &format!("nothing follows the `else` of `{word} {label}` in its block")));
                     }
                     let is_else = q.eat("else");
-                    if !is_else {
+                    if is_else {
+                        q.else_named()?;
+                    } else {
                         q.expect("condition")?;
                     }
                     let name = q.dotted()?;
