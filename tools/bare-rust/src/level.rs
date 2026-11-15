@@ -36,6 +36,12 @@
 //!   parameter may be any impl of the trait in the crate, and needs the most of them; a library's trait method needs
 //!   the level of its type's module and of its trait's.
 //!
+//!   A call through a function pointer, a `dyn Fn…` or a type parameter bound by `Fn…` names no function in MIR, only
+//!   the types of its arguments. It may be any function the crate names as a value (passes, binds, makes a pointer or a
+//!   `dyn Fn`) or any closure the crate writes that takes those types (a type parameter takes any), and needs the most
+//!   of them (`analyse`). A closure is read on its own for this, as `function::{closure@line:col}`; what it uses is its
+//!   function's already, and is reported there.
+//!
 //!   rustc's MIR is read for every target of the crate (library, binaries, integration tests), for the library and
 //!   binaries again with their unit tests (`cfg(test)`), and in every build whose check passed (`crate::builds`: its
 //!   target, features, `--cfg` and profile), so code that only a test or another build compiles is read from rustc too.
@@ -62,7 +68,7 @@
 //! repeats). An invocation of it is a call of it, and needs what it needs; one that expands to itself is not recursion
 //! at run time. Its body counts in the module it is defined in, as a function's does. What a rule's right side builds
 //! from tokens it is given (`$body` that is code) is the invocation's, through the arguments.
-use crate::facts::{Callee, Fact, Facts};
+use crate::facts::{Callee, Fact, Facts, Kind};
 use crate::{parse_bare, text};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -161,6 +167,16 @@ enum Call {
     Resolved(Callee),
     /// An invocation of a macro the crate defines, by its name.
     Macro(String),
+    /// A call of a closure, as rustc resolved it: where the closure is written (bare file, offset).
+    Closure((String, usize)),
+}
+
+/// A fact as a call: one of a closure is the closure's, by where it is written.
+fn fact_call(f: &Fact) -> Call {
+    match (&f.callee.kind, &f.def) {
+        (Kind::CallClosure, Some(def)) => Call::Closure(def.clone()),
+        _ => Call::Resolved(f.callee.clone()),
+    }
 }
 
 /// A function of the crate: its path, its file, what it uses itself, and the calls it makes, with their lines; and,
@@ -177,6 +193,10 @@ struct Function {
     resolved: bool,
     /// Whether it is a macro the crate defines (`macro_rules! name`, kept as `module::name!`): what its rules expand to.
     is_macro: bool,
+    /// For a closure (`function::{closure@line:col}`): where it is written, as its bare file and the offset it starts
+    /// at. A closure is read on its own only as what a call through a pointer or an `Fn` bound may call: what it uses is
+    /// its function's already, and is reported there.
+    closure: Option<(String, usize)>,
 }
 
 /// An import: the module it is in, the path as written, its file and line.
@@ -213,7 +233,7 @@ fn read_file(file: &str, brs: &str, js: &Value, facts: Option<&[Fact]>, crate_ma
     let mut resolved: Vec<Vec<(Call, usize)>> = vec![vec![]; found.len()];
     for f in facts.into_iter().flatten() {
         if let Some(i) = enclosing(&found, f.offset) {
-            resolved[i].push((Call::Resolved(f.callee.clone()), f.line));
+            resolved[i].push((fact_call(f), f.line));
         }
     }
     for (k, (path, node)) in found.iter().enumerate() {
@@ -235,7 +255,7 @@ fn read_file(file: &str, brs: &str, js: &Value, facts: Option<&[Fact]>, crate_ma
             if from_rustc {
                 calls = std::mem::take(&mut resolved[k]);
             }
-            fns.push(Function { path: path.clone(), file: file.to_string(), own, calls, trait_name: None, macros, resolved: from_rustc, is_macro });
+            fns.push(Function { path: path.clone(), file: file.to_string(), own, calls, trait_name: None, macros, resolved: from_rustc, is_macro, closure: None });
             continue;
         }
         if node.child_by_field_name("body").is_some() {
@@ -289,7 +309,37 @@ fn read_file(file: &str, brs: &str, js: &Value, facts: Option<&[Fact]>, crate_ma
             calls = std::mem::take(&mut resolved[k]);
         }
         let trait_name = node.parent().and_then(|p| p.parent()).filter(|p| p.kind() == "impl_item").and_then(|p| p.child_by_field_name("trait")).map(|t| last_segment(text(t, brs)));
-        fns.push(Function { path: path.clone(), file: file.to_string(), own, calls, trait_name, macros, resolved: from_rustc, is_macro });
+        fns.push(Function { path: path.clone(), file: file.to_string(), own, calls, trait_name, macros, resolved: from_rustc, is_macro, closure: None });
+    }
+    // each closure of a function, read on its own: what a call through a pointer or an `Fn` bound may call
+    for (path, node) in found.iter().filter(|(_, n)| n.kind() == "function_item") {
+        let mut stack = vec![];
+        if let Some(body) = node.child_by_field_name("body") {
+            stack.push(body);
+        }
+        while let Some(n) = stack.pop() {
+            if n.kind() == "function_item" {
+                continue;
+            }
+            if n.kind() == "closure_expression" {
+                let (l, c) = (n.start_position().row + 1, n.start_position().column + 1);
+                let cpath = format!("{path}::{{closure@{l}:{c}}}");
+                let mut own = vec![];
+                let mut add = |level: &str, what: String, line: usize| own.push(Use { level: rank(level).unwrap(), what, function: cpath.clone(), file: file.to_string(), line });
+                let (mut calls, mut macros) = (vec![], vec![]);
+                if let Some(body) = n.child_by_field_name("body") {
+                    walk(body, brs, 0, &mut add, &mut calls, &mut macros);
+                }
+                let inside: Vec<(Call, usize)> = facts.into_iter().flatten().filter(|f| f.offset >= n.start_byte() && f.offset < n.end_byte()).map(|f| (fact_call(f), f.line)).collect();
+                let from_rustc = facts.is_some() && !inside.is_empty();
+                if from_rustc {
+                    calls = inside;
+                }
+                fns.push(Function { path: cpath, file: file.to_string(), own, calls, trait_name: None, macros, resolved: from_rustc, is_macro: false, closure: Some((file.to_string(), n.start_byte())) });
+            }
+            let mut c = n.walk();
+            stack.extend(n.named_children(&mut c));
+        }
     }
     // a macro needs the level of the library it is from, read from its invocation in either way (`macro_level`); one the
     // crate defines is called, as a function is, and needs what its rules expand to
@@ -661,7 +711,7 @@ fn resolve(call: &Call, caller: &str, krate: &str, fns: &BTreeMap<String, usize>
             let one = hits.len() == 1;
             (hits, one)
         }
-        Call::Resolved(_) => (vec![], false),
+        Call::Resolved(_) | Call::Closure(_) => (vec![], false),
         Call::Macro(name) => {
             let hits: Vec<usize> = fns.iter().filter(|(p, _)| p.ends_with(&format!("::{name}!"))).map(|(_, i)| *i).collect();
             let one = hits.len() == 1;
@@ -777,6 +827,32 @@ pub fn uses(files: &[(String, String, Value)]) -> Vec<Use> {
 /// As `uses`, with the calls rustc resolved in the files it gave facts for (`crate::facts`), and the syntax's in the
 /// others.
 pub fn uses_with(files: &[(String, String, Value)], facts: Option<&Facts>) -> Vec<Use> {
+    analyse(files, facts).uses
+}
+
+/// What a crate's bodies use (`uses_with`), and the argument types of everything a call through a function pointer or
+/// an `Fn` bound may call: for the region check (`crate::region::check_body_with`), which holds a region to the whole
+/// crate's.
+pub struct CrateLevels {
+    pub uses: Vec<Use>,
+    pub candidates: Vec<Vec<String>>,
+}
+
+impl CrateLevels {
+    /// How many functions and closures of the crate a call through a pointer or an `Fn` bound taking `args` may be.
+    pub fn candidates_for(&self, args: &[String]) -> usize {
+        self.candidates.iter().filter(|a| fits(args, a)).count()
+    }
+}
+
+/// Whether a candidate that takes `have` fits a call that passes `want`: the same types, a type parameter (`_`) fitting
+/// any.
+fn fits(want: &[String], have: &[String]) -> bool {
+    want.len() == have.len() && want.iter().zip(have).all(|(a, b)| a == b || a == "_" || b == "_")
+}
+
+/// `uses_with` and the candidates of indirect calls, together (`CrateLevels`).
+pub fn analyse(files: &[(String, String, Value)], facts: Option<&Facts>) -> CrateLevels {
     let (mut fns, mut imports) = (vec![], vec![]);
     let mut types = BTreeSet::new();
     let crate_macros: BTreeSet<String> = files.iter().flat_map(|(_, brs, _)| macro_names(parse_bare(brs).root_node(), brs)).collect();
@@ -790,13 +866,69 @@ pub fn uses_with(files: &[(String, String, Value)], facts: Option<&Facts>) -> Ve
     // does not list needs `effects`
     let mut targets: Vec<Vec<Option<Callees>>> = vec![];
     let mut library: Vec<Vec<Use>> = vec![];
+    // what a call through a pointer or an `Fn` bound may call: the functions named as values, and the closures, by the
+    // types of their arguments
+    let closures: BTreeMap<(String, usize), usize> = fns.iter().enumerate().filter_map(|(i, f)| Some((f.closure.clone()?, i))).collect();
+    let mut values: Vec<(Vec<String>, Callee)> = vec![];
+    let mut closure_args: Vec<(Vec<String>, usize)> = vec![];
+    for f in &fns {
+        for (c, _) in &f.calls {
+            if let Call::Resolved(c @ Callee { kind: Kind::Value(args), .. }) = c {
+                values.push((args.clone(), c.clone()));
+            }
+        }
+    }
+    for (file, list) in facts.into_iter().flatten() {
+        for x in list {
+            if let (Kind::Closure(args), Some(def)) = (&x.callee.kind, &x.def) {
+                if let Some(i) = closures.get(&(file.clone(), def.1)).or_else(|| closures.get(def)) {
+                    closure_args.push((args.clone(), *i));
+                }
+            }
+        }
+    }
     for f in &fns {
         let (mut t, mut lib) = (vec![], vec![]);
         for (c, line) in &f.calls {
+            if let Call::Closure(def) = c {
+                t.push(Some((closures.get(def).into_iter().copied().collect(), true)));
+                continue;
+            }
             let Call::Resolved(c) = c else {
                 t.push(None);
                 continue;
             };
+            match &c.kind {
+                Kind::Closure(_) => {
+                    // where a closure is written: its body is the function's already
+                    t.push(Some((vec![], false)));
+                    continue;
+                }
+                Kind::CallClosure => {
+                    // a closure rustc could not place: nothing to follow
+                    t.push(Some((vec![], false)));
+                    continue;
+                }
+                Kind::Indirect(args) => {
+                    // any closure, or function named as a value, that takes these arguments
+                    let mut hits: Vec<usize> = closure_args.iter().filter(|(a, _)| fits(args, a)).map(|(_, i)| *i).collect();
+                    for (_, v) in values.iter().filter(|(a, _)| fits(args, a)) {
+                        match resolve_fact(v, &fns, &index, &types) {
+                            Target::Crate(h, _) => hits.extend(h),
+                            Target::Library(paths) => {
+                                if let Some((l, p)) = paths.iter().map(|p| (library_level(p).unwrap_or(4), p)).max_by_key(|x| x.0).filter(|x| x.0 >= 2) {
+                                    lib.push(Use { level: l, what: format!("a call through a function pointer or an `Fn` bound, which may be `{p}`"), function: f.path.clone(), file: f.file.clone(), line: *line });
+                                }
+                            }
+                        }
+                    }
+                    hits.sort_unstable();
+                    hits.dedup();
+                    t.push(Some((hits, false)));
+                    continue;
+                }
+                _ => {}
+            }
             match resolve_fact(c, &fns, &index, &types) {
                 Target::Crate(hits, one) => t.push(Some((hits, one))),
                 Target::Library(paths) => {
@@ -827,8 +959,11 @@ pub fn uses_with(files: &[(String, String, Value)], facts: Option<&Facts>) -> Ve
                     let shown = match c {
                         Call::Path(p) => p.clone(),
                         Call::Method { name, .. } => format!(".{name}"),
+                        Call::Resolved(Callee { kind: Kind::Indirect(_), .. }) => "a function pointer or an `Fn` bound".to_string(),
+                        Call::Resolved(Callee { kind: Kind::CallClosure, .. }) => "a closure".to_string(),
                         Call::Resolved(c) => c.name.clone(),
                         Call::Macro(m) => format!("{m}!"),
+                        Call::Closure(_) => "a closure".to_string(),
                     };
                     (hits, *line, one, shown)
                 })
@@ -853,8 +988,8 @@ pub fn uses_with(files: &[(String, String, Value)], facts: Option<&Facts>) -> Ve
     let mut own: Vec<Vec<Use>> = fns.iter().zip(library).map(|(f, lib)| f.own.iter().cloned().chain(lib).collect()).collect();
     for (i, f) in fns.iter().enumerate() {
         for &(j, line) in &edges[i] {
-            // a macro that expands to itself is not recursion at run time
-            if !f.is_macro && !fns[j].is_macro && reaches(j, i) {
+            // a macro that expands to itself is not recursion at run time, and a closure's recursion is its function's
+            if !f.is_macro && !fns[j].is_macro && f.closure.is_none() && fns[j].closure.is_none() && reaches(j, i) {
                 let what = if i == j { format!("a call of `{}` inside it", short(&f.path)) } else { format!("recursion through `{}`", short(&fns[j].path)) };
                 own[i].push(Use { level: 2, what, function: f.path.clone(), file: f.file.clone(), line });
             }
@@ -878,12 +1013,21 @@ pub fn uses_with(files: &[(String, String, Value)], facts: Option<&Facts>) -> Ve
         }
     }
     let mut out = vec![];
-    for (i, f) in fns.iter().enumerate() {
+    // a closure is reported in its function, which uses all it uses
+    for (i, f) in fns.iter().enumerate().filter(|(_, f)| f.closure.is_none()) {
         out.extend(own[i].iter().cloned());
         for (hits, line, one, shown) in &calls[i] {
             let (j, most) = hits.iter().map(|j| (*j, level[*j])).max_by_key(|x| x.1).unwrap();
-            if most >= 2 && !(hits.len() == 1 && j == i) {
-                let which = if *one { format!("`{}`", short(&fns[j].path)) } else { format!("`{shown}` (it may be `{}`, which needs the most of the {} it may be)", fns[j].path, hits.len()) };
+            // a closure the function writes and calls is in its body already
+            let own_closure = hits.len() == 1 && fns[j].closure.is_some() && fns[j].path.starts_with(&format!("{}::{{closure", f.path));
+            if most >= 2 && !(hits.len() == 1 && j == i) && !own_closure {
+                let which = if *one {
+                    format!("`{}`", short(&fns[j].path))
+                } else if shown.starts_with("a function pointer") {
+                    format!("{shown} (it may be `{}`, which needs the most of the {} it may be)", fns[j].path, hits.len())
+                } else {
+                    format!("`{shown}` (it may be `{}`, which needs the most of the {} it may be)", fns[j].path, hits.len())
+                };
                 out.push(Use { level: most, what: format!("a call of {which}, which needs `{}`,", LEVELS[most]), function: f.path.clone(), file: f.file.clone(), line: *line });
             }
         }
@@ -897,7 +1041,8 @@ pub fn uses_with(files: &[(String, String, Value)], facts: Option<&Facts>) -> Ve
             }
         }
     }
-    out
+    let candidates = values.into_iter().map(|(a, _)| a).chain(closure_args.into_iter().map(|(a, _)| a)).collect();
+    CrateLevels { uses: out, candidates }
 }
 
 /// The modules with a `level`, and their levels.
@@ -1059,7 +1204,7 @@ mod tests {
     fn fact(brs: &str, at: &str, mir: &str) -> Fact {
         let offset = brs.find(at).unwrap_or_else(|| panic!("{at}"));
         let externs = ["y_runtime".to_string(), "rand".to_string()].into_iter().collect();
-        Fact { offset, line: crate::trace::line_col(brs, offset).0, callee: crate::facts::callee(mir, "c", &externs).unwrap() }
+        Fact { offset, line: crate::trace::line_col(brs, offset).0, callee: crate::facts::callee(mir, "c", &externs).unwrap(), def: None }
     }
 
     #[test]
@@ -1143,6 +1288,49 @@ mod tests {
         let errs = check_with(&[f2], Some(&facts));
         assert!(errs.len() == 1 && errs[0].contains("a call of `later!`, which needs `effects`, in `c::m::calc::e`"), "{errs:#?}");
         assert_eq!(unrepeat("$( f($x); )* ($y)*2 $( $z ),+"), "{ f(x); } (y)*2 { z }");
+    }
+
+    /// A fact of a kind other than a plain call: `def_at`, where the closure it is of or calls is written.
+    fn kind_fact(brs: &str, at: &str, kind: Kind, path: &str, def_at: Option<&str>) -> Fact {
+        let offset = brs.find(at).unwrap_or_else(|| panic!("{at}"));
+        let mut callee = if path.is_empty() { crate::facts::callee("x", "c", &Default::default()).unwrap() } else { crate::facts::callee(path, "c", &Default::default()).unwrap() };
+        callee.kind = kind;
+        let def = def_at.map(|d| ("src/m.brs".to_string(), brs.find(d).unwrap()));
+        Fact { offset, line: crate::trace::line_col(brs, offset).0, callee, def }
+    }
+
+    #[test]
+    fn a_call_through_a_pointer_or_an_fn_bound_may_be_any_value_that_fits() {
+        // `apply` calls `f`, a pointer; what may be passed are `calm` and the closure `slow`, which take a `u32`, and the
+        // closure `named`, which takes a `&str` and does not fit
+        let brs = "mod ops {\n    fn calm(x) {\n        x\n    }\n    fn apply(f) {\n        f(1)\n    }\n}\nmod main_m {\n    fn run() {\n        let slow = |n| {\n            loop {}\n        };\n        let named = |s| {\n            for c in s {\n                c;\n            }\n        };\n        crate::m::ops::apply(crate::m::ops::calm) + slow(2) + named(\"x\")\n    }\n}\n";
+        let f = pin(&file(brs, json!([pure("c::m::ops::calm"), pure("c::m::ops::apply"), pure("c::m::main_m::run")])), "c::m::ops", "calculations");
+        // from the syntax alone, `f(1)` names no function
+        assert_eq!(check(std::slice::from_ref(&f)), Vec::<String>::new());
+        let u32s = vec!["u32".to_string()];
+        let facts: Facts = [(
+            "src/m.brs".to_string(),
+            vec![
+                kind_fact(brs, "f(1)", Kind::Indirect(u32s.clone()), "", None),
+                kind_fact(brs, "crate::m::ops::calm", Kind::Value(u32s.clone()), "m::ops::calm", None),
+                kind_fact(brs, "crate::m::ops::apply", Kind::Call, "m::ops::apply", None),
+                kind_fact(brs, "|n|", Kind::Closure(u32s.clone()), "", Some("|n|")),
+                kind_fact(brs, "|s|", Kind::Closure(vec!["&str".into()]), "", Some("|s|")),
+                kind_fact(brs, "slow(2)", Kind::CallClosure, "", Some("|n|")),
+                kind_fact(brs, "named(", Kind::CallClosure, "", Some("|s|")),
+            ],
+        )]
+        .into_iter()
+        .collect();
+        let errs = check_with(std::slice::from_ref(&f), Some(&facts));
+        assert_eq!(errs.len(), 1, "{errs:#?}");
+        assert!(errs[0].contains("a call of a function pointer or an `Fn` bound (it may be `c::m::main_m::run::{closure@11:20}`, which needs the most of the 2 it may be), which needs `structured`, in `c::m::ops::apply`"), "{errs:#?}");
+        // `run` writes and calls its closures: their loops are its own, reported once
+        let all = uses_with(std::slice::from_ref(&f), Some(&facts));
+        let run: Vec<&str> = all.iter().filter(|u| u.function == "c::m::main_m::run" && u.level >= 2).map(|u| u.what.as_str()).collect();
+        assert_eq!(run, ["a loop", "a loop", "a call of `apply`, which needs `structured`,"], "{all:#?}");
+        // a type parameter fits any argument: all three take one
+        assert_eq!(analyse(std::slice::from_ref(&f), Some(&facts)).candidates_for(&["_".into()]), 3);
     }
 
     #[test]

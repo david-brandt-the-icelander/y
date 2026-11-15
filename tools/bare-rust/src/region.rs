@@ -30,9 +30,11 @@
 //! runtime's transaction, and a method is its receiver's type's. Without a build (`check_body`, a weave without
 //! cargo, a crate that does not compile), a call's function is the path it names, through the file's `use`
 //! declarations. A call rustc said nothing of (in a test) is read the second way, and a macro is read from its
-//! invocation either way (`crate::level`): `println!` in an atomic region is an effect. The rest is syntax either
-//! way: the capabilities used, by parameter name; the function passed in that is called, by name; the deadline a wait
-//! takes; `Isolation::Snapshot` and `Step::Retry`, by path.
+//! invocation either way (`crate::level`): `println!` in an atomic region is an effect. A function passed in that an
+//! atomic region calls is refused, as nothing says what it does, unless rustc's facts and the whole crate's reading
+//! (`crate::level::analyse`) say what it may be: the function values and closures of the crate that take its arguments,
+//! which then count as what the region calls. The rest is syntax either way: the capabilities used, by parameter name;
+//! the deadline a wait takes; `Isolation::Snapshot` and `Step::Retry`, by path.
 use crate::{parse_bare, text};
 use serde_json::Value;
 use tree_sitter::Node;
@@ -252,13 +254,17 @@ fn names(nodes: &[Node], src: &str, word: &str) -> bool {
 /// its clauses' constraints (`find_marker`, `agree`), and the code the marker starts keeps each of them. What the code
 /// does is read from its syntax: the calls it makes, the names it uses, the waits in it.
 pub fn check_body(brs: &str, js: &Value, name: &str) -> Result<(), String> {
-    check_body_with(brs, js, name, None)
+    check_body_with(brs, js, name, None, None)
 }
 
 /// As `check_body`, with the calls rustc resolved in the bare body (`crate::facts`): a call's function is the one rustc
 /// says, whatever the call names it by, and the calls the region makes are counted as `crate::level::uses_with` counts
 /// them. A call rustc said nothing of is read from its syntax.
-pub fn check_body_with(brs: &str, js: &Value, name: &str, facts: Option<&[crate::facts::Fact]>) -> Result<(), String> {
+///
+/// With `levels`, what the whole crate uses (`crate::level::analyse`): what the region calls is counted as the crate's
+/// reading counts it, and a call of a function passed in is held to what it may be, when rustc's facts and the crate
+/// say (the closures and function values that take its arguments), rather than refused.
+pub fn check_body_with(brs: &str, js: &Value, name: &str, facts: Option<&[crate::facts::Fact]>, levels: Option<&crate::level::CrateLevels>) -> Result<(), String> {
     let facts = facts.filter(|f| !f.is_empty());
     let base = crate::weave::base_path(js);
     let stated = find_marker(brs, &base, name)?;
@@ -340,7 +346,17 @@ pub fn check_body_with(brs: &str, js: &Value, name: &str, facts: Option<&[crate:
             if *injected && !ty.contains("Shared<") && used {
                 return Err(format!("region `{name}` is atomic and may run again, so it holds no external effect, and it uses the capability `{n}`"));
             }
-            let called = calls.iter().any(|c| c.child_by_field_name("function").is_some_and(|g| g.kind() == "identifier" && text(g, brs) == n));
+            // a call of it that rustc resolved to the crate's functions and closures that may be passed is held to what they
+            // need (below); one it could not is refused
+            let resolved = |c: &Node| {
+                let Some(g) = c.child_by_field_name("function") else { return false };
+                let fact = facts.into_iter().flatten().find(|x| x.offset >= g.start_byte() && x.offset < g.end_byte().max(g.start_byte() + 1) || x.offset == c.start_byte());
+                match (fact.map(|x| &x.callee.kind), levels) {
+                    (Some(crate::facts::Kind::Indirect(args)), Some(l)) => l.candidates_for(args) > 0,
+                    _ => false,
+                }
+            };
+            let called = calls.iter().any(|c| c.child_by_field_name("function").is_some_and(|g| g.kind() == "identifier" && text(g, brs) == n) && !resolved(c));
             if !injected && called {
                 return Err(format!("region `{name}` is atomic and may run again, and it calls `{n}`, a function passed in, whose effects nothing says"));
             }
@@ -350,7 +366,10 @@ pub fn check_body_with(brs: &str, js: &Value, name: &str, facts: Option<&[crate:
         }
         let file = format!("{}.brs", js["module"].as_str().unwrap_or("").trim_end_matches(".rs"));
         let by_file: crate::facts::Facts = facts.map(|fs| [(file.clone(), fs.to_vec())].into_iter().collect()).unwrap_or_default();
-        let effects = crate::level::uses_with(&[(file, brs.to_string(), js.clone())], facts.map(|_| &by_file));
+        let effects = match levels {
+            Some(l) => l.uses.iter().filter(|u| u.file == file).cloned().collect(),
+            None => crate::level::uses_with(&[(file, brs.to_string(), js.clone())], facts.map(|_| &by_file)),
+        };
         let waits_inside = |what: &str| what.starts_with("a wait, `waits until");
         if let Some(u) = effects.iter().find(|u| u.function == f && u.level == 4 && u.line >= rows.0 && u.line <= rows.1 && !waits_inside(&u.what)) {
             return Err(format!("region `{name}` is atomic and may run again, so it holds no external effect, and it has {} at line {} (language 6.22: `effects`)", u.what.trim_end_matches(','), u.line));
@@ -597,6 +616,42 @@ mod tests {
     }
 
     #[test]
+    fn a_function_passed_in_is_held_to_what_it_may_be() {
+        // `apply` calls `change`, passed in; the crate passes `double` (a calculation) or, in `loud`, `shout` (which
+        // prints)
+        let brs = "use y_runtime::shared::{atomic, Step};\nfn apply(count, change) {\n    // y: region add is atomic\n    atomic(\"m::apply#add\", None, |tx| Ok(Step::Done(change(tx.get(count)))))\n}\nfn double(x) {\n    x * 2\n}\nfn shout(x) {\n    println!(\"{}\", x);\n    x\n}\nfn calm(count) {\n    apply(count, double)\n}\nfn loud(count) {\n    apply(count, shout)\n}\n";
+        let apply = serde_json::json!({"kind": "function", "name": "c::m::apply", "params": [{"name": "count", "type": "Shared<u32>", "injected": true}, {"name": "change", "type": "fn(u32) -> u32"}]});
+        let js = constraints(serde_json::json!([apply, region("c::m::apply#add", &["atomic", "may run again", "on failure unchanged"])]));
+        let externs = ["y_runtime".to_string()].into_iter().collect();
+        let at = |s: &str, mir: &str, kind: crate::facts::Kind| {
+            let offset = brs.find(s).unwrap();
+            let mut callee = crate::facts::callee(mir, "c", &externs).unwrap();
+            callee.kind = kind;
+            crate::facts::Fact { offset, line: crate::trace::line_col(brs, offset).0, callee, def: None }
+        };
+        let u32s = || vec!["u32".to_string()];
+        let mut facts = vec![
+            at("atomic(", "y_runtime::shared::atomic::<u32, (), {closure@src/m.rs:4:41: 4:45}>", crate::facts::Kind::Call),
+            at("change(", "x", crate::facts::Kind::Indirect(u32s())),
+            at("double)", "m::double", crate::facts::Kind::Value(u32s())),
+        ];
+        let files = |facts: &Vec<crate::facts::Fact>| -> (Vec<(String, String, Value)>, crate::facts::Facts) {
+            (vec![("src/m.brs".to_string(), brs.to_string(), js.clone())], [("src/m.brs".to_string(), facts.clone())].into_iter().collect())
+        };
+        // without what the crate passes, the call is refused; with it, `double` is all it may be, and it is kept
+        assert!(check_body_with(brs, &js, "c::m::apply#add", Some(&facts), None).unwrap_err().contains("it calls `change`, a function passed in"));
+        let (fs, m) = files(&facts);
+        let levels = crate::level::analyse(&fs, Some(&m));
+        assert_eq!(check_body_with(brs, &js, "c::m::apply#add", Some(&facts), Some(&levels)), Ok(()));
+        // once `shout` may be passed too, the region may print
+        facts.push(at("shout)", "m::shout", crate::facts::Kind::Value(u32s())));
+        let (fs, m) = files(&facts);
+        let levels = crate::level::analyse(&fs, Some(&m));
+        let err = check_body_with(brs, &js, "c::m::apply#add", Some(&facts), Some(&levels)).unwrap_err();
+        assert!(err.contains("a call of a function pointer or an `Fn` bound (it may be `c::m::shout`"), "{err}");
+    }
+
+    #[test]
     fn rustc_sees_an_aliased_atomic_as_a_transaction() {
         // `run` is `atomic`, bound to a local: by its syntax, a call of `run`, which is no transaction
         let brs = "use y_runtime::shared::{atomic, Step};\nfn add(count) {\n    let run = atomic;\n    // y: region add is atomic\n    run(\"m::add#add\", None, |tx| Ok(Step::Done(tx.get(count))))\n}\n";
@@ -606,7 +661,7 @@ mod tests {
         let externs = ["y_runtime".to_string()].into_iter().collect();
         let at = |s: &str, mir: &str| {
             let offset = brs.find(s).unwrap();
-            crate::facts::Fact { offset, line: crate::trace::line_col(brs, offset).0, callee: crate::facts::callee(mir, "c", &externs).unwrap() }
+            crate::facts::Fact { offset, line: crate::trace::line_col(brs, offset).0, callee: crate::facts::callee(mir, "c", &externs).unwrap(), def: None }
         };
         // rustc names the function where `run` is bound and where it is called
         let facts = vec![
@@ -614,11 +669,11 @@ mod tests {
             at("run(", "y_runtime::shared::atomic::<u32, (), {closure@src/m.rs:5:30: 5:34}>"),
             at("get(", "y_runtime::shared::Tx::get::<u32>"),
         ];
-        assert_eq!(check_body_with(brs, &js, "c::m::add#add", Some(&facts)), Ok(()));
+        assert_eq!(check_body_with(brs, &js, "c::m::add#add", Some(&facts), None), Ok(()));
         // and a call in it that needs `effects`, by any name, is refused
         let mut store = facts.clone();
         store.push(at("get(", "y_runtime::store::Store::<m::Item>::read_all"));
-        let err = check_body_with(brs, &js, "c::m::add#add", Some(&store)).unwrap_err();
+        let err = check_body_with(brs, &js, "c::m::add#add", Some(&store), None).unwrap_err();
         assert!(err.contains("`read_all` (`y_runtime::store::Store::read_all`)"), "{err}");
     }
 }

@@ -39,6 +39,26 @@ pub struct Callee {
     /// Whether the receiver is named by one segment of the crate: a type parameter of the function the call is in,
     /// whose impl the caller does not choose, or a type of the crate's root module, which MIR prints the same way.
     pub param: bool,
+    /// What the fact is: a call of the item, or one of the forms of `Kind`.
+    pub kind: Kind,
+}
+
+/// What a fact says of a function: that it is called, that it is a value that may be called through a pointer or an
+/// `Fn` bound, that a call goes through one, or that a closure is there or is called.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Kind {
+    /// A call of the item `path`.
+    Call,
+    /// The item `path` named as a value (passed, bound, made a pointer or a `dyn Fn`), with the types of its arguments:
+    /// what a call through a pointer or an `Fn` bound may call.
+    Value(Vec<String>),
+    /// A call through a function pointer, a `dyn Fn…` or a type parameter bound by `Fn…`, with the types of its
+    /// arguments: it may call any function value or closure of the crate that takes those.
+    Indirect(Vec<String>),
+    /// A closure, where it is written, with the types of its arguments: what an indirect call may call.
+    Closure(Vec<String>),
+    /// A call of the closure written at the fact's `def`.
+    CallClosure,
 }
 
 /// A call in a bare file, as rustc resolved it.
@@ -48,6 +68,8 @@ pub struct Fact {
     pub offset: usize,
     pub line: usize,
     pub callee: Callee,
+    /// For a closure or a call of one: where the closure is written, as a bare file and the offset its `|` is at.
+    pub def: Option<(String, usize)>,
 }
 
 /// The facts of a crate's bare files, by bare file (`src/m.brs`).
@@ -60,6 +82,8 @@ pub struct MirCall {
     pub line: usize,
     pub col: usize,
     pub callee: Callee,
+    /// For a closure or a call of one: the closure's span's start (file, line, column), in the woven crate.
+    pub def: Option<(String, usize, usize)>,
 }
 
 /// The crates that are not the one being read: the standard library's, and the dependencies'.
@@ -145,16 +169,16 @@ pub fn callee(v: &str, krate: &str, externs: &BTreeSet<String>) -> Option<Callee
         // a receiver MIR names by one segment of the crate is a type parameter, or a type of the crate's root module
         let param = matches!(&self_ty, Some((_, true))) && segments(s.trim_start_matches(['&', '*', ' '])).len() == 1;
         let callee = match (&self_ty, &trait_path) {
-            (Some((t, l)), _) => Callee { path: format!("{t}::{name}"), self_ty: self_ty.clone(), trait_path, name, local: *l, param },
+            (Some((t, l)), _) => Callee { path: format!("{t}::{name}"), self_ty: self_ty.clone(), trait_path, name, local: *l, param, kind: Kind::Call },
             // a trait object's method: the trait's
-            (None, Some((tr, l))) => Callee { path: format!("{tr}::{name}"), self_ty: None, trait_path: trait_path.clone(), name, local: *l, param },
+            (None, Some((tr, l))) => Callee { path: format!("{tr}::{name}"), self_ty: None, trait_path: trait_path.clone(), name, local: *l, param, kind: Kind::Call },
             (None, None) => return None,
         };
         return Some(callee);
     }
     let (path, local) = canonical(v, krate, externs)?;
     let name = path.rsplit("::").next().unwrap_or("").to_string();
-    Some(Callee { path, self_ty: None, trait_path: None, name, local, param: false })
+    Some(Callee { path, self_ty: None, trait_path: None, name, local, param: false, kind: Kind::Call })
 }
 
 /// `file:line:col: line:col`, the start of a span. `None` for a span outside the crate (in a library's source).
@@ -189,19 +213,164 @@ fn fn_item(ty: &str) -> Option<&str> {
     (!item.starts_with("closure@") && !item.starts_with("coroutine@")).then_some(item)
 }
 
-/// Every call and function value in the MIR of one target of the crate `krate`, with where it is.
+/// A type as the argument lists of indirect calls and of their candidates are compared: without lifetimes, `for<…>`,
+/// `dyn` and trait-object bounds, and with each path by its last segment (`&'a m::Tally` is `&Tally`). A type parameter
+/// (`T`, `F`, `Self`) is `_`, which any type matches.
+pub fn norm_type(t: &str) -> String {
+    let mut s = t.trim().to_string();
+    while let Some(i) = s.find("for<") {
+        let e = crate::externals::skip_balanced(&s, i + 3);
+        s.replace_range(i..e.min(s.len()), "");
+    }
+    // lifetimes: `'a `, `'_`, `+ 'a`
+    let mut out = String::new();
+    let cs: Vec<char> = s.chars().collect();
+    let mut i = 0;
+    while i < cs.len() {
+        if cs[i] == '\'' {
+            i += 1;
+            while i < cs.len() && (cs[i].is_alphanumeric() || cs[i] == '_') {
+                i += 1;
+            }
+            while i < cs.len() && cs[i] == ' ' {
+                i += 1;
+            }
+            continue;
+        }
+        out.push(cs[i]);
+        i += 1;
+    }
+    let s = out.replace("dyn ", "").replace(" + )", ")").replace(" +)", ")");
+    let s = s.trim_end_matches(" +").to_string();
+    // each path by its last segment
+    let mut res = String::new();
+    let mut word = String::new();
+    let flush = |w: &mut String, res: &mut String| {
+        if !w.is_empty() {
+            let last = w.rsplit("::").next().unwrap_or(w).to_string();
+            let param = last == "Self" || (last.len() <= 2 && last.chars().next().is_some_and(char::is_uppercase) && last.chars().all(|c| c.is_alphanumeric()));
+            res.push_str(if param { "_" } else { &last });
+            w.clear();
+        }
+    };
+    for c in s.chars() {
+        if c.is_alphanumeric() || c == '_' || c == ':' {
+            word.push(c);
+        } else {
+            flush(&mut word, &mut res);
+            res.push(c);
+        }
+    }
+    flush(&mut word, &mut res);
+    res.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// The types in a list as MIR prints it (`u32, &'a m::Tally`, `(u32,)`), split at its top-level commas.
+fn type_list(t: &str) -> Vec<String> {
+    let t = t.trim();
+    let t = t.strip_prefix('(').and_then(|x| x.strip_suffix(')')).unwrap_or(t);
+    let (mut out, mut depth, mut start) = (vec![], 0i32, 0);
+    let b = t.as_bytes();
+    for (i, c) in t.char_indices() {
+        match c {
+            '(' | '[' | '<' | '{' => depth += 1,
+            '>' if i > 0 && b[i - 1] == b'-' => {}
+            ')' | ']' | '>' | '}' => depth -= 1,
+            ',' if depth == 0 => {
+                out.push(norm_type(&t[start..i]));
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    out.push(norm_type(&t[start..]));
+    out.into_iter().filter(|x| !x.is_empty()).collect()
+}
+
+/// The argument types of a function pointer's type: `for<'a> fn(&'a str, u32) -> u32` takes `&str, u32`.
+fn pointer_args(ty: &str) -> Option<Vec<String>> {
+    let ty = ty.trim();
+    let open = ty.find("fn(")? + 2;
+    if ty.trim_end().ends_with('}') && ty.contains(" {") {
+        // a function item's type, not a pointer: `fn(u32) -> u32 {m::calm}`
+        let e = crate::externals::skip_balanced(&ty.replace('(', "<").replace(')', ">"), open);
+        return Some(type_list(&ty[open..e]));
+    }
+    let e = crate::externals::skip_balanced(&ty.replace('(', "<").replace(')', ">"), open);
+    Some(type_list(&ty[open..e]))
+}
+
+/// The start of a closure's span in a type that names it: `{closure@src/lib.rs:9:17: 9:28}`.
+fn closure_span(t: &str) -> Option<(String, usize, usize)> {
+    let i = t.find("{closure@")?;
+    span_start(&t[i + 9..])
+}
+
+/// A call of a method of `Fn`, `FnMut` or `FnOnce` (`<X as std::ops::Fn<(u32,)>>::call`): the receiver's type and the
+/// types of the arguments.
+fn fn_trait_call(v: &str) -> Option<(String, Vec<String>)> {
+    let v = v.trim();
+    if !v.starts_with('<') {
+        return None;
+    }
+    let end = crate::externals::skip_balanced(v, 0);
+    let method = v[end..].strip_prefix("::")?;
+    if !matches!(method, "call" | "call_mut" | "call_once") {
+        return None;
+    }
+    let (x, tr) = crate::externals::split_as(&v[1..end - 1])?;
+    let tr = tr.trim();
+    let open = ["std::ops::Fn<", "std::ops::FnMut<", "std::ops::FnOnce<", "core::ops::Fn<", "core::ops::FnMut<", "core::ops::FnOnce<"].iter().find_map(|p| tr.strip_prefix(p))?;
+    let args = open.strip_suffix('>')?;
+    Some((x.trim().to_string(), type_list(args)))
+}
+
+/// Every call and function value in the MIR of one target of the crate `krate`, with where it is; and, for the calls
+/// rustc cannot resolve (through a pointer, a `dyn Fn…`, an `Fn…` bound), what they may call: every function named as
+/// a value, and every closure, with the types of their arguments.
 pub fn read_mir(mir: &str, krate: &str, externs: &BTreeSet<String>) -> Vec<MirCall> {
     let mut out = vec![];
     let mut pending: Option<(String, usize, usize)> = None;
-    // the function items the body's locals hold, by local
+    // the function items and the function pointers the body's locals hold, by local
     let mut locals: BTreeMap<String, String> = BTreeMap::new();
+    let mut pointers: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    // the last statement, to tell the function a call calls from a function named as a value
+    let mut statement = String::new();
+    let indirect = |args: Vec<String>| Callee { path: String::new(), self_ty: None, trait_path: None, name: String::new(), local: true, param: false, kind: Kind::Indirect(args) };
     for line in mir.lines() {
         if !line.starts_with(' ') && !line.is_empty() {
             locals.clear();
+            pointers.clear();
             pending = None;
+            // a closure's body: `fn m::run::{closure#0}(_1: &{closure@src/lib.rs:9:17: 9:28}, _2: &m::Tally) -> u32 {`
+            if let Some(open) = line.find("::{closure#").and_then(|_| line.find('(')) {
+                let e = crate::externals::skip_balanced(&line.replace('(', "<").replace(')', ">"), open);
+                let params: Vec<&str> = split_params(&line[open + 1..e.saturating_sub(1)]);
+                if let Some(def) = params.first().and_then(|p| closure_span(p)) {
+                    let args: Vec<String> = params[1..].iter().map(|p| norm_type(p.split_once(": ").map_or(*p, |x| x.1))).collect();
+                    let c = Callee { path: String::new(), self_ty: None, trait_path: None, name: String::new(), local: true, param: false, kind: Kind::Closure(args) };
+                    out.push(MirCall { file: def.0.clone(), line: def.1, col: def.2, callee: c, def: Some(def) });
+                }
+            }
+            // a function's parameters that are function pointers
+            if let Some(open) = line.find('(') {
+                let e = crate::externals::skip_balanced(&line.replace('(', "<").replace(')', ">"), open);
+                for p in split_params(&line[open + 1..e.saturating_sub(1)]) {
+                    if let (Some((n, ty)), true) = (p.split_once(": "), p.contains("fn(")) {
+                        if fn_item(ty).is_none() {
+                            if let Some(a) = pointer_args(ty) {
+                                pointers.insert(n.trim().to_string(), a);
+                            }
+                        }
+                    }
+                }
+            }
             continue;
         }
         let t = line.trim();
+        if !t.starts_with("//") {
+            statement = t.to_string();
+        }
         if t == "// mir::ConstOperand" {
             pending = None;
         } else if let Some(sp) = t.strip_prefix("// + span: ") {
@@ -214,8 +383,23 @@ pub fn read_mir(mir: &str, krate: &str, externs: &BTreeSet<String>) -> Vec<MirCa
             if !c[..i].trim_end().trim_end_matches(',').ends_with(&format!("{{{v}}}")) {
                 continue;
             }
-            if let Some(callee) = callee(v, krate, externs) {
-                out.push(MirCall { file: at.0, line: at.1, col: at.2, callee });
+            let called = statement.contains(&format!("= {v}("));
+            if let Some((x, args)) = fn_trait_call(v).filter(|_| called) {
+                // a call of `Fn…`: of a closure the crate wrote, or through a pointer, a `dyn` or a type parameter
+                if let Some(def) = closure_span(&x).filter(|_| x.trim_start_matches(['&', ' ']).trim_start_matches("mut ").starts_with('{')) {
+                    let c = Callee { path: String::new(), self_ty: None, trait_path: None, name: String::new(), local: true, param: false, kind: Kind::CallClosure };
+                    out.push(MirCall { file: at.0, line: at.1, col: at.2, callee: c, def: Some(def) });
+                } else {
+                    out.push(MirCall { file: at.0, line: at.1, col: at.2, callee: indirect(args), def: None });
+                }
+                continue;
+            }
+            if let Some(mut callee) = callee(v, krate, externs) {
+                if !called {
+                    let ty = c[..i].trim_start_matches("Const { ty: ");
+                    callee.kind = Kind::Value(pointer_args(ty).unwrap_or_default());
+                }
+                out.push(MirCall { file: at.0, line: at.1, col: at.2, callee, def: None });
             }
         } else if let Some(rest) = t.strip_prefix("let ") {
             // `let mut _6: fn(u32) -> u32 {rt::shared::atomic}; // in scope 0 at …`
@@ -224,6 +408,10 @@ pub fn read_mir(mir: &str, krate: &str, externs: &BTreeSet<String>) -> Vec<MirCa
             let ty = ty.split("; //").next().unwrap_or("").trim_end_matches(';');
             if let Some(item) = fn_item(ty) {
                 locals.insert(name.to_string(), item.to_string());
+            } else if ty.starts_with("fn(") || ty.starts_with("for<") || ty.starts_with("unsafe fn(") {
+                if let Some(a) = pointer_args(ty) {
+                    pointers.insert(name.to_string(), a);
+                }
             }
         } else if let Some(eq) = t.find(" = ") {
             // a call through a local: `_5 = move _6(const 1_u32) -> [return: bb1, …]; // scope 2 at src/lib.rs:13:88: 13:92`
@@ -234,10 +422,35 @@ pub fn read_mir(mir: &str, krate: &str, externs: &BTreeSet<String>) -> Vec<MirCa
             if !(local.starts_with('_') && local[1..].bytes().all(|b| b.is_ascii_digit()) && local.len() > 1 && rhs.contains(") -> [")) {
                 continue;
             }
-            let (Some(item), Some(i)) = (locals.get(local), t.rfind(" at ")) else { continue };
-            let (Some(at), Some(callee)) = (span_start(&t[i + 4..]), callee(item, krate, externs)) else { continue };
-            out.push(MirCall { file: at.0, line: at.1, col: at.2, callee });
+            let Some(at) = t.rfind(" at ").and_then(|i| span_start(&t[i + 4..])) else { continue };
+            if let Some(callee) = locals.get(local).and_then(|item| callee(item, krate, externs)) {
+                out.push(MirCall { file: at.0, line: at.1, col: at.2, callee, def: None });
+            } else if let Some(args) = pointers.get(local) {
+                out.push(MirCall { file: at.0, line: at.1, col: at.2, callee: indirect(args.clone()), def: None });
+            }
         }
+    }
+    out
+}
+
+/// A function's parameters as MIR prints them, split at their top-level commas: `_1: &{closure@…}, _2: u32`.
+fn split_params(p: &str) -> Vec<&str> {
+    let (mut out, mut depth, mut start) = (vec![], 0i32, 0);
+    let b = p.as_bytes();
+    for (i, c) in p.char_indices() {
+        match c {
+            '(' | '[' | '<' | '{' => depth += 1,
+            '>' if i > 0 && b[i - 1] == b'-' => {}
+            ')' | ']' | '>' | '}' => depth -= 1,
+            ',' if depth == 0 => {
+                out.push(p[start..i].trim());
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    if !p[start..].trim().is_empty() {
+        out.push(p[start..].trim());
     }
     out
 }
@@ -272,7 +485,12 @@ pub fn to_bare(calls: &[MirCall], files: &[Woven]) -> Facts {
         let Some(w) = offset_of(f.text, c.line, c.col) else { continue };
         let offset = f.map.to_bare(w, false).min(f.bare.len());
         let line = crate::trace::line_col(f.bare, offset).0;
-        let fact = Fact { offset, line, callee: c.callee.clone() };
+        let def = c.def.as_ref().and_then(|(file, l, col)| {
+            let g = files.iter().find(|g| g.rel == *file)?;
+            let w = offset_of(g.text, *l, *col)?;
+            Some((g.bare_name.clone(), g.map.to_bare(w, false).min(g.bare.len())))
+        });
+        let fact = Fact { offset, line, callee: c.callee.clone(), def };
         let v = out.entry(f.bare_name.clone()).or_default();
         if !v.contains(&fact) {
             v.push(fact);
@@ -522,7 +740,7 @@ mod tests {
         let map = SpanMap {
             spans: vec![crate::trace::Span { start: 6, end: 12, bare_start: 6, bare_end: 6, origin: crate::trace::Origin { kind: crate::trace::Kind::Slot, subject: "c::f".into(), slot: "ret".into() } }],
         };
-        let calls = vec![MirCall { file: "src/lib.rs".into(), line: 2, col: 5, callee: callee("g", "c", &ext()).unwrap() }];
+        let calls = vec![MirCall { file: "src/lib.rs".into(), line: 2, col: 5, callee: callee("g", "c", &ext()).unwrap(), def: None }];
         let facts = to_bare(&calls, &[Woven { rel: "src/lib.rs".into(), text: woven, map: &map, bare_name: "src/lib.brs".into(), bare }]);
         let f = &facts["src/lib.brs"][0];
         assert_eq!((f.offset, f.line, f.callee.path.as_str()), (bare.find("g()").unwrap(), 2, "c::g"));

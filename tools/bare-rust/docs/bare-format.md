@@ -387,7 +387,7 @@ marker, and refuses a region its function does not mark, whose marker states oth
 whose code does not keep them. That code is what follows the marker in its block, up to `// y: end region name` or the
 block's end, or the statement the marker ends; a region that more of the function's statements follow in its block
 must say where it ends. Weave reads that code's calls, names and waits, and an atomic region may call nothing that
-needs `effects`, nor a function passed in. A **level** (§ 6.22) is a field of a module's subject, `"level":
+needs `effects`, nor a function passed in unless rustc's reading of the crate says what it may be. A **level** (§ 6.22) is a field of a module's subject, `"level":
 "structured"`: nothing in the module, its inner modules or its files (its `tests` aside) may use more, the functions
 it calls (method calls among them) and the modules it imports counted, and a library's calls at the level
 `libraries/levels.json` gives its module; a library it does not list counts as `effects`. A parameter the Y lowering
@@ -403,7 +403,8 @@ regions checked from …`, and `checks_via` in `--json`):
   type's whatever names the receiver (`|t| t.count()` is `Tally`'s `count` when `t` is a `Tally`), and a library's
   function is found where it is defined, so a re-export, a renamed import or a local that holds the function (`let
   run = atomic; run(…)`) is that function. A trait's method called on a type parameter may be any impl of the trait in
-  the crate. Weave reads the MIR of every target (library, binaries, integration tests), of the library and binaries
+  the crate. A call through a function pointer, a `dyn Fn` or an `Fn` bound may be any function the crate names as a
+  value, or any closure it writes, that takes the same argument types; it needs the most of them. Weave reads the MIR of every target (library, binaries, integration tests), of the library and binaries
   with their unit tests, and of every build in `builds.json` whose check passed, each with its target, features,
   `--cfg` and profile; it names what it read, and any build or target whose MIR it could not read, with why.
 - **From the syntax**, when there is no build: a weave without cargo, a crate that does not compile, a file weave

@@ -865,10 +865,12 @@ fn levels_and_regions(files: &[WovenFile], bodies: &[(String, String, Value)], f
         let file = e.split(':').next().unwrap_or("").to_string();
         out.push((PathBuf::from(file).with_extension("rs"), e, false));
     }
+    // with rustc's facts, a region is held to what the whole crate's reading says it calls
+    let levels = facts.map(|_| crate::level::analyse(bodies, facts));
     for f in files.iter().filter(|_| regions) {
         let own = facts.and_then(|m| m.get(&f.bare_name())).map(Vec::as_slice);
         for r in f.json["subjects"].as_array().into_iter().flatten().filter(|s| s["kind"] == "region") {
-            if let Err(e) = crate::region::check_body_with(&f.woven.bare, &f.json, r["name"].as_str().unwrap_or(""), own) {
+            if let Err(e) = crate::region::check_body_with(&f.woven.bare, &f.json, r["name"].as_str().unwrap_or(""), own, levels.as_ref()) {
                 out.push((f.rel.clone(), e, true));
             }
         }
