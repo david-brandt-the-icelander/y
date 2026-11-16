@@ -49,16 +49,42 @@ pub struct Callee {
 pub enum Kind {
     /// A call of the item `path`.
     Call,
-    /// The item `path` named as a value (passed, bound, made a pointer or a `dyn Fn`), with the types of its arguments:
-    /// what a call through a pointer or an `Fn` bound may call.
-    Value(Vec<String>),
-    /// A call through a function pointer, a `dyn Fn…` or a type parameter bound by `Fn…`, with the types of its
-    /// arguments: it may call any function value or closure of the crate that takes those.
-    Indirect(Vec<String>),
-    /// A closure, where it is written, with the types of its arguments: what an indirect call may call.
-    Closure(Vec<String>),
+    /// The item `path` named as a value (passed, bound, made a pointer or a `dyn Fn`), with its signature: what a call
+    /// through a pointer or an `Fn` bound may call.
+    Value(Sig),
+    /// A call through a function pointer, a `dyn Fn…` or a type parameter bound by `Fn…`, with its signature: it may
+    /// call any function value or closure of the crate that fits it. With the library function whose result the called
+    /// value is, when the body got it from one (`Option::unwrap`, a library's constructor of a callback).
+    Indirect(Sig, Option<String>),
+    /// A closure, where it is written, with its signature: what an indirect call may call.
+    Closure(Sig),
     /// A call of the closure written at the fact's `def`.
     CallClosure,
+}
+
+/// The signature a call through a pointer or an `Fn` bound has, or a candidate for one: the types of its arguments
+/// (`norm_type`), and of its result when MIR states it (it does not for a type parameter's `Fn`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Sig {
+    pub args: Vec<String>,
+    pub ret: Option<String>,
+}
+
+impl Sig {
+    /// A signature by its arguments, its result unknown.
+    pub fn of(args: Vec<String>) -> Sig {
+        Sig { args, ret: None }
+    }
+
+    /// Whether a candidate of signature `have` fits a call of this one: the same argument types and, where both state
+    /// it, the same result; a type parameter (`_`) fits any type.
+    pub fn fits(&self, have: &Sig) -> bool {
+        let same = |a: &String, b: &String| a == b || a == "_" || b == "_";
+        self.args.len() == have.args.len() && self.args.iter().zip(&have.args).all(|(a, b)| same(a, b)) && match (&self.ret, &have.ret) {
+            (Some(a), Some(b)) => same(a, b),
+            _ => true,
+        }
+    }
 }
 
 /// A call in a bare file, as rustc resolved it.
@@ -287,17 +313,60 @@ fn type_list(t: &str) -> Vec<String> {
     out.into_iter().filter(|x| !x.is_empty()).collect()
 }
 
-/// The argument types of a function pointer's type: `for<'a> fn(&'a str, u32) -> u32` takes `&str, u32`.
-fn pointer_args(ty: &str) -> Option<Vec<String>> {
-    let ty = ty.trim();
+/// The signature of a function pointer's or a function item's type: `for<'a> fn(&'a str, u32) -> u32` takes `&str, u32`
+/// and gives `u32`; `fn(u32) {m::log}` gives `()`.
+fn pointer_sig(ty: &str) -> Option<Sig> {
+    let ty = ty.trim().trim_end_matches([',', ';', ' ']);
     let open = ty.find("fn(")? + 2;
-    if ty.trim_end().ends_with('}') && ty.contains(" {") {
-        // a function item's type, not a pointer: `fn(u32) -> u32 {m::calm}`
-        let e = crate::externals::skip_balanced(&ty.replace('(', "<").replace(')', ">"), open);
-        return Some(type_list(&ty[open..e]));
-    }
     let e = crate::externals::skip_balanced(&ty.replace('(', "<").replace(')', ">"), open);
-    Some(type_list(&ty[open..e]))
+    let args = type_list(&ty[open..e]);
+    // what follows the arguments: ` -> u32`, ` -> u32 {m::calm}`, ` {m::log}`, or nothing
+    let mut rest = ty[e..].trim();
+    if let Some(i) = rest.rfind(" {").filter(|_| rest.ends_with('}')) {
+        rest = rest[..i].trim();
+    } else if rest.starts_with('{') {
+        rest = "";
+    }
+    Some(Sig { args, ret: Some(rest.strip_prefix("->").map_or("()".to_string(), norm_type)) })
+}
+
+/// The result of an `Fn(…)` the type `x` names, if it names one: `dyn for<'a> std::ops::Fn(&'a m::Tally) -> u32` gives
+/// `u32`, `&dyn Fn(u32)` gives `()`, a type parameter `F` gives nothing.
+fn fn_trait_ret(x: &str) -> Option<String> {
+    let i = x.find("Fn(").or_else(|| x.find("FnMut(")).or_else(|| x.find("FnOnce("))?;
+    let open = i + x[i..].find('(')?;
+    let e = crate::externals::skip_balanced(&x.replace('(', "<").replace(')', ">"), open);
+    let rest = x[e..].trim();
+    let rest = rest.split(" + ").next().unwrap_or("").trim().trim_end_matches(')').trim();
+    Some(rest.strip_prefix("->").map_or("()".to_string(), norm_type))
+}
+
+/// The local a simple right side reads (`copy _1`, `move _2`, `&_3`, `&mut (*_4)`, `move _5 as fn(u32) (…)`), if it
+/// is one: what the local assigned from it holds, for following where a called value comes from.
+fn read_local(rhs: &str) -> Option<String> {
+    if rhs.contains(") -> [") {
+        return None;
+    }
+    let mut r = rhs.trim();
+    for p in ["move ", "copy ", "&mut ", "&raw const ", "&raw mut ", "&", "(*", "move ", "copy "] {
+        r = r.strip_prefix(p).unwrap_or(r).trim_start();
+    }
+    let n: String = r.chars().take_while(|c| *c == '_' || c.is_ascii_digit()).collect();
+    (n.len() > 1 && n.starts_with('_')).then_some(n)
+}
+
+/// The library function whose result a local of a body holds, following copies, references and casts back from it.
+fn origin_of(local: &str, aliases: &BTreeMap<String, Vec<String>>, results: &BTreeMap<String, String>) -> Option<String> {
+    let (mut seen, mut stack) = (BTreeSet::new(), vec![local.to_string()]);
+    while let Some(l) = stack.pop() {
+        if let Some(p) = results.get(&l) {
+            return Some(p.clone());
+        }
+        if seen.insert(l.clone()) && seen.len() < 64 {
+            stack.extend(aliases.get(&l).into_iter().flatten().cloned());
+        }
+    }
+    None
 }
 
 /// The start of a closure's span in a type that names it: `{closure@src/lib.rs:9:17: 9:28}`.
@@ -307,8 +376,8 @@ fn closure_span(t: &str) -> Option<(String, usize, usize)> {
 }
 
 /// A call of a method of `Fn`, `FnMut` or `FnOnce` (`<X as std::ops::Fn<(u32,)>>::call`): the receiver's type and the
-/// types of the arguments.
-fn fn_trait_call(v: &str) -> Option<(String, Vec<String>)> {
+/// signature, whose result is the one `X` states, if it states one.
+fn fn_trait_call(v: &str) -> Option<(String, Sig)> {
     let v = v.trim();
     if !v.starts_with('<') {
         return None;
@@ -322,7 +391,7 @@ fn fn_trait_call(v: &str) -> Option<(String, Vec<String>)> {
     let tr = tr.trim();
     let open = ["std::ops::Fn<", "std::ops::FnMut<", "std::ops::FnOnce<", "core::ops::Fn<", "core::ops::FnMut<", "core::ops::FnOnce<"].iter().find_map(|p| tr.strip_prefix(p))?;
     let args = open.strip_suffix('>')?;
-    Some((x.trim().to_string(), type_list(args)))
+    Some((x.trim().to_string(), Sig { args: type_list(args), ret: fn_trait_ret(x) }))
 }
 
 /// Every call and function value in the MIR of one target of the crate `krate`, with where it is; and, for the calls
@@ -333,14 +402,29 @@ pub fn read_mir(mir: &str, krate: &str, externs: &BTreeSet<String>) -> Vec<MirCa
     let mut pending: Option<(String, usize, usize)> = None;
     // the function items and the function pointers the body's locals hold, by local
     let mut locals: BTreeMap<String, String> = BTreeMap::new();
-    let mut pointers: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut pointers: BTreeMap<String, Sig> = BTreeMap::new();
+    // where a body's locals come from: other locals (copies, references, casts), and library functions' results
+    let mut aliases: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut results: BTreeMap<String, String> = BTreeMap::new();
+    // the indirect calls of the body, with the local they call through, given their origin when the body ends
+    let mut through: Vec<(usize, String)> = vec![];
     // the last statement, to tell the function a call calls from a function named as a value
     let mut statement = String::new();
-    let indirect = |args: Vec<String>| Callee { path: String::new(), self_ty: None, trait_path: None, name: String::new(), local: true, param: false, kind: Kind::Indirect(args) };
+    let indirect = |sig: Sig| Callee { path: String::new(), self_ty: None, trait_path: None, name: String::new(), local: true, param: false, kind: Kind::Indirect(sig, None) };
+    let settle = |out: &mut Vec<MirCall>, through: &mut Vec<(usize, String)>, aliases: &BTreeMap<String, Vec<String>>, results: &BTreeMap<String, String>| {
+        for (i, l) in through.drain(..) {
+            if let Kind::Indirect(_, origin) = &mut out[i].callee.kind {
+                *origin = origin_of(&l, aliases, results);
+            }
+        }
+    };
     for line in mir.lines() {
         if !line.starts_with(' ') && !line.is_empty() {
+            settle(&mut out, &mut through, &aliases, &results);
             locals.clear();
             pointers.clear();
+            aliases.clear();
+            results.clear();
             pending = None;
             // a closure's body: `fn m::run::{closure#0}(_1: &{closure@src/lib.rs:9:17: 9:28}, _2: &m::Tally) -> u32 {`
             if let Some(open) = line.find("::{closure#").and_then(|_| line.find('(')) {
@@ -348,7 +432,9 @@ pub fn read_mir(mir: &str, krate: &str, externs: &BTreeSet<String>) -> Vec<MirCa
                 let params: Vec<&str> = split_params(&line[open + 1..e.saturating_sub(1)]);
                 if let Some(def) = params.first().and_then(|p| closure_span(p)) {
                     let args: Vec<String> = params[1..].iter().map(|p| norm_type(p.split_once(": ").map_or(*p, |x| x.1))).collect();
-                    let c = Callee { path: String::new(), self_ty: None, trait_path: None, name: String::new(), local: true, param: false, kind: Kind::Closure(args) };
+                    // `) -> u32 {`
+                    let ret = line[e..].trim().strip_prefix("->").map(|r| norm_type(r.trim().trim_end_matches('{'))).unwrap_or_else(|| "()".into());
+                    let c = Callee { path: String::new(), self_ty: None, trait_path: None, name: String::new(), local: true, param: false, kind: Kind::Closure(Sig { args, ret: Some(ret) }) };
                     out.push(MirCall { file: def.0.clone(), line: def.1, col: def.2, callee: c, def: Some(def) });
                 }
             }
@@ -358,7 +444,7 @@ pub fn read_mir(mir: &str, krate: &str, externs: &BTreeSet<String>) -> Vec<MirCa
                 for p in split_params(&line[open + 1..e.saturating_sub(1)]) {
                     if let (Some((n, ty)), true) = (p.split_once(": "), p.contains("fn(")) {
                         if fn_item(ty).is_none() {
-                            if let Some(a) = pointer_args(ty) {
+                            if let Some(a) = pointer_sig(ty) {
                                 pointers.insert(n.trim().to_string(), a);
                             }
                         }
@@ -370,6 +456,12 @@ pub fn read_mir(mir: &str, krate: &str, externs: &BTreeSet<String>) -> Vec<MirCa
         let t = line.trim();
         if !t.starts_with("//") {
             statement = t.to_string();
+            // `_5 = &_1;`, `_6 = copy _2;`, `_7 = move _3 as fn(u32) -> u32 (PointerCoercion(…))`
+            if let Some((dest, rhs)) = t.split_once(" = ") {
+                if let Some(src) = read_local(rhs.split(';').next().unwrap_or("")) {
+                    aliases.entry(dest.trim().to_string()).or_default().push(src);
+                }
+            }
         }
         if t == "// mir::ConstOperand" {
             pending = None;
@@ -384,20 +476,30 @@ pub fn read_mir(mir: &str, krate: &str, externs: &BTreeSet<String>) -> Vec<MirCa
                 continue;
             }
             let called = statement.contains(&format!("= {v}("));
-            if let Some((x, args)) = fn_trait_call(v).filter(|_| called) {
+            if let Some((x, sig)) = fn_trait_call(v).filter(|_| called) {
                 // a call of `Fn…`: of a closure the crate wrote, or through a pointer, a `dyn` or a type parameter
                 if let Some(def) = closure_span(&x).filter(|_| x.trim_start_matches(['&', ' ']).trim_start_matches("mut ").starts_with('{')) {
                     let c = Callee { path: String::new(), self_ty: None, trait_path: None, name: String::new(), local: true, param: false, kind: Kind::CallClosure };
                     out.push(MirCall { file: at.0, line: at.1, col: at.2, callee: c, def: Some(def) });
                 } else {
-                    out.push(MirCall { file: at.0, line: at.1, col: at.2, callee: indirect(args), def: None });
+                    // the value called is the call's first argument: `<F as Fn<(u32,)>>::call(move _5, move _6)`
+                    let receiver = statement.split_once(&format!("{v}(")).and_then(|(_, a)| read_local(a.split(',').next().unwrap_or("").trim_end_matches(')')));
+                    if let Some(r) = receiver {
+                        through.push((out.len(), r));
+                    }
+                    out.push(MirCall { file: at.0, line: at.1, col: at.2, callee: indirect(sig), def: None });
                 }
                 continue;
             }
             if let Some(mut callee) = callee(v, krate, externs) {
                 if !called {
                     let ty = c[..i].trim_start_matches("Const { ty: ");
-                    callee.kind = Kind::Value(pointer_args(ty).unwrap_or_default());
+                    callee.kind = Kind::Value(pointer_sig(ty).unwrap_or_default());
+                } else if !callee.local {
+                    // a library function's result: where a value called later may come from
+                    if let Some((dest, _)) = statement.split_once(" = ") {
+                        results.insert(dest.trim().to_string(), callee.path.clone());
+                    }
                 }
                 out.push(MirCall { file: at.0, line: at.1, col: at.2, callee, def: None });
             }
@@ -405,11 +507,11 @@ pub fn read_mir(mir: &str, krate: &str, externs: &BTreeSet<String>) -> Vec<MirCa
             // `let mut _6: fn(u32) -> u32 {rt::shared::atomic}; // in scope 0 at …`
             let rest = rest.strip_prefix("mut ").unwrap_or(rest);
             let Some((name, ty)) = rest.split_once(": ") else { continue };
-            let ty = ty.split("; //").next().unwrap_or("").trim_end_matches(';');
+            let ty = ty.split(';').next().unwrap_or("").trim();
             if let Some(item) = fn_item(ty) {
                 locals.insert(name.to_string(), item.to_string());
             } else if ty.starts_with("fn(") || ty.starts_with("for<") || ty.starts_with("unsafe fn(") {
-                if let Some(a) = pointer_args(ty) {
+                if let Some(a) = pointer_sig(ty) {
                     pointers.insert(name.to_string(), a);
                 }
             }
@@ -425,11 +527,13 @@ pub fn read_mir(mir: &str, krate: &str, externs: &BTreeSet<String>) -> Vec<MirCa
             let Some(at) = t.rfind(" at ").and_then(|i| span_start(&t[i + 4..])) else { continue };
             if let Some(callee) = locals.get(local).and_then(|item| callee(item, krate, externs)) {
                 out.push(MirCall { file: at.0, line: at.1, col: at.2, callee, def: None });
-            } else if let Some(args) = pointers.get(local) {
-                out.push(MirCall { file: at.0, line: at.1, col: at.2, callee: indirect(args.clone()), def: None });
+            } else if let Some(sig) = pointers.get(local) {
+                through.push((out.len(), local.to_string()));
+                out.push(MirCall { file: at.0, line: at.1, col: at.2, callee: indirect(sig.clone()), def: None });
             }
         }
     }
+    settle(&mut out, &mut through, &aliases, &results);
     out
 }
 
@@ -583,45 +687,84 @@ pub fn library_macros(dir: &Path) -> R<Vec<(String, String, Value)>> {
     for d in own["dependencies"].as_array().into_iter().flatten().filter(|d| d["kind"].is_null()) {
         let name = d["name"].as_str().unwrap_or("");
         let Some(p) = packages.iter().find(|p| p["name"] == name) else { continue };
-        let Some(lib) = p["targets"].as_array().into_iter().flatten().find(|t| t["kind"].as_array().into_iter().flatten().any(|k| k == "lib")) else { continue };
+        let kinds = |t: &Value, k: &str| t["kind"].as_array().into_iter().flatten().any(|x| x == k);
+        let Some(lib) = p["targets"].as_array().into_iter().flatten().find(|t| kinds(t, "lib") || kinds(t, "proc-macro")) else { continue };
         let krate = d["rename"].as_str().or(lib["name"].as_str()).unwrap_or(name).replace('-', "_");
+        if kinds(lib, "proc-macro") {
+            // a procedural macro: no body to read; rustc places what its expansions call at the invocation
+            out.push((format!("library:{krate}"), String::new(), serde_json::json!({"crate": format!("{krate} 0.0.0"), "module": "src/lib.rs", "subjects": [], "library": true, "proc_macro": true})));
+            continue;
+        }
         let Some(src) = Path::new(lib["src_path"].as_str().unwrap_or("")).parent().map(Path::to_path_buf) else { continue };
-        let mut files = vec![];
-        let mut stack = vec![src.clone()];
-        while let Some(d) = stack.pop() {
-            for e in std::fs::read_dir(&d).into_iter().flatten().flatten() {
-                let p = e.path();
-                if p.is_dir() {
-                    stack.push(p);
-                } else if p.extension().is_some_and(|x| x == "rs") {
-                    files.push(p);
-                }
-            }
-        }
-        files.sort();
-        let mut text = String::new();
-        for f in files {
-            let Ok(code) = std::fs::read_to_string(&f) else { continue };
-            let tree = crate::parse_rust(&code);
-            let mut nodes = vec![tree.root_node()];
-            while let Some(n) = nodes.pop() {
-                if n.kind() == "macro_definition" {
-                    let exported = n.prev_named_sibling().is_some_and(|a| a.kind() == "attribute_item" && crate::text(a, &code).contains("macro_export"));
-                    if exported {
-                        text.push_str(&crate::text(n, &code).replace("$crate", &krate));
-                        text.push('\n');
-                    }
-                    continue;
-                }
-                let mut c = n.walk();
-                nodes.extend(n.named_children(&mut c));
-            }
-        }
+        let text = exported_macros(&src, &krate);
         if !text.is_empty() {
             out.push((format!("library:{krate}"), text, serde_json::json!({"crate": format!("{krate} 0.0.0"), "module": "src/lib.rs", "subjects": [], "library": true})));
         }
     }
+    // the standard library's, from its source where the toolchain has it (`rustup component add rust-src`)
+    out.extend(std_macros(dir));
     Ok(out)
+}
+
+/// The macros `std`, `alloc` and `core` export, from the toolchain's source (`<sysroot>/lib/rustlib/src/rust/library`),
+/// in the form of `library_macros`. None without the source. A compiler built-in (`assert!`, `format_args!`) has no
+/// body to read: it is read as calling nothing.
+pub fn std_macros(dir: &Path) -> Vec<(String, String, Value)> {
+    let Ok(o) = Command::new("rustc").args(["--print", "sysroot"]).current_dir(dir).output() else { return vec![] };
+    let sysroot = String::from_utf8_lossy(&o.stdout).trim().to_string();
+    let library = Path::new(&sysroot).join("lib/rustlib/src/rust/library");
+    ["std", "alloc", "core"]
+        .iter()
+        .filter_map(|c| {
+            let text = exported_macros(&library.join(c).join("src"), c);
+            (!text.is_empty()).then(|| (format!("library:{c}"), text, serde_json::json!({"crate": format!("{c} 0.0.0"), "module": "src/lib.rs", "subjects": [], "library": true})))
+        })
+        .collect()
+}
+
+/// The `#[macro_export]` macros of the sources under `src`, one after another, with `$crate` as `krate`.
+fn exported_macros(src: &Path, krate: &str) -> String {
+    let mut files = vec![];
+    let mut stack = vec![src.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for e in std::fs::read_dir(&d).into_iter().flatten().flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                stack.push(p);
+            } else if p.extension().is_some_and(|x| x == "rs") {
+                files.push(p);
+            }
+        }
+    }
+    files.sort();
+    let mut text = String::new();
+    for f in files {
+        let Ok(code) = std::fs::read_to_string(&f) else { continue };
+        if !code.contains("macro_export") {
+            continue;
+        }
+        let tree = crate::parse_rust(&code);
+        let mut nodes = vec![tree.root_node()];
+        while let Some(n) = nodes.pop() {
+            if n.kind() == "macro_definition" {
+                // its attributes, before it: `#[macro_export]` among them
+                let mut prev = n.prev_named_sibling();
+                let mut exported = false;
+                while let Some(a) = prev.filter(|a| a.kind() == "attribute_item" || a.kind() == "line_comment" || a.kind() == "block_comment") {
+                    exported |= a.kind() == "attribute_item" && crate::text(a, &code).contains("macro_export");
+                    prev = a.prev_named_sibling();
+                }
+                if exported {
+                    text.push_str(&crate::text(n, &code).replace("$crate", krate));
+                    text.push('\n');
+                }
+                continue;
+            }
+            let mut c = n.walk();
+            nodes.extend(n.named_children(&mut c));
+        }
+    }
+    text
 }
 
 /// A function of a library crate, by its path (`y_runtime::shared::atomic`, `y_runtime::System::console`): whether

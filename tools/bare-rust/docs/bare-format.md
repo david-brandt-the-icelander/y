@@ -404,7 +404,9 @@ regions checked from …`, and `checks_via` in `--json`):
   function is found where it is defined, so a re-export, a renamed import or a local that holds the function (`let
   run = atomic; run(…)`) is that function. A trait's method called on a type parameter may be any impl of the trait in
   the crate. A call through a function pointer, a `dyn Fn` or an `Fn` bound may be any function the crate names as a
-  value, or any closure it writes, that takes the same argument types; it needs the most of them. Weave reads the MIR of every target (library, binaries, integration tests), of the library and binaries
+  value, or any closure it writes, whose signature fits (the same argument types, and the same result where both
+  state it); it needs the most of them. A value the body got from a library's function (`Option::unwrap`) needs that
+  function's level too, and a call nothing in the crate fits, of a value from no library, counts as `effects`. Weave reads the MIR of every target (library, binaries, integration tests), of the library and binaries
   with their unit tests, and of every build in `builds.json` whose check passed, each with its target, features,
   `--cfg` and profile; it names what it read, and any build or target whose MIR it could not read, with why.
 - **From the syntax**, when there is no build: a weave without cargo, a crate that does not compile, a file weave
@@ -421,8 +423,10 @@ is what its rules expand to: the calls rustc places in its definition, or, witho
 read as code (`$x` as `x`, a repetition as a block of what it repeats). An invocation of it is a call of it and needs
 what it needs, and a macro that expands to itself is not recursion. A macro a dependency exports (`#[macro_export]`)
 is read the same way, from the dependency's source as cargo has it, when weave runs cargo: its rules with `$crate` as
-the library's name, their calls at the levels the table gives. Without its source, the table's level for its path is
-used.
+the library's name, their calls at the levels the table gives. The standard library's macros are read the same way
+from the toolchain's source (`rustup component add rust-src`), except a compiler built-in, which calls nothing, and
+the few `macros_from_table` names (`thread_local!`). Without its source, the table's level for its path is used. A
+procedural macro's expansion is what rustc resolved at its invocation; without a build, the table's.
 
 `bare-rust levels <bare-dir> --crate <crate-dir> --out <dir>` weaves with cargo and prints the levels from rustc's
 calls (`--show-calls` lists them). `bare-rust levels --libraries <crate>…` checks `libraries/levels.json` against what a

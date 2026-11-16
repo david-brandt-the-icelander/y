@@ -327,7 +327,9 @@ fn levels_and_regions_read_what_rustc_resolved() {
     assert!(errs.iter().any(|e| e.contains("a call of `later!`, which needs `effects`, in `wc_levels::waits::wait` needs level `effects`")), "{errs:#?}");
     errs.retain(|e| !e.contains("waits::wait"));
     assert_eq!(errs.len(), 2, "{errs:#?}");
-    assert!(errs[0].contains("the macro `println!` (`std::println`) in `wc_levels::sums::shout` needs level `effects`, and module `wc_levels::sums` is at `calculations`"), "{errs:#?}");
+    // read from `std`'s source where the toolchain has it (rust-src), and from the table where it does not
+    let println = if bare_rust::facts::std_macros(&root()).is_empty() { "the macro `println!` (`std::println`)" } else { "a call of `println!`, which needs `effects`," };
+    assert!(errs[0].contains(&format!("{println} in `wc_levels::sums::shout` needs level `effects`, and module `wc_levels::sums` is at `calculations`")), "{errs:#?}");
     assert!(errs[1].contains("`detach` (`y_runtime::task::detach`) in `wc_levels::ticks::start` needs level `effects`, and module `wc_levels::ticks` is at `calculations`"), "{errs:#?}");
     // the bare bodies' syntax alone sees none of the three
     let brs = fs::read_to_string(bare.join("src/lib.brs")).unwrap();
@@ -502,4 +504,41 @@ fn a_dependencys_macros_are_followed_into_their_bodies() {
     let errs: Vec<&String> = cw.weave_errors.iter().map(|(_, e)| e).collect();
     assert_eq!(errs.len(), 1, "{errs:#?}");
     assert!(errs[0].contains("a call of `noisy!`, which needs `effects`, in `wc_dep_macros::calc::tell`"), "{errs:#?}");
+}
+
+/// A procedural macro's expansion is read from the calls rustc resolved at its invocation: `pure!` expands to a
+/// calculation and `wipe!` to `std::fs::remove_file`. Its crate is not in `libraries/levels.json`, so the table alone
+/// gives both `effects`. And `std`'s macros, where the toolchain has their source, are read from it: `println!` calls
+/// `std::io::_print`.
+#[test]
+fn procedural_macros_are_read_from_their_expansions() {
+    let top = root().join("target/bare-rust-test/wc_proc_macros");
+    let _ = fs::remove_dir_all(&top);
+    let pm = top.join("wc_pm");
+    fs::create_dir_all(pm.join("src")).unwrap();
+    fs::write(pm.join("Cargo.toml"), "[package]\nname = \"wc_pm\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[lib]\nproc-macro = true\n\n[workspace]\n").unwrap();
+    fs::write(pm.join("src/lib.rs"), "use proc_macro::TokenStream;\n\n#[proc_macro]\npub fn wipe(input: TokenStream) -> TokenStream {\n    format!(\"std::fs::remove_file({input})\").parse().unwrap()\n}\n\n#[proc_macro]\npub fn pure(input: TokenStream) -> TokenStream {\n    format!(\"({input}) * 2\").parse().unwrap()\n}\n").unwrap();
+    let dir = top.join("crate");
+    fs::create_dir_all(dir.join("src")).unwrap();
+    fs::write(dir.join("Cargo.toml"), format!("[package]\nname = \"wc_proc_macros\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\nwc_pm = {{ path = \"{}\" }}\n\n[workspace]\n", pm.display())).unwrap();
+    fs::write(dir.join("src/lib.rs"), "pub mod calc {\n    pub fn twice(x: u32) -> u32 {\n        wc_pm::pure!(x)\n    }\n\n    pub fn wipe() -> bool {\n        wc_pm::wipe!(\"x\").is_ok()\n    }\n\n    pub fn say(x: u32) {\n        println!(\"{x}\");\n    }\n}\n").unwrap();
+    let bare = top.join("bare");
+    let results = strip_crate(&dir, &bare, true).unwrap();
+    assert!(results.iter().all(|r| r.outcome.is_ok()), "{:?}", results.iter().map(|r| r.outcome.clone()).collect::<Vec<_>>());
+    let cj = bare.join("src/lib.constraints.json");
+    let mut js: Value = serde_json::from_str(&fs::read_to_string(&cj).unwrap()).unwrap();
+    for s in js["subjects"].as_array_mut().unwrap() {
+        if s["name"] == "wc_proc_macros::calc" {
+            s["level"] = "calculations".into();
+        }
+    }
+    fs::write(&cj, serde_json::to_string_pretty(&js).unwrap()).unwrap();
+    let cw = weave(&dir, &bare, &top.join("woven"), false);
+    assert!(cw.checks_via.as_deref().is_some_and(|v| v.starts_with("rustc")), "{:?}", cw.checks_via);
+    let mut errs: Vec<&String> = cw.weave_errors.iter().map(|(_, e)| e).collect();
+    errs.sort();
+    assert_eq!(errs.len(), 2, "{errs:#?}");
+    assert!(errs.iter().any(|e| e.contains("`remove_file` (`std::fs::remove_file`) in `wc_proc_macros::calc::wipe`")), "{errs:#?}");
+    assert!(errs.iter().any(|e| e.contains("println!") && e.contains("in `wc_proc_macros::calc::say`")), "{errs:#?}");
+    assert!(!errs.iter().any(|e| e.contains("twice")), "{errs:#?}");
 }

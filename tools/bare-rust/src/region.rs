@@ -32,8 +32,8 @@
 //! declarations. A call rustc said nothing of (in a test) is read the second way, and a macro is read from its
 //! invocation either way (`crate::level`): `println!` in an atomic region is an effect. A function passed in that an
 //! atomic region calls is refused, as nothing says what it does, unless rustc's facts and the whole crate's reading
-//! (`crate::level::analyse`) say what it may be: the function values and closures of the crate that take its arguments,
-//! which then count as what the region calls. The rest is syntax either way: the capabilities used, by parameter name;
+//! (`crate::level::analyse`) say what it may be: the function values and closures of the crate that fit its signature,
+//! or the library function that gave it, which then count as what the region calls. The rest is syntax either way: the capabilities used, by parameter name;
 //! the deadline a wait takes; `Isolation::Snapshot` and `Step::Retry`, by path.
 use crate::{parse_bare, text};
 use serde_json::Value;
@@ -352,7 +352,7 @@ pub fn check_body_with(brs: &str, js: &Value, name: &str, facts: Option<&[crate:
                 let Some(g) = c.child_by_field_name("function") else { return false };
                 let fact = facts.into_iter().flatten().find(|x| x.offset >= g.start_byte() && x.offset < g.end_byte().max(g.start_byte() + 1) || x.offset == c.start_byte());
                 match (fact.map(|x| &x.callee.kind), levels) {
-                    (Some(crate::facts::Kind::Indirect(args)), Some(l)) => l.candidates_for(args) > 0,
+                    (Some(crate::facts::Kind::Indirect(sig, origin)), Some(l)) => l.candidates_for(sig) > 0 || origin.is_some(),
                     _ => false,
                 }
             };
@@ -632,8 +632,8 @@ mod tests {
         let u32s = || vec!["u32".to_string()];
         let mut facts = vec![
             at("atomic(", "y_runtime::shared::atomic::<u32, (), {closure@src/m.rs:4:41: 4:45}>", crate::facts::Kind::Call),
-            at("change(", "x", crate::facts::Kind::Indirect(u32s())),
-            at("double)", "m::double", crate::facts::Kind::Value(u32s())),
+            at("change(", "x", crate::facts::Kind::Indirect(crate::facts::Sig::of(u32s()), None)),
+            at("double)", "m::double", crate::facts::Kind::Value(crate::facts::Sig::of(u32s()))),
         ];
         let files = |facts: &Vec<crate::facts::Fact>| -> (Vec<(String, String, Value)>, crate::facts::Facts) {
             (vec![("src/m.brs".to_string(), brs.to_string(), js.clone())], [("src/m.brs".to_string(), facts.clone())].into_iter().collect())
@@ -644,7 +644,7 @@ mod tests {
         let levels = crate::level::analyse(&fs, Some(&m));
         assert_eq!(check_body_with(brs, &js, "c::m::apply#add", Some(&facts), Some(&levels)), Ok(()));
         // once `shout` may be passed too, the region may print
-        facts.push(at("shout)", "m::shout", crate::facts::Kind::Value(u32s())));
+        facts.push(at("shout)", "m::shout", crate::facts::Kind::Value(crate::facts::Sig::of(u32s()))));
         let (fs, m) = files(&facts);
         let levels = crate::level::analyse(&fs, Some(&m));
         let err = check_body_with(brs, &js, "c::m::apply#add", Some(&facts), Some(&levels)).unwrap_err();

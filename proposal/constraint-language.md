@@ -1863,7 +1863,9 @@ prints it under the file's `module` line:
   it is defined, through a re-export, a renamed import or a local that holds it. A trait's method called on a type
   parameter may be any impl of the trait in the crate; a library's trait method needs the level of its type's module
   and of its trait's. A call through a function pointer, a `dyn Fn` or an `Fn` bound may be any function the crate
-  names as a value, or any closure it writes, that takes the call's argument types, and needs the most of them. rustc reads every target of the crate, its unit tests, and every build of it whose check passes
+  names as a value, or any closure it writes, whose signature fits the call's (its argument types, and its result
+  where both state it), and needs the most of them; a value the body got from a library's function needs that
+  function's level too; and a call nothing in the crate fits, of a value from no library, needs `effects`. rustc reads every target of the crate, its unit tests, and every build of it whose check passes
   (another target, features, `--cfg`, a release build), so code that only a test or another build compiles is read
   from it too. Without a build (a crate that does not compile, a weave without cargo, `bare-rust levels` without
   `--crate`), and for a function no build compiles, a call is matched through the file's `use` declarations, and a method call takes its receiver's
@@ -1875,7 +1877,9 @@ prints it under the file's `module` line:
   body's. A macro the crate defines is read as one of its functions, whose body is what its rules expand to (rustc's
   calls in its definition, or each rule's right side read as code), and an invocation is a call of it. A macro a
   dependency exports is read the same way from the dependency's source, its calls at the table's levels, when weave
-  runs cargo; without its source, it is the table's. An import of a module pinned higher needs that module's level. Weave fails
+  runs cargo, and so is one the standard library exports, from the toolchain's source (`rust-src`), but for the few
+  the table names in `macros_from_table`; without its source, it is the table's. A procedural macro's expansion is
+  what rustc resolved at its invocation. An import of a module pinned higher needs that module's level. Weave fails
   on anything above its module's level, and `bare-rust levels <bare-dir>` prints the level each module needs and why,
   with the level pinned on it (with `--crate <dir> --out <dir>`, from rustc's calls). `bare-rust levels --libraries
   <crate>…` checks the table against a library crate's MIR: a public function that calls a library at a higher level

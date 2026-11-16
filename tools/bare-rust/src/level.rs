@@ -37,10 +37,14 @@
 //!   the level of its type's module and of its trait's.
 //!
 //!   A call through a function pointer, a `dyn Fn…` or a type parameter bound by `Fn…` names no function in MIR, only
-//!   the types of its arguments. It may be any function the crate names as a value (passes, binds, makes a pointer or a
-//!   `dyn Fn`) or any closure the crate writes that takes those types (a type parameter takes any), and needs the most
-//!   of them (`analyse`). A closure is read on its own for this, as `function::{closure@line:col}`; what it uses is its
-//!   function's already, and is reported there.
+//!   its signature: the types of its arguments, and of its result where the pointer's or the `dyn Fn`'s type states
+//!   it. It may be any function the crate names as a value (passes, binds, makes a pointer or a `dyn Fn`) or any
+//!   closure the crate writes whose signature fits (a type parameter fits any type), and needs the most of them
+//!   (`analyse`). Where the body got the called value from a library's function (`Option::unwrap`, a callback a
+//!   library hands back), the call needs that function's level too, as the library vouches for what it returns. A call
+//!   that no function or closure of the crate fits, of a value from no library, needs `effects`: it calls something
+//!   from outside the crate that nothing says anything of. A closure is read on its own for this, as
+//!   `function::{closure@line:col}`; what it uses is its function's already, and is reported there.
 //!
 //!   rustc's MIR is read for every target of the crate (library, binaries, integration tests), for the library and
 //!   binaries again with their unit tests (`cfg(test)`), and in every build whose check passed (`crate::builds`: its
@@ -75,7 +79,18 @@
 //! places the calls of its expansions in the dependency's source, outside the crate, so this is read from the syntax.
 //! An invocation of it is a call of it, and what it uses is reported there. Without its source, or without cargo, a
 //! dependency's macro is the table's (`macro_level`).
-use crate::facts::{Callee, Fact, Facts, Kind};
+//!
+//! The standard library's macros are read the same way from the toolchain's source, where it has it (`rust-src`,
+//! `crate::facts::std_macros`): `println!` calls `std::io::_print`, which is `effects`. A macro named alone that the
+//! crate does not define is `std`'s, `core`'s or `alloc`'s, whichever exports it. A compiler built-in (`assert!`,
+//! `format_args!`) has no body, and calls nothing. A macro `macros_from_table` names in `libraries/levels.json`
+//! (`thread_local!`) is the table's, as its body is the standard library's own machinery. Without the source, the
+//! standard library's macros are the table's.
+//!
+//! A procedural macro (of a dependency built as `proc-macro`) has no body to read: rustc places what its expansion
+//! calls at the invocation, so in a file rustc read, those calls are its function's, and the macro adds nothing. In a
+//! file it did not, the macro is the table's.
+use crate::facts::{Callee, Fact, Facts, Kind, Sig};
 use crate::{parse_bare, text};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -101,6 +116,13 @@ pub struct Use {
 
 /// The levels of library modules (`libraries/levels.json`): a call into one needs its level.
 const LIBRARY_LEVELS: &str = include_str!("../libraries/levels.json");
+
+/// The macros whose level the table gives though their source can be read (`macros_from_table` in
+/// `libraries/levels.json`): what their bodies call is the standard library's own machinery, not what they mean.
+fn table_macros() -> BTreeSet<String> {
+    let v: Value = serde_json::from_str(LIBRARY_LEVELS).unwrap_or_default();
+    v["macros_from_table"].as_object().into_iter().flatten().map(|(k, _)| k.clone()).collect()
+}
 
 /// The calls `libraries/levels.json` trusts a library's function to make though they are above its module's level, by
 /// the function: each a path, or a module or type the call is under (see `crate::facts::check_library`).
@@ -235,10 +257,12 @@ fn enclosing(found: &[(String, Node)], offset: usize) -> Option<usize> {
 
 /// The functions and imports of one bare body. With `facts`, the calls are the ones rustc resolved in it, each in the
 /// innermost function it is in; without, the ones its syntax shows.
-/// The macros the crate defines, by name, and those its dependencies export, by path (`y_collections::list`).
+/// The macros the crate defines, by name; those its dependencies and the standard library export, by path
+/// (`y_collections::list`); and the crates of its procedural macros.
 struct Macros<'m> {
     defined: &'m BTreeSet<String>,
     library: &'m BTreeSet<String>,
+    proc: &'m BTreeSet<String>,
 }
 
 fn read_file(file: &str, brs: &str, js: &Value, facts: Option<&[Fact]>, macros: &Macros, fns: &mut Vec<Function>, imports: &mut Vec<Import>) {
@@ -370,10 +394,25 @@ fn read_file(file: &str, brs: &str, js: &Value, facts: Option<&[Fact]>, macros: 
             let name = ["::", "$crate::", "crate::", "self::"].iter().fold(m.as_str(), |n, p| n.strip_prefix(p).unwrap_or(n));
             let first = name.split("::").next().unwrap_or("");
             let full = uses.get(first).map(|p| format!("{p}{}", &name[first.len()..])).unwrap_or_else(|| name.to_string());
+            // the paths it may be: a prelude macro is `std`'s, `core`'s or `alloc`'s, whichever defines it
+            let rest = ["std::", "core::", "alloc::"].iter().find_map(|r| full.strip_prefix(r)).map(str::to_string);
+            // a macro named alone that the crate does not define: the prelude's, or any the standard library exports, which
+            // every crate has by name
+            let from_std = |n: &str| STD_MACROS.contains(&n) || ["std", "core", "alloc"].iter().any(|c| library_macros.contains(&format!("{c}::{n}")));
+            let rest = rest.or_else(|| (!full.contains("::") && !crate_macros.contains(&full) && from_std(&full)).then(|| full.clone()));
+            let paths: Vec<String> = match &rest {
+                Some(r) => ["std", "core", "alloc"].iter().map(|c| format!("{c}::{r}")).collect(),
+                None => vec![full.clone()],
+            };
+            let from_table = paths.iter().any(|p| table_macros().contains(p));
+            let proc = macros.proc.contains(full.split("::").next().unwrap_or(""));
             if !name.contains("::") && crate_macros.contains(name) && !uses.contains_key(name) && !library {
                 f.calls.push((Call::Macro(name.to_string()), line));
-            } else if library_macros.contains(&full) {
-                f.calls.push((Call::LibraryMacro(full), line));
+            } else if let Some(p) = paths.iter().find(|p| library_macros.contains(*p)).filter(|_| !from_table) {
+                f.calls.push((Call::LibraryMacro(p.clone()), line));
+            } else if proc && facts.is_some() {
+                // a procedural macro, in a file rustc read: it places what the expansion calls at the invocation, among the
+                // calls it resolved (none, for an expansion that calls nothing)
             } else if let Some((l, what)) = macro_level(&m, &uses, crate_macros) {
                 f.own.push(Use { level: l, what, function: f.path.clone(), file: file.to_string(), line });
             }
@@ -859,25 +898,19 @@ pub fn uses_with(files: &[(String, String, Value)], facts: Option<&Facts>) -> Ve
     analyse(files, facts).uses
 }
 
-/// What a crate's bodies use (`uses_with`), and the argument types of everything a call through a function pointer or
-/// an `Fn` bound may call: for the region check (`crate::region::check_body_with`), which holds a region to the whole
+/// What a crate's bodies use (`uses_with`), and the signatures of everything a call through a function pointer or an
+/// `Fn` bound may call: for the region check (`crate::region::check_body_with`), which holds a region to the whole
 /// crate's.
 pub struct CrateLevels {
     pub uses: Vec<Use>,
-    pub candidates: Vec<Vec<String>>,
+    pub candidates: Vec<Sig>,
 }
 
 impl CrateLevels {
-    /// How many functions and closures of the crate a call through a pointer or an `Fn` bound taking `args` may be.
-    pub fn candidates_for(&self, args: &[String]) -> usize {
-        self.candidates.iter().filter(|a| fits(args, a)).count()
+    /// How many functions and closures of the crate a call through a pointer or an `Fn` bound of signature `sig` may be.
+    pub fn candidates_for(&self, sig: &Sig) -> usize {
+        self.candidates.iter().filter(|a| sig.fits(a)).count()
     }
-}
-
-/// Whether a candidate that takes `have` fits a call that passes `want`: the same types, a type parameter (`_`) fitting
-/// any.
-fn fits(want: &[String], have: &[String]) -> bool {
-    want.len() == have.len() && want.iter().zip(have).all(|(a, b)| a == b || a == "_" || b == "_")
 }
 
 /// `uses_with` and the candidates of indirect calls, together (`CrateLevels`).
@@ -893,8 +926,9 @@ pub fn analyse(files: &[(String, String, Value)], facts: Option<&Facts>) -> Crat
             macro_names(parse_bare(brs).root_node(), brs).into_iter().map(move |m| format!("{base}::{m}"))
         })
         .collect();
+    let proc_crates: BTreeSet<String> = files.iter().filter(|f| f.2["proc_macro"] == true).map(|f| crate::weave::base_path(&f.2)).collect();
     for (file, brs, js) in files {
-        read_file(file, brs, js, facts_of(facts, file), &Macros { defined: &crate_macros, library: &library_macros }, &mut fns, &mut imports);
+        read_file(file, brs, js, facts_of(facts, file), &Macros { defined: &crate_macros, library: &library_macros, proc: &proc_crates }, &mut fns, &mut imports);
         type_names(parse_bare(brs).root_node(), brs, &mut types);
     }
     let krate = files.iter().find(|f| f.2["library"] != true).map(|f| crate_name(&f.2)).unwrap_or_default();
@@ -906,12 +940,12 @@ pub fn analyse(files: &[(String, String, Value)], facts: Option<&Facts>) -> Crat
     // what a call through a pointer or an `Fn` bound may call: the functions named as values, and the closures, by the
     // types of their arguments
     let closures: BTreeMap<(String, usize), usize> = fns.iter().enumerate().filter_map(|(i, f)| Some((f.closure.clone()?, i))).collect();
-    let mut values: Vec<(Vec<String>, Callee)> = vec![];
-    let mut closure_args: Vec<(Vec<String>, usize)> = vec![];
+    let mut values: Vec<(Sig, Callee)> = vec![];
+    let mut closure_args: Vec<(Sig, usize)> = vec![];
     for f in &fns {
         for (c, _) in &f.calls {
-            if let Call::Resolved(c @ Callee { kind: Kind::Value(args), .. }) = c {
-                values.push((args.clone(), c.clone()));
+            if let Call::Resolved(c @ Callee { kind: Kind::Value(sig), .. }) = c {
+                values.push((sig.clone(), c.clone()));
             }
         }
     }
@@ -955,10 +989,11 @@ pub fn analyse(files: &[(String, String, Value)], facts: Option<&Facts>) -> Crat
                     t.push(Some((vec![], false)));
                     continue;
                 }
-                Kind::Indirect(args) => {
-                    // any closure, or function named as a value, that takes these arguments
-                    let mut hits: Vec<usize> = closure_args.iter().filter(|(a, _)| fits(args, a)).map(|(_, i)| *i).collect();
-                    for (_, v) in values.iter().filter(|(a, _)| fits(args, a)) {
+                Kind::Indirect(sig, origin) => {
+                    // any closure, or function named as a value, that fits the call's signature
+                    let mut hits: Vec<usize> = closure_args.iter().filter(|(a, _)| sig.fits(a)).map(|(_, i)| *i).collect();
+                    let fitting = values.iter().filter(|(a, _)| sig.fits(a)).count();
+                    for (_, v) in values.iter().filter(|(a, _)| sig.fits(a)) {
                         match resolve_fact(v, &fns, &index, &types) {
                             Target::Crate(h, _) => hits.extend(h),
                             Target::Library(paths) => {
@@ -967,6 +1002,18 @@ pub fn analyse(files: &[(String, String, Value)], facts: Option<&Facts>) -> Crat
                                 }
                             }
                         }
+                    }
+                    // a value a library's function gave: what that function needs, as the library vouches for what it returns
+                    if let Some(p) = origin {
+                        let l = library_level(p).unwrap_or(4);
+                        if l >= 2 {
+                            lib.push(Use { level: l, what: format!("a call of a function value that `{p}` gave"), function: f.path.clone(), file: f.file.clone(), line: *line });
+                        }
+                    }
+                    // and one nothing in the crate fits, from no library: a value from outside the crate, which nothing
+                    // says anything of
+                    if hits.is_empty() && fitting == 0 && origin.is_none() {
+                        lib.push(Use { level: 4, what: "a call through a function pointer or an `Fn` bound that no function or closure of the crate fits, whose effects nothing says".into(), function: f.path.clone(), file: f.file.clone(), line: *line });
                     }
                     hits.sort_unstable();
                     hits.dedup();
@@ -1005,7 +1052,7 @@ pub fn analyse(files: &[(String, String, Value)], facts: Option<&Facts>) -> Crat
                     let shown = match c {
                         Call::Path(p) => p.clone(),
                         Call::Method { name, .. } => format!(".{name}"),
-                        Call::Resolved(Callee { kind: Kind::Indirect(_), .. }) => "a function pointer or an `Fn` bound".to_string(),
+                        Call::Resolved(Callee { kind: Kind::Indirect(..), .. }) => "a function pointer or an `Fn` bound".to_string(),
                         Call::Resolved(Callee { kind: Kind::CallClosure, .. }) => "a closure".to_string(),
                         Call::Resolved(c) => c.name.clone(),
                         Call::Macro(m) => format!("{m}!"),
@@ -1359,11 +1406,11 @@ mod tests {
         let facts: Facts = [(
             "src/m.brs".to_string(),
             vec![
-                kind_fact(brs, "f(1)", Kind::Indirect(u32s.clone()), "", None),
-                kind_fact(brs, "crate::m::ops::calm", Kind::Value(u32s.clone()), "m::ops::calm", None),
+                kind_fact(brs, "f(1)", Kind::Indirect(Sig::of(u32s.clone()), None), "", None),
+                kind_fact(brs, "crate::m::ops::calm", Kind::Value(Sig::of(u32s.clone())), "m::ops::calm", None),
                 kind_fact(brs, "crate::m::ops::apply", Kind::Call, "m::ops::apply", None),
-                kind_fact(brs, "|n|", Kind::Closure(u32s.clone()), "", Some("|n|")),
-                kind_fact(brs, "|s|", Kind::Closure(vec!["&str".into()]), "", Some("|s|")),
+                kind_fact(brs, "|n|", Kind::Closure(Sig::of(u32s.clone())), "", Some("|n|")),
+                kind_fact(brs, "|s|", Kind::Closure(Sig::of(vec!["&str".into()])), "", Some("|s|")),
                 kind_fact(brs, "slow(2)", Kind::CallClosure, "", Some("|n|")),
                 kind_fact(brs, "named(", Kind::CallClosure, "", Some("|s|")),
             ],
@@ -1378,7 +1425,7 @@ mod tests {
         let run: Vec<&str> = all.iter().filter(|u| u.function == "c::m::main_m::run" && u.level >= 2).map(|u| u.what.as_str()).collect();
         assert_eq!(run, ["a loop", "a loop", "a call of `apply`, which needs `structured`,"], "{all:#?}");
         // a type parameter fits any argument: all three take one
-        assert_eq!(analyse(std::slice::from_ref(&f), Some(&facts)).candidates_for(&["_".into()]), 3);
+        assert_eq!(analyse(std::slice::from_ref(&f), Some(&facts)).candidates_for(&Sig::of(vec!["_".into()])), 3);
     }
 
     #[test]
@@ -1397,6 +1444,60 @@ mod tests {
         assert_eq!(in_fn("f"), Vec::<String>::new());
         // the dependency's macro is not reported on its own
         assert!(errs.iter().all(|e| !e.starts_with("library:")), "{errs:#?}");
+    }
+
+    #[test]
+    fn an_indirect_call_fits_by_result_too_and_follows_what_a_library_gave() {
+        // `apply` calls a `fn(u32) -> u32`; `loud` takes a `u32` too but gives a `String`, so it does not fit; `given`
+        // calls what `Option::unwrap` gave; `stray` calls a value nothing in the crate fits, from no library
+        let brs = "mod ops {\n    fn apply(f) {\n        f(1)\n    }\n    fn given(o) {\n        o.unwrap()(2)\n    }\n    fn stray(g) {\n        g(\"x\")\n    }\n}\nmod main_m {\n    fn calm(x) {\n        x\n    }\n    fn loud(x) {\n        println!(\"{}\", x);\n        x\n    }\n    fn run() {\n        apply(calm);\n        apply(loud)\n    }\n}\n";
+        let f = pin(&file(brs, json!([pure("c::m::ops::apply"), pure("c::m::ops::given"), pure("c::m::ops::stray"), pure("c::m::main_m::calm"), pure("c::m::main_m::loud"), pure("c::m::main_m::run")])), "c::m::ops", "calculations");
+        let sig = |args: &[&str], ret: Option<&str>| Sig { args: args.iter().map(|a| a.to_string()).collect(), ret: ret.map(str::to_string) };
+        let facts: Facts = [(
+            "src/m.brs".to_string(),
+            vec![
+                kind_fact(brs, "f(1)", Kind::Indirect(sig(&["u32"], Some("u32")), None), "", None),
+                kind_fact(brs, "o.unwrap()(2)", Kind::Indirect(sig(&["u32"], Some("u32")), Some("std::option::Option::unwrap".into())), "", None),
+                kind_fact(brs, "g(", Kind::Indirect(sig(&["&str"], Some("usize")), None), "", None),
+                kind_fact(brs, "calm);", Kind::Value(sig(&["u32"], Some("u32"))), "m::main_m::calm", None),
+                kind_fact(brs, "loud)\n", Kind::Value(sig(&["u32"], Some("String"))), "m::main_m::loud", None),
+            ],
+        )]
+        .into_iter()
+        .collect();
+        let errs = check_with(std::slice::from_ref(&f), Some(&facts));
+        assert_eq!(errs.len(), 1, "{errs:#?}");
+        assert!(errs[0].contains("a call through a function pointer or an `Fn` bound that no function or closure of the crate fits, whose effects nothing says in `c::m::ops::stray`"), "{errs:#?}");
+        // were `loud` a `u32 -> u32`, `apply` and `given` could print
+        let mut facts2 = facts.clone();
+        facts2.get_mut("src/m.brs").unwrap()[4] = kind_fact(brs, "loud)\n", Kind::Value(sig(&["u32"], Some("u32"))), "m::main_m::loud", None);
+        let errs = check_with(&[f], Some(&facts2));
+        assert!(errs.iter().any(|e| e.contains("in `c::m::ops::apply`")) && errs.iter().any(|e| e.contains("in `c::m::ops::given`")), "{errs:#?}");
+    }
+
+    #[test]
+    fn the_standard_librarys_macros_and_procedural_macros() {
+        // `std` from its source: `println!` calls `std::io::_print`; `thread_local!` is the table's (`shared`), though its
+        // body is read; `rare!`, which the prelude list does not name, is `std`'s all the same
+        let std = ("library:std".to_string(), "macro_rules! println {\n    ($($arg:tt)*) => {{ std::io::_print(std::format_args_nl!($($arg)*)); }};\n}\nmacro_rules! thread_local {\n    ($($tt:tt)+) => { std::thread::local_impl::thread_local_inner!($($tt)+); };\n}\nmacro_rules! rare {\n    ($x:expr) => { std::fs::remove_file($x) };\n}\n".to_string(), json!({"crate": "std 0.0.0", "module": "src/lib.rs", "subjects": [], "library": true}));
+        // `pm` is a procedural macro crate: rustc places what `pm::wipe!` expands to at its invocation
+        let pm = ("library:pm".to_string(), String::new(), json!({"crate": "pm 0.0.0", "module": "src/lib.rs", "subjects": [], "library": true, "proc_macro": true}));
+        let brs = "mod calc {\n    fn a(x) {\n        println!(\"{}\", x)\n    }\n    fn b() {\n        thread_local!(static N: u8 = 1);\n    }\n    fn c(p) {\n        rare!(p)\n    }\n    fn d() {\n        pm::wipe!(\"x\")\n    }\n}\n";
+        let f = pin(&file(brs, json!([pure("c::m::calc::a"), pure("c::m::calc::b"), pure("c::m::calc::c"), pure("c::m::calc::d")])), "c::m::calc", "calculations");
+        let errs = check(&[f.clone(), std.clone(), pm.clone()]);
+        let of = |errs: &[String], g: &str| errs.iter().filter(|e| e.contains(&format!("in `c::m::calc::{g}`"))).cloned().collect::<Vec<_>>();
+        assert!(of(&errs, "a")[0].contains("a call of `println!`, which needs `effects`"), "{errs:#?}");
+        assert!(of(&errs, "b")[0].contains("the macro `thread_local!` (`std::thread_local`)") && of(&errs, "b")[0].contains("needs level `shared`"), "{errs:#?}");
+        assert!(of(&errs, "c")[0].contains("a call of `rare!`, which needs `effects`"), "{errs:#?}");
+        // without rustc's calls, the procedural macro is the table's, which does not list `pm`
+        assert!(of(&errs, "d")[0].contains("the macro `pm::wipe!` (`pm::wipe`), from a library with no level"), "{errs:#?}");
+        // with them, it is what they say it calls: here, `std::fs::remove_file`
+        let facts: Facts = [("src/m.brs".to_string(), vec![fact(brs, "pm::wipe!", "std::fs::remove_file::<&str>")])].into_iter().collect();
+        let errs = check_with(&[f.clone(), std.clone(), pm.clone()], Some(&facts));
+        assert_eq!(of(&errs, "d").len(), 1, "{errs:#?}");
+        assert!(of(&errs, "d")[0].contains("`remove_file` (`std::fs::remove_file`)"), "{errs:#?}");
+        let pure_facts: Facts = [("src/m.brs".to_string(), vec![fact(brs, "pm::wipe!", "std::string::String::new")])].into_iter().collect();
+        assert_eq!(of(&check_with(&[f, std, pm], Some(&pure_facts)), "d"), Vec::<String>::new());
     }
 
     #[test]
