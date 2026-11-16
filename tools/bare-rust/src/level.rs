@@ -68,6 +68,13 @@
 //! repeats). An invocation of it is a call of it, and needs what it needs; one that expands to itself is not recursion
 //! at run time. Its body counts in the module it is defined in, as a function's does. What a rule's right side builds
 //! from tokens it is given (`$body` that is code) is the invocation's, through the arguments.
+//!
+//! A macro a dependency exports is followed into its body the same way, from the dependency's source, when weave runs
+//! cargo (`crate::facts::library_macros`): its rules are read as code, with `$crate` as the library's name, and what
+//! they call is counted at the levels the table gives (a call into its own library at that library's level). rustc
+//! places the calls of its expansions in the dependency's source, outside the crate, so this is read from the syntax.
+//! An invocation of it is a call of it, and what it uses is reported there. Without its source, or without cargo, a
+//! dependency's macro is the table's (`macro_level`).
 use crate::facts::{Callee, Fact, Facts, Kind};
 use crate::{parse_bare, text};
 use serde_json::Value;
@@ -169,6 +176,9 @@ enum Call {
     Macro(String),
     /// A call of a closure, as rustc resolved it: where the closure is written (bare file, offset).
     Closure((String, usize)),
+    /// An invocation of a macro a dependency exports, read from its source (`crate::facts::library_macros`), by its
+    /// path (`y_collections::list`).
+    LibraryMacro(String),
 }
 
 /// A fact as a call: one of a closure is the closure's, by where it is written.
@@ -197,6 +207,8 @@ struct Function {
     /// at. A closure is read on its own only as what a call through a pointer or an `Fn` bound may call: what it uses is
     /// its function's already, and is reported there.
     closure: Option<(String, usize)>,
+    /// Whether it is a macro of a dependency, read from its source: what it uses is counted where it is invoked.
+    library: bool,
 }
 
 /// An import: the module it is in, the path as written, its file and line.
@@ -223,8 +235,17 @@ fn enclosing(found: &[(String, Node)], offset: usize) -> Option<usize> {
 
 /// The functions and imports of one bare body. With `facts`, the calls are the ones rustc resolved in it, each in the
 /// innermost function it is in; without, the ones its syntax shows.
-fn read_file(file: &str, brs: &str, js: &Value, facts: Option<&[Fact]>, crate_macros: &BTreeSet<String>, fns: &mut Vec<Function>, imports: &mut Vec<Import>) {
+/// The macros the crate defines, by name, and those its dependencies export, by path (`y_collections::list`).
+struct Macros<'m> {
+    defined: &'m BTreeSet<String>,
+    library: &'m BTreeSet<String>,
+}
+
+fn read_file(file: &str, brs: &str, js: &Value, facts: Option<&[Fact]>, macros: &Macros, fns: &mut Vec<Function>, imports: &mut Vec<Import>) {
+    let (crate_macros, library_macros) = (macros.defined, macros.library);
     let base = crate::weave::base_path(js);
+    // a dependency's exported macros (`crate::facts::library_macros`)
+    let library = js["library"] == true;
     let tree = parse_bare(brs);
     let subject = |f: &str| js["subjects"].as_array().into_iter().flatten().find(|s| s["kind"] == "function" && s["name"] == f).cloned();
     let mut found: Vec<(String, Node)> = vec![];
@@ -255,7 +276,7 @@ fn read_file(file: &str, brs: &str, js: &Value, facts: Option<&[Fact]>, crate_ma
             if from_rustc {
                 calls = std::mem::take(&mut resolved[k]);
             }
-            fns.push(Function { path: path.clone(), file: file.to_string(), own, calls, trait_name: None, macros, resolved: from_rustc, is_macro, closure: None });
+            fns.push(Function { path: path.clone(), file: file.to_string(), own, calls, trait_name: None, macros, resolved: from_rustc, is_macro, closure: None, library });
             continue;
         }
         if node.child_by_field_name("body").is_some() {
@@ -309,7 +330,7 @@ fn read_file(file: &str, brs: &str, js: &Value, facts: Option<&[Fact]>, crate_ma
             calls = std::mem::take(&mut resolved[k]);
         }
         let trait_name = node.parent().and_then(|p| p.parent()).filter(|p| p.kind() == "impl_item").and_then(|p| p.child_by_field_name("trait")).map(|t| last_segment(text(t, brs)));
-        fns.push(Function { path: path.clone(), file: file.to_string(), own, calls, trait_name, macros, resolved: from_rustc, is_macro, closure: None });
+        fns.push(Function { path: path.clone(), file: file.to_string(), own, calls, trait_name, macros, resolved: from_rustc, is_macro, closure: None, library });
     }
     // each closure of a function, read on its own: what a call through a pointer or an `Fn` bound may call
     for (path, node) in found.iter().filter(|(_, n)| n.kind() == "function_item") {
@@ -335,7 +356,7 @@ fn read_file(file: &str, brs: &str, js: &Value, facts: Option<&[Fact]>, crate_ma
                 if from_rustc {
                     calls = inside;
                 }
-                fns.push(Function { path: cpath, file: file.to_string(), own, calls, trait_name: None, macros, resolved: from_rustc, is_macro: false, closure: Some((file.to_string(), n.start_byte())) });
+                fns.push(Function { path: cpath, file: file.to_string(), own, calls, trait_name: None, macros, resolved: from_rustc, is_macro: false, closure: Some((file.to_string(), n.start_byte())), library });
             }
             let mut c = n.walk();
             stack.extend(n.named_children(&mut c));
@@ -347,8 +368,12 @@ fn read_file(file: &str, brs: &str, js: &Value, facts: Option<&[Fact]>, crate_ma
     for f in fns[first..].iter_mut() {
         for (m, line) in f.macros.clone() {
             let name = ["::", "$crate::", "crate::", "self::"].iter().fold(m.as_str(), |n, p| n.strip_prefix(p).unwrap_or(n));
-            if !name.contains("::") && crate_macros.contains(name) && !uses.contains_key(name) {
+            let first = name.split("::").next().unwrap_or("");
+            let full = uses.get(first).map(|p| format!("{p}{}", &name[first.len()..])).unwrap_or_else(|| name.to_string());
+            if !name.contains("::") && crate_macros.contains(name) && !uses.contains_key(name) && !library {
                 f.calls.push((Call::Macro(name.to_string()), line));
+            } else if library_macros.contains(&full) {
+                f.calls.push((Call::LibraryMacro(full), line));
             } else if let Some((l, what)) = macro_level(&m, &uses, crate_macros) {
                 f.own.push(Use { level: l, what, function: f.path.clone(), file: file.to_string(), line });
             }
@@ -356,7 +381,11 @@ fn read_file(file: &str, brs: &str, js: &Value, facts: Option<&[Fact]>, crate_ma
     }
     // a call into a library needs its module's level (`libraries/levels.json`), through the file's imports; a call into a
     // library the table does not know needs `effects`, as nothing says it has none
-    let local = local_names(&tree.root_node(), brs, &base);
+    let mut local = local_names(&tree.root_node(), brs, &base);
+    if library {
+        // a dependency's macro calls into its library, whose level the table gives
+        local.remove(base.split("::").next().unwrap_or(""));
+    }
     // what rustc resolved needs no imports to follow: its library calls are counted with the crate's (`uses_with`)
     for f in fns[first..].iter_mut().filter(|f| !f.resolved) {
         for (call, line) in &f.calls {
@@ -711,7 +740,7 @@ fn resolve(call: &Call, caller: &str, krate: &str, fns: &BTreeMap<String, usize>
             let one = hits.len() == 1;
             (hits, one)
         }
-        Call::Resolved(_) | Call::Closure(_) => (vec![], false),
+        Call::Resolved(_) | Call::Closure(_) | Call::LibraryMacro(_) => (vec![], false),
         Call::Macro(name) => {
             let hits: Vec<usize> = fns.iter().filter(|(p, _)| p.ends_with(&format!("::{name}!"))).map(|(_, i)| *i).collect();
             let one = hits.len() == 1;
@@ -855,12 +884,20 @@ fn fits(want: &[String], have: &[String]) -> bool {
 pub fn analyse(files: &[(String, String, Value)], facts: Option<&Facts>) -> CrateLevels {
     let (mut fns, mut imports) = (vec![], vec![]);
     let mut types = BTreeSet::new();
-    let crate_macros: BTreeSet<String> = files.iter().flat_map(|(_, brs, _)| macro_names(parse_bare(brs).root_node(), brs)).collect();
+    let crate_macros: BTreeSet<String> = files.iter().filter(|f| f.2["library"] != true).flat_map(|(_, brs, _)| macro_names(parse_bare(brs).root_node(), brs)).collect();
+    let library_macros: BTreeSet<String> = files
+        .iter()
+        .filter(|f| f.2["library"] == true)
+        .flat_map(|(_, brs, js)| {
+            let base = crate::weave::base_path(js);
+            macro_names(parse_bare(brs).root_node(), brs).into_iter().map(move |m| format!("{base}::{m}"))
+        })
+        .collect();
     for (file, brs, js) in files {
-        read_file(file, brs, js, facts_of(facts, file), &crate_macros, &mut fns, &mut imports);
+        read_file(file, brs, js, facts_of(facts, file), &Macros { defined: &crate_macros, library: &library_macros }, &mut fns, &mut imports);
         type_names(parse_bare(brs).root_node(), brs, &mut types);
     }
-    let krate = files.first().map(|f| crate_name(&f.2)).unwrap_or_default();
+    let krate = files.iter().find(|f| f.2["library"] != true).map(|f| crate_name(&f.2)).unwrap_or_default();
     let index: BTreeMap<String, usize> = fns.iter().enumerate().map(|(i, f)| (f.path.clone(), i)).collect();
     // a call rustc resolved into a library needs the level of the library's module, and one into a library the table
     // does not list needs `effects`
@@ -892,6 +929,15 @@ pub fn analyse(files: &[(String, String, Value)], facts: Option<&Facts>) -> Crat
         for (c, line) in &f.calls {
             if let Call::Closure(def) = c {
                 t.push(Some((closures.get(def).into_iter().copied().collect(), true)));
+                continue;
+            }
+            if let Call::LibraryMacro(p) = c {
+                t.push(Some((index.get(&format!("{p}!")).into_iter().copied().collect(), true)));
+                continue;
+            }
+            if f.library && !matches!(c, Call::Macro(_)) {
+                // a dependency's macro names its library's functions, not the crate's
+                t.push(Some((vec![], false)));
                 continue;
             }
             let Call::Resolved(c) = c else {
@@ -964,6 +1010,7 @@ pub fn analyse(files: &[(String, String, Value)], facts: Option<&Facts>) -> Crat
                         Call::Resolved(c) => c.name.clone(),
                         Call::Macro(m) => format!("{m}!"),
                         Call::Closure(_) => "a closure".to_string(),
+                        Call::LibraryMacro(p) => format!("{}!", short(p)),
                     };
                     (hits, *line, one, shown)
                 })
@@ -989,7 +1036,7 @@ pub fn analyse(files: &[(String, String, Value)], facts: Option<&Facts>) -> Crat
     for (i, f) in fns.iter().enumerate() {
         for &(j, line) in &edges[i] {
             // a macro that expands to itself is not recursion at run time, and a closure's recursion is its function's
-            if !f.is_macro && !fns[j].is_macro && f.closure.is_none() && fns[j].closure.is_none() && reaches(j, i) {
+            if !f.is_macro && !fns[j].is_macro && f.closure.is_none() && fns[j].closure.is_none() && !f.library && reaches(j, i) {
                 let what = if i == j { format!("a call of `{}` inside it", short(&f.path)) } else { format!("recursion through `{}`", short(&fns[j].path)) };
                 own[i].push(Use { level: 2, what, function: f.path.clone(), file: f.file.clone(), line });
             }
@@ -1014,7 +1061,8 @@ pub fn analyse(files: &[(String, String, Value)], facts: Option<&Facts>) -> Crat
     }
     let mut out = vec![];
     // a closure is reported in its function, which uses all it uses
-    for (i, f) in fns.iter().enumerate().filter(|(_, f)| f.closure.is_none()) {
+    // and a dependency's macro where it is invoked
+    for (i, f) in fns.iter().enumerate().filter(|(_, f)| f.closure.is_none() && !f.library) {
         out.extend(own[i].iter().cloned());
         for (hits, line, one, shown) in &calls[i] {
             let (j, most) = hits.iter().map(|j| (*j, level[*j])).max_by_key(|x| x.1).unwrap();
@@ -1331,6 +1379,24 @@ mod tests {
         assert_eq!(run, ["a loop", "a loop", "a call of `apply`, which needs `structured`,"], "{all:#?}");
         // a type parameter fits any argument: all three take one
         assert_eq!(analyse(std::slice::from_ref(&f), Some(&facts)).candidates_for(&["_".into()]), 3);
+    }
+
+    #[test]
+    fn a_dependencys_macro_is_followed_into_its_body() {
+        // the dependency `y_runtime` exports `later!`, which detaches, and `shown!`, which calls `show`, a name the crate
+        // has a looping function for: the dependency's `show` is its own, not the crate's
+        let lib = ("library:y_runtime".to_string(), "macro_rules! later {\n    ($d:expr) => { y_runtime::task::detach($d, || 1) };\n}\nmacro_rules! shown {\n    ($x:expr) => { show($x) };\n}\n".to_string(), json!({"crate": "y_runtime 0.0.0", "module": "src/lib.rs", "subjects": [], "library": true}));
+        let brs = "use y_runtime::{later, shown};\nmod calc {\n    fn e(d) {\n        later!(d)\n    }\n    fn f(x) {\n        shown!(x)\n    }\n    fn show(x) {\n        loop {}\n    }\n}\n";
+        let f = pin(&file(brs, json!([pure("c::m::calc::e"), pure("c::m::calc::f"), pure("c::m::calc::show")])), "c::m::calc", "calculations");
+        // without its source, the table gives `y_runtime`'s macros `calculations`
+        let errs = check(std::slice::from_ref(&f));
+        assert!(errs.iter().all(|e| e.contains("c::m::calc::show")), "{errs:#?}");
+        let errs = check(&[f, lib]);
+        let in_fn = |g: &str| errs.iter().filter(|e| e.contains(&format!("in `c::m::calc::{g}`"))).cloned().collect::<Vec<_>>();
+        assert!(in_fn("e").len() == 1 && in_fn("e")[0].contains("a call of `later!`, which needs `effects`"), "{errs:#?}");
+        assert_eq!(in_fn("f"), Vec::<String>::new());
+        // the dependency's macro is not reported on its own
+        assert!(errs.iter().all(|e| !e.starts_with("library:")), "{errs:#?}");
     }
 
     #[test]

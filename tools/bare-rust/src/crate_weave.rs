@@ -143,6 +143,9 @@ pub struct CrateWeave {
     pub checks_via: Option<String>,
     /// The calls rustc resolved in the woven crate, by bare file, when the checks read them.
     pub facts: Option<crate::facts::Facts>,
+    /// The macros the crate's dependencies export, read from their sources (`crate::facts::library_macros`), when the
+    /// checks read them.
+    pub library_macros: Vec<(String, String, Value)>,
 }
 
 impl CrateWeave {
@@ -839,14 +842,18 @@ pub fn weave_crate_with(from: &Path, out: &Path, o: &WeaveOpts) -> R<CrateWeave>
         } else {
             Err("the woven crate does not build".into())
         };
+        // the macros the dependencies export, followed into their bodies: their sources are where cargo put them
+        cw.library_macros = crate::facts::library_macros(out).unwrap_or_default();
+        let mut with_libraries = bodies.clone();
+        with_libraries.extend(cw.library_macros.iter().cloned());
         let errs = match &facts {
             Ok((facts, targets)) => {
                 cw.checks_via = Some(format!("rustc (MIR of {})", targets.join(", ")));
-                levels_and_regions(&cw.files, &bodies, Some(facts), true)
+                levels_and_regions(&cw.files, &with_libraries, Some(facts), true)
             }
             Err(e) => {
                 cw.checks_via = Some(format!("syntax ({e})"));
-                levels_and_regions(&cw.files, &bodies, None, true)
+                levels_and_regions(&cw.files, &with_libraries, None, true)
             }
         };
         push_checks(&mut cw, errs);

@@ -467,3 +467,39 @@ fn calls_through_pointers_and_dyn_fn_are_resolved() {
         assert!(e.contains(&format!("a call of a function pointer or an `Fn` bound (it may be `wc_indirect::loud::shout`, which needs the most of the 3 it may be), which needs `effects`, in `wc_indirect::ops::{f}`")), "{errs:#?}");
     }
 }
+
+/// A macro a dependency exports is followed into its body, read from the dependency's source: `double!` only
+/// multiplies, and `noisy!` prints. Neither crate is in `libraries/levels.json`, so the table alone gives both `effects`.
+#[test]
+fn a_dependencys_macros_are_followed_into_their_bodies() {
+    let top = root().join("target/bare-rust-test/wc_dep_macros");
+    let _ = fs::remove_dir_all(&top);
+    let dep = top.join("wc_noisy");
+    fs::create_dir_all(dep.join("src")).unwrap();
+    fs::write(dep.join("Cargo.toml"), "[package]\nname = \"wc_noisy\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n").unwrap();
+    fs::write(dep.join("src/lib.rs"), "#[macro_export]\nmacro_rules! double {\n    ($x:expr) => {\n        $x * 2\n    };\n}\n\n#[macro_export]\nmacro_rules! noisy {\n    ($x:expr) => {\n        println!(\"{}\", $x)\n    };\n}\n").unwrap();
+    let dir = top.join("crate");
+    fs::create_dir_all(dir.join("src")).unwrap();
+    fs::write(dir.join("Cargo.toml"), format!("[package]\nname = \"wc_dep_macros\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\nwc_noisy = {{ path = \"{}\" }}\n\n[workspace]\n", dep.display())).unwrap();
+    fs::write(dir.join("src/lib.rs"), "pub mod calc {\n    use wc_noisy::{double, noisy};\n\n    pub fn twice(x: u32) -> u32 {\n        double!(x)\n    }\n\n    pub fn tell(x: u32) {\n        noisy!(x);\n    }\n}\n").unwrap();
+    let bare = top.join("bare");
+    let results = strip_crate(&dir, &bare, true).unwrap();
+    assert!(results.iter().all(|r| r.outcome.is_ok()), "{:?}", results.iter().map(|r| r.outcome.clone()).collect::<Vec<_>>());
+    let cj = bare.join("src/lib.constraints.json");
+    let mut js: Value = serde_json::from_str(&fs::read_to_string(&cj).unwrap()).unwrap();
+    for s in js["subjects"].as_array_mut().unwrap() {
+        if s["name"] == "wc_dep_macros::calc" {
+            s["level"] = "calculations".into();
+        }
+    }
+    fs::write(&cj, serde_json::to_string_pretty(&js).unwrap()).unwrap();
+    // from the table alone, both macros are of a library with no level
+    let brs = fs::read_to_string(bare.join("src/lib.brs")).unwrap();
+    let syntax = bare_rust::level::check(&[("src/lib.brs".into(), brs, js.clone())]);
+    assert_eq!(syntax.len(), 2, "{syntax:#?}");
+    let cw = weave(&dir, &bare, &top.join("woven"), false);
+    assert!(cw.library_macros.iter().any(|(n, t, _)| n == "library:wc_noisy" && t.contains("macro_rules! noisy")), "{:?}", cw.library_macros);
+    let errs: Vec<&String> = cw.weave_errors.iter().map(|(_, e)| e).collect();
+    assert_eq!(errs.len(), 1, "{errs:#?}");
+    assert!(errs[0].contains("a call of `noisy!`, which needs `effects`, in `wc_dep_macros::calc::tell`"), "{errs:#?}");
+}
