@@ -564,6 +564,66 @@ pub fn of_crate(dir: &Path, target: &Path, krate: &str, files: &[Woven], builds:
     Ok((to_bare(&calls, files), read))
 }
 
+/// The macros the crate's direct dependencies export (`#[macro_export] macro_rules! name`), read from their sources,
+/// for the level check to follow into their bodies (`crate::level`): rustc places the calls of a library macro's
+/// expansion in the library's source, outside the crate, so its facts do not reach the bare body. Each dependency is
+/// one file of the form `crate::level::uses_with` reads: its macros' definitions, with `$crate` as the library's name,
+/// marked `"library": true`. A dependency whose source cargo does not have yet, or that exports no macro, gives none.
+pub fn library_macros(dir: &Path) -> R<Vec<(String, String, Value)>> {
+    let o = Command::new("cargo").args(["metadata", "--format-version", "1"]).current_dir(dir).output().map_err(|e| format!("cargo metadata: {e}"))?;
+    if !o.status.success() {
+        return Err(format!("cargo metadata: {}", String::from_utf8_lossy(&o.stderr).lines().next().unwrap_or("")));
+    }
+    let v: Value = serde_json::from_slice(&o.stdout).map_err(|e| e.to_string())?;
+    let root = std::fs::canonicalize(dir).map_err(|e| e.to_string())?;
+    let packages = v["packages"].as_array().cloned().unwrap_or_default();
+    let manifest_dir = |p: &Value| std::fs::canonicalize(p["manifest_path"].as_str().unwrap_or("")).ok().and_then(|m| m.parent().map(Path::to_path_buf));
+    let Some(own) = packages.iter().find(|p| manifest_dir(p) == Some(root.clone())) else { return Ok(vec![]) };
+    let mut out = vec![];
+    for d in own["dependencies"].as_array().into_iter().flatten().filter(|d| d["kind"].is_null()) {
+        let name = d["name"].as_str().unwrap_or("");
+        let Some(p) = packages.iter().find(|p| p["name"] == name) else { continue };
+        let Some(lib) = p["targets"].as_array().into_iter().flatten().find(|t| t["kind"].as_array().into_iter().flatten().any(|k| k == "lib")) else { continue };
+        let krate = d["rename"].as_str().or(lib["name"].as_str()).unwrap_or(name).replace('-', "_");
+        let Some(src) = Path::new(lib["src_path"].as_str().unwrap_or("")).parent().map(Path::to_path_buf) else { continue };
+        let mut files = vec![];
+        let mut stack = vec![src.clone()];
+        while let Some(d) = stack.pop() {
+            for e in std::fs::read_dir(&d).into_iter().flatten().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    stack.push(p);
+                } else if p.extension().is_some_and(|x| x == "rs") {
+                    files.push(p);
+                }
+            }
+        }
+        files.sort();
+        let mut text = String::new();
+        for f in files {
+            let Ok(code) = std::fs::read_to_string(&f) else { continue };
+            let tree = crate::parse_rust(&code);
+            let mut nodes = vec![tree.root_node()];
+            while let Some(n) = nodes.pop() {
+                if n.kind() == "macro_definition" {
+                    let exported = n.prev_named_sibling().is_some_and(|a| a.kind() == "attribute_item" && crate::text(a, &code).contains("macro_export"));
+                    if exported {
+                        text.push_str(&crate::text(n, &code).replace("$crate", &krate));
+                        text.push('\n');
+                    }
+                    continue;
+                }
+                let mut c = n.walk();
+                nodes.extend(n.named_children(&mut c));
+            }
+        }
+        if !text.is_empty() {
+            out.push((format!("library:{krate}"), text, serde_json::json!({"crate": format!("{krate} 0.0.0"), "module": "src/lib.rs", "subjects": [], "library": true})));
+        }
+    }
+    Ok(out)
+}
+
 /// A function of a library crate, by its path (`y_runtime::shared::atomic`, `y_runtime::System::console`): whether
 /// another crate can call it (`pub`, or a method of an impl of a trait), and the byte range of its node.
 struct LibFn {

@@ -419,7 +419,10 @@ place counts as `effects`. The calls in a macro's arguments are the body's, from
 the arguments as a call's. A macro the crate defines (`macro_rules! name`) is read as one of its functions, whose body
 is what its rules expand to: the calls rustc places in its definition, or, without a build, each rule's right side
 read as code (`$x` as `x`, a repetition as a block of what it repeats). An invocation of it is a call of it and needs
-what it needs, and a macro that expands to itself is not recursion.
+what it needs, and a macro that expands to itself is not recursion. A macro a dependency exports (`#[macro_export]`)
+is read the same way, from the dependency's source as cargo has it, when weave runs cargo: its rules with `$crate` as
+the library's name, their calls at the levels the table gives. Without its source, the table's level for its path is
+used.
 
 `bare-rust levels <bare-dir> --crate <crate-dir> --out <dir>` weaves with cargo and prints the levels from rustc's
 calls (`--show-calls` lists them). `bare-rust levels --libraries <crate>…` checks `libraries/levels.json` against what a

@@ -291,6 +291,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
                             }
                         }
                     }
+                    files.extend(cw.library_macros.iter().cloned());
                     cw.facts
                 }
                 None => {
