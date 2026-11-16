@@ -1862,7 +1862,8 @@ prints it under the file's `module` line:
   type's whatever names the receiver (a closure's parameter, a chained call), and a library's function is found where
   it is defined, through a re-export, a renamed import or a local that holds it. A trait's method called on a type
   parameter may be any impl of the trait in the crate; a library's trait method needs the level of its type's module
-  and of its trait's. rustc reads every target of the crate, its unit tests, and every build of it whose check passes
+  and of its trait's. A call through a function pointer, a `dyn Fn` or an `Fn` bound may be any function the crate
+  names as a value, or any closure it writes, that takes the call's argument types, and needs the most of them. rustc reads every target of the crate, its unit tests, and every build of it whose check passes
   (another target, features, `--cfg`, a release build), so code that only a test or another build compiles is read
   from it too. Without a build (a crate that does not compile, a weave without cargo, `bare-rust levels` without
   `--crate`), and for a function no build compiles, a call is matched through the file's `use` declarations, and a method call takes its receiver's
@@ -1940,8 +1941,9 @@ region 'memory.setup.new_game#fetch'
   rustc where the woven crate builds, as § 6.22 does, so `atomic` bound to a local or re-exported is still the
   runtime's transaction; without a build, it resolves the names through the file's `use` declarations and the
   constraint data. An atomic region runs in a transaction of `y_runtime::shared`, and, as it may
-  run again, uses no capability but `shared` state, does not wait, calls no function passed in, and calls nothing
-  that needs `effects` (§ 6.22); a snapshot one passes `Isolation::Snapshot`; `within` binds a deadline that every
+  run again, uses no capability but `shared` state, does not wait, calls no function passed in whose effects nothing
+  says (with rustc's facts, one is held to the crate's function values and closures that it may be), and calls
+  nothing that needs `effects` (§ 6.22); a snapshot one passes `Isolation::Snapshot`; `within` binds a deadline that every
   wait takes, by whatever name it binds it to; `forever` gives the wait a parameter of type `Forever`;
   `detach` and `supervise` call the runtime's `detach` and `supervised`; `uncancellable` holds cancellation with a
   `Cancellation`; `waits until name` marks its condition and retries until it holds. A region that is not in its function's body, that says other constraints than its marker, or whose

@@ -338,7 +338,7 @@ fn levels_and_regions_read_what_rustc_resolved() {
     assert!(region.contains("runs in no transaction"), "{region}");
     // and with what rustc resolved, the region is kept
     let facts = cw.facts.as_ref().unwrap();
-    assert_eq!(bare_rust::region::check_body_with(&brs, &js, "wc_levels::store::add#add", Some(&facts["src/lib.brs"])), Ok(()));
+    assert_eq!(bare_rust::region::check_body_with(&brs, &js, "wc_levels::store::add#add", Some(&facts["src/lib.brs"]), None), Ok(()));
 }
 
 /// `libraries/levels.json` against what the library crates of the examples call (`facts::check_library`): no public
@@ -436,4 +436,34 @@ fn gated_and_test_code_is_read_from_rustc() {
     let errs: Vec<&String> = cw.weave_errors.iter().map(|(_, e)| e).collect();
     assert_eq!(errs.len(), 1, "{errs:#?}");
     assert!(errs[0].contains("`detach` (`y_runtime::task::detach`) in `wc_gated::ticks::start` needs level `effects`, and module `wc_gated::ticks` is at `calculations`"), "{errs:#?}");
+}
+
+/// A call through a function pointer or a `dyn Fn` may be any function value or closure of the crate that takes its
+/// arguments, as rustc reads them: `ops`, pinned at `calculations`, calls what it is given, and the crate gives it
+/// `double` (a calculation), `shout` (which prints) and a closure that loops. From the syntax alone, `f(x)` names no
+/// function.
+#[test]
+fn calls_through_pointers_and_dyn_fn_are_resolved() {
+    let src = "pub mod ops {\n    pub fn apply(f: fn(u32) -> u32, x: u32) -> u32 {\n        f(x)\n    }\n\n    pub fn apply_dyn(f: &dyn Fn(u32) -> u32, x: u32) -> u32 {\n        f(x)\n    }\n\n    pub fn named(f: fn(&str) -> usize) -> usize {\n        f(\"x\")\n    }\n}\n\npub mod calm {\n    pub fn double(x: u32) -> u32 {\n        x * 2\n    }\n\n    pub fn length(s: &str) -> usize {\n        s.len()\n    }\n}\n\npub mod loud {\n    pub fn shout(x: u32) -> u32 {\n        println!(\"{x}\");\n        x\n    }\n\n    pub fn run() -> u32 {\n        let slow = |x: u32| {\n            let mut n = x;\n            while n > 0 {\n                n -= 1;\n            }\n            n\n        };\n        let _ = crate::ops::named(crate::calm::length);\n        crate::ops::apply(crate::calm::double, 1) + crate::ops::apply_dyn(&shout, 2) + crate::ops::apply_dyn(&slow, 3)\n    }\n}\n";
+    let (dir, bare, out) = krate("wc_indirect", src);
+    let cj = bare.join("src/lib.constraints.json");
+    let mut js: Value = serde_json::from_str(&fs::read_to_string(&cj).unwrap()).unwrap();
+    for s in js["subjects"].as_array_mut().unwrap() {
+        if s["name"] == "wc_indirect::ops" {
+            s["level"] = "calculations".into();
+        }
+    }
+    fs::write(&cj, serde_json::to_string_pretty(&js).unwrap()).unwrap();
+    let brs = fs::read_to_string(bare.join("src/lib.brs")).unwrap();
+    assert_eq!(bare_rust::level::check(&[("src/lib.brs".into(), brs, js.clone())]), Vec::<String>::new());
+    let cw = weave(&dir, &bare, &out, false);
+    assert!(cw.checks_via.as_deref().is_some_and(|v| v.starts_with("rustc")), "{:?}", cw.checks_via);
+    let mut errs: Vec<&String> = cw.weave_errors.iter().map(|(_, e)| e).collect();
+    errs.sort();
+    // `apply` and `apply_dyn` take a `u32`, as `double`, `shout` and `slow` do: they may print; `named` takes a `&str`,
+    // as only `length` does
+    assert_eq!(errs.len(), 2, "{errs:#?}");
+    for (e, f) in errs.iter().zip(["apply", "apply_dyn"]) {
+        assert!(e.contains(&format!("a call of a function pointer or an `Fn` bound (it may be `wc_indirect::loud::shout`, which needs the most of the 3 it may be), which needs `effects`, in `wc_indirect::ops::{f}`")), "{errs:#?}");
+    }
 }
