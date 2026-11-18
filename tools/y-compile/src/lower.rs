@@ -252,6 +252,22 @@ impl<'a> Lowerer<'a> {
 
     /// An expression, lowered with a type it is wanted as, where the context gives one.
     pub fn expr_want(&mut self, e: &Node, want: &Ty) -> Ex {
+        // `list.count()` where a `uint32` or an `int32` is wanted: the runtime's count of that type
+        if matches!(want, Ty::U32 | Ty::I32) && e.kind == "call" && e.nodes("args").is_empty() {
+            let c = e.node("callee").unwrap();
+            if c.kind == "member" && c.str("name") == Some("count") {
+                let l = self.expr(c.node("object").unwrap());
+                if matches!(l.ty, Ty::List(_)) {
+                    self.use_("y_runtime::list");
+                    let r = self.by_ref(l.clone(), &l.ty.clone());
+                    return if *want == Ty::U32 {
+                        ex(format!("list::count({r})"), Ty::U32, Form::Temp, ATOM)
+                    } else {
+                        ex(format!("list::count_int32({r})"), Ty::I32, Form::Temp, ATOM)
+                    };
+                }
+            }
+        }
         match e.kind {
             "list" if e.nodes("items").is_empty() => {
                 self.use_("y_collections::List");
@@ -314,7 +330,7 @@ impl<'a> Lowerer<'a> {
                 format!("List::from({})", x.code)
             }
             _ if matches!(x.form, Form::Ref | Form::Mut) && self.is_copy(&x.ty) => format!("*{}", x.code),
-            _ if matches!(x.form, Form::Ref | Form::Mut) && name_like(&x.code) && x.ty != Ty::Unknown => format!("{}.clone()", x.code),
+            _ if matches!(x.form, Form::Ref | Form::Mut) && x.ty != Ty::Unknown => format!("{}.clone()", wrap(&x, ATOM)),
             _ => x.code,
         }
     }
@@ -600,7 +616,8 @@ impl<'a> Lowerer<'a> {
                 ("optional", "some") => {
                     let x = self.expr(args[0].1);
                     let ty = x.ty.clone();
-                    return ex(format!("Some({})", x.code), Ty::Opt(Box::new(ty)), Form::Temp, ATOM);
+                    let v = self.owned(x, &ty);
+                    return ex(format!("Some({v})"), Ty::Opt(Box::new(ty)), Form::Temp, ATOM);
                 }
                 _ => {}
             }
@@ -795,6 +812,12 @@ impl<'a> Lowerer<'a> {
                 let n = self.expr(args[1].1).code;
                 ex(format!("List::from({r}.chosen({l}, {n}))"), Ty::List(Box::new(elem)), Form::Temp, ATOM)
             }
+            (Ty::Cap(c), "one_of") if c == "random" => {
+                let from = self.expr(args[0].1);
+                let t = from.ty.clone();
+                let l = self.by_ref(from, &t);
+                ex(format!("{r}.one_of({l})"), t.elem(), Form::Temp, ATOM)
+            }
             (Ty::Cap(c), "shuffled") if c == "random" => {
                 self.use_("y_collections::List");
                 let from = self.expr(args[0].1);
@@ -986,6 +1009,24 @@ impl<'a> Lowerer<'a> {
                 ex(format!("{} ^ {o}", wrap(&recv, 61)), recv.ty.clone(), Form::Temp, 60)
             }
             (Ty::U32, "to_uint32") => recv,
+            (Ty::I32, "to_uint32") => {
+                self.use_("y_runtime::number");
+                ex(format!("number::to_uint32({})", recv.code), Ty::U32, Form::Temp, ATOM)
+            }
+            (Ty::U32, "to_int32") => {
+                self.use_("y_runtime::number");
+                ex(format!("number::to_int32({})", recv.code), Ty::I32, Form::Temp, ATOM)
+            }
+            (t, "divided_rounding_up") if t.is_int() => {
+                let n = self.expr_want(args[0].1, t).code;
+                ex(format!("{r}.div_ceil({n})"), recv.ty.clone(), Form::Temp, ATOM)
+            }
+            (t, "max" | "min") if t.is_int() => {
+                let o = self.expr_want(args[0].1, t);
+                let t = t.clone();
+                let o = self.owned(o, &t);
+                ex(format!("{r}.{name}({o})"), t, Form::Temp, ATOM)
+            }
             (Ty::Res(_, e), "failure") => ex(format!("{r}.expect_err(\"a failure\")"), (**e).clone(), Form::Temp, ATOM),
             _ => {
                 let parts: Vec<String> = args.iter().map(|(_, a)| self.expr(a).code).collect();
@@ -1017,7 +1058,7 @@ impl<'a> Lowerer<'a> {
                 self.compare(l, r, op)
             }
             "<" | ">" | "<=" | ">=" => self.compare(l, r, op),
-            "+" | "-" | "*" | "/" | "mod" => {
+            "+" | "-" | "*" | "/" | "mod" | "%" => {
                 let p = if op == "+" || op == "-" { 70 } else { 80 };
                 let rop = if op == "mod" { "%" } else { op };
                 let a = self.expr(l);
@@ -1033,7 +1074,14 @@ impl<'a> Lowerer<'a> {
     }
 
     fn compare(&mut self, l: &Node, r: &Node, op: &str) -> Ex {
-        let a = self.expr(l);
+        // `list.count()` against a `uint32`: the count as one
+        let counted = l.kind == "call" && l.nodes("args").is_empty() && l.node("callee").is_some_and(|c| c.kind == "member" && c.str("name") == Some("count"));
+        let a = if counted {
+            let other = self.expr(r).ty;
+            self.expr_want(l, &other)
+        } else {
+            self.expr(l)
+        };
         if a.ty == Ty::List(Box::new(Ty::HostStr)) && r.kind == "list" {
             let items: Vec<String> = r.nodes("items").iter().map(|i| self.expr(i).code).collect();
             return ex(format!("{} {op} [{}]", wrap(&a, 51), items.join(", ")), Ty::Bool, Form::Temp, 50);
@@ -1264,7 +1312,11 @@ impl<'a> Lowerer<'a> {
                 self.bind(name, x.ty, form);
             }
             "assign" => {
-                let target = self.expr(st.node("target").unwrap());
+                let mut target = self.expr(st.node("target").unwrap());
+                // a number the function was lent to change: `*left = …`
+                if target.form == Form::Mut && name_like(&target.code) && self.is_copy(&target.ty) {
+                    target.code = format!("*{}", target.code);
+                }
                 let v = st.node("value").unwrap();
                 let tt = target.ty.clone();
                 // `x := x + e` is `x += e`; `x := x.xor(e)` is `x ^= e`
@@ -1314,6 +1366,7 @@ impl<'a> Lowerer<'a> {
             "break" => self.line("break;"),
             "if" => self.if_(st, tail),
             "conditional" => self.conditional(st, tail),
+            "compare" => self.compare_stmt(st, tail),
             "while" => self.loop_(st),
             "for" => self.loop_(st),
             "region" => self.region(st, tail),
@@ -1562,13 +1615,23 @@ impl<'a> Lowerer<'a> {
                     conds = conds[k + 1..].to_vec();
                 }
                 for (k, c) in conds.iter().enumerate() {
-                    let x = self.expr(c.node("test").unwrap());
+                    let t = c.node("test").unwrap();
                     let name = c.str("name").unwrap();
-                    if k == 0 {
-                        self.line(format!("if {} {{ // y: #{name}", x.code));
-                    } else {
-                        self.line(format!("}} else if {} {{ // y: #{name}", x.code));
+                    let lead = if k == 0 { "" } else { "} else " };
+                    // `condition l.c = (x != optional.none):` narrows `x` in its statements
+                    if t.kind == "binary" && t.str("op") == Some("!=") && is_member(t.node("right").unwrap(), "optional", "none") {
+                        if let Some(x) = name_of(t.node("left").unwrap()) {
+                            let inner = self.var(x).map(|v| v.ty.elem()).unwrap_or(Ty::Unknown);
+                            self.line(format!("{lead}if let Some({x}) = {x} {{ // y: #{name}"));
+                            self.push_scope();
+                            self.bind(x, inner, Form::Place);
+                            self.branch_block(name, &c.nodes("body"), tail);
+                            self.pop_scope();
+                            continue;
+                        }
                     }
+                    let x = self.expr(t);
+                    self.line(format!("{lead}if {} {{ // y: #{name}", x.code));
                     self.branch_block(name, &c.nodes("body"), tail);
                 }
                 if let Some(e) = els {
@@ -1632,15 +1695,19 @@ impl<'a> Lowerer<'a> {
                     return;
                 }
                 if let Ty::Opt(inner) = s.ty.clone() {
-                    // `conditional held = …:` over an optional: `None`, and `Some(held)`, which narrows it
-                    self.line(format!("match {} {{", s.code));
+                    // `conditional held = …:` over an optional: `None`, and `Some(held)`, which narrows it; a place
+                    // whose value is not copied is borrowed
+                    let borrowed = s.form != Form::Temp && !self.is_copy(&inner);
+                    let subject = if borrowed && s.form == Form::Place { format!("&{}", s.code) } else { s.code.clone() };
+                    let inner_form = if borrowed { Form::Ref } else { Form::Place };
+                    self.line(format!("match {subject} {{"));
                     self.ind += 1;
                     for c in &conds {
                         let t = c.node("test").unwrap();
                         let none = t.kind == "binary" && is_member(t.node("right").unwrap(), "optional", "none");
                         self.push_scope();
                         if !none {
-                            self.bind(label, (*inner).clone(), Form::Place);
+                            self.bind(label, (*inner).clone(), inner_form);
                         }
                         let name = c.str("name").unwrap();
                         let pat = if none { "None".to_string() } else { format!("Some({label})") };
@@ -1649,12 +1716,42 @@ impl<'a> Lowerer<'a> {
                     }
                     if let Some(e) = els {
                         self.push_scope();
-                        self.bind(label, (*inner).clone(), Form::Place);
+                        self.bind(label, (*inner).clone(), inner_form);
                         let name = e.str("name").unwrap();
                         self.arm(&format!("Some({label})"), name, name, &e.nodes("body"), tail);
                         self.pop_scope();
                     }
                     self.ind -= 1;
+                    self.line("}");
+                    return;
+                }
+                let is_case = |o: &Node| o.kind == "binary" && o.str("op") == Some("==") && name_of(o.node("left").unwrap()) == Some(label) && o.node("right").is_some_and(|r| r.kind == "member");
+                let guarded = |t: &Node| t.kind == "binary" && t.str("op") == Some("and") && is_case(t.node("left").unwrap());
+                let by_case = conds.iter().all(|c| {
+                    let t = c.node("test").unwrap();
+                    is_case(t) || guarded(t) || (or_operands(t).len() > 1 && or_operands(t).iter().all(|o| is_case(o)))
+                });
+                if !by_case {
+                    // the conditions test the value's members: it is named, and they are a chain
+                    let code = match s.form {
+                        Form::Temp => s.code.clone(),
+                        _ if self.is_copy(&s.ty) => s.code.clone(),
+                        _ => format!("&{}", s.code),
+                    };
+                    let form = if matches!(s.form, Form::Temp) || self.is_copy(&s.ty) { Form::Place } else { Form::Ref };
+                    self.line(format!("let {label} = {code};"));
+                    self.bind(label, s.ty.clone(), form);
+                    for (k, c) in conds.iter().enumerate() {
+                        let x = self.expr(c.node("test").unwrap());
+                        let name = c.str("name").unwrap();
+                        self.line(format!("{}if {} {{ // y: #{name}", if k == 0 { "" } else { "} else " }, x.code));
+                        self.branch_block(name, &c.nodes("body"), tail);
+                    }
+                    if let Some(e) = els {
+                        let name = e.str("name").unwrap();
+                        self.line(format!("}} else {{ // y: #{name}"));
+                        self.branch_block(name, &e.nodes("body"), tail);
+                    }
                     self.line("}");
                     return;
                 }
@@ -1678,6 +1775,11 @@ impl<'a> Lowerer<'a> {
                     }
                     let pat = if is_case(t) {
                         self.expr(t.node("right").unwrap()).code
+                    } else if guarded(t) {
+                        // `(shown == outcome.playing) and p`: the case, with `p` as the arm's guard
+                        let case = self.expr(t.node("left").unwrap().node("right").unwrap()).code;
+                        let g = self.expr(t.node("right").unwrap()).code;
+                        format!("{case} if {g}")
                     } else {
                         let x = self.expr(t);
                         format!("_ if {}", x.code)
@@ -1693,6 +1795,37 @@ impl<'a> Lowerer<'a> {
                 self.line("}");
             }
         }
+    }
+
+    /// `compare label = a with b:` with `condition label.x = equal:` (or `less:`, `greater:`): a `match` on the order
+    /// of the two, an arm per `Ordering` (Y § 3.5).
+    fn compare_stmt(&mut self, st: &Node, tail: bool) {
+        let a = self.expr(st.node("left").unwrap());
+        let b = self.expr_want(st.node("right").unwrap(), &a.ty);
+        let b = self.by_ref(b.clone(), &b.ty.clone());
+        self.use_("std::cmp::Ordering");
+        self.line(format!("match {}.cmp({b}) {{", wrap(&a, ATOM)));
+        self.ind += 1;
+        let mut seen = vec![];
+        for c in st.nodes("conditions") {
+            let test = c.str("test").or_else(|| c.node("test").and_then(|t| t.str("name"))).unwrap_or("");
+            let order = match test {
+                "less" => "Less",
+                "greater" => "Greater",
+                _ => "Equal",
+            };
+            seen.push(order);
+            let name = c.str("name").unwrap();
+            self.arm(&format!("Ordering::{order}"), name, name, &c.nodes("body"), tail);
+        }
+        if let Some(e) = st.node("else") {
+            let name = e.str("name").unwrap();
+            let rest: Vec<&str> = ["Less", "Equal", "Greater"].into_iter().filter(|o| !seen.contains(o)).collect();
+            let pat = rest.iter().map(|o| format!("Ordering::{o}")).collect::<Vec<_>>().join(" | ");
+            self.arm(&pat, name, name, &e.nodes("body"), tail);
+        }
+        self.ind -= 1;
+        self.line("}");
     }
 
     fn loop_(&mut self, st: &Node) {
@@ -1720,8 +1853,8 @@ impl<'a> Lowerer<'a> {
                 let get = |k: &str| args.iter().find(|(n, _)| *n == Some(k)).map(|(_, a)| *a);
                 let from = get("from").map(|a| self.expr(a)).unwrap();
                 let (to, op) = match get("through") {
-                    Some(t) => (self.expr(t), "..="),
-                    None => (self.expr(get("below").unwrap()), ".."),
+                    Some(t) => (self.expr_want(t, &Ty::U32), "..="),
+                    None => (self.expr_want(get("below").unwrap(), &Ty::U32), ".."),
                 };
                 let ty = if to.ty == Ty::Int { from.ty.clone() } else { to.ty.clone() };
                 self.bind(&var, ty, Form::Place);

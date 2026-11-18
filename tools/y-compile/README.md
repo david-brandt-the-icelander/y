@@ -68,6 +68,11 @@ A region, `region name is c₁, c₂:`, is marked where it starts, `// y: region
 statement, or on a line of its own above several, with `// y: end region name` after them when statements follow it
 in its block. Its constraints become the clauses of its region subject as `regen.py` makes them.
 
+## Structures in constants
+
+A structure whose values are made in a constant group (Checkers' `level`, in `levels.all`) keeps its `string` fields
+as `&'static str`, as the hand lowering did: a constant cannot make a `YString`.
+
 ## What it added to the runtime
 
 - `y_runtime::list::sorted`, for `list.sorted()` in Memory's tests: a sorted copy as a `Vec`. The hand lowering sorted
@@ -121,6 +126,16 @@ Each kind of difference below keeps the woven Rust building and its tests passin
   started.turned.is_empty()` where the hand lowering wrote `count(started.turned) == 0`).
 - **An element of a list that is not copied** (a picture) is borrowed with `list::at_number_ref`, and given to the
   window by reference.
+- **A structure is passed by reference** unless the function keeps it, in every example. Checkers' hand lowering
+  passed its small copied structures (`square`, `piece`, a `move` it applies) by value, where Nim's passed `move` by
+  reference; y-compile keeps Nim's rule. Of a list parameter it keeps, it takes the value (`chains_after`'s `path`).
+- **`count()` takes the number type its context wants**: compared with or passed as a `uint32` it is the runtime's
+  `list::count` (a `u32`), and otherwise the list's own `count()` (a `usize`), where the hand lowering chose case by
+  case.
+- **A `conditional` whose conditions test the value's members** (`conditional counted = placed.piece:` with
+  `condition counted.other = (counted.owner != owner):`) names the value, `let counted = placed.piece;`, and is a
+  chain; the hand lowering wrote the members out in full. One whose conditions are a case and a further test
+  (`(shown == outcome.playing) and …`) is a `match` arm with a guard, as the hand lowering wrote it.
 - **Imports** are the ones the code uses, found in the code; the order of the paths in `y-facts.json` is the
   enumerator's sorted order.
 - **Documentation** is made from the Y documentation mechanically: the prose, then the roles, each without its type.

@@ -150,6 +150,7 @@ pub fn imports_for(code: &str) -> std::collections::BTreeSet<String> {
         ("PictureError", "y_window::PictureError"),
         ("Frame", "y_window::Frame"),
         ("time", "y_runtime::time"),
+        ("Ordering", "std::cmp::Ordering"),
         ("require", "y_runtime::require"),
         ("ensure", "y_runtime::ensure"),
         ("invariant", "y_runtime::invariant"),
@@ -169,6 +170,9 @@ pub fn imports_for(code: &str) -> std::collections::BTreeSet<String> {
     }
     if code.contains("list!") {
         out.insert("y_collections::list".into());
+    }
+    if code.contains("number::to_") {
+        out.insert("y_runtime::number".into());
     }
     if code.contains("list::") {
         out.insert("y_runtime::list".into());
@@ -332,7 +336,7 @@ impl<'a> Lowerer<'a> {
                 self.ind += 1;
                 let fvis = if facet { "pub(super) " } else { "" };
                 for (f, t) in fields {
-                    let t = self.rust_type(t);
+                    let t = if *t == Ty::StrLit { "&'static str".to_string() } else { self.rust_type(t) };
                     self.line(format!("{fvis}{f}: {t},"));
                 }
                 self.ind -= 1;

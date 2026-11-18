@@ -153,6 +153,7 @@ pub fn by_value(m: &Module, t: &Ty) -> bool {
     match t {
         Ty::U32 | Ty::I32 | Ty::U64 | Ty::U16 | Ty::Count | Ty::Int | Ty::Bool | Ty::Rune => true,
         Ty::Named(n) if crate::ty::COPIED.contains(&n.as_str()) => true,
+        Ty::Opt(x) => by_value(m, x),
         Ty::Named(n) => matches!(m.types.get(n).map(|t| &t.def), Some(TypeDef::Enum { cases }) if cases.iter().all(|(_, f)| f.is_empty())),
         _ => false,
     }
@@ -244,6 +245,26 @@ impl<'t> Module<'t> {
                     }
                 }
                 _ => {}
+            }
+        }
+        // a structure that constants are made of keeps its text as the host's `&str`: a constant cannot make a string
+        let mut in_constants = BTreeSet::new();
+        for g in m.consts.values() {
+            for (_, _, v) in &g.items {
+                v.walk(&mut |n: &Node| {
+                    if n.kind == "call" {
+                        if let Some(c) = n.node("callee").filter(|c| c.kind == "name").and_then(|c| c.str("name")) {
+                            in_constants.insert(c.to_string());
+                        }
+                    }
+                });
+            }
+        }
+        for t in in_constants {
+            if let Some(TypeInfo { def: TypeDef::Struct { fields, .. }, .. }) = m.types.get_mut(&t) {
+                for f in fields.iter_mut().filter(|f| f.1 == Ty::Str) {
+                    f.1 = Ty::StrLit;
+                }
             }
         }
         for (facet, d) in &decls {

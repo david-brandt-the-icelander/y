@@ -69,3 +69,8 @@ fn snake() {
 fn memory() {
     end_to_end("memory", "memory");
 }
+
+#[test]
+fn checkers() {
+    end_to_end("checkers", "checkers");
+}
