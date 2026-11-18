@@ -76,6 +76,7 @@ fn doc_lines(d: &Node, f: Option<&FnInfo>) -> Vec<String> {
 }
 
 pub struct Emitted {
+    pub copies: Vec<(usize, String, String)>,
     pub lib: String,
     pub module: String,
     pub tests: String,
@@ -189,7 +190,7 @@ impl<'a> Lowerer<'a> {
         format!("{vis}fn {}({}){rt}", f.name, ps.join(", "))
     }
 
-    fn function_item(&mut self, d: &Node, f: &FnInfo, vis: &str) {
+    pub fn function_item(&mut self, d: &Node, f: &FnInfo, vis: &str) {
         for l in doc_lines(d, Some(f)) {
             self.line(l);
         }
@@ -223,7 +224,30 @@ impl<'a> Lowerer<'a> {
             self.line(v.code);
         } else {
             let body = d.nodes("body");
-            self.block(&body, true);
+            let ensures = d.nodes("ensures");
+            if ensures.is_empty() {
+                self.block(&body, true);
+            } else {
+                // `ensures name = p`: the result is bound to its Y name, checked, then given
+                let r = f.result.as_ref().map(|r| r.0.clone()).unwrap_or_else(|| "result".into());
+                self.push_scope();
+                self.block_open_tail(&body);
+                let start = self.last_start;
+                let ind = "    ".repeat(self.ind);
+                self.out[start] = format!("{ind}let {r} = {};", self.out[start].trim_start());
+                let end = self.out.len() - 1;
+                if !self.out[end].ends_with(';') {
+                    self.out[end].push(';');
+                }
+                self.bind(&r, f.result.as_ref().map(|r| r.1.clone()).unwrap_or(Ty::Unknown), Form::Place);
+                for w in ensures {
+                    self.use_("y_runtime::ensure");
+                    let c = self.expr(w.node("condition").unwrap());
+                    self.line(format!("ensure({}, \"{}::{}#{}\");", c.code, self.m.name, f.name, w.str("name").unwrap()));
+                }
+                self.line(r);
+                self.pop_scope();
+            }
             if f.fails.is_some() && f.result.is_none() && !crate::lower::diverges(&body) {
                 self.line("Ok(())");
             }
@@ -277,6 +301,27 @@ impl<'a> Lowerer<'a> {
                 }
                 self.ind -= 1;
                 self.line("}");
+                // a closed type shown in an interpolation shows as its constant's value
+                if self.display.contains(name) && d.kind == "constants" {
+                    let en = pascal(name);
+                    self.line("");
+                    self.line(format!("impl std::fmt::Display for {en} {{"));
+                    self.ind += 1;
+                    self.line("fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {");
+                    self.ind += 1;
+                    self.line("match self {");
+                    self.ind += 1;
+                    for i in d.nodes("items") {
+                        let v = i.node("value").and_then(|v| v.str("value")).unwrap_or("");
+                        self.line(format!("{en}::{} => f.write_str(\"{v}\"),", pascal(i.str("name").unwrap())));
+                    }
+                    self.ind -= 1;
+                    self.line("}");
+                    self.ind -= 1;
+                    self.line("}");
+                    self.ind -= 1;
+                    self.line("}");
+                }
                 // `or fail` on a failure that one case carries converts through that case (Y § 3.4)
                 for (c, fs) in cases {
                     if let [(f, Ty::Named(t))] = &fs[..] {
@@ -319,12 +364,7 @@ impl<'a> Lowerer<'a> {
             let ty = i.node("type").map(Ty::from_node);
             let v = i.node("value").unwrap();
             let t = const_type(ty.as_ref(), v);
-            let code = if v.kind == "list" {
-                let items: Vec<String> = v.nodes("items").iter().map(|x| self.expr(x).code).collect();
-                format!("[{}]", items.join(", "))
-            } else {
-                self.expr(v).code
-            };
+            let code = self.const_value(v);
             let rt = self.rust_type(&t);
             self.line(format!("pub const {}: {rt} = {code};", upper(i.str("name").unwrap())));
         }
@@ -339,6 +379,16 @@ impl<'a> Lowerer<'a> {
         }
         self.ind -= 1;
         self.line("}");
+    }
+
+    /// A constant's value: a list is an array, at every depth.
+    fn const_value(&mut self, v: &Node) -> String {
+        if v.kind == "list" {
+            let items: Vec<String> = v.nodes("items").iter().map(|x| self.const_value(x)).collect();
+            format!("[{}]", items.join(", "))
+        } else {
+            self.expr(v).code
+        }
     }
 
     fn decl(&mut self, d: &Node, facet: bool) {
@@ -362,7 +412,21 @@ impl<'a> Lowerer<'a> {
 
 /// The module's file: its imports, its facets as Rust modules, and the declarations outside every facet.
 pub fn module_file(m: &Module, y_path: &str) -> String {
+    module_out(m, y_path).0
+}
+
+/// The module's file, and the copies its lowering made.
+pub fn module_out(m: &Module, y_path: &str) -> (String, Vec<(usize, String, String)>) {
+    // a first pass finds the closed types an interpolation shows, which the second gives a `Display`
+    let shown = module_pass(m, y_path, Default::default()).shown;
+    let l = module_pass(m, y_path, shown);
+    let copies = l.copies.clone();
+    (module_text(m, y_path, l), copies)
+}
+
+fn module_pass<'a>(m: &'a Module<'a>, _y_path: &str, display: std::collections::BTreeSet<String>) -> Lowerer<'a> {
     let mut l = Lowerer::new(m, None);
+    l.display = display;
     let mut first = true;
     for d in m.tree.nodes("decls") {
         match d.kind {
@@ -397,6 +461,10 @@ pub fn module_file(m: &Module, y_path: &str) -> String {
             l.decl(d, false);
         }
     }
+    l
+}
+
+fn module_text(m: &Module, y_path: &str, l: Lowerer) -> String {
     let mut out = vec![format!("//! Lowered from `{y_path}`, the Y module `{}`.", m.name)];
     out.push("//! Each Y facet is a Rust module of the same name, so a member's path keeps the facet.".into());
     out.push("//! Each named decision of the Y source is marked `// y: #name` where its condition is tested.".into());
@@ -435,6 +503,12 @@ fn comment_above(l: &Lowerer, line: usize) -> Option<String> {
 pub fn tests_file(m: &Module, test_tree: &Node, test_module: &Module, y_path: &str) -> String {
     let lib: &Module = m;
     let mut l = Lowerer::new(test_module, Some(lib));
+    // the test file's own functions, which its tests call
+    for d in test_tree.nodes("decls").into_iter().filter(|d| d.kind == "function") {
+        l.line("");
+        let f = test_module.fns[d.str("name").unwrap()].clone();
+        l.function_item(d, &f, "");
+    }
     for t in test_tree.nodes("decls").into_iter().filter(|d| d.kind == "test") {
         let name = t.str("name").unwrap();
         l.line("");
@@ -563,9 +637,11 @@ pub fn lib_file(module: &str) -> String {
 
 pub fn emit(m: &Module, test_tree: &Node, test_module: &Module, main: &Module, lib_crate: &str) -> Emitted {
     let name = m.name.clone();
+    let (module, copies) = module_out(m, &format!("y/src/{name}.y"));
     Emitted {
+        copies,
         lib: lib_file(&name),
-        module: module_file(m, &format!("y/src/{name}.y")),
+        module,
         tests: tests_file(m, test_tree, test_module, &format!("y/src/{name}.test.y")),
         main: main_file(main, m, lib_crate, "y/src/main.y"),
     }

@@ -40,7 +40,7 @@ pub fn clause_expr(m: &Module, e: &Node) -> String {
             let obj = e.node("object").unwrap();
             let name = e.str("name").unwrap();
             if let Some(o) = obj.str("name").filter(|_| obj.kind == "name") {
-                if m.types.contains_key(o) {
+                if matches!(m.types.get(o).map(|t| &t.def), Some(crate::model::TypeDef::Enum { .. })) {
                     return pascal(name);
                 }
                 if m.consts.contains_key(o) {
@@ -58,6 +58,9 @@ pub fn clause_expr(m: &Module, e: &Node) -> String {
                 if method == "count" && args.is_empty() {
                     return format!("count({obj})");
                 }
+                if method == "at_number" && args.len() == 1 {
+                    return format!("{obj}[{} - 1]", args[0]);
+                }
                 return format!("{obj}.{method}({})", args.join(", "));
             }
             format!("{}({})", clause_expr(m, callee), args.join(", "))
@@ -65,6 +68,9 @@ pub fn clause_expr(m: &Module, e: &Node) -> String {
         "binary" => {
             let op = e.str("op").unwrap();
             let r = e.node("right").unwrap();
+            if matches!(op, "==" | "!=") && r.kind == "member" && r.node("object").and_then(|o| o.str("name")) == Some("optional") {
+                return format!("{} is {}", sub("left"), if op == "==" { "None" } else { "Some(_)" });
+            }
             if op == "==" && r.kind == "member" && r.node("object").and_then(|o| o.str("name")) == Some("result") {
                 return format!("{} is {}", sub("left"), if r.str("name") == Some("ok") { "Ok(_)" } else { "Err(_)" });
             }
@@ -77,10 +83,30 @@ pub fn clause_expr(m: &Module, e: &Node) -> String {
             }
             format!("{} {op} {}", sub("left"), sub("right"))
         }
-        "unary" => format!("{} {}", e.str("op").unwrap_or("not"), sub("operand")),
+        "unary" if e.str("op") == Some("-") => format!("-{}", sub("operand")),
+        "unary" => format!("not {}", sub("operand")),
         "index" => format!("{}[{}]", sub("object"), sub("index")),
         _ => String::new(),
     }
+}
+
+/// An expression with a name replaced.
+fn renamed(e: &Node, old: &str, new: &str) -> Node {
+    let mut e = e.clone();
+    fn go(n: &mut Node, old: &str, new: &str) {
+        if n.kind == "name" && n.str("name") == Some(old) {
+            n.set("name", new);
+        }
+        for (_, v) in n.fields.iter_mut() {
+            match v {
+                y_parse::Value::Node(c) => go(c, old, new),
+                y_parse::Value::List(vs) => vs.iter_mut().for_each(|v| if let y_parse::Value::Node(c) = v { go(c, old, new) }),
+                _ => {}
+            }
+        }
+    }
+    go(&mut e, old, new);
+    e
 }
 
 /// The members of a `mutable` parameter a function changes, itself or through the functions it passes them to.
@@ -146,8 +172,10 @@ fn function_clauses(m: &Module, decls: &BTreeMap<String, &Node>, d: &Node, y: &s
         let text = format!("require {} : {}", w.str("name").unwrap(), clause_expr(m, w.node("condition").unwrap()));
         cs.push(json!({"kind": "require", "text": text, "source": format!("{y}:{}", w.line), "status": {"lifted": format!("src/{}.rs: y_runtime::require", m.name)}}));
     }
+    let result = f.result.as_ref().map(|r| r.0.clone()).unwrap_or_default();
     for w in d.nodes("ensures") {
-        let text = format!("ensure {} : {}", w.str("name").unwrap(), clause_expr(m, w.node("condition").unwrap()));
+        let c = clause_expr(m, &renamed(w.node("condition").unwrap(), &result, "result"));
+        let text = format!("ensure {} : {c}", w.str("name").unwrap());
         cs.push(json!({"kind": "ensure", "text": text, "source": format!("{y}:{}", w.line), "status": {"lifted": format!("src/{}.rs: y_runtime::ensure", m.name)}}));
     }
     let at = format!("{y}:{}", d.line);
@@ -172,7 +200,17 @@ fn function_clauses(m: &Module, decls: &BTreeMap<String, &Node>, d: &Node, y: &s
         }
         let mut changed = BTreeSet::new();
         for p in &mutable {
-            changed.extend(mutated(m, decls, &f.name, p, 0));
+            let mut set = mutated(m, decls, &f.name, p, 0);
+            // every field of the parameter changed: the parameter
+            let ty = f.params.iter().find(|q| q.name == *p).map(|q| q.ty.clone());
+            if let Some(crate::ty::Ty::Named(t)) = ty {
+                if let Some(crate::model::TypeDef::Struct { fields, .. }) = m.types.get(&t).map(|t| &t.def) {
+                    if fields.len() > 1 && fields.iter().all(|(n, _)| set.contains(&format!("{p}.{n}"))) {
+                        set = BTreeSet::from([p.to_string()]);
+                    }
+                }
+            }
+            changed.extend(set);
         }
         if !changed.is_empty() {
             let list: Vec<String> = changed.into_iter().collect();

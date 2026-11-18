@@ -131,6 +131,11 @@ pub fn by_value(m: &Module, t: &Ty) -> bool {
 
 impl<'t> Module<'t> {
     pub fn new(tree: &'t Node) -> Module<'t> {
+        Module::new_in(tree, None)
+    }
+
+    /// A module that sees the types and constants of another: a test file, which is in the module it tests.
+    pub fn new_in(tree: &'t Node, outer: Option<&Module>) -> Module<'t> {
         let name = tree.nodes("decls").iter().find(|d| d.kind == "module").and_then(|d| d.str("name")).unwrap_or("main").to_string();
         let decls = declarations(tree);
         // a constant group is a closed type when its name is used as a type
@@ -151,6 +156,10 @@ impl<'t> Module<'t> {
             }
         }
         let mut m = Module { name, tree, types: BTreeMap::new(), consts: BTreeMap::new(), fns: BTreeMap::new(), facets: vec![] };
+        if let Some(o) = outer {
+            m.types = o.types.clone();
+            m.consts = o.consts.clone();
+        }
         for d in tree.nodes("decls") {
             if d.kind == "facet" {
                 let members = d.nodes("decls").iter().filter_map(|x| x.str("name").map(str::to_string)).collect();
@@ -278,20 +287,24 @@ impl<'t> Module<'t> {
     }
 }
 
-/// The parameters a function keeps: bound whole to a `mutable` name, or put whole into a structure it builds.
+/// The parameters a function keeps: bound whole to a `mutable` name and not read again.
 fn kept_params(d: &Node) -> BTreeSet<String> {
     let params: BTreeSet<String> = d.nodes("params").iter().map(|p| p.str("name").unwrap().to_string()).collect();
-    let mut out = BTreeSet::new();
+    let mut bound = vec![];
+    let mut reads: Vec<(String, usize)> = vec![];
     for b in d.nodes("body") {
         b.walk(&mut |n: &Node| {
             if n.kind == "let" && n.flag("mutable") {
                 if let Some(v) = n.node("value").filter(|v| v.kind == "name") {
                     if params.contains(v.str("name").unwrap()) {
-                        out.insert(v.str("name").unwrap().to_string());
+                        bound.push((v.str("name").unwrap().to_string(), n.line));
                     }
                 }
             }
+            if n.kind == "name" {
+                reads.push((n.str("name").unwrap().to_string(), n.line));
+            }
         });
     }
-    out
+    bound.into_iter().filter(|(p, line)| !reads.iter().any(|(r, l)| r == p && l != line)).map(|(p, _)| p).collect()
 }

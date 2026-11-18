@@ -47,16 +47,16 @@ pub fn compile(dir: &Path, opts: &Options) -> Result<String, String> {
     let test_tree = parse(&format!("{name}.test.y"))?;
     let main_tree = parse("main.y")?;
     let m = model::Module::new(&tree);
-    let tm = model::Module::new(&test_tree);
+    let tm = model::Module::new_in(&test_tree, Some(&m));
     let mm = model::Module::new(&main_tree);
     let (pkg, version) = package(dir)?;
     let lib_crate = pkg.replace('-', "_");
     let e = emit::emit(&m, &test_tree, &tm, &mm, &lib_crate);
     let files = vec![
-        (PathBuf::from("src/lib.rs"), e.lib),
-        (PathBuf::from(format!("src/{name}.rs")), e.module),
-        (PathBuf::from(format!("src/{name}/tests.rs")), e.tests),
-        (PathBuf::from("src/main.rs"), e.main),
+        (PathBuf::from("src/lib.rs"), e.lib.clone()),
+        (PathBuf::from(format!("src/{name}.rs")), e.module.clone()),
+        (PathBuf::from(format!("src/{name}/tests.rs")), e.tests.clone()),
+        (PathBuf::from("src/main.rs"), e.main.clone()),
     ];
     if let Some(r) = &opts.rust {
         for (p, s) in &files {
@@ -70,7 +70,7 @@ pub fn compile(dir: &Path, opts: &Options) -> Result<String, String> {
         write(&out.join(p.with_extension("brs")), brs)?;
         write(&out.join(p.with_extension("constraints.json")), &bare_rust::json::canonical(js))?;
     }
-    let facts = facts::facts(dir, &m, &tree, &test_tree, &main_tree, &lowered, &lib_crate, &name)?;
+    let facts = facts::facts(dir, &m, &tree, &test_tree, &main_tree, &lowered, &lib_crate, &name, &e.copies)?;
     write(&out.join("y-facts.json"), &(serde_json::to_string_pretty(&facts).unwrap() + "\n"))?;
     Ok(format!("y-compile: {name}: {} files lowered", lowered.len()))
 }

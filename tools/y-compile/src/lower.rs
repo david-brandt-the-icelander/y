@@ -67,6 +67,20 @@ pub struct Lowerer<'a> {
     pub ctx: Ctx,
     /// Comments of the file being lowered, by line.
     pub comments: BTreeMap<usize, String>,
+    /// The closed types shown in an interpolation, which implement `Display`.
+    pub shown: BTreeSet<String>,
+    /// The copies the lowering made: the Y line, what is copied, and why.
+    pub copies: Vec<(usize, String, String)>,
+    /// The closed types to give a `Display`, found by an earlier pass.
+    pub display: BTreeSet<String>,
+    /// The statements after it in its block.
+    rest: Vec<Node>,
+    /// The statements after it in its block and the blocks around it, up to the function's.
+    rest_outer: Vec<Node>,
+    /// The loops it is in, whose bodies run again.
+    loops: Vec<Node>,
+    /// Where the output of the last statement lowered starts.
+    pub last_start: usize,
 }
 
 fn find_forever(e: &Node) -> Option<String> {
@@ -117,6 +131,13 @@ impl<'a> Lowerer<'a> {
             uses: BTreeSet::new(),
             ctx: Ctx { module: m.name.clone(), name: String::new(), result: None, fails: None, branches: vec![], section: None },
             comments,
+            shown: BTreeSet::new(),
+            copies: vec![],
+            display: BTreeSet::new(),
+            rest: vec![],
+            rest_outer: vec![],
+            loops: vec![],
+            last_start: 0,
         }
     }
 
@@ -372,6 +393,9 @@ impl<'a> Lowerer<'a> {
                 node = Node::new("member", 0).with("object", node).with("name", p);
             }
             let x = self.expr(&node);
+            if let Ty::Named(n) = &x.ty {
+                self.shown.insert(n.clone());
+            }
             if x.code.chars().all(|c| c.is_alphanumeric() || c == '_') {
                 fmt.push_str(&format!("{{{}}}", x.code));
             } else {
@@ -439,19 +463,30 @@ impl<'a> Lowerer<'a> {
         let method = callee.str("name").unwrap();
         let obj = callee.node("object").unwrap();
         // `list.count().to_uint32()`: the count of a list as a `uint32`, from the runtime's list operations
-        if method == "to_uint32" && obj.kind == "call" {
+        if (method == "to_uint32" || method == "to_int32") && obj.kind == "call" {
             let inner = obj.node("callee").unwrap();
             if inner.kind == "member" && inner.str("name") == Some("count") {
                 let l = self.expr(inner.node("object").unwrap());
                 if matches!(l.ty, Ty::List(_)) {
                     self.use_("y_runtime::list");
                     let r = self.by_ref(l.clone(), &l.ty.clone());
-                    return ex(format!("list::count({r})"), Ty::U32, Form::Temp, ATOM);
+                    return if method == "to_uint32" {
+                        ex(format!("list::count({r})"), Ty::U32, Form::Temp, ATOM)
+                    } else {
+                        ex(format!("list::count_int32({r})"), Ty::I32, Form::Temp, ATOM)
+                    };
                 }
             }
         }
         if let Some(o) = name_of(obj).filter(|o| self.var(o).is_none()) {
             match (o, method) {
+                ("list", "repeated") => {
+                    self.use_("y_runtime::list");
+                    let v = self.expr(args[0].1);
+                    let n = self.expr_want(args[1].1, &Ty::U32).code;
+                    let ty = v.ty.clone();
+                    return ex(format!("List::from(list::repeated({}, {n}))", v.code), Ty::List(Box::new(ty)), Form::Temp, ATOM);
+                }
                 ("list", "new") => {
                     self.use_("y_collections::List");
                     return ex("List::new()", Ty::List(Box::new(Ty::Unknown)), Form::Temp, ATOM);
@@ -633,6 +668,7 @@ impl<'a> Lowerer<'a> {
                 self.use_("y_collections::List");
                 ex(format!("List::from({r}.split_whitespace())"), Ty::List(Box::new(Ty::Str)), Form::Temp, ATOM)
             }
+            (Ty::Str, "trim") => ex(format!("{r}.trimmed()"), Ty::Str, Form::Temp, ATOM),
             (Ty::Str, "parse_uint32") => ex(format!("{r}.parse_uint32()"), Ty::Opt(Box::new(Ty::U32)), Form::Temp, ATOM),
             (Ty::Str, "count") => ex(format!("{r}.count()"), Ty::Count, Form::Temp, ATOM),
             (Ty::StrLit, "repeated") => {
@@ -732,15 +768,64 @@ impl<'a> Lowerer<'a> {
         ex(code, ty, Form::Temp, ATOM)
     }
 
+    /// Whether a name is read by the statements after the current one, or by a loop around it that runs again.
+    fn still_read(&self, name: &str) -> bool {
+        let reads = |n: &Node| {
+            let mut found = false;
+            n.walk(&mut |x: &Node| {
+                if x.kind == "name" && x.str("name") == Some(name) {
+                    found = true;
+                }
+            });
+            found
+        };
+        self.rest_outer.iter().any(reads) || self.loops.iter().any(reads) || matches!(self.var(name).map(|v| v.form), Some(Form::Ref))
+    }
+
+    /// Why a copy is made: the function the copy is passed to `mutable`, which changes it.
+    fn why_copied(&self, copy: &str, of: &str) -> String {
+        let mut changer = None;
+        for n in &self.rest {
+            n.walk(&mut |x: &Node| {
+                if changer.is_none() && x.kind == "call" {
+                    let passes = x.nodes("args").iter().any(|a| a.node("value").is_some_and(|v| v.kind == "mutable" && v.node("value").and_then(name_of) == Some(copy)));
+                    if passes {
+                        changer = x.node("callee").and_then(name_of).map(str::to_string);
+                    }
+                }
+            });
+        }
+        match changer {
+            Some(f) => format!("{f} changes it, and {of} is still read"),
+            None => format!("it changes, and {of} is still read"),
+        }
+    }
+
     // ---------------------------------------------------------------------------------------------------------------
     // Statements
 
+    /// Statements in the current scope, the last of them the function's value.
+    pub fn block_open_tail(&mut self, stmts: &[&Node]) {
+        self.stmts(stmts, true);
+    }
+
     pub fn block(&mut self, stmts: &[&Node], tail: bool) {
         self.push_scope();
-        for (k, s) in stmts.iter().enumerate() {
-            self.stmt(s, tail && k + 1 == stmts.len(), &stmts[k + 1..]);
-        }
+        self.stmts(stmts, tail);
         self.pop_scope();
+    }
+
+    fn stmts(&mut self, stmts: &[&Node], tail: bool) {
+        for (k, s) in stmts.iter().enumerate() {
+            let saved = std::mem::replace(&mut self.rest, stmts[k + 1..].iter().map(|n| (*n).clone()).collect());
+            let outer = self.rest_outer.clone();
+            self.rest_outer.extend(stmts[k + 1..].iter().map(|n| (*n).clone()));
+            let start = self.out.len();
+            self.stmt(s, tail && k + 1 == stmts.len(), &stmts[k + 1..]);
+            self.last_start = start;
+            self.rest_outer = outer;
+            self.rest = saved;
+        }
     }
 
     fn claim(&self, st: &Node) -> String {
@@ -766,12 +851,20 @@ impl<'a> Lowerer<'a> {
                 } else {
                     x
                 };
+                let mut marker = String::new();
                 let (code, form) = match x.form {
                     Form::Ref | Form::Mut if self.is_copy(&x.ty) && name_like(&x.code) => (format!("*{}", x.code), Form::Place),
+                    // `mutable after = game` while `game` is still read: a copy (Y § 3.2)
+                    Form::Ref | Form::Mut | Form::Place if st.flag("mutable") && v.kind != "call" && !self.is_copy(&x.ty) && self.still_read(&x.code) => {
+                        let why = self.why_copied(name, &x.code);
+                        marker = format!(" // y: a copy, because {why}");
+                        self.copies.push((st.line, crate::lower::y_text(v), why));
+                        (format!("{}.clone()", wrap(&x, ATOM)), Form::Place)
+                    }
                     Form::Ref | Form::Mut => (x.code.clone(), x.form),
                     _ => (x.code.clone(), Form::Place),
                 };
-                self.line(format!("let {name} = {code};{claim}"));
+                self.line(format!("let {name} = {code};{claim}{marker}"));
                 self.bind(name, x.ty, form);
             }
             "assign" => {
@@ -906,6 +999,22 @@ impl<'a> Lowerer<'a> {
                 return;
             }
         }
+        // `if a = (x == optional.none):` whose branch goes on: a `match`, with the name narrowed in `Some`
+        if cond.kind == "binary" && cond.str("op") == Some("==") && is_member(cond.node("right").unwrap(), "optional", "none") && els.is_some() {
+            if let Some(x) = name_of(cond.node("left").unwrap()) {
+                let inner = self.var(x).map(|v| v.ty.elem()).unwrap_or(Ty::Unknown);
+                self.line(format!("match {x} {{"));
+                self.ind += 1;
+                self.arm("None", name, name, &body, tail);
+                self.push_scope();
+                self.bind(x, inner, Form::Place);
+                self.arm(&format!("Some({x})"), ename, ename, &ebody, tail);
+                self.pop_scope();
+                self.ind -= 1;
+                self.line("}");
+                return;
+            }
+        }
         // `if a = ((x == optional.none) or (y == optional.none)):` that fails: a `match` on the names, an arm for each
         // operand of the `or`, and one in which each name is narrowed
         let ops = or_operands(cond);
@@ -1011,6 +1120,33 @@ impl<'a> Lowerer<'a> {
                     self.line("}");
                     return;
                 }
+                if let Ty::Opt(inner) = s.ty.clone() {
+                    // `conditional held = …:` over an optional: `None`, and `Some(held)`, which narrows it
+                    self.line(format!("match {} {{", s.code));
+                    self.ind += 1;
+                    for c in &conds {
+                        let t = c.node("test").unwrap();
+                        let none = t.kind == "binary" && is_member(t.node("right").unwrap(), "optional", "none");
+                        self.push_scope();
+                        if !none {
+                            self.bind(label, (*inner).clone(), Form::Place);
+                        }
+                        let name = c.str("name").unwrap();
+                        let pat = if none { "None".to_string() } else { format!("Some({label})") };
+                        self.arm(&pat, name, name, &c.nodes("body"), tail);
+                        self.pop_scope();
+                    }
+                    if let Some(e) = els {
+                        self.push_scope();
+                        self.bind(label, (*inner).clone(), Form::Place);
+                        let name = e.str("name").unwrap();
+                        self.arm(&format!("Some({label})"), name, name, &e.nodes("body"), tail);
+                        self.pop_scope();
+                    }
+                    self.ind -= 1;
+                    self.line("}");
+                    return;
+                }
                 self.line(format!("match {} {{", s.code));
                 self.ind += 1;
                 self.push_scope();
@@ -1068,6 +1204,11 @@ impl<'a> Lowerer<'a> {
                 let ty = if to.ty == Ty::Int { from.ty.clone() } else { to.ty.clone() };
                 self.bind(&var, ty, Form::Place);
                 format!("for {var} in {}{op}{}", from.code, to.code)
+            } else if it.kind == "list" {
+                let items: Vec<String> = it.nodes("items").iter().map(|i| self.expr(i).code).collect();
+                let elem = it.nodes("items").first().map(|i| self.expr(i).ty).unwrap_or(Ty::Unknown);
+                self.bind(&var, elem, Form::Place);
+                format!("for {var} in [{}]", items.join(", "))
             } else {
                 let x = self.expr(it);
                 let elem = x.ty.elem();
@@ -1082,12 +1223,14 @@ impl<'a> Lowerer<'a> {
             }
         };
         self.line(format!("{head} {{ // y: #{name}{bare_else}"));
+        self.loops.push(st.clone());
         self.ctx.branches.push(name.to_string());
         self.ind += 1;
         if ran {
             self.line("ran = true;");
         }
         self.block(&st.nodes("body"), false);
+        self.loops.pop();
         self.ind -= 1;
         self.ctx.branches.pop();
         self.pop_scope();
@@ -1154,7 +1297,10 @@ pub fn y_text(e: &Node) -> String {
 /// The type of a constant from its declared type and its value: a list is an array of its length.
 pub fn const_type(ty: Option<&Ty>, value: &Node) -> Ty {
     match (ty, value.kind) {
-        (Some(Ty::List(e)), "list") => Ty::Array(e.clone(), value.nodes("items").len()),
+        (Some(Ty::List(e)), "list") => {
+            let inner = value.nodes("items").first().map(|i| const_type(Some(e), i)).unwrap_or((**e).clone());
+            Ty::Array(Box::new(inner), value.nodes("items").len())
+        }
         (Some(t), _) if *t != Ty::Str => t.clone(),
         (_, "literal") if value.str("type") == Some("string") => Ty::StrLit,
         (Some(t), _) => t.clone(),

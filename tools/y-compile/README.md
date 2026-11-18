@@ -65,6 +65,13 @@ Each kind of difference below keeps the woven Rust building and its tests passin
   has no typed locals.
 - **A test's checks** read the console's lines in each assertion; the hand lowering sometimes bound them to a local
   first (`let written = console.written();`). A check that a string is empty compares it with `""`.
+- **A value chosen by a `conditional` and checked by `ensures`** is bound to the result's name before the check, as
+  the hand lowering did, but the check is the Y condition as written (`value >= -10 && value <= 10`), not a range.
+- **A count compared with a number** is the list's `count()` (`open.count() == 0`) where the hand lowering sometimes
+  used `list::count`, which gives a `u32`.
+- **`mutates only`** names each member of a `mutable` parameter that changes, or the parameter itself when every
+  member does; the hand lowering sometimes named the parameter when only some members change.
+- **A test file's own functions** (Tic-tac-toe's `marked`) bind each element of a list of numbers by value.
 - **Imports** are the ones the code uses, found in the code; the order of the paths in `y-facts.json` is the
   enumerator's sorted order.
 - **Documentation** is made from the Y documentation mechanically: the prose, then the roles, each without its type.

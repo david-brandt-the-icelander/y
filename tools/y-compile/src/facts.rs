@@ -36,7 +36,7 @@ fn fn_head(line: &str) -> Option<String> {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn facts(dir: &Path, m: &Module, tree: &Node, test_tree: &Node, main_tree: &Node, files: &Files, krate: &str, name: &str) -> Result<Value, String> {
+pub fn facts(dir: &Path, m: &Module, tree: &Node, test_tree: &Node, main_tree: &Node, files: &Files, krate: &str, name: &str, copies: &[(usize, String, String)]) -> Result<Value, String> {
     let y = format!("y/src/{name}.y");
     let ty = format!("y/src/{name}.test.y");
     let bare = format!("bare/src/{name}.brs");
@@ -97,7 +97,11 @@ pub fn facts(dir: &Path, m: &Module, tree: &Node, test_tree: &Node, main_tree: &
     f.insert("claims".into(), Value::Array(claims));
     f.insert("suspensions".into(), json!([]));
     f.insert("compiled".into(), json!([]));
-    f.insert("copies".into(), json!([]));
+    // each copy the lowering made: its Y line, and the bare line its marker is on, in order
+    let bl = lines(files, &bare);
+    let marked: Vec<usize> = bl.iter().enumerate().filter(|(_, l)| l.contains("// y: a copy")).map(|(k, _)| k + 1).collect();
+    let cs: Vec<Value> = copies.iter().zip(marked).map(|((line, what, why), b)| json!({"what": what, "why": why, "y": format!("{y}:{line}"), "bare": format!("{bare}:{b}")})).collect();
+    f.insert("copies".into(), Value::Array(cs));
     // the decisions of each function, in the order of the lines that open them
     let mut decisions = Map::new();
     let mut groups: Vec<(String, Vec<Value>)> = vec![];

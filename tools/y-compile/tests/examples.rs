@@ -49,3 +49,8 @@ fn end_to_end(name: &str, module: &str) {
 fn nim() {
     end_to_end("nim", "nim");
 }
+
+#[test]
+fn tic_tac_toe() {
+    end_to_end("tic-tac-toe", "tic_tac_toe");
+}
