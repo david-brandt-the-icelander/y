@@ -197,6 +197,13 @@ pub mod list {
         }
     }
 
+    /// The elements in order from the smallest: Y's `list.sorted()`, a sorted copy.
+    pub fn sorted<T: Clone + Ord>(items: &[T]) -> Vec<T> {
+        let mut out = items.to_vec();
+        out.sort();
+        out
+    }
+
     /// The list without its last element; empty when the list is.
     pub fn without_last<T>(items: &[T]) -> &[T] {
         &items[..items.len().saturating_sub(1)]

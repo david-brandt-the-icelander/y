@@ -204,8 +204,12 @@ fn function_clauses(m: &Module, decls: &BTreeMap<String, &Node>, d: &Node, y: &s
     }
     let result = f.result.as_ref().map(|r| r.0.clone()).unwrap_or_default();
     for w in d.nodes("ensures") {
-        let c = clause_expr(m, &renamed(w.node("condition").unwrap(), &result, "result"));
-        let text = format!("ensure {} : {c}", w.str("name").unwrap());
+        // of a function that may fail, what it ensures holds of the value it gives
+        let text = if f.fails.is_some() {
+            format!("ensure {} : result is Ok({result}) implies {}", w.str("name").unwrap(), clause_expr(m, w.node("condition").unwrap()))
+        } else {
+            format!("ensure {} : {}", w.str("name").unwrap(), clause_expr(m, &renamed(w.node("condition").unwrap(), &result, "result")))
+        };
         cs.push(json!({"kind": "ensure", "text": text, "source": format!("{y}:{}", w.line), "status": {"lifted": format!("src/{}.rs: y_runtime::ensure", m.name)}}));
     }
     let at = format!("{y}:{}", d.line);

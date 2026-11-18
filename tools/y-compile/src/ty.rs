@@ -6,6 +6,7 @@ pub enum Ty {
     U32,
     I32,
     U64,
+    U16,
     /// `count<unit_type=…>`, and the result of a collection's `count()`: `usize`.
     Count,
     /// An integer literal whose type the context decides.
@@ -34,7 +35,7 @@ pub enum Ty {
     Unknown,
 }
 
-pub const CAPABILITIES: [&str; 6] = ["console", "forever", "random", "system", "clock", "window"];
+pub const CAPABILITIES: [&str; 7] = ["console", "forever", "random", "system", "clock", "window", "http"];
 
 /// Types the runtime gives whose values are copied, as numbers are: passed by value.
 pub const COPIED: [&str; 5] = ["colour", "key", "instant", "duration", "point"];
@@ -53,6 +54,12 @@ pub fn external(name: &str) -> Option<(&'static str, &'static str)> {
         "colour" => ("Colour", "y_window"),
         "key" => ("Key", "y_window"),
         "point" => ("Point", "y_window"),
+        "http" => ("Http", "y_http"),
+        "http_error" => ("HttpError", "y_http"),
+        "expired" => ("Expired", "y_runtime"),
+        "picture" => ("Picture", "y_window"),
+        "picture_error" => ("PictureError", "y_window"),
+        "frame" => ("Frame", "y_window"),
         "instant" => ("Instant", "std::time"),
         "duration" => ("Duration", "std::time"),
         _ => return None,
@@ -80,6 +87,7 @@ impl Ty {
             "uint32" => Ty::U32,
             "int32" => Ty::I32,
             "uint64" => Ty::U64,
+            "uint16" => Ty::U16,
             "count" => Ty::Count,
             "boolean" => Ty::Bool,
             "string" => Ty::Str,
@@ -101,7 +109,7 @@ impl Ty {
     }
 
     pub fn is_int(&self) -> bool {
-        matches!(self, Ty::U32 | Ty::I32 | Ty::U64 | Ty::Count | Ty::Int)
+        matches!(self, Ty::U32 | Ty::I32 | Ty::U64 | Ty::U16 | Ty::Count | Ty::Int)
     }
 
     pub fn is_text(&self) -> bool {

@@ -137,7 +137,10 @@ pub fn facts(dir: &Path, m: &Module, tree: &Node, test_tree: &Node, main_tree: &
                     if let Some(at) = crate::model::suspends_at(n, &m.suspending) {
                         let point = if n.nodes("args").is_empty() { format!("{at}()") } else { format!("{at}(") };
                         let (because, lowered) = if at.contains('.') {
-                            (format!("the {} capability may suspend (Y § 3.7)", at.split('.').next().unwrap()), "async fn, and .await at the point".to_string())
+                            // the capability by its type: `site`, an `http<…>`, is the http capability
+                            let holder = at.split('.').next().unwrap();
+                            let cap = m.fns.get(fname).and_then(|f| f.params.iter().find(|p| p.name == holder)).and_then(|p| match &p.ty { crate::ty::Ty::Cap(c) => Some(c.clone()), _ => None }).unwrap_or_else(|| holder.to_string());
+                            (format!("the {cap} capability may suspend (Y § 3.7)"), "async fn, and .await at the point".to_string())
                         } else if is_main {
                             (format!("{at} may suspend"), "async fn entry, run on the window's executor by y_window::run, and .await at the call".to_string())
                         } else {

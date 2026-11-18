@@ -289,6 +289,13 @@ impl<'a> Lowerer<'a> {
 
     /// The value of an expression as an owned value of the type wanted.
     pub fn owned(&mut self, x: Ex, want: &Ty) -> String {
+        // a value where an optional one is wanted: the value, there
+        if let Ty::Opt(inner) = want {
+            if !matches!(x.ty, Ty::Opt(_) | Ty::Unknown) && x.code != "None" {
+                let v = self.owned(x, inner);
+                return format!("Some({v})");
+            }
+        }
         match (want, &x.ty) {
             (Ty::Str, Ty::StrLit) => {
                 self.use_("y_string::YString");
@@ -297,6 +304,10 @@ impl<'a> Lowerer<'a> {
             (Ty::Str, Ty::HostStr) => {
                 self.use_("y_string::YString");
                 format!("YString::from({})", x.code)
+            }
+            (Ty::List(e), Ty::Array(a, _)) if **e == Ty::Str && **a == Ty::StrLit => {
+                self.use_("y_collections::List");
+                format!("List::from({}.map(YString::new))", x.code)
             }
             (Ty::List(_), Ty::Array(..)) => {
                 self.use_("y_collections::List");
@@ -413,7 +424,7 @@ impl<'a> Lowerer<'a> {
                 };
                 ex(code, Ty::Named("duration".into()), Form::Temp, ATOM)
             }
-            "string" => {
+            "string" | "path" | "url" => {
                 let v = e.str("value").unwrap_or("");
                 if v.contains('{') {
                     self.interpolation(v)
@@ -438,11 +449,7 @@ impl<'a> Lowerer<'a> {
             fmt.push_str(&rest[..open]);
             let close = rest[open..].find('}').map(|c| c + open).unwrap_or(rest.len() - 1);
             let inner = rest[open + 1..close].trim();
-            let mut parts = inner.split('.');
-            let mut node = Node::new("name", 0).with("name", parts.next().unwrap());
-            for p in parts {
-                node = Node::new("member", 0).with("object", node).with("name", p);
-            }
+            let node = parse_expression(inner);
             let x = self.expr(&node);
             if let Ty::Named(n) = &x.ty {
                 self.shown.insert(n.clone());
@@ -514,6 +521,23 @@ impl<'a> Lowerer<'a> {
                     let fields = fields.clone();
                     return self.construct(&pascal(n), &fields, &args, Ty::Named(n.to_string()));
                 }
+            }
+            if n == "point" {
+                let parts: Vec<String> = args.iter().map(|(k, a)| format!("{}: {}", k.unwrap_or("x"), self.expr(a).code)).collect();
+                return ex(format!("Point {{ {} }}", parts.join(", ")), Ty::Named("point".into()), Form::Temp, ATOM);
+            }
+            if n == "frame" {
+                if args.is_empty() {
+                    return ex("Frame::default()", Ty::Named("frame".into()), Form::Temp, ATOM);
+                }
+                let mut keys = "Vec::new()".to_string();
+                let mut clicks = "Vec::new()".to_string();
+                for (k, a) in &args {
+                    let items: Vec<String> = a.nodes("items").iter().map(|i| self.expr(i).code).collect();
+                    let v = format!("vec![{}]", items.join(", "));
+                    if *k == Some("keys") { keys = v } else { clicks = v }
+                }
+                return ex(format!("Frame {{ keys: {keys}, clicks: {clicks} }}"), Ty::Named("frame".into()), Form::Temp, ATOM);
             }
             if n == "colour" {
                 let parts: Vec<String> = args.iter().map(|(_, a)| self.expr(a).code).collect();
@@ -597,8 +621,17 @@ impl<'a> Lowerer<'a> {
             }
             if let Some((r, krate)) = external(o) {
                 self.use_(&format!("{krate}::{r}"));
-                let parts: Vec<String> = args.iter().map(|(_, a)| self.expr(a).code).collect();
-                return ex(format!("{r}::{method}({})", parts.join(", ")), Ty::Named(o.to_string()), Form::Temp, ATOM);
+                let mut parts = vec![];
+                for (_, a) in &args {
+                    let x = self.expr(a);
+                    parts.push(if x.ty.is_text() { self.as_str(x) } else { x.code });
+                }
+                let ty = if (o, method) == ("picture", "from_svg") {
+                    Ty::Res(Box::new(Ty::Named("picture".into())), Box::new(Ty::Named("picture_error".into())))
+                } else {
+                    Ty::Named(o.to_string())
+                };
+                return ex(format!("{r}::{method}({})", parts.join(", ")), ty, Form::Temp, ATOM);
             }
         }
         if let Some(Var { arm: Some(false), .. }) = name_of(obj).and_then(|n| self.var(n)) {
@@ -735,12 +768,50 @@ impl<'a> Lowerer<'a> {
                 let mut parts = vec![];
                 for (n, a) in args {
                     let x = self.expr(a);
-                    let code = if x.ty.is_text() || *n == Some("text") { self.as_str(x) } else if *n == Some("picture") { self.by_ref(x.clone(), &x.ty.clone()) } else { let t = x.ty.clone(); self.owned(x, &t) };
+                    let code = if x.ty.is_text() || *n == Some("text") {
+                        self.as_str(x)
+                    } else if !self.is_copy(&x.ty) && x.ty != Ty::Unknown {
+                        self.by_ref(x.clone(), &x.ty.clone())
+                    } else {
+                        let t = x.ty.clone();
+                        self.owned(x, &t)
+                    };
                     parts.push(code);
                 }
                 ex(format!("{r}.{m}({})", parts.join(", ")), Ty::Unknown, Form::Temp, ATOM)
             }
+            (Ty::Cap(c), "get") if c == "http" => {
+                let p = self.arg_str(args, 0);
+                ex(format!("{r}.get({p}, &deadline).await"), Ty::Res(Box::new(Ty::HostStr), Box::new(Ty::Named("within_http".into()))), Form::Temp, ATOM)
+            }
+            (Ty::Cap(c), "chosen") if c == "random" => {
+                self.use_("y_collections::List");
+                let from = self.expr(args[0].1);
+                let elem = match from.ty.elem() { Ty::StrLit => Ty::Str, t => t };
+                let l = match &from.ty {
+                    Ty::Array(e, _) if **e == Ty::StrLit => format!("&{}.map(YString::new)", from.code),
+                    _ => self.by_ref(from.clone(), &from.ty.clone()),
+                };
+                let n = self.expr(args[1].1).code;
+                ex(format!("List::from({r}.chosen({l}, {n}))"), Ty::List(Box::new(elem)), Form::Temp, ATOM)
+            }
+            (Ty::Cap(c), "shuffled") if c == "random" => {
+                self.use_("y_collections::List");
+                let from = self.expr(args[0].1);
+                let t = from.ty.clone();
+                let l = self.by_ref(from, &t);
+                ex(format!("List::from({r}.shuffled({l}))"), t, Form::Temp, ATOM)
+            }
+            (Ty::Named(t), "whole_seconds") if t == "duration" => {
+                self.use_("y_runtime::time");
+                let v = self.owned(recv.clone(), &recv.ty.clone());
+                ex(format!("time::whole_seconds({v})"), Ty::U32, Form::Temp, ATOM)
+            }
             (Ty::Cap(c), "now") if c == "clock" => ex(format!("{r}.now()"), Ty::Named("instant".into()), Form::Temp, ATOM),
+            (Ty::Cap(c), "http") if c == "system" => {
+                let svc = name_of(args[0].1).unwrap_or("service").to_string();
+                ex(format!("{r}.http({svc}::ADDRESS)"), Ty::Cap("http".into()), Form::Temp, ATOM)
+            }
             (Ty::Cap(c), cap) if c == "system" => {
                 self.note_type(&Ty::Cap(cap.to_string()));
                 ex(format!("{r}.{cap}()"), Ty::Cap(cap.to_string()), Form::Temp, ATOM)
@@ -765,6 +836,24 @@ impl<'a> Lowerer<'a> {
             (Ty::List(e), "remove_last") => ex(format!("{r}.take_back()"), Ty::Opt(e.clone()), Form::Temp, ATOM),
             (Ty::List(e), "remove_first") => ex(format!("{r}.take_front()"), Ty::Opt(e.clone()), Form::Temp, ATOM),
             (Ty::List(e), "first") => ex(format!("{r}.first().copied()"), Ty::Opt(e.clone()), Form::Temp, ATOM),
+            (Ty::List(e), "at_number") if !self.is_copy(e) => {
+                // a value that is not copied is borrowed from the list
+                self.use_("y_runtime::list");
+                let e = (**e).clone();
+                let l = self.by_ref(recv.clone(), &recv.ty.clone());
+                let n = self.expr_want(args[0].1, &Ty::U32).code;
+                ex(format!("list::at_number_ref({l}, {n})"), e, Form::Ref, ATOM)
+            }
+            // a sorted copy
+            (Ty::List(_), "sorted") => {
+                self.use_("y_runtime::list");
+                let l = self.by_ref(recv.clone(), &recv.ty.clone());
+                ex(format!("List::from(list::sorted({l}))"), recv.ty.clone(), Form::Temp, ATOM)
+            }
+            (Ty::List(_), "extend") => {
+                let v = self.expr(args[0].1);
+                ex(format!("{r}.extend({})", v.code), Ty::Unit, Form::Temp, ATOM)
+            }
             (Ty::List(e), "at_number") => {
                 self.use_("y_runtime::list");
                 let l = self.by_ref(recv.clone(), &recv.ty.clone());
@@ -897,6 +986,7 @@ impl<'a> Lowerer<'a> {
                 ex(format!("{} ^ {o}", wrap(&recv, 61)), recv.ty.clone(), Form::Temp, 60)
             }
             (Ty::U32, "to_uint32") => recv,
+            (Ty::Res(_, e), "failure") => ex(format!("{r}.expect_err(\"a failure\")"), (**e).clone(), Form::Temp, ATOM),
             _ => {
                 let parts: Vec<String> = args.iter().map(|(_, a)| self.expr(a).code).collect();
                 ex(format!("{r}.{name}({})", parts.join(", ")), Ty::Unknown, Form::Temp, ATOM)
@@ -949,6 +1039,14 @@ impl<'a> Lowerer<'a> {
             return ex(format!("{} {op} [{}]", wrap(&a, 51), items.join(", ")), Ty::Bool, Form::Temp, 50);
         }
         let b = self.expr_want(r, &a.ty);
+        // a list and a constant's array: the array as a list
+        let b = if matches!(a.ty, Ty::List(_)) && matches!(b.ty, Ty::Array(..)) {
+            let t = a.ty.clone();
+            let code = self.owned(b, &t);
+            ex(code, t, Form::Temp, ATOM)
+        } else {
+            b
+        };
         let a = if a.ty == Ty::Int { let t = b.ty.clone(); Ex { ty: t, ..a } } else { a };
         // a borrowed name meets an owned value: compare the values
         let (ac, bc) = match (a.form, b.form) {
@@ -983,11 +1081,37 @@ impl<'a> Lowerer<'a> {
             }
             "forever" => "Forever::fake()".to_string(),
             "window" => {
-                let frames: Vec<String> = arg("frames").map(|l| l.nodes("items").iter().map(|f| {
-                    let keys: Vec<String> = f.nodes("items").iter().map(|k| self.expr(k).code).collect();
-                    format!("&[{}]", keys.join(", "))
-                }).collect()).unwrap_or_default();
-                format!("Window::fake(&[{}])", frames.join(", "))
+                let frames = arg("frames");
+                match frames {
+                    Some(l) if l.kind == "list" && l.nodes("items").iter().all(|f| f.kind == "list") => {
+                        let fs: Vec<String> = l.nodes("items").iter().map(|f| {
+                            let keys: Vec<String> = f.nodes("items").iter().map(|k| self.expr(k).code).collect();
+                            format!("&[{}]", keys.join(", "))
+                        }).collect();
+                        format!("Window::fake(&[{}])", fs.join(", "))
+                    }
+                    // frames made with `frame(…)`: the fake's own frames
+                    Some(l) if l.kind == "list" => {
+                        let fs: Vec<String> = l.nodes("items").iter().map(|f| self.expr(f).code).collect();
+                        format!("Window::fake_frames(vec![{}])", fs.join(", "))
+                    }
+                    Some(l) => format!("Window::fake_frames({}.into_vec())", self.expr(l).code),
+                    None => "Window::fake(&[])".to_string(),
+                }
+            }
+            "http" => {
+                let text = arg("text").map(|t| { let x = self.expr(t); self.as_str(x) });
+                match (text, arg("texts"), arg("status"), arg("expiring"), arg("answers"), arg("then_status")) {
+                    (Some(t), _, _, _, Some(n), Some(st)) => format!("Http::fake_failing_after({t}, {}, {})", self.expr(n).code, self.expr(st).code),
+                    (Some(t), ..) => format!("Http::fake({t})"),
+                    (_, Some(ts), ..) => {
+                        let items: Vec<String> = ts.nodes("items").iter().map(|i| { let x = self.expr(i); self.as_str(x) }).collect();
+                        format!("Http::fake_texts(&[{}])", items.join(", "))
+                    }
+                    (_, _, Some(st), ..) => format!("Http::fake_failing({})", self.expr(st).code),
+                    (_, _, _, Some(_), ..) => "Http::fake_expiring()".to_string(),
+                    _ => "Http::fake(\"\")".to_string(),
+                }
             }
             "clock" => {
                 let tick = arg("tick").map(|t| self.expr(t).code).unwrap_or_else(|| "Duration::from_millis(0)".into());
@@ -1132,6 +1256,11 @@ impl<'a> Lowerer<'a> {
                     _ => (x.code.clone(), Form::Place),
                 };
                 self.line(format!("let {name} = {code};{claim}{marker}"));
+                if x.ty == Ty::HostStr && v.kind == "or_fail" {
+                    self.line(format!("let {name} = YString::from({name});"));
+                    self.bind(name, Ty::Str, Form::Place);
+                    return;
+                }
                 self.bind(name, x.ty, form);
             }
             "assign" => {
@@ -1217,6 +1346,25 @@ impl<'a> Lowerer<'a> {
         let marker = format!("// y: region {name} is {}", cs.join(", "));
         let body = st.nodes("body");
         self.regions.push((self.ctx.name.clone(), name.to_string(), st.line, cs.clone()));
+        if let Some(bound) = st.nodes("constraints").iter().find(|c| c.str("word") == Some("within")).and_then(|c| c.node("bound")) {
+            // `within d or fail`: a deadline the region's waits are given
+            let b = self.expr(bound).code;
+            self.use_("y_runtime::Deadline");
+            self.line("{");
+            self.ind += 1;
+            self.line(marker);
+            self.line(format!("let deadline = Deadline::after({b});"));
+            self.push_scope();
+            self.bind("deadline", Ty::Named("deadline".into()), Form::Place);
+            self.stmts(&body, false);
+            self.pop_scope();
+            if !self.rest.is_empty() {
+                self.line(format!("// y: end region {name}"));
+            }
+            self.ind -= 1;
+            self.line("}");
+            return;
+        }
         if body.len() == 1 && matches!(body[0].kind, "let" | "expr" | "assign") {
             let start = self.out.len();
             self.stmts(&body, tail);
@@ -1295,6 +1443,22 @@ impl<'a> Lowerer<'a> {
                     self.stmt(s, tail && k + 1 == ebody.len(), &ebody[k + 1..]);
                 }
                 self.ctx.branches.pop();
+                return;
+            }
+        }
+        // `if a = (x != optional.none):`: a `match`, with the name narrowed in `Some`
+        if cond.kind == "binary" && cond.str("op") == Some("!=") && is_member(cond.node("right").unwrap(), "optional", "none") && els.is_some() {
+            if let Some(x) = name_of(cond.node("left").unwrap()) {
+                let inner = self.var(x).map(|v| v.ty.elem()).unwrap_or(Ty::Unknown);
+                self.line(format!("match {x} {{"));
+                self.ind += 1;
+                self.push_scope();
+                self.bind(x, inner, Form::Place);
+                self.arm(&format!("Some({x})"), name, name, &body, tail);
+                self.pop_scope();
+                self.arm("None", ename, ename, &ebody, tail);
+                self.ind -= 1;
+                self.line("}");
                 return;
             }
         }
@@ -1632,6 +1796,15 @@ pub fn with_fields(e: &Node, fields: &[String], obj: &str) -> Node {
     go(e, fields, &objn)
 }
 
+/// An expression of Y text, from the parser: the value of `return r = <text>` in a function of its own.
+pub fn parse_expression(text: &str) -> Node {
+    let src = format!("module x\n\n\nfunction f() returns r:\n    return r = {text}\n");
+    y_parse::parse(&src)
+        .ok()
+        .and_then(|t| t.nodes("decls").into_iter().find(|d| d.kind == "function").and_then(|f| f.nodes("body").first().and_then(|r| r.node("value").cloned())))
+        .unwrap_or_else(|| Node::new("name", 0).with("name", text))
+}
+
 /// The name a place starts from: `words` of `words[chosen]`.
 fn root_name(e: &Node) -> Option<String> {
     match e.kind {
@@ -1695,7 +1868,7 @@ pub fn const_type(ty: Option<&Ty>, value: &Node) -> Ty {
             Ty::Array(Box::new(inner), value.nodes("items").len())
         }
         (Some(t), _) if *t != Ty::Str => t.clone(),
-        (_, "literal") if value.str("type") == Some("string") => Ty::StrLit,
+        (_, "literal") if matches!(value.str("type"), Some("string" | "url" | "path")) => Ty::StrLit,
         (Some(t), _) => t.clone(),
         (None, "literal") if value.str("type") == Some("integer") => Ty::Int,
         _ => Ty::Unknown,

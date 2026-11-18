@@ -141,6 +141,15 @@ pub fn imports_for(code: &str) -> std::collections::BTreeSet<String> {
         ("Instant", "std::time::Instant"),
         ("block_on", "y_window::block_on"),
         ("SystemWindow", "y_window::SystemWindow"),
+        ("SystemHttp", "y_http::SystemHttp"),
+        ("Http", "y_http::Http"),
+        ("HttpError", "y_http::HttpError"),
+        ("Within", "y_runtime::Within"),
+        ("Deadline", "y_runtime::Deadline"),
+        ("Expired", "y_runtime::Expired"),
+        ("PictureError", "y_window::PictureError"),
+        ("Frame", "y_window::Frame"),
+        ("time", "y_runtime::time"),
         ("require", "y_runtime::require"),
         ("ensure", "y_runtime::ensure"),
         ("invariant", "y_runtime::invariant"),
@@ -150,6 +159,8 @@ pub fn imports_for(code: &str) -> std::collections::BTreeSet<String> {
         let used = match name {
             // a trait's method: `system.window()`
             "SystemWindow" => code.contains(".window()"),
+            "SystemHttp" => code.contains(".http("),
+            "time" => code.contains("time::whole_seconds"),
             _ => words.contains(name) && (name.chars().next().unwrap().is_uppercase() || code.contains(&format!("{name}("))),
         };
         if used {
@@ -250,6 +261,26 @@ impl<'a> Lowerer<'a> {
                 // `ensures name = p`: the result is bound to its Y name, checked, then given
                 let r = f.result.as_ref().map(|r| r.0.clone()).unwrap_or_else(|| "result".into());
                 self.push_scope();
+                if f.fails.is_some() && body.last().is_some_and(|l| l.kind == "return") {
+                    // a function that may fail: the value it gives is checked, then given as its result
+                    let (init, last) = body.split_at(body.len() - 1);
+                    self.block_open_tail(init);
+                    let want = f.result.as_ref().map(|r| r.1.clone()).unwrap_or(Ty::Unknown);
+                    let x = self.expr_want(last[0].node("value").unwrap(), &want);
+                    let v = self.owned(x, &want);
+                    self.line(format!("let {r} = {v};"));
+                    self.bind(&r, want, Form::Place);
+                    for w in &ensures {
+                        self.use_("y_runtime::ensure");
+                        let c = self.expr(w.node("condition").unwrap());
+                        self.line(format!("ensure({}, \"{}::{}#{}\");", c.code, self.m.name, f.name, w.str("name").unwrap()));
+                    }
+                    self.line(format!("Ok({r})"));
+                    self.pop_scope();
+                    self.ind -= 1;
+                    self.line("}");
+                    return;
+                }
                 self.block_open_tail(&body);
                 let start = self.last_start;
                 let ind = "    ".repeat(self.ind);
@@ -283,7 +314,7 @@ impl<'a> Lowerer<'a> {
             self.line(l);
         }
         let copy = crate::model::is_copy(m, &Ty::Named(name.to_string()));
-        let eq = true;
+        let eq = crate::model::has_eq(m, &Ty::Named(name.to_string()));
         let mut derives = vec!["Clone"];
         if copy {
             derives.push("Copy");
@@ -408,10 +439,28 @@ impl<'a> Lowerer<'a> {
                     self.ind -= 1;
                     self.line("}");
                 }
-                // `or fail` on a failure that one case carries converts through that case (Y § 3.4)
+                // `or fail` on a failure that one case carries converts through that case (Y § 3.4); a wait within a
+                // deadline fails with `Within`, which two cases carry between them
+                let carried = |t: &str| cases.iter().find(|(_, fs)| matches!(&fs[..], [(_, Ty::Named(x))] if x == t)).map(|(c, fs)| (c.clone(), fs[0].0.clone()));
+                let within = carried("http_error").zip(carried("expired"));
+                if let Some(((failed, ff), (expired, ef))) = &within {
+                    let en = pascal(name);
+                    self.line("");
+                    self.line(format!("/// Y's `or fail` on a wait within a deadline converts through `{en}`'s `{}` and `{}` cases (Y § 3.4).", pascal(failed), pascal(expired)));
+                    self.line(format!("impl From<Within<HttpError>> for {en} {{"));
+                    self.line(format!("    fn from(failed: Within<HttpError>) -> {en} {{"));
+                    self.line("        match failed {");
+                    self.line(format!("            Within::Failed({ff}) => {en}::{} {{ {ff} }},", pascal(failed)));
+                    self.line(format!("            Within::Expired({ef}) => {en}::{} {{ {ef} }},", pascal(expired)));
+                    self.line("        }");
+                    self.line("    }");
+                    self.line("}");
+                }
+                let failures: std::collections::BTreeSet<String> = self.m.fns.values().chain(self.lib.map(|l| l.fns.values()).into_iter().flatten()).filter_map(|f| match &f.fails { Some(Ty::Named(t)) => Some(t.clone()), _ => None }).collect();
                 for (c, fs) in cases {
                     if let [(f, Ty::Named(t))] = &fs[..] {
-                        if crate::ty::external(t).is_some() && t.ends_with("_error") {
+                        let external_error = crate::ty::external(t).is_some() && t.ends_with("_error") && !(within.is_some() && t == "http_error");
+                        if external_error || (failures.contains(t) && t != name) {
                             let (et, en) = (self.rust_type(&Ty::Named(t.clone())), pascal(name));
                             self.line("");
                             self.line(format!("/// Y's `or fail` on a `{et}` converts through `{en}`'s one case that carries it (Y § 3.4)."));
@@ -510,7 +559,7 @@ impl<'a> Lowerer<'a> {
                 self.function_item(d, &f, if facet { "pub " } else { "" });
             }
             "structure" | "type_decl" => self.type_item(d, facet),
-            "constants" => {
+            "constants" | "service" => {
                 if self.m.types.contains_key(d.str("name").unwrap()) {
                     self.type_item(d, facet)
                 } else {
@@ -620,7 +669,11 @@ pub fn tests_file(m: &Module, test_tree: &Node, test_module: &Module, y_path: &s
     let lib: &Module = m;
     let mut l = Lowerer::new(test_module, Some(lib));
     l.block_on = true;
-    // the test file's own functions, which its tests call
+    // the test file's own constants and functions, which its tests use
+    for d in test_tree.nodes("decls").into_iter().filter(|d| d.kind == "constants") {
+        l.line("");
+        l.const_item(d, false);
+    }
     for d in test_tree.nodes("decls").into_iter().filter(|d| d.kind == "function") {
         l.line("");
         let f = test_module.fns[d.str("name").unwrap()].clone();
@@ -709,6 +762,10 @@ pub fn main_file(main: &Module, lib: &Module, lib_crate: &str, y_path: &str) -> 
                 imports.push(format!("use {path}::{{{}}};", items.join(", ")));
             }
         }
+    }
+    for d in main.tree.nodes("decls").into_iter().filter(|d| matches!(d.kind, "type_decl" | "structure")) {
+        l.type_item(d, false);
+        l.line("");
     }
     for d in main.tree.nodes("decls").into_iter().filter(|d| d.kind == "function") {
         let f = main.fns[d.str("name").unwrap()].clone();

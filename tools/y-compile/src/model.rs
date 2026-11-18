@@ -114,7 +114,7 @@ fn copy_in(m: &Module, t: &Ty, depth: usize) -> bool {
         return false;
     }
     match t {
-        Ty::U32 | Ty::I32 | Ty::U64 | Ty::Count | Ty::Int | Ty::Bool | Ty::StrLit => true,
+        Ty::U32 | Ty::I32 | Ty::U64 | Ty::U16 | Ty::Count | Ty::Int | Ty::Bool | Ty::StrLit => true,
         Ty::Named(n) if crate::ty::COPIED.contains(&n.as_str()) => true,
         Ty::Opt(x) => copy_in(m, x, depth + 1),
         Ty::Named(n) => match m.types.get(n).map(|t| &t.def) {
@@ -127,10 +127,31 @@ fn copy_in(m: &Module, t: &Ty, depth: usize) -> bool {
     }
 }
 
+/// Whether a type has Rust's `Eq`: every type but a picture's, and what holds one.
+pub fn has_eq(m: &Module, t: &Ty) -> bool {
+    eq_in(m, t, 0)
+}
+
+fn eq_in(m: &Module, t: &Ty, depth: usize) -> bool {
+    if depth > 8 {
+        return true;
+    }
+    match t {
+        Ty::Named(n) if n == "picture" => false,
+        Ty::List(x) | Ty::Set(x) | Ty::Opt(x) | Ty::Array(x, _) => eq_in(m, x, depth + 1),
+        Ty::Named(n) => match m.types.get(n).map(|t| &t.def) {
+            Some(TypeDef::Struct { fields, .. }) => fields.iter().all(|(_, f)| eq_in(m, f, depth + 1)),
+            Some(TypeDef::Enum { cases }) => cases.iter().all(|(_, fs)| fs.iter().all(|(_, f)| eq_in(m, f, depth + 1))),
+            _ => true,
+        },
+        _ => true,
+    }
+}
+
 /// A type passed by value: a number, a truth value, or a type whose values are its cases alone.
 pub fn by_value(m: &Module, t: &Ty) -> bool {
     match t {
-        Ty::U32 | Ty::I32 | Ty::U64 | Ty::Count | Ty::Int | Ty::Bool | Ty::Rune => true,
+        Ty::U32 | Ty::I32 | Ty::U64 | Ty::U16 | Ty::Count | Ty::Int | Ty::Bool | Ty::Rune => true,
         Ty::Named(n) if crate::ty::COPIED.contains(&n.as_str()) => true,
         Ty::Named(n) => matches!(m.types.get(n).map(|t| &t.def), Some(TypeDef::Enum { cases }) if cases.iter().all(|(_, f)| f.is_empty())),
         _ => false,
@@ -212,10 +233,10 @@ impl<'t> Module<'t> {
                         .collect();
                     m.types.insert(name.clone(), TypeInfo { name, facet: facet.clone(), def: TypeDef::Enum { cases }, line: d.line });
                 }
-                "constants" => {
+                "constants" | "service" => {
                     let items: Vec<(String, Option<Ty>, Node)> =
                         d.nodes("items").iter().map(|i| (i.str("name").unwrap().to_string(), i.node("type").map(Ty::from_node), i.node("value").cloned().unwrap_or_else(|| Node::new("literal", i.line)))).collect();
-                    if used_as_type.contains(&name) {
+                    if used_as_type.contains(&name) && d.kind == "constants" {
                         let cases = items.iter().map(|(n, _, _)| (n.clone(), vec![])).collect();
                         m.types.insert(name.clone(), TypeInfo { name, facet: facet.clone(), def: TypeDef::Enum { cases }, line: d.line });
                     } else {
@@ -258,7 +279,7 @@ impl<'t> Module<'t> {
                 let ty = doc_type(d, &pname).or_else(|| p.node("type").map(Ty::from_node)).unwrap_or(Ty::Unknown);
                 let (mutable, injected) = (p.flag("mutable"), p.flag("injected"));
                 let mode = if injected {
-                    if matches!(&ty, Ty::Cap(c) if c == "forever" || c == "system") { Mode::Ref } else { Mode::Mut }
+                    if matches!(&ty, Ty::Cap(c) if c == "forever" || c == "system" || c == "http") { Mode::Ref } else { Mode::Mut }
                 } else if mutable {
                     Mode::Mut
                 } else if by_value(self, &ty) || kept.contains(&pname) {
@@ -277,11 +298,12 @@ impl<'t> Module<'t> {
             Ty::U32 => "u32".into(),
             Ty::I32 => "i32".into(),
             Ty::U64 => "u64".into(),
+            Ty::U16 => "u16".into(),
             Ty::Count | Ty::Int => "usize".into(),
             Ty::Bool => "bool".into(),
             Ty::Str => "YString".into(),
             Ty::HostStr => "String".into(),
-            Ty::StrLit => "&'static str".into(),
+            Ty::StrLit => "&str".into(),
             Ty::Rune => "Rune".into(),
             Ty::List(e) => format!("List<{}>", self.rust_type(e)),
             Ty::Array(e, n) => format!("[{}; {n}]", self.rust_type(e)),

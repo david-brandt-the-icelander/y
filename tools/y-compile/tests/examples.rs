@@ -64,3 +64,8 @@ fn hangman() {
 fn snake() {
     end_to_end("snake", "snake");
 }
+
+#[test]
+fn memory() {
+    end_to_end("memory", "memory");
+}

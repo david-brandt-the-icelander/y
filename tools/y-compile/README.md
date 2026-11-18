@@ -59,9 +59,19 @@ does, is an `async fn`, and each such point is awaited; a test runs a call of on
 `inject`) is lowered as Snake's hand lowering did it: `main` calls `y_window::run` with those constants, and the Y
 `main` becomes `async fn entry`. `y-facts.json` `suspensions` lists each point.
 
+A region `within` a bound (`region fetch is within game_rules.fetch_time or fail:`) is a block of its own that makes
+the deadline, `let deadline = Deadline::after(…);`, and gives it to each wait in it (`site.get(…, &deadline)`), as
+Memory's hand lowering did. A failure of such a wait is a `Within<HttpError>`, which a type with a case for each of
+`http_error` and `expired` converts by an `impl From` of its own.
+
 A region, `region name is c₁, c₂:`, is marked where it starts, `// y: region name is c₁, c₂`: on the line of its one
 statement, or on a line of its own above several, with `// y: end region name` after them when statements follow it
 in its block. Its constraints become the clauses of its region subject as `regen.py` makes them.
+
+## What it added to the runtime
+
+- `y_runtime::list::sorted`, for `list.sorted()` in Memory's tests: a sorted copy as a `Vec`. The hand lowering sorted
+  a clone in place, which needs a `mut` local inside an expression.
 
 ## Decisions the proposal leaves open
 
@@ -106,6 +116,11 @@ Each kind of difference below keeps the woven Rust building and its tests passin
   example; the hand lowering did so only where the text was used twice.
 - **Effects clauses** follow one rule (the table above). The hand lowering was not always consistent: Snake's `play`
   says `no io` though it draws in a window, and Checkers' `play` leaves out `no clock`.
+- **What a failing function ensures** is checked on the value before it is given (`let started = …; ensure(…);
+  Ok(started)`), as the hand lowering did; its clause keeps the Y condition (`result is Ok(started) implies
+  started.turned.is_empty()` where the hand lowering wrote `count(started.turned) == 0`).
+- **An element of a list that is not copied** (a picture) is borrowed with `list::at_number_ref`, and given to the
+  window by reference.
 - **Imports** are the ones the code uses, found in the code; the order of the paths in `y-facts.json` is the
   enumerator's sorted order.
 - **Documentation** is made from the Y documentation mechanically: the prose, then the roles, each without its type.
