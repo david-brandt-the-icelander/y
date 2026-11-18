@@ -70,6 +70,8 @@ pub struct Module<'t> {
     pub fns: BTreeMap<String, FnInfo>,
     /// Each facet, in order, with its line, visibility and members' names.
     pub facets: Vec<(String, usize, String, Vec<String>)>,
+    /// The functions that may suspend (Y § 3.7): they wait for a capability that may, or call one that does.
+    pub suspending: BTreeSet<String>,
 }
 
 /// The declarations of a file with the facet each is in.
@@ -113,6 +115,7 @@ fn copy_in(m: &Module, t: &Ty, depth: usize) -> bool {
     }
     match t {
         Ty::U32 | Ty::I32 | Ty::U64 | Ty::Count | Ty::Int | Ty::Bool | Ty::StrLit => true,
+        Ty::Named(n) if crate::ty::COPIED.contains(&n.as_str()) => true,
         Ty::Opt(x) => copy_in(m, x, depth + 1),
         Ty::Named(n) => match m.types.get(n).map(|t| &t.def) {
             Some(TypeDef::Struct { fields, .. }) => fields.iter().all(|(_, f)| copy_in(m, f, depth + 1)),
@@ -128,6 +131,7 @@ fn copy_in(m: &Module, t: &Ty, depth: usize) -> bool {
 pub fn by_value(m: &Module, t: &Ty) -> bool {
     match t {
         Ty::U32 | Ty::I32 | Ty::U64 | Ty::Count | Ty::Int | Ty::Bool | Ty::Rune => true,
+        Ty::Named(n) if crate::ty::COPIED.contains(&n.as_str()) => true,
         Ty::Named(n) => matches!(m.types.get(n).map(|t| &t.def), Some(TypeDef::Enum { cases }) if cases.iter().all(|(_, f)| f.is_empty())),
         _ => false,
     }
@@ -159,7 +163,7 @@ impl<'t> Module<'t> {
                 }
             }
         }
-        let mut m = Module { name, tree, types: BTreeMap::new(), consts: BTreeMap::new(), fns: BTreeMap::new(), facets: vec![] };
+        let mut m = Module { name, tree, types: BTreeMap::new(), consts: BTreeMap::new(), fns: BTreeMap::new(), facets: vec![], suspending: BTreeSet::new() };
         if let Some(o) = outer {
             m.types = o.types.clone();
             m.consts = o.consts.clone();
@@ -227,6 +231,10 @@ impl<'t> Module<'t> {
                 m.fns.insert(f.name.clone(), f);
             }
         }
+        if let Some(o) = outer {
+            m.suspending = o.suspending.clone();
+        }
+        m.suspending.extend(suspending(&decls, outer.map(|o| &o.suspending)));
         m
     }
 
@@ -300,6 +308,45 @@ impl<'t> Module<'t> {
     /// The Rust path of a member of the module, from the module's own file: its facet's module when it has one.
     pub fn facet_of(&self, name: &str) -> Option<&str> {
         self.types.get(name).and_then(|t| t.facet.as_deref()).or_else(|| self.fns.get(name).and_then(|f| f.facet.as_deref())).or_else(|| self.consts.get(name).and_then(|c| c.facet.as_deref()))
+    }
+}
+
+/// The points where a function may suspend: a capability's wait (`window.next_frame()`, `site.get(…)`), or a call of
+/// a function that may suspend.
+pub fn suspends_at(call: &Node, suspending: &BTreeSet<String>) -> Option<String> {
+    let callee = call.node("callee")?;
+    match callee.kind {
+        "member" => {
+            let obj = callee.node("object")?;
+            let m = callee.str("name")?;
+            let o = obj.str("name").filter(|_| obj.kind == "name")?;
+            ((o == "window" && m == "next_frame") || (o == "site" && m == "get")).then(|| format!("{o}.{m}"))
+        }
+        "name" => callee.str("name").filter(|n| suspending.contains(*n)).map(str::to_string),
+        _ => None,
+    }
+}
+
+fn suspending(decls: &[(Option<String>, &Node)], outer: Option<&BTreeSet<String>>) -> BTreeSet<String> {
+    let mut out: BTreeSet<String> = outer.cloned().unwrap_or_default();
+    loop {
+        let before = out.len();
+        for (_, d) in decls.iter().filter(|(_, d)| d.kind == "function") {
+            let mut found = false;
+            for b in d.nodes("body") {
+                b.walk(&mut |n: &Node| {
+                    if n.kind == "call" && suspends_at(n, &out).is_some() {
+                        found = true;
+                    }
+                });
+            }
+            if found {
+                out.insert(d.str("name").unwrap().to_string());
+            }
+        }
+        if out.len() == before {
+            return out;
+        }
     }
 }
 

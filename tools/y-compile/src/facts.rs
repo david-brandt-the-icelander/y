@@ -122,7 +122,38 @@ pub fn facts(dir: &Path, m: &Module, tree: &Node, test_tree: &Node, main_tree: &
         }
     }
     f.insert("claims".into(), Value::Array(claims));
-    f.insert("suspensions".into(), json!([]));
+    // each point where a function may suspend (Y § 3.7), and the bare line that awaits it, in order
+    let mut suspensions = vec![];
+    for (yp, t, bp, is_main) in [(&y, tree, &bare, false), (&"y/src/main.y".to_string(), main_tree, &"bare/src/main.brs".to_string(), true)] {
+        let awaited: Vec<usize> = lines(files, bp).iter().enumerate().filter(|(_, l)| l.contains(".await")).map(|(k, _)| k + 1).collect();
+        let mut points = vec![];
+        for (_, d) in declarations(t).into_iter().filter(|(_, d)| d.kind == "function") {
+            let fname = d.str("name").unwrap();
+            for b in d.nodes("body") {
+                b.walk(&mut |n: &Node| {
+                    if n.kind != "call" {
+                        return;
+                    }
+                    if let Some(at) = crate::model::suspends_at(n, &m.suspending) {
+                        let point = if n.nodes("args").is_empty() { format!("{at}()") } else { format!("{at}(") };
+                        let (because, lowered) = if at.contains('.') {
+                            (format!("the {} capability may suspend (Y § 3.7)", at.split('.').next().unwrap()), "async fn, and .await at the point".to_string())
+                        } else if is_main {
+                            (format!("{at} may suspend"), "async fn entry, run on the window's executor by y_window::run, and .await at the call".to_string())
+                        } else {
+                            (format!("{at} may suspend"), ".await at the call".to_string())
+                        };
+                        let subject = if is_main { format!("{krate}::{fname}") } else { rust_path(krate, m, fname) };
+                        points.push((subject, point, because, lowered, n.line));
+                    }
+                });
+            }
+        }
+        for ((subject, point, because, lowered, line), b) in points.into_iter().zip(awaited) {
+            suspensions.push(json!({"subject": subject, "point": point, "because": because, "lowered": lowered, "y": format!("{yp}:{line}"), "bare": format!("{bp}:{b}")}));
+        }
+    }
+    f.insert("suspensions".into(), Value::Array(suspensions));
     // each `compile`: the call, and where the entry point computes its value
     let mut compiled = vec![];
     let ml = lines(files, "bare/src/main.brs");

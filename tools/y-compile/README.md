@@ -44,10 +44,24 @@ The Rust a weave gives is the typed Rust the lowering wrote, apart from the `mut
 | `ensures name = p` | `ensure name : p'`, status `lifted` by `y_runtime::ensure` |
 | No `injected` and no `mutable` parameter | `effects pure` |
 | A `mutable` parameter and no `injected` one | `no io`, `no clock`, `no randomness`, and `mutates only` the members of the parameter the function changes, itself or through the functions it passes them to |
-| `injected` parameters | `effects only` the capabilities other than `forever` and `system`, then `no clock` and `no randomness` unless a clock or a random source is among them |
+| `injected` parameters | `effects only` the capabilities other than `forever` and `system`; `no io` unless one of them is a device (the console, a window, a site); `no clock` and `no randomness` unless a clock or a random source is among them |
+| In a module whose capabilities may suspend, a function that does not | `no suspension` |
+| A `mutable` parameter, with or without `injected` ones | also `mutates only` |
 
 `p'` is the Y condition in the constraint language: `f(x) == result.ok` is `f(x) is Ok(_)`, `x == t.case` is `x is
 Case` for a closed type, `x.count()` is `count(x)`, and a constant `group.name` is `NAME`.
+
+## Suspension and regions
+
+A function that waits for a capability that may suspend (`window.next_frame()`, `site.get(…)`), or calls one that
+does, is an `async fn`, and each such point is awaited; a test runs a call of one to its end with
+`y_window::block_on`. An entry point that opens a window (`system.window(title: …, width: …, height: …)` in an
+`inject`) is lowered as Snake's hand lowering did it: `main` calls `y_window::run` with those constants, and the Y
+`main` becomes `async fn entry`. `y-facts.json` `suspensions` lists each point.
+
+A region, `region name is c₁, c₂:`, is marked where it starts, `// y: region name is c₁, c₂`: on the line of its one
+statement, or on a line of its own above several, with `// y: end region name` after them when statements follow it
+in its block. Its constraints become the clauses of its region subject as `regen.py` makes them.
 
 ## Decisions the proposal leaves open
 
@@ -90,6 +104,8 @@ Each kind of difference below keeps the woven Rust building and its tests passin
   (`if !(…)`).
 - **The console's text, once narrowed,** is made a `YString` at once (`let typed = YString::from(typed);`), in every
   example; the hand lowering did so only where the text was used twice.
+- **Effects clauses** follow one rule (the table above). The hand lowering was not always consistent: Snake's `play`
+  says `no io` though it draws in a window, and Checkers' `play` leaves out `no clock`.
 - **Imports** are the ones the code uses, found in the code; the order of the paths in `y-facts.json` is the
   enumerator's sorted order.
 - **Documentation** is made from the Y documentation mechanically: the prose, then the roles, each without its type.

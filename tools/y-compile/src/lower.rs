@@ -83,8 +83,14 @@ pub struct Lowerer<'a> {
     pub last_start: usize,
     /// The function whose call is being lowered.
     calling: Option<String>,
+    /// The constant group being lowered.
+    pub in_group: Option<String>,
+    /// In a test: a call that may suspend is run to its end with `block_on`.
+    pub block_on: bool,
     /// Markers for the next line written: the copies its statement makes.
     pending: Vec<String>,
+    /// Each region: its function, its name, its Y line and its constraints as written.
+    pub regions: Vec<(String, String, usize, Vec<String>)>,
     /// Each structure invariant checked after a write: the type, the invariant, the function and the field written.
     pub invariant_sites: Vec<(String, String, String, String)>,
 }
@@ -145,8 +151,11 @@ impl<'a> Lowerer<'a> {
             loops: vec![],
             last_start: 0,
             calling: None,
+            in_group: None,
+            block_on: false,
             pending: vec![],
             invariant_sites: vec![],
+            regions: vec![],
         }
     }
 
@@ -392,6 +401,18 @@ impl<'a> Lowerer<'a> {
         match e.str("type").unwrap_or("") {
             "integer" => ex(text, Ty::Int, Form::Temp, ATOM),
             "boolean" => ex(text, Ty::Bool, Form::Temp, ATOM),
+            "duration" => {
+                let digits: String = text.chars().take_while(|c| c.is_ascii_digit()).collect();
+                let unit = &text[digits.len()..];
+                let code = match unit {
+                    "ms" => format!("Duration::from_millis({digits})"),
+                    "s" => format!("Duration::from_secs({digits})"),
+                    "min" => format!("Duration::from_secs({})", digits.parse::<u64>().unwrap_or(0) * 60),
+                    "h" => format!("Duration::from_secs({})", digits.parse::<u64>().unwrap_or(0) * 3600),
+                    _ => format!("Duration::from_millis({digits})"),
+                };
+                ex(code, Ty::Named("duration".into()), Form::Temp, ATOM)
+            }
             "string" => {
                 let v = e.str("value").unwrap_or("");
                 if v.contains('{') {
@@ -449,10 +470,17 @@ impl<'a> Lowerer<'a> {
             if let Some(TypeDef::Enum { .. }) = self.type_def(o) {
                 return ex(format!("{}::{}", pascal(o), pascal(name)), Ty::Named(o.to_string()), Form::Temp, ATOM);
             }
+            if o == "key" {
+                return ex(format!("Key::{}", pascal(name)), Ty::Named("key".into()), Form::Temp, ATOM);
+            }
             let group = self.m.consts.get(o).or_else(|| self.lib.and_then(|l| l.consts.get(o)));
             if let Some(g) = group {
                 let (_, ty, value) = g.items.iter().find(|(n, _, _)| n == name).cloned().unwrap_or((String::new(), None, Node::new("literal", 0)));
                 let ty = const_type(ty.as_ref(), &value);
+                // a constant of the group being lowered is named alone
+                if self.in_group.as_deref() == Some(o) {
+                    return ex(upper(name), ty, Form::Temp, ATOM);
+                }
                 return ex(format!("{o}::{}", upper(name)), ty, Form::Temp, ATOM);
             }
         }
@@ -486,6 +514,10 @@ impl<'a> Lowerer<'a> {
                     let fields = fields.clone();
                     return self.construct(&pascal(n), &fields, &args, Ty::Named(n.to_string()));
                 }
+            }
+            if n == "colour" {
+                let parts: Vec<String> = args.iter().map(|(_, a)| self.expr(a).code).collect();
+                return ex(format!("Colour::rgb({})", parts.join(", ")), Ty::Named("colour".into()), Form::Temp, ATOM);
             }
             let parts: Vec<String> = args.iter().map(|(_, a)| self.expr(a).code).collect();
             return ex(format!("{n}({})", parts.join(", ")), Ty::Unknown, Form::Temp, ATOM);
@@ -642,7 +674,15 @@ impl<'a> Lowerer<'a> {
             Some(e) => Ty::Res(Box::new(ret), Box::new(e.clone())),
             None => ret,
         };
-        ex(format!("{}({})", f.name, parts.join(", ")), ty, Form::Temp, ATOM)
+        let call = format!("{}({})", f.name, parts.join(", "));
+        if self.module().suspending.contains(&f.name) {
+            // a function that may suspend is awaited (Y § 3.7); a test runs it to its end
+            if self.block_on {
+                return ex(format!("block_on({call})"), ty, Form::Temp, ATOM);
+            }
+            return ex(format!("{call}.await"), ty, Form::Temp, ATOM);
+        }
+        ex(call, ty, Form::Temp, ATOM)
     }
 
     fn arg_str(&mut self, args: &[(Option<&str>, &Node)], k: usize) -> String {
@@ -673,6 +713,34 @@ impl<'a> Lowerer<'a> {
                 ex(format!("{r}.read_line({fv})"), Ty::Res(Box::new(Ty::Opt(Box::new(Ty::HostStr))), Box::new(console_error())), Form::Temp, ATOM)
             }
             (Ty::Cap(c), "written") if c == "console" => ex(format!("{r}.written()"), Ty::List(Box::new(Ty::HostStr)), Form::Temp, ATOM),
+            (Ty::Cap(c), "next_frame") if c == "window" => {
+                let fv = match self.var("forever").map(|v| v.form) {
+                    Some(Form::Ref | Form::Mut) => "forever".to_string(),
+                    _ => "&forever".to_string(),
+                };
+                ex(format!("{r}.next_frame({fv}).await"), Ty::Unit, Form::Temp, ATOM)
+            }
+            (Ty::Cap(c), "keys_pressed") if c == "window" => {
+                self.use_("y_collections::List");
+                ex(format!("List::from({r}.keys_pressed())"), Ty::List(Box::new(Ty::Named("key".into()))), Form::Temp, ATOM)
+            }
+            (Ty::Cap(c), "clicks") if c == "window" => {
+                self.use_("y_collections::List");
+                ex(format!("List::from({r}.clicks())"), Ty::List(Box::new(Ty::Named("point".into()))), Form::Temp, ATOM)
+            }
+            (Ty::Cap(c), "close_requested") if c == "window" => ex(format!("{r}.close_requested()"), Ty::Bool, Form::Temp, ATOM),
+            (Ty::Cap(c), "written") if c == "window" => ex(format!("{r}.written()"), Ty::List(Box::new(Ty::HostStr)), Form::Temp, ATOM),
+            (Ty::Cap(c), m) if c == "window" => {
+                // drawing: each argument in the order the Y names them, text as the host's
+                let mut parts = vec![];
+                for (n, a) in args {
+                    let x = self.expr(a);
+                    let code = if x.ty.is_text() || *n == Some("text") { self.as_str(x) } else if *n == Some("picture") { self.by_ref(x.clone(), &x.ty.clone()) } else { let t = x.ty.clone(); self.owned(x, &t) };
+                    parts.push(code);
+                }
+                ex(format!("{r}.{m}({})", parts.join(", ")), Ty::Unknown, Form::Temp, ATOM)
+            }
+            (Ty::Cap(c), "now") if c == "clock" => ex(format!("{r}.now()"), Ty::Named("instant".into()), Form::Temp, ATOM),
             (Ty::Cap(c), cap) if c == "system" => {
                 self.note_type(&Ty::Cap(cap.to_string()));
                 ex(format!("{r}.{cap}()"), Ty::Cap(cap.to_string()), Form::Temp, ATOM)
@@ -683,6 +751,20 @@ impl<'a> Lowerer<'a> {
                 ex(format!("{r}.iter().any(|line| line == {s})"), Ty::Bool, Form::Temp, ATOM)
             }
             (Ty::List(_), "count") => ex(format!("{r}.count()"), Ty::Count, Form::Temp, ATOM),
+            (Ty::List(e), "without_last") => {
+                self.use_("y_runtime::list");
+                let l = self.by_ref(recv.clone(), &recv.ty.clone());
+                ex(format!("list::without_last({l})"), Ty::List(e.clone()), Form::Temp, ATOM)
+            }
+            (Ty::List(e), "insert_first") => {
+                let e = (**e).clone();
+                let v = self.expr_want(args[0].1, &e);
+                let v = self.owned(v, &e);
+                ex(format!("{r}.push_front({v})"), Ty::Unit, Form::Temp, ATOM)
+            }
+            (Ty::List(e), "remove_last") => ex(format!("{r}.take_back()"), Ty::Opt(e.clone()), Form::Temp, ATOM),
+            (Ty::List(e), "remove_first") => ex(format!("{r}.take_front()"), Ty::Opt(e.clone()), Form::Temp, ATOM),
+            (Ty::List(e), "first") => ex(format!("{r}.first().copied()"), Ty::Opt(e.clone()), Form::Temp, ATOM),
             (Ty::List(e), "at_number") => {
                 self.use_("y_runtime::list");
                 let l = self.by_ref(recv.clone(), &recv.ty.clone());
@@ -862,6 +944,10 @@ impl<'a> Lowerer<'a> {
 
     fn compare(&mut self, l: &Node, r: &Node, op: &str) -> Ex {
         let a = self.expr(l);
+        if a.ty == Ty::List(Box::new(Ty::HostStr)) && r.kind == "list" {
+            let items: Vec<String> = r.nodes("items").iter().map(|i| self.expr(i).code).collect();
+            return ex(format!("{} {op} [{}]", wrap(&a, 51), items.join(", ")), Ty::Bool, Form::Temp, 50);
+        }
         let b = self.expr_want(r, &a.ty);
         let a = if a.ty == Ty::Int { let t = b.ty.clone(); Ex { ty: t, ..a } } else { a };
         // a borrowed name meets an owned value: compare the values
@@ -896,6 +982,17 @@ impl<'a> Lowerer<'a> {
                 }
             }
             "forever" => "Forever::fake()".to_string(),
+            "window" => {
+                let frames: Vec<String> = arg("frames").map(|l| l.nodes("items").iter().map(|f| {
+                    let keys: Vec<String> = f.nodes("items").iter().map(|k| self.expr(k).code).collect();
+                    format!("&[{}]", keys.join(", "))
+                }).collect()).unwrap_or_default();
+                format!("Window::fake(&[{}])", frames.join(", "))
+            }
+            "clock" => {
+                let tick = arg("tick").map(|t| self.expr(t).code).unwrap_or_else(|| "Duration::from_millis(0)".into());
+                format!("Clock::fake({tick})")
+            }
             "random" => format!("Random::seeded({})", arg("seed").and_then(|s| s.str("text")).unwrap_or("0")),
             other => format!("{}::fake()", pascal(other)),
         };
@@ -1090,6 +1187,7 @@ impl<'a> Lowerer<'a> {
             "conditional" => self.conditional(st, tail),
             "while" => self.loop_(st),
             "for" => self.loop_(st),
+            "region" => self.region(st, tail),
             "inject" => {
                 self.line("{");
                 self.ind += 1;
@@ -1108,6 +1206,30 @@ impl<'a> Lowerer<'a> {
                 self.line("}");
             }
             k => self.line(format!("/* {k} */")),
+        }
+    }
+
+    /// `region name is c₁, c₂:` and its statements: the marker `// y: region name is …` where it starts, on the line of
+    /// its one statement or above several, and `// y: end region name` after them when statements follow it.
+    fn region(&mut self, st: &Node, tail: bool) {
+        let name = st.str("name").unwrap();
+        let cs: Vec<String> = st.nodes("constraints").iter().map(|c| c.str("text").unwrap_or("").to_string()).collect();
+        let marker = format!("// y: region {name} is {}", cs.join(", "));
+        let body = st.nodes("body");
+        self.regions.push((self.ctx.name.clone(), name.to_string(), st.line, cs.clone()));
+        if body.len() == 1 && matches!(body[0].kind, "let" | "expr" | "assign") {
+            let start = self.out.len();
+            self.stmts(&body, tail);
+            if self.out.len() == start + 1 {
+                self.out[start].push_str(&format!(" {marker}"));
+                return;
+            }
+            self.out.truncate(start);
+        }
+        self.line(marker);
+        self.stmts(&body, tail);
+        if !self.rest.is_empty() {
+            self.line(format!("// y: end region {name}"));
         }
     }
 
@@ -1378,13 +1500,24 @@ impl<'a> Lowerer<'a> {
                 self.bind(label, s.ty.clone(), Form::Place);
                 for c in &conds {
                     let t = c.node("test").unwrap();
-                    let pat = if t.kind == "binary" && t.str("op") == Some("==") && name_of(t.node("left").unwrap()) == Some(label) {
+                    let name = c.str("name").unwrap();
+                    let is_case = |o: &Node| o.kind == "binary" && o.str("op") == Some("==") && name_of(o.node("left").unwrap()) == Some(label);
+                    let ops = or_operands(t);
+                    if ops.len() > 1 && ops.iter().all(|o| is_case(o)) {
+                        // `condition arrow.up = ((arrow == key.up) or (arrow == key.w)):`: an arm for each operand, named
+                        // by its place
+                        for (k, o) in ops.iter().enumerate() {
+                            let pat = self.expr(o.node("right").unwrap()).code;
+                            self.arm(&pat, &format!("{name}'{}", k + 1), name, &c.nodes("body"), tail);
+                        }
+                        continue;
+                    }
+                    let pat = if is_case(t) {
                         self.expr(t.node("right").unwrap()).code
                     } else {
                         let x = self.expr(t);
                         format!("_ if {}", x.code)
                     };
-                    let name = c.str("name").unwrap();
                     self.arm(&pat, name, name, &c.nodes("body"), tail);
                 }
                 if let Some(e) = els {

@@ -65,7 +65,7 @@ pub fn compile(dir: &Path, opts: &Options) -> Result<String, String> {
     }
     let Some(out) = &opts.out else { return Ok(format!("y-compile: wrote the typed Rust of {name}")) };
     let stripped = bare::strip(&format!("{pkg} {version}"), &files)?;
-    let lowered = bare::lower(&m, &tree, &read(&src.join(&module_y))?, &stripped, &name, &e.invariant_sites)?;
+    let lowered = bare::lower(&m, &tree, &read(&src.join(&module_y))?, &stripped, &name, &e.invariant_sites, &e.regions)?;
     for (p, (brs, js)) in &lowered {
         write(&out.join(p.with_extension("brs")), brs)?;
         write(&out.join(p.with_extension("constraints.json")), &bare_rust::json::canonical(js))?;

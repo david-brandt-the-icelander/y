@@ -78,6 +78,7 @@ fn doc_lines(d: &Node, f: Option<&FnInfo>) -> Vec<String> {
 pub struct Emitted {
     pub copies: Vec<(usize, String, String)>,
     pub invariant_sites: Vec<(String, String, String, String)>,
+    pub regions: Regions,
     pub main_copies: Vec<(usize, String, String)>,
     pub lib: String,
     pub module: String,
@@ -131,13 +132,27 @@ pub fn imports_for(code: &str) -> std::collections::BTreeSet<String> {
         ("System", "y_runtime::System"),
         ("Clock", "y_runtime::Clock"),
         ("ConstraintViolation", "y_runtime::ConstraintViolation"),
+        ("Window", "y_window::Window"),
+        ("Colour", "y_window::Colour"),
+        ("Key", "y_window::Key"),
+        ("Point", "y_window::Point"),
+        ("Picture", "y_window::Picture"),
+        ("Duration", "std::time::Duration"),
+        ("Instant", "std::time::Instant"),
+        ("block_on", "y_window::block_on"),
+        ("SystemWindow", "y_window::SystemWindow"),
         ("require", "y_runtime::require"),
         ("ensure", "y_runtime::ensure"),
         ("invariant", "y_runtime::invariant"),
         ("not_reachable", "y_runtime::not_reachable"),
         ("not_implemented", "y_runtime::not_implemented"),
     ] {
-        if words.contains(name) && (name.chars().next().unwrap().is_uppercase() || code.contains(&format!("{name}("))) {
+        let used = match name {
+            // a trait's method: `system.window()`
+            "SystemWindow" => code.contains(".window()"),
+            _ => words.contains(name) && (name.chars().next().unwrap().is_uppercase() || code.contains(&format!("{name}("))),
+        };
+        if used {
             out.insert(path.to_string());
         }
     }
@@ -190,7 +205,8 @@ impl<'a> Lowerer<'a> {
             (Some(r), None) => format!(" -> {}", self.rust_type(r)),
             (None, None) => String::new(),
         };
-        format!("{vis}fn {}({}){rt}", f.name, ps.join(", "))
+        let asynchronous = if self.m.suspending.contains(&f.name) { "async " } else { "" };
+        format!("{vis}{asynchronous}fn {}({}){rt}", f.name, ps.join(", "))
     }
 
     pub fn function_item(&mut self, d: &Node, f: &FnInfo, vis: &str) {
@@ -423,6 +439,13 @@ impl<'a> Lowerer<'a> {
         let vis = if facet { "pub " } else { "" };
         self.line(format!("{vis}mod {name} {{"));
         self.ind += 1;
+        self.in_group = Some(name.to_string());
+        // a value that names anything but a literal reads the module around it
+        let plain = |v: &Node| { let mut p = true; v.walk(&mut |n: &Node| if !matches!(n.kind, "literal" | "list") || (n.kind == "literal" && n.str("type") == Some("duration")) { p = false; }); p };
+        if !d.nodes("items").iter().all(|i| i.node("value").is_none_or(plain)) {
+            self.line("use super::*;");
+            self.line("");
+        }
         let saved = std::mem::take(&mut self.uses);
         for (k, i) in d.nodes("items").iter().enumerate() {
             if k > 0 {
@@ -438,7 +461,9 @@ impl<'a> Lowerer<'a> {
             let rt = if t == Ty::StrLit { "&str".to_string() } else { self.rust_type(&t) };
             self.line(format!("pub const {}: {rt} = {code};", upper(i.str("name").unwrap())));
         }
-        let inner = std::mem::replace(&mut self.uses, saved);
+        self.in_group = None;
+        let _ = std::mem::replace(&mut self.uses, saved);
+        let inner: std::collections::BTreeSet<String> = Default::default();
         if !inner.is_empty() {
             let at = self.out.iter().rposition(|l| l.ends_with(&format!("mod {name} {{"))).unwrap() + 1;
             let ind = "    ".repeat(self.ind);
@@ -503,13 +528,16 @@ pub fn module_file(m: &Module, y_path: &str) -> String {
 }
 
 /// The module's file, and the copies its lowering made.
-pub fn module_out(m: &Module, y_path: &str) -> (String, Vec<(usize, String, String)>, Vec<(String, String, String, String)>) {
+pub type Regions = Vec<(String, String, usize, Vec<String>)>;
+
+pub fn module_out(m: &Module, y_path: &str) -> (String, Vec<(usize, String, String)>, Vec<(String, String, String, String)>, Regions) {
     // a first pass finds the closed types an interpolation shows, which the second gives a `Display`
     let shown = module_pass(m, y_path, Default::default()).shown;
     let l = module_pass(m, y_path, shown);
     let copies = l.copies.clone();
     let sites = l.invariant_sites.clone();
-    (module_text(m, y_path, l), copies, sites)
+    let regions = l.regions.clone();
+    (module_text(m, y_path, l), copies, sites, regions)
 }
 
 fn module_pass<'a>(m: &'a Module<'a>, _y_path: &str, display: std::collections::BTreeSet<String>) -> Lowerer<'a> {
@@ -591,6 +619,7 @@ fn comment_above(l: &Lowerer, line: usize) -> Option<String> {
 pub fn tests_file(m: &Module, test_tree: &Node, test_module: &Module, y_path: &str) -> String {
     let lib: &Module = m;
     let mut l = Lowerer::new(test_module, Some(lib));
+    l.block_on = true;
     // the test file's own functions, which its tests call
     for d in test_tree.nodes("decls").into_iter().filter(|d| d.kind == "function") {
         l.line("");
@@ -657,6 +686,10 @@ pub fn main_file(main: &Module, lib: &Module, lib_crate: &str, y_path: &str) -> 
     let mut imports: Vec<String> = vec![];
     for d in main.tree.nodes("decls").into_iter().filter(|d| d.kind == "import") {
         let from = d.str("from").unwrap_or("");
+        // the standard library's names are the runtime's, imported where the code uses them
+        if from.starts_with("standard.") {
+            continue;
+        }
         let mut by_facet: std::collections::BTreeMap<String, Vec<String>> = Default::default();
         if let Some(y_parse::Value::List(ns)) = d.get("names") {
             for n in ns {
@@ -686,7 +719,30 @@ pub fn main_file(main: &Module, lib: &Module, lib_crate: &str, y_path: &str) -> 
             Some(e) => format!(" -> Result<(), {}>", l.rust_type(e)),
             None => String::new(),
         };
-        l.line(format!("fn main(){rt} {{"));
+        // a window opens before any code runs: `main` opens it with the constants `system.window(…)` names, and runs
+        // the entry point, which may suspend, on the window's executor
+        let mut window_args = None;
+        d.walk(&mut |n: &Node| {
+            if n.kind == "call" && n.node("callee").is_some_and(|c| c.kind == "member" && c.str("name") == Some("window")) {
+                window_args = Some(n.nodes("args").iter().map(|a| a.node("value").unwrap().clone()).collect::<Vec<Node>>());
+            }
+        });
+        if let Some(args) = &window_args {
+            let parts: Vec<String> = args.iter().map(|a| l.expr(a).code).collect();
+            l.line("/// The window opens before any code runs, so the title and size that `system.window(…)` names open it here,");
+            l.line("/// and the entry point runs on the window's executor.");
+            l.line("fn main() {");
+            l.line(format!("    y_window::run({}, entry());", parts.join(", ")));
+            l.line("}");
+            l.line("");
+            let at = l.out.len() - 6;
+            let docs: Vec<String> = l.out.drain(..at).collect();
+            l.out.extend(docs);
+            l.line(format!("async fn entry(){rt} {{"));
+            l.use_("y_window::SystemWindow");
+        } else {
+            l.line(format!("fn main(){rt} {{"));
+        }
         l.ind += 1;
         l.reset_scopes();
         l.ctx = Ctx { module: main.name.clone(), name: "main".into(), result: None, fails: f.fails.clone(), branches: vec![], section: None };
@@ -725,8 +781,9 @@ pub fn lib_file(module: &str) -> String {
 
 pub fn emit(m: &Module, test_tree: &Node, test_module: &Module, main: &Module, lib_crate: &str) -> Emitted {
     let name = m.name.clone();
-    let (module, copies, invariant_sites) = module_out(m, &format!("y/src/{name}.y"));
+    let (module, copies, invariant_sites, regions) = module_out(m, &format!("y/src/{name}.y"));
     Emitted {
+        regions,
         copies,
         invariant_sites,
         main_copies: vec![],

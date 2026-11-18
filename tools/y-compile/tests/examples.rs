@@ -59,3 +59,8 @@ fn tic_tac_toe() {
 fn hangman() {
     end_to_end("hangman", "hangman");
 }
+
+#[test]
+fn snake() {
+    end_to_end("snake", "snake");
+}

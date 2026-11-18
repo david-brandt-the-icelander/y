@@ -166,7 +166,33 @@ fn mutated(m: &Module, decls: &BTreeMap<String, &Node>, f: &str, param: &str, de
     out
 }
 
-const MUTATING: [&str; 10] = ["set_number", "push", "add", "remove", "set", "insert", "take", "clear", "push_front", "take_front"];
+const MUTATING: [&str; 14] = ["set_number", "push", "add", "remove", "set", "insert", "take", "clear", "push_front", "take_front", "insert_first", "remove_last", "remove_first", "insert_at"];
+
+/// A region's constraints, each as written, as the constraint language's clauses (language 6.23), as
+/// `tools/paths/regen.py` makes them: `within d or fail` is `within d`, `waits until name = (p)` is `waits until name :
+/// p`, and `atomic` adds what it implies, `may run again` and `on failure unchanged`.
+pub fn region_clauses(cs: &[String]) -> Vec<String> {
+    let mut out = vec![];
+    for c in cs {
+        if let Some(rest) = c.strip_prefix("waits until ") {
+            if let Some((n, p)) = rest.split_once(" = ") {
+                let p = p.strip_prefix('(').and_then(|p| p.strip_suffix(')')).unwrap_or(p);
+                out.push(format!("waits until {n} : {p}"));
+                continue;
+            }
+        }
+        if c.starts_with("within ") {
+            out.push(c.trim_end_matches(" or fail").to_string());
+        } else {
+            out.push(c.clone());
+        }
+    }
+    if out.iter().any(|c| c == "atomic") {
+        out.push("may run again".into());
+        out.push("on failure unchanged".into());
+    }
+    out
+}
 
 /// The clauses of a function's subject, from its Y declaration.
 fn function_clauses(m: &Module, decls: &BTreeMap<String, &Node>, d: &Node, y: &str) -> Vec<Value> {
@@ -186,9 +212,14 @@ fn function_clauses(m: &Module, decls: &BTreeMap<String, &Node>, d: &Node, y: &s
     let effects = |t: &str| json!({"kind": "effects", "text": t, "source": at});
     let caps: Vec<&str> = f.params.iter().filter(|p| p.injected).map(|p| p.name.as_str()).filter(|c| !matches!(*c, "forever" | "system")).collect();
     let mutable: Vec<&str> = f.params.iter().filter(|p| p.mutable && !p.injected).map(|p| p.name.as_str()).collect();
+    // a module whose capabilities may suspend says of each function that does not that it does not
+    let no_suspension = !m.suspending.is_empty() && !m.suspending.contains(&f.name);
     if f.params.iter().any(|p| p.injected) {
         if !caps.is_empty() {
             cs.push(effects(&format!("effects only {}", caps.join(", "))));
+        }
+        if !caps.iter().any(|c| matches!(*c, "console" | "window" | "site" | "file_system")) && !caps.is_empty() {
+            cs.push(effects("no io"));
         }
         if !caps.contains(&"clock") {
             cs.push(effects("no clock"));
@@ -196,30 +227,36 @@ fn function_clauses(m: &Module, decls: &BTreeMap<String, &Node>, d: &Node, y: &s
         if !caps.contains(&"random") {
             cs.push(effects("no randomness"));
         }
+        if no_suspension {
+            cs.push(effects("no suspension"));
+        }
     } else if mutable.is_empty() {
         cs.push(effects("pure"));
     } else {
         for t in ["no io", "no clock", "no randomness"] {
             cs.push(effects(t));
         }
-        let mut changed = BTreeSet::new();
-        for p in &mutable {
-            let mut set = mutated(m, decls, &f.name, p, 0);
-            // every field of the parameter changed: the parameter
-            let ty = f.params.iter().find(|q| q.name == *p).map(|q| q.ty.clone());
-            if let Some(crate::ty::Ty::Named(t)) = ty {
-                if let Some(crate::model::TypeDef::Struct { fields, .. }) = m.types.get(&t).map(|t| &t.def) {
-                    if fields.len() > 1 && fields.iter().all(|(n, _)| set.contains(&format!("{p}.{n}"))) {
-                        set = BTreeSet::from([p.to_string()]);
-                    }
+        if no_suspension {
+            cs.push(effects("no suspension"));
+        }
+    }
+    let mut changed = BTreeSet::new();
+    for p in &mutable {
+        let mut set = mutated(m, decls, &f.name, p, 0);
+        // every field of the parameter changed: the parameter
+        let ty = f.params.iter().find(|q| q.name == *p).map(|q| q.ty.clone());
+        if let Some(crate::ty::Ty::Named(t)) = ty {
+            if let Some(crate::model::TypeDef::Struct { fields, .. }) = m.types.get(&t).map(|t| &t.def) {
+                if fields.len() > 1 && fields.iter().all(|(n, _)| set.contains(&format!("{p}.{n}"))) {
+                    set = BTreeSet::from([p.to_string()]);
                 }
             }
-            changed.extend(set);
         }
-        if !changed.is_empty() {
-            let list: Vec<String> = changed.into_iter().collect();
-            cs.push(json!({"kind": "access", "text": format!("mutates only {}", list.join(", ")), "source": at}));
-        }
+        changed.extend(set);
+    }
+    if !changed.is_empty() {
+        let list: Vec<String> = changed.into_iter().collect();
+        cs.push(json!({"kind": "access", "text": format!("mutates only {}", list.join(", ")), "source": at}));
     }
     cs
 }
@@ -256,7 +293,7 @@ fn type_clauses(m: &Module, name: &str, info: &crate::model::TypeInfo, y: &str, 
 }
 
 /// The bare files with what the Y lowering adds to a strip.
-pub fn lower(m: &Module, tree: &Node, source: &str, stripped: &Files, name: &str, sites: &[(String, String, String, String)]) -> Result<Files, String> {
+pub fn lower(m: &Module, tree: &Node, source: &str, stripped: &Files, name: &str, sites: &[(String, String, String, String)], regions: &crate::emit::Regions) -> Result<Files, String> {
     let y = format!("y/src/{name}.y");
     let decls: BTreeMap<String, &Node> = declarations(tree).into_iter().filter(|(_, d)| matches!(d.kind, "function" | "rule")).map(|(_, d)| (d.str("name").unwrap().to_string(), d)).collect();
     let levels = y_levels::facet_levels(source);
@@ -318,6 +355,22 @@ pub fn lower(m: &Module, tree: &Node, source: &str, stripped: &Files, name: &str
                     }
                 }
                 _ => {}
+            }
+        }
+        // each region of a function: a subject after the function's, with its constraints as clauses (language 6.23)
+        if !tests && !main {
+            let subjects = js["subjects"].as_array_mut().unwrap();
+            for (f, r, line, cs) in regions.iter().rev() {
+                let Some(k) = subjects.iter().position(|s| s["kind"] == "function" && s["name"].as_str().is_some_and(|n| n.ends_with(&format!("::{f}")))) else { continue };
+                let fname = subjects[k]["name"].as_str().unwrap().to_string();
+                let clauses: Vec<Value> = region_clauses(cs).into_iter().map(|t| json!({"kind": "region", "text": t, "source": format!("{y}:{line}")})).collect();
+                // after the function's subject and the regions of it already placed before this one
+                let mut at = k + 1;
+                while at < subjects.len() && subjects[at]["kind"] == "region" && subjects[at]["name"].as_str().is_some_and(|n| n.starts_with(&format!("{fname}#"))) {
+                    at += 1;
+                }
+                let _ = at;
+                subjects.insert(k + 1, json!({"kind": "region", "name": format!("{fname}#{r}"), "clauses": clauses}));
             }
         }
         out.push((rel.clone(), (brs.clone(), js)));

@@ -36,6 +36,9 @@ pub enum Ty {
 
 pub const CAPABILITIES: [&str; 6] = ["console", "forever", "random", "system", "clock", "window"];
 
+/// Types the runtime gives whose values are copied, as numbers are: passed by value.
+pub const COPIED: [&str; 5] = ["colour", "key", "instant", "duration", "point"];
+
 /// Types the runtime gives, by their Y name: the Rust name and the crate that has it.
 pub fn external(name: &str) -> Option<(&'static str, &'static str)> {
     Some(match name {
@@ -46,6 +49,12 @@ pub fn external(name: &str) -> Option<(&'static str, &'static str)> {
         "system" => ("System", "y_runtime"),
         "clock" => ("Clock", "y_runtime"),
         "constraint_violation" => ("ConstraintViolation", "y_runtime"),
+        "window" => ("Window", "y_window"),
+        "colour" => ("Colour", "y_window"),
+        "key" => ("Key", "y_window"),
+        "point" => ("Point", "y_window"),
+        "instant" => ("Instant", "std::time"),
+        "duration" => ("Duration", "std::time"),
         _ => return None,
     })
 }
