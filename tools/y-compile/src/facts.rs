@@ -59,7 +59,34 @@ pub fn facts(dir: &Path, m: &Module, tree: &Node, test_tree: &Node, main_tree: &
         })
         .collect();
     f.insert("facets".into(), Value::Array(facets));
-    f.insert("units".into(), json!([]));
+    // the units the lowering erases: of each constant, and of each parameter, whose type has one
+    let mut units = vec![];
+    let unit_of = |t: &Node| t.str("text").filter(|x| x.contains("unit_type=") || *x == "duration").map(str::to_string);
+    for (facet, d) in declarations(tree) {
+        if d.kind == "constants" && !m.types.contains_key(d.str("name").unwrap()) {
+            for i in d.nodes("items") {
+                if let Some(u) = i.node("type").and_then(unit_of) {
+                    let path = match &facet {
+                        Some(fc) => format!("{krate}::{name}::{fc}::{}::{}", d.str("name").unwrap(), i.str("name").unwrap().to_uppercase()),
+                        None => format!("{krate}::{name}::{}::{}", d.str("name").unwrap(), i.str("name").unwrap().to_uppercase()),
+                    };
+                    units.push(json!({"subject": path, "unit": u, "y": format!("{y}:{}", i.line)}));
+                }
+            }
+        }
+        if d.kind == "function" {
+            for e in d.node("doc").map(|doc| doc.nodes("entries")).unwrap_or_default() {
+                let pname = e.str("name").unwrap_or("");
+                if !d.nodes("params").iter().any(|p| p.str("name") == Some(pname)) {
+                    continue;
+                }
+                if let Some(u) = e.node("type").and_then(unit_of) {
+                    units.push(json!({"subject": rust_path(krate, m, d.str("name").unwrap()), "param": pname, "unit": u, "y": format!("{y}:{}", d.line)}));
+                }
+            }
+        }
+    }
+    f.insert("units".into(), Value::Array(units));
     // each function with injected capabilities, in the order of the source; `main` last
     let count = ["", "as the last parameter", "as the last two parameters, in order", "as the last three parameters, in order", "as the last four parameters, in order", "as the last five parameters, in order"];
     let mut caps = vec![];
@@ -96,7 +123,17 @@ pub fn facts(dir: &Path, m: &Module, tree: &Node, test_tree: &Node, main_tree: &
     }
     f.insert("claims".into(), Value::Array(claims));
     f.insert("suspensions".into(), json!([]));
-    f.insert("compiled".into(), json!([]));
+    // each `compile`: the call, and where the entry point computes its value
+    let mut compiled = vec![];
+    let ml = lines(files, "bare/src/main.brs");
+    for n in main_tree.find("compile") {
+        let call = crate::lower::y_text(n.node("value").unwrap());
+        let marker = format!("// y: compile {call}");
+        if let Some(k) = ml.iter().position(|l| l.contains(&marker)) {
+            compiled.push(json!({"call": call, "value": "computed by the entry point when it starts", "y": format!("y/src/main.y:{}", n.line), "bare": format!("bare/src/main.brs:{}", k + 1)}));
+        }
+    }
+    f.insert("compiled".into(), Value::Array(compiled));
     // each copy the lowering made: its Y line, and the bare line its marker is on, in order
     let bl = lines(files, &bare);
     let marked: Vec<usize> = bl.iter().enumerate().filter(|(_, l)| l.contains("// y: a copy")).map(|(k, _)| k + 1).collect();

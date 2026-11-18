@@ -23,6 +23,8 @@ pub enum Ty {
     Array(Box<Ty>, usize),
     Set(Box<Ty>),
     Opt(Box<Ty>),
+    /// What a loop can run over once: `runes()`, `split(…)`.
+    Iter(Box<Ty>),
     Res(Box<Ty>, Box<Ty>),
     /// A type the module declares, or one the runtime gives (`console_error`), by its Y name.
     Named(String),
@@ -43,6 +45,7 @@ pub fn external(name: &str) -> Option<(&'static str, &'static str)> {
         "random" => ("Random", "y_runtime"),
         "system" => ("System", "y_runtime"),
         "clock" => ("Clock", "y_runtime"),
+        "constraint_violation" => ("ConstraintViolation", "y_runtime"),
         _ => return None,
     })
 }
@@ -75,6 +78,7 @@ impl Ty {
             "list" => Ty::List(Box::new(arg("element_type").unwrap_or(Ty::Unknown))),
             "set" => Ty::Set(Box::new(arg("element_type").unwrap_or(Ty::Unknown))),
             "optional" => Ty::Opt(Box::new(arg("value_type").unwrap_or(Ty::Unknown))),
+            "result" => Ty::Res(Box::new(arg("value_type").unwrap_or(Ty::Unit)), Box::new(arg("failure_type").unwrap_or(Ty::Unknown))),
             n if CAPABILITIES.contains(&n) => Ty::Cap(n.to_string()),
             n => Ty::Named(n.to_string()),
         }
@@ -82,7 +86,7 @@ impl Ty {
 
     pub fn elem(&self) -> Ty {
         match self {
-            Ty::List(t) | Ty::Set(t) | Ty::Array(t, _) | Ty::Opt(t) => (**t).clone(),
+            Ty::List(t) | Ty::Set(t) | Ty::Array(t, _) | Ty::Opt(t) | Ty::Iter(t) => (**t).clone(),
             _ => Ty::Unknown,
         }
     }

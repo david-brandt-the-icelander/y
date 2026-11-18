@@ -6,7 +6,10 @@ use y_parse::Node;
 
 #[derive(Clone, Debug)]
 pub enum TypeDef {
-    Struct { fields: Vec<(String, Ty)>, derived: Vec<(String, Ty)> },
+    /// A structure: its fields, its derived values with their lines and expressions, and its invariants.
+    Struct { fields: Vec<(String, Ty)>, derived: Vec<(String, Ty)>, derived_values: Vec<(usize, Node)>, invariants: Vec<(String, usize, Node)> },
+    /// `type word is string:` with its `where` clauses: a newtype whose constructor checks them.
+    Newtype { base: Ty, wheres: Vec<(String, usize, Node)> },
     /// Cases, each with its fields; a constant group used as a closed type has cases with none.
     Enum { cases: Vec<(String, Vec<(String, Ty)>)> },
 }
@@ -114,6 +117,7 @@ fn copy_in(m: &Module, t: &Ty, depth: usize) -> bool {
         Ty::Named(n) => match m.types.get(n).map(|t| &t.def) {
             Some(TypeDef::Struct { fields, .. }) => fields.iter().all(|(_, f)| copy_in(m, f, depth + 1)),
             Some(TypeDef::Enum { cases }) => cases.iter().all(|(_, fs)| fs.iter().all(|(_, f)| copy_in(m, f, depth + 1))),
+            Some(TypeDef::Newtype { base, .. }) => copy_in(m, base, depth + 1),
             None => false,
         },
         _ => false,
@@ -172,15 +176,26 @@ impl<'t> Module<'t> {
                 "structure" => {
                     let mut fields = vec![];
                     let mut derived = vec![];
+                    let mut derived_values = vec![];
+                    let mut invariants = vec![];
                     for mem in d.nodes("members") {
                         let t = mem.node("type").map(Ty::from_node).unwrap_or(Ty::Unknown);
                         match mem.kind {
                             "field" => fields.push((mem.str("name").unwrap().to_string(), t)),
-                            "derived" => derived.push((mem.str("name").unwrap().to_string(), t)),
+                            "derived" => {
+                                derived.push((mem.str("name").unwrap().to_string(), t));
+                                derived_values.push((mem.line, mem.node("value").cloned().unwrap_or_else(|| Node::new("literal", mem.line))));
+                            }
+                            "invariant" => invariants.push((mem.str("name").unwrap().to_string(), mem.line, mem.node("condition").cloned().unwrap())),
                             _ => {}
                         }
                     }
-                    m.types.insert(name.clone(), TypeInfo { name, facet: facet.clone(), def: TypeDef::Struct { fields, derived }, line: d.line });
+                    m.types.insert(name.clone(), TypeInfo { name, facet: facet.clone(), def: TypeDef::Struct { fields, derived, derived_values, invariants }, line: d.line });
+                }
+                "type_decl" if d.node("type").is_some() && d.nodes("cases").is_empty() => {
+                    let base = Ty::from_node(d.node("type").unwrap());
+                    let wheres = d.nodes("where").iter().map(|w| (w.str("name").unwrap().to_string(), w.line, w.node("condition").cloned().unwrap())).collect();
+                    m.types.insert(name.clone(), TypeInfo { name, facet: facet.clone(), def: TypeDef::Newtype { base, wheres }, line: d.line });
                 }
                 "type_decl" => {
                     let cases = d
@@ -264,6 +279,7 @@ impl<'t> Module<'t> {
             Ty::Array(e, n) => format!("[{}; {n}]", self.rust_type(e)),
             Ty::Set(e) => format!("Set<{}>", self.rust_type(e)),
             Ty::Opt(e) => format!("Option<{}>", self.rust_type(e)),
+            Ty::Iter(e) => format!("impl Iterator<Item = {}>", self.rust_type(e)),
             Ty::Res(a, b) => format!("Result<{}, {}>", self.rust_type(a), self.rust_type(b)),
             Ty::Named(n) | Ty::Cap(n) => crate::ty::external(n).map(|(r, _)| r.to_string()).unwrap_or_else(|| pascal(n)),
             Ty::Unit => "()".into(),
@@ -274,7 +290,7 @@ impl<'t> Module<'t> {
     pub fn field_ty(&self, t: &Ty, field: &str) -> Option<(Ty, bool)> {
         let Ty::Named(n) = t else { return None };
         match &self.types.get(n)?.def {
-            TypeDef::Struct { fields, derived } => {
+            TypeDef::Struct { fields, derived, .. } => {
                 fields.iter().find(|(f, _)| f == field).map(|(_, t)| (t.clone(), false)).or_else(|| derived.iter().find(|(f, _)| f == field).map(|(_, t)| (t.clone(), true)))
             }
             _ => None,
@@ -292,6 +308,7 @@ fn kept_params(d: &Node) -> BTreeSet<String> {
     let params: BTreeSet<String> = d.nodes("params").iter().map(|p| p.str("name").unwrap().to_string()).collect();
     let mut bound = vec![];
     let mut reads: Vec<(String, usize)> = vec![];
+    let mut stored = BTreeSet::new();
     for b in d.nodes("body") {
         b.walk(&mut |n: &Node| {
             if n.kind == "let" && n.flag("mutable") {
@@ -304,7 +321,19 @@ fn kept_params(d: &Node) -> BTreeSet<String> {
             if n.kind == "name" {
                 reads.push((n.str("name").unwrap().to_string(), n.line));
             }
+            // `game(word: word, …)`: a named argument of a call whose value is the parameter whole
+            if n.kind == "call" && n.node("callee").is_some_and(|c| c.kind == "name") {
+                for a in n.nodes("args") {
+                    if let Some(v) = a.node("value").filter(|v| v.kind == "name") {
+                        if a.str("name").is_some() && params.contains(v.str("name").unwrap()) {
+                            stored.insert(v.str("name").unwrap().to_string());
+                        }
+                    }
+                }
+            }
         });
     }
-    bound.into_iter().filter(|(p, line)| !reads.iter().any(|(r, l)| r == p && l != line)).map(|(p, _)| p).collect()
+    let mut out: BTreeSet<String> = bound.into_iter().filter(|(p, line)| !reads.iter().any(|(r, l)| r == p && l != line)).map(|(p, _)| p).collect();
+    out.extend(stored);
+    out
 }

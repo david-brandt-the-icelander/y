@@ -54,3 +54,8 @@ fn nim() {
 fn tic_tac_toe() {
     end_to_end("tic-tac-toe", "tic_tac_toe");
 }
+
+#[test]
+fn hangman() {
+    end_to_end("hangman", "hangman");
+}

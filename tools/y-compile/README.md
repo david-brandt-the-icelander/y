@@ -49,6 +49,16 @@ The Rust a weave gives is the typed Rust the lowering wrote, apart from the `mut
 `p'` is the Y condition in the constraint language: `f(x) == result.ok` is `f(x) is Ok(_)`, `x == t.case` is `x is
 Case` for a closed type, `x.count()` is `count(x)`, and a constant `group.name` is `NAME`.
 
+## Decisions the proposal leaves open
+
+- **`compile f(…)` is not evaluated while building.** The proposal (§ 3.17) has the compiler evaluate the call and
+  write its value into the program. y-compile has no evaluator of Y, so it lowers `words = compile
+  parse_word_list(game_rules.word_list)` to the call itself, made where the entry point starts, with `expect`: a
+  failure is a fault when the program starts rather than an error when it is built. `y-facts.json` `compiled` says so.
+  The hand lowering wrote the ten words down as a constant array and checked them against the call in a test.
+- **A newtype's `matches(pattern"…")`** is lowered for a pattern of one character class repeated, `^[a-z]*$`, as a
+  test of each rune; the runtime has no regular expressions. Its clause keeps the pattern: `self.0 matches /^[a-z]*$/`.
+
 ## Where its output differs from the hand lowering
 
 Each kind of difference below keeps the woven Rust building and its tests passing.
@@ -72,6 +82,14 @@ Each kind of difference below keeps the woven Rust building and its tests passin
 - **`mutates only`** names each member of a `mutable` parameter that changes, or the parameter itself when every
   member does; the hand lowering sometimes named the parameter when only some members change.
 - **A test file's own functions** (Tic-tac-toe's `marked`) bind each element of a list of numbers by value.
+- **A precondition** is the Y condition as written: `not words.is_empty()` where the hand lowering wrote
+  `count(words) > 0`.
+- **A `conditional` with a condition that narrows** among others (Hangman's `guess`) is lowered as the hand lowering
+  did it: the conditions before it as guards, it as a let-else, and the rest as a chain. A guard has no `else` marker.
+- **A newtype's `Display`** is written `std::fmt::Display`, and its constraint checks keep the Y brackets
+  (`if !(…)`).
+- **The console's text, once narrowed,** is made a `YString` at once (`let typed = YString::from(typed);`), in every
+  example; the hand lowering did so only where the text was used twice.
 - **Imports** are the ones the code uses, found in the code; the order of the paths in `y-facts.json` is the
   enumerator's sorted order.
 - **Documentation** is made from the Y documentation mechanically: the prose, then the roles, each without its type.

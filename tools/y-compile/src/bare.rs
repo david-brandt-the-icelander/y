@@ -52,6 +52,10 @@ pub fn clause_expr(m: &Module, e: &Node) -> String {
         "call" => {
             let callee = e.node("callee").unwrap();
             let args: Vec<String> = e.nodes("args").iter().map(|a| clause_expr(m, a.node("value").unwrap())).collect();
+            if callee.kind == "member" && callee.str("name") == Some("matches") {
+                let pat = e.nodes("args")[0].node("value").and_then(|v| v.str("value")).unwrap_or("");
+                return format!("{} matches /{pat}/", clause_expr(m, callee.node("object").unwrap()));
+            }
             if callee.kind == "member" {
                 let obj = clause_expr(m, callee.node("object").unwrap());
                 let method = callee.str("name").unwrap();
@@ -220,8 +224,39 @@ fn function_clauses(m: &Module, decls: &BTreeMap<String, &Node>, d: &Node, y: &s
     cs
 }
 
+/// The invariants of a type: a newtype's `where` clauses, which its constructor checks, and a structure's
+/// `invariant`s, checked after each write that can break them.
+fn type_clauses(m: &Module, name: &str, info: &crate::model::TypeInfo, y: &str, sites: &[(String, String, String, String)]) -> Vec<Value> {
+    let mut cs = vec![];
+    match &info.def {
+        crate::model::TypeDef::Newtype { base, wheres } => {
+            for (w, line, c) in wheres {
+                let mut text = clause_expr(m, &renamed(c, "value", "self.0"));
+                if *base == crate::ty::Ty::Str {
+                    text = text.replace("count(self.0)", "count(scalars(self.0))");
+                }
+                cs.push(json!({"kind": "invariant", "text": format!("invariant {w} : {text}"), "source": format!("{y}:{line}"), "status": {"lifted": format!("src/{}.rs: {}::new", m.name, pascal(name))}}));
+            }
+        }
+        crate::model::TypeDef::Struct { fields, invariants, .. } => {
+            let fnames: Vec<String> = fields.iter().map(|f| f.0.clone()).collect();
+            for (w, line, c) in invariants {
+                let text = clause_expr(m, &crate::lower::with_fields(c, &fnames, "self"));
+                let at: Vec<&(String, String, String, String)> = sites.iter().filter(|s| s.0 == name && &s.1 == w).collect();
+                let lifted = match &at[..] {
+                    [one] => format!("src/{}.rs: {}, after the one write to {}", m.name, one.2, one.3),
+                    _ => format!("src/{}.rs: after each write that can break it", m.name),
+                };
+                cs.push(json!({"kind": "invariant", "text": format!("invariant {w} : {text}"), "source": format!("{y}:{line}"), "status": {"lifted": lifted}}));
+            }
+        }
+        _ => {}
+    }
+    cs
+}
+
 /// The bare files with what the Y lowering adds to a strip.
-pub fn lower(m: &Module, tree: &Node, source: &str, stripped: &Files, name: &str) -> Result<Files, String> {
+pub fn lower(m: &Module, tree: &Node, source: &str, stripped: &Files, name: &str, sites: &[(String, String, String, String)]) -> Result<Files, String> {
     let y = format!("y/src/{name}.y");
     let decls: BTreeMap<String, &Node> = declarations(tree).into_iter().filter(|(_, d)| matches!(d.kind, "function" | "rule")).map(|(_, d)| (d.str("name").unwrap().to_string(), d)).collect();
     let levels = y_levels::facet_levels(source);
@@ -247,6 +282,26 @@ pub fn lower(m: &Module, tree: &Node, source: &str, stripped: &Files, name: &str
                     };
                     if let Some(l) = level {
                         s["level"] = json!(l);
+                    }
+                }
+                "type" if !tests && !main => {
+                    let Some((yname, info)) = m.types.iter().find(|(n, _)| pascal(n) == last) else { continue };
+                    let cs = type_clauses(m, yname, info, &y, sites);
+                    if !cs.is_empty() {
+                        s["clauses"] = Value::Array(cs);
+                    }
+                }
+                // a method the lowering made: a newtype's `new`, or a derived value
+                "function" if !tests && !main && sname.rsplit("::").nth(1).is_some_and(|t| t.chars().next().is_some_and(char::is_uppercase)) => {
+                    let owner = sname.rsplit("::").nth(1).unwrap();
+                    let Some((_, info)) = m.types.iter().find(|(n, _)| pascal(n) == owner) else { continue };
+                    let line = match &info.def {
+                        crate::model::TypeDef::Struct { derived, derived_values, .. } => derived.iter().zip(derived_values).find(|((n, _), _)| *n == last).map(|(_, (l, _))| *l),
+                        crate::model::TypeDef::Newtype { .. } if last == "new" => Some(info.line),
+                        _ => None,
+                    };
+                    if let Some(l) = line {
+                        s["clauses"] = json!([{"kind": "effects", "text": "pure", "source": format!("{y}:{l}")}]);
                     }
                 }
                 "function" if !tests && !main => {

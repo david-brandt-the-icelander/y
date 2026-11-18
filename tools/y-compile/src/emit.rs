@@ -77,6 +77,8 @@ fn doc_lines(d: &Node, f: Option<&FnInfo>) -> Vec<String> {
 
 pub struct Emitted {
     pub copies: Vec<(usize, String, String)>,
+    pub invariant_sites: Vec<(String, String, String, String)>,
+    pub main_copies: Vec<(usize, String, String)>,
     pub lib: String,
     pub module: String,
     pub tests: String,
@@ -128,6 +130,7 @@ pub fn imports_for(code: &str) -> std::collections::BTreeSet<String> {
         ("Random", "y_runtime::Random"),
         ("System", "y_runtime::System"),
         ("Clock", "y_runtime::Clock"),
+        ("ConstraintViolation", "y_runtime::ConstraintViolation"),
         ("require", "y_runtime::require"),
         ("ensure", "y_runtime::ensure"),
         ("invariant", "y_runtime::invariant"),
@@ -277,7 +280,7 @@ impl<'a> Lowerer<'a> {
         self.line(format!("#[derive({})]", derives.join(", ")));
         let vis = if facet { "pub " } else { "" };
         match &info.def {
-            TypeDef::Struct { fields, .. } => {
+            TypeDef::Struct { fields, derived, derived_values, .. } => {
                 self.line(format!("{vis}struct {} {{", pascal(name)));
                 self.ind += 1;
                 let fvis = if facet { "pub(super) " } else { "" };
@@ -285,6 +288,73 @@ impl<'a> Lowerer<'a> {
                     let t = self.rust_type(t);
                     self.line(format!("{fvis}{f}: {t},"));
                 }
+                self.ind -= 1;
+                self.line("}");
+                // `derived miss_count is … = misses.count()`: a method, recomputed on every read
+                if !derived.is_empty() {
+                    let fnames: Vec<String> = fields.iter().map(|f| f.0.clone()).collect();
+                    self.line("");
+                    self.line(format!("impl {} {{", pascal(name)));
+                    self.ind += 1;
+                    for (k, ((dn, dt), (_, v))) in derived.iter().zip(derived_values).enumerate() {
+                        if k > 0 {
+                            self.line("");
+                        }
+                        let t = self.rust_type(dt);
+                        self.line(format!("pub fn {dn}(&self) -> {t} {{"));
+                        self.ind += 1;
+                        self.reset_scopes();
+                        self.bind("self", Ty::Named(name.to_string()), Form::Ref);
+                        let v = crate::lower::with_fields(v, &fnames, "self");
+                        let x = self.expr(&v);
+                        let code = self.owned(x, dt);
+                        self.line(code);
+                        self.ind -= 1;
+                        self.line("}");
+                    }
+                    self.ind -= 1;
+                    self.line("}");
+                }
+            }
+            TypeDef::Newtype { base, wheres } => {
+                let (en, bt) = (pascal(name), self.rust_type(base));
+                self.line(format!("{vis}struct {en}({bt});"));
+                self.line("");
+                self.line(format!("impl {en} {{"));
+                self.ind += 1;
+                self.line(format!("/// Makes a `{name}`, checking each of its constraints in order."));
+                self.line(format!("pub fn new(value: {bt}) -> Result<{en}, ConstraintViolation> {{"));
+                self.ind += 1;
+                self.reset_scopes();
+                self.bind("value", base.clone(), Form::Place);
+                for (w, _, c) in wheres {
+                    let x = self.constraint_check(c);
+                    self.line(format!("if !({x}) {{ // y: {en}#{w}"));
+                    self.ind += 1;
+                    self.line(format!("return Err(ConstraintViolation {{ constraint: \"{}::{en}#{w}\" }});", self.m.name));
+                    self.ind -= 1;
+                    self.line("}");
+                }
+                self.line(format!("Ok({en}(value))"));
+                self.ind -= 1;
+                self.line("}");
+                self.line("");
+                self.line(format!("/// The `{name}` as the value it refines."));
+                self.line(format!("pub fn as_text(&self) -> &{bt} {{"));
+                self.ind += 1;
+                self.line("&self.0");
+                self.ind -= 1;
+                self.line("}");
+                self.ind -= 1;
+                self.line("}");
+                self.line("");
+                self.line(format!("impl std::fmt::Display for {en} {{"));
+                self.ind += 1;
+                self.line("fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {");
+                self.ind += 1;
+                self.line("std::fmt::Display::fmt(&self.0, f)");
+                self.ind -= 1;
+                self.line("}");
                 self.ind -= 1;
                 self.line("}");
             }
@@ -365,7 +435,7 @@ impl<'a> Lowerer<'a> {
             let v = i.node("value").unwrap();
             let t = const_type(ty.as_ref(), v);
             let code = self.const_value(v);
-            let rt = self.rust_type(&t);
+            let rt = if t == Ty::StrLit { "&str".to_string() } else { self.rust_type(&t) };
             self.line(format!("pub const {}: {rt} = {code};", upper(i.str("name").unwrap())));
         }
         let inner = std::mem::replace(&mut self.uses, saved);
@@ -379,6 +449,23 @@ impl<'a> Lowerer<'a> {
         }
         self.ind -= 1;
         self.line("}");
+    }
+
+    /// A newtype's constraint as Rust: `value.matches(pattern"^[a-z]*$")` is a test of each rune.
+    fn constraint_check(&mut self, c: &Node) -> String {
+        if c.kind == "call" {
+            let callee = c.node("callee").unwrap();
+            if callee.str("name") == Some("matches") {
+                let obj = self.expr(callee.node("object").unwrap());
+                let pat = c.nodes("args")[0].node("value").unwrap().str("value").unwrap_or("").to_string();
+                return match pat.as_str() {
+                    "^[a-z]*$" => format!("{}.runes().all(|letter| letter.is_ascii_lowercase())", obj.code),
+                    "^[A-Z]*$" => format!("{}.runes().all(|letter| letter.is_ascii_uppercase())", obj.code),
+                    p => format!("/* y-compile: the pattern {p} is not supported */ false"),
+                };
+            }
+        }
+        self.expr(c).code
     }
 
     /// A constant's value: a list is an array, at every depth.
@@ -416,12 +503,13 @@ pub fn module_file(m: &Module, y_path: &str) -> String {
 }
 
 /// The module's file, and the copies its lowering made.
-pub fn module_out(m: &Module, y_path: &str) -> (String, Vec<(usize, String, String)>) {
+pub fn module_out(m: &Module, y_path: &str) -> (String, Vec<(usize, String, String)>, Vec<(String, String, String, String)>) {
     // a first pass finds the closed types an interpolation shows, which the second gives a `Display`
     let shown = module_pass(m, y_path, Default::default()).shown;
     let l = module_pass(m, y_path, shown);
     let copies = l.copies.clone();
-    (module_text(m, y_path, l), copies)
+    let sites = l.invariant_sites.clone();
+    (module_text(m, y_path, l), copies, sites)
 }
 
 fn module_pass<'a>(m: &'a Module<'a>, _y_path: &str, display: std::collections::BTreeSet<String>) -> Lowerer<'a> {
@@ -637,9 +725,11 @@ pub fn lib_file(module: &str) -> String {
 
 pub fn emit(m: &Module, test_tree: &Node, test_module: &Module, main: &Module, lib_crate: &str) -> Emitted {
     let name = m.name.clone();
-    let (module, copies) = module_out(m, &format!("y/src/{name}.y"));
+    let (module, copies, invariant_sites) = module_out(m, &format!("y/src/{name}.y"));
     Emitted {
         copies,
+        invariant_sites,
+        main_copies: vec![],
         lib: lib_file(&name),
         module,
         tests: tests_file(m, test_tree, test_module, &format!("y/src/{name}.test.y")),
