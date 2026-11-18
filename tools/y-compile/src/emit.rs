@@ -654,9 +654,16 @@ pub fn module_file(m: &Module, y_path: &str) -> String {
 }
 
 /// The module's file, and the copies its lowering made.
+/// Each region: its function, its name, its Y line and its constraints as written.
 pub type Regions = Vec<(String, String, usize, Vec<String>)>;
 
-pub fn module_out(m: &Module, y_path: &str) -> (String, Vec<(usize, String, String)>, Vec<(String, String, String, String)>, Regions) {
+/// Each copy the lowering made: its Y line, what it copies, and why.
+pub type Copies = Vec<(usize, String, String)>;
+
+/// Each structure invariant checked after a write: the type, the invariant, the function and the field written.
+pub type InvariantSites = Vec<(String, String, String, String)>;
+
+pub fn module_out(m: &Module, y_path: &str) -> (String, Copies, InvariantSites, Regions) {
     // a first pass finds the closed types an interpolation shows, which the second gives a `Display`
     let shown = module_pass(m, y_path, Default::default()).shown;
     let l = module_pass(m, y_path, shown);

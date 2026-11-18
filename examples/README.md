@@ -1,8 +1,11 @@
 # Examples
 
 Programs written in Y and taken through the whole pipeline to Rust: Y source, the bare bodies and constraint files a Y
-compiler would lower it to, and the Rust that `bare-rust weave` makes from those. No Y compiler exists yet, so the
-lowering is done by hand; each example's README states its rules and what it had to assume.
+compiler would lower it to, and the Rust that `bare-rust weave` makes from those. The lowering committed here was done
+by hand, and each example's README states its rules and what it had to assume. The Y compiler,
+[`../tools/y-compile`](../tools/y-compile/), now lowers every example by those rules; its output weaves into Rust that
+passes the same tests. The hand-written Rust stays the reference, and `tools/paths/rebare.sh --from-y <example>` puts
+the compiler's output in its place to compare the two.
 
 The tests of every example cover every execution path of its module that needs a test (Y § 3.5, § 3.14): each way
 through each function, named by the outcomes along it, such as `computer_move > winnable > number'many > winning`.

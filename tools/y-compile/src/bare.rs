@@ -301,6 +301,7 @@ fn type_clauses(m: &Module, name: &str, info: &crate::model::TypeInfo, y: &str, 
 }
 
 /// The bare files with what the Y lowering adds to a strip.
+#[allow(clippy::too_many_arguments)]
 pub fn lower(m: &Module, tree: &Node, source: &str, stripped: &Files, name: &str, sites: &[(String, String, String, String)], regions: &crate::emit::Regions, main_regions: &crate::emit::Regions) -> Result<Files, String> {
     let y = format!("y/src/{name}.y");
     let decls: BTreeMap<String, &Node> = declarations(tree).into_iter().filter(|(_, d)| matches!(d.kind, "function" | "rule")).map(|(_, d)| (d.str("name").unwrap().to_string(), d)).collect();

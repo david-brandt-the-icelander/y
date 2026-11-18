@@ -3,8 +3,9 @@
 The old pencil-and-paper game, written in Y, lowered to bare Rust plus its constraint files, and woven into Rust that
 builds, runs and passes its tests.
 
-No Y compiler exists yet, so one step was done by hand: the lowering from Y to bare Rust. It follows the rules in the
-table below, as a compiler would. The other steps are the real tools.
+One step was done by hand: the lowering from Y to bare Rust. It follows the rules in the table below, as a compiler
+would. The other steps are the real tools. The Y compiler, [`../../tools/y-compile`](../../tools/y-compile/), now
+does that step by the same rules; the hand lowering stays the reference.
 
 ```
 y/src/*.y  ──lowering (by hand)──▶  bare/src/*.brs + bare/src/*.constraints.json + bare/y-facts.json

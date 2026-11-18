@@ -179,12 +179,70 @@ Each kind of difference below keeps the woven Rust building and its tests passin
   say what it may do.
 - **`rendered()` on an arena** is a function the lowering writes beside the module, as the hand lowering did: the
   entries one per line, an entry `under` another indented by two spaces. The proposal does not define `rendered`.
+- **A test's helpers.** Warehouse's hand-written tests built their lines with helper functions of their own (`sku`,
+  `line`, `order`, `shelf`); the compiler writes each value out where the Y source makes it.
+- **The entry point's `compile`** is the call, made when the program starts (see above).
 - **Imports** are the ones the code uses, found in the code; the order of the paths in `y-facts.json` is the
   enumerator's sorted order.
 - **Documentation** is made from the Y documentation mechanically: the prose, then the roles, each without its type.
   The hand lowering sometimes reworded it.
 - **The file's status** is `assumed` with the reason `lowered from y/src by y-compile`.
 
+## Where the hand lowering is inconsistent
+
+The compiler follows one rule where the hand lowering varied, and does not copy the variation:
+
+- **Effects clauses.** Snake's `play` says `no io` though it draws in a window; Checkers' `play` leaves out `no
+  clock`, which every other function without a clock says.
+- **Passing structures.** Nim passes its copied `move` by reference; Checkers passes its copied `square`, `piece` and
+  `move` by value. The compiler passes a structure by reference unless the function keeps it.
+- **`mutates only`.** Snake's `advance` and Tic-tac-toe's `place` say `mutates only game` though each leaves some of
+  the game's fields alone; the compiler names the fields that change (the whole parameter only when all do).
+- **Copies.** The hand lowering marked some copies of borrowed values `// y: a copy` and listed them in `copies`, and
+  left others (Hangman's `mark.clone()`, Warehouse's `wanted.sku.clone()`) unmarked; the compiler marks and lists each.
+- **A string from a closed choice** was made around the whole `match` in Nim and Tic-tac-toe, and in each arm in
+  Snake and Checkers; the compiler makes it in each arm.
+
+## How close it comes
+
+With its output in place of the hand lowering (`tools/paths/rebare.sh --from-y <example>`), every example passes its
+checks in `tools/bare-rust/tests/y_examples.rs`, and `cargo test --release --test examples` here weaves each, builds
+it, runs its tests and `trace.py`. Against the committed `bare/` files:
+
+| Example | Bare lines that differ | Subjects with the same names |
+|---|---|---|
+| Nim | 62 of 838 | 87 of 87 |
+| Tic-tac-toe | 53 of 891 | 92 of 92 |
+| Hangman | 92 of 990 | 90 of 95 |
+| Snake | 55 of 953 | 100 of 100 |
+| Memory | 167 of 1224 | 134 of 134 |
+| Checkers | 356 of 2882 | 311 of 311 |
+| Warehouse | 174 of 824 | 88 of 100 |
+
+Hangman's missing subjects are the hand lowering's compiled word list and its check, and its `Display` impl named
+`fmt::Display`; Warehouse's are its type aliases (`Price` and the others), its `rendered` (here at module level), and
+the helper functions its hand-written tests and `main` used to build lines (`sku`, `line`, `order`, `shelf`), which
+the compiler writes out in place.
+
 ## What it does not handle yet
 
-It handles what the examples compiled so far use; the checklist in the pull request says which those are.
+It handles the forms the seven examples use, and no others. In particular:
+
+- **The forms the parser does not read** ([`../y-parse`](../y-parse/README.md)): `enumeration`, `state`,
+  `transition`, `trait`, `implementation`, `unit`, `command`, `handler`, `workflow`, `lambda`, `old`, `assert`,
+  `native`, `assume`, `allow`, `reveal`, `log`, `metric`, `policy`, `compensate`, a test's `faults`, and the rest of
+  that list.
+- **`compile f(…)` is evaluated when the program starts, not while it is built** (see above).
+- **Library operations**: only those the examples call, each with the lowering its README gives (the methods of
+  lists, sets, bags, queues, sorted maps, strings, runes, decimals and integers, and of the console, window, clock,
+  random source, site, stores and shared state). Any other method is lowered as a plain method call, which may not
+  build.
+- **Narrowing** by `x == optional.none` (in an `if`, in a `conditional`, and through `or`) and by `x !=
+  optional.none`; not through `and`, and not of a result by an `if`.
+- **`ensures`** checks the value of the function's last statement; a `return` before it is not checked.
+- **Regions**: the combinations of constraints the examples use: `forever`; `within` a bound around waits on a site;
+  `within` with `supervise` around `task`s; `atomic`, with `isolation`, `waits until` and `orelse`; `uncancellable,
+  within`; and `detach, within`, whose `or fail`s are taken to fail as the console does.
+- **A newtype's `matches(pattern"…")`** for one character class repeated.
+- **Decimals** of the arithmetic Warehouse uses: sums, differences and products, with integers and with each other,
+  rationals divided, and rounding to a scale.
