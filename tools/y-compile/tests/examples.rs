@@ -74,3 +74,8 @@ fn memory() {
 fn checkers() {
     end_to_end("checkers", "checkers");
 }
+
+#[test]
+fn warehouse() {
+    end_to_end("warehouse", "warehouse");
+}

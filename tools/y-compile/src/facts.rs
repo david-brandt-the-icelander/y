@@ -173,75 +173,77 @@ pub fn facts(dir: &Path, m: &Module, tree: &Node, test_tree: &Node, main_tree: &
     let marked: Vec<usize> = bl.iter().enumerate().filter(|(_, l)| l.contains("// y: a copy")).map(|(k, _)| k + 1).collect();
     let cs: Vec<Value> = copies.iter().zip(marked).map(|((line, what, why), b)| json!({"what": what, "why": why, "y": format!("{y}:{line}"), "bare": format!("{bare}:{b}")})).collect();
     f.insert("copies".into(), Value::Array(cs));
-    // the decisions of each function, in the order of the lines that open them
     let mut decisions = Map::new();
-    let mut groups: Vec<(String, Vec<Value>)> = vec![];
-    for (_, d) in declarations(tree) {
-        if d.kind != "function" {
-            continue;
-        }
-        let mut opened: Vec<(usize, Value)> = vec![];
-        let branch = |b: &Node| json!({"name": b.str("name").unwrap(), "y": format!("{y}:{}", b.line)});
-        d.walk(&mut |n: &Node| match n.kind {
-            "if" | "while" | "for" => {
-                let mut bs = vec![branch(n)];
-                bs.extend(n.nodes("else").into_iter().map(branch));
-                opened.push((n.line, json!({"kind": n.kind, "branches": bs})));
+    for (dname, dtree, dy, dbare) in [(name.to_string(), tree, y.clone(), bare.clone()), ("main".to_string(), main_tree, "y/src/main.y".to_string(), "bare/src/main.brs".to_string())] {
+        // the decisions of each function, in the order of the lines that open them
+        let mut groups: Vec<(String, Vec<Value>)> = vec![];
+        for (_, d) in declarations(dtree) {
+            if d.kind != "function" {
+                continue;
             }
-            "conditional" | "compare" => {
-                let mut bs: Vec<Value> = n.nodes("conditions").into_iter().map(branch).collect();
-                bs.extend(n.nodes("else").into_iter().map(branch));
-                opened.push((n.line, json!({"kind": n.kind, "label": n.str("label").unwrap(), "y": format!("{y}:{}", n.line), "branches": bs})));
-            }
-            "region" if !n.nodes("orelse").is_empty() => {
-                let mut bs = vec![branch(n)];
-                bs.extend(n.nodes("orelse").into_iter().map(branch));
-                opened.push((n.nodes("orelse")[0].line, json!({"kind": "orelse", "branches": bs})));
-            }
-            _ => {}
-        });
-        opened.sort_by_key(|o| o.0);
-        if !opened.is_empty() {
-            groups.push((d.str("name").unwrap().to_string(), opened.into_iter().map(|o| o.1).collect()));
-        }
-    }
-    // where the bare body takes each branch: the next `#name` in the function not yet given to a branch
-    let bl = lines(files, &bare);
-    let mut used: BTreeSet<(String, usize)> = BTreeSet::new();
-    let mut current = String::new();
-    for (i, l) in bl.iter().enumerate() {
-        if let Some(h) = fn_head(l) {
-            current = h;
-        }
-        let Some((_, marker)) = l.split_once("// y:") else { continue };
-        for cap in marker.split('#').skip(1) {
-            let mark: String = cap.chars().take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '.' || *c == '\'').collect();
-            let base = mark.split('\'').next().unwrap().to_string();
-            for (fname, gs) in groups.iter_mut() {
-                if *fname != current {
-                    continue;
+            let mut opened: Vec<(usize, Value)> = vec![];
+            let branch = |b: &Node| json!({"name": b.str("name").unwrap(), "y": format!("{dy}:{}", b.line)});
+            d.walk(&mut |n: &Node| match n.kind {
+                "if" | "while" | "for" => {
+                    let mut bs = vec![branch(n)];
+                    bs.extend(n.nodes("else").into_iter().map(branch));
+                    opened.push((n.line, json!({"kind": n.kind, "branches": bs})));
                 }
-                'found: for g in gs.iter_mut() {
-                    for b in g["branches"].as_array_mut().unwrap() {
-                        if b["name"] == base.as_str() && b.get("bare").is_none() && !used.contains(&(mark.clone(), i)) {
-                            b["bare"] = json!(format!("{bare}:{}", i + 1));
-                            used.insert((mark.clone(), i));
-                            break 'found;
+                "conditional" | "compare" => {
+                    let mut bs: Vec<Value> = n.nodes("conditions").into_iter().map(branch).collect();
+                    bs.extend(n.nodes("else").into_iter().map(branch));
+                    opened.push((n.line, json!({"kind": n.kind, "label": n.str("label").unwrap(), "y": format!("{dy}:{}", n.line), "branches": bs})));
+                }
+                "region" if !n.nodes("orelse").is_empty() => {
+                    let mut bs = vec![branch(n)];
+                    bs.extend(n.nodes("orelse").into_iter().map(branch));
+                    opened.push((n.nodes("orelse")[0].line, json!({"kind": "orelse", "branches": bs})));
+                }
+                _ => {}
+            });
+            opened.sort_by_key(|o| o.0);
+            if !opened.is_empty() {
+                groups.push((d.str("name").unwrap().to_string(), opened.into_iter().map(|o| o.1).collect()));
+            }
+        }
+        // where the bare body takes each branch: the next `#name` in the function not yet given to a branch
+        let bl = lines(files, &dbare);
+        let mut used: BTreeSet<(String, usize)> = BTreeSet::new();
+        let mut current = String::new();
+        for (i, l) in bl.iter().enumerate() {
+            if let Some(h) = fn_head(l) {
+                current = h;
+            }
+            let Some((_, marker)) = l.split_once("// y:") else { continue };
+            for cap in marker.split('#').skip(1) {
+                let mark: String = cap.chars().take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '.' || *c == '\'').collect();
+                let base = mark.split('\'').next().unwrap().to_string();
+                for (fname, gs) in groups.iter_mut() {
+                    if *fname != current {
+                        continue;
+                    }
+                    'found: for g in gs.iter_mut() {
+                        for b in g["branches"].as_array_mut().unwrap() {
+                            if b["name"] == base.as_str() && b.get("bare").is_none() && !used.contains(&(mark.clone(), i)) {
+                                b["bare"] = json!(format!("{dbare}:{}", i + 1));
+                                used.insert((mark.clone(), i));
+                                break 'found;
+                            }
                         }
                     }
                 }
             }
         }
-    }
-    for (fname, gs) in groups {
-        for g in &gs {
-            for b in g["branches"].as_array().unwrap() {
-                if b.get("bare").is_none() {
-                    return Err(format!("{fname}#{}: no marker in the bare body", b["name"]));
+        for (fname, gs) in groups {
+            for g in &gs {
+                for b in g["branches"].as_array().unwrap() {
+                    if b.get("bare").is_none() {
+                        return Err(format!("{fname}#{}: no marker in the bare body", b["name"]));
+                    }
                 }
             }
+            decisions.insert(format!("{dname}.{fname}"), Value::Array(gs));
         }
-        decisions.insert(format!("{name}.{fname}"), Value::Array(gs));
     }
     f.insert("decisions".into(), Value::Object(decisions));
     let (paths, problems) = y_paths::all_paths(&crate::read(&dir.join(&y))?);

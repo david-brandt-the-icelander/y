@@ -4,6 +4,7 @@ pub mod emit;
 pub mod lower;
 pub mod model;
 pub mod ty;
+pub mod ware;
 pub mod bare;
 pub mod facts;
 
@@ -46,7 +47,17 @@ pub fn compile(dir: &Path, opts: &Options) -> Result<String, String> {
     let tree = parse(&module_y)?;
     let test_tree = parse(&format!("{name}.test.y"))?;
     let main_tree = parse("main.y")?;
-    let m = model::Module::new(&tree);
+    let mut m = model::Module::new(&tree);
+    // the names `main` imports: `from warehouse import pricing.line, …`
+    for d in main_tree.nodes("decls").into_iter().filter(|d| d.kind == "import") {
+        if let Some(y_parse::Value::List(ns)) = d.get("names") {
+            for n in ns {
+                if let y_parse::Value::Str(n) = n {
+                    m.exported.insert(n.rsplit('.').next().unwrap().to_string());
+                }
+            }
+        }
+    }
     let tm = model::Module::new_in(&test_tree, Some(&m));
     let mm = model::Module::new(&main_tree);
     let (pkg, version) = package(dir)?;
@@ -65,7 +76,7 @@ pub fn compile(dir: &Path, opts: &Options) -> Result<String, String> {
     }
     let Some(out) = &opts.out else { return Ok(format!("y-compile: wrote the typed Rust of {name}")) };
     let stripped = bare::strip(&format!("{pkg} {version}"), &files)?;
-    let lowered = bare::lower(&m, &tree, &read(&src.join(&module_y))?, &stripped, &name, &e.invariant_sites, &e.regions)?;
+    let lowered = bare::lower(&m, &tree, &read(&src.join(&module_y))?, &stripped, &name, &e.invariant_sites, &e.regions, &e.main_regions)?;
     for (p, (brs, js)) in &lowered {
         write(&out.join(p.with_extension("brs")), brs)?;
         write(&out.join(p.with_extension("constraints.json")), &bare_rust::json::canonical(js))?;

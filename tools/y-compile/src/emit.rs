@@ -79,6 +79,7 @@ pub struct Emitted {
     pub copies: Vec<(usize, String, String)>,
     pub invariant_sites: Vec<(String, String, String, String)>,
     pub regions: Regions,
+    pub main_regions: Regions,
     pub main_copies: Vec<(usize, String, String)>,
     pub lib: String,
     pub module: String,
@@ -151,6 +152,36 @@ pub fn imports_for(code: &str) -> std::collections::BTreeSet<String> {
         ("Frame", "y_window::Frame"),
         ("time", "y_runtime::time"),
         ("Ordering", "std::cmp::Ordering"),
+        ("Decimal", "y_runtime::decimal::Decimal"),
+        ("Integer", "y_runtime::decimal::Integer"),
+        ("Rational", "y_runtime::decimal::Rational"),
+        ("Rounding", "y_runtime::decimal::Rounding"),
+        ("Big", "y_runtime::decimal::Big"),
+        ("UNBOUNDED", "y_runtime::decimal::UNBOUNDED"),
+        ("AsciiString", "y_string::AsciiString"),
+        ("Bag", "y_collections::Bag"),
+        ("Queue", "y_collections::Queue"),
+        ("SortedMap", "y_collections::SortedMap"),
+        ("Shared", "y_runtime::shared::Shared"),
+        ("Tx", "y_runtime::shared::Tx"),
+        ("Step", "y_runtime::shared::Step"),
+        ("Isolation", "y_runtime::shared::Isolation"),
+        ("atomic", "y_runtime::shared::atomic"),
+        ("atomic_with", "y_runtime::shared::atomic_with"),
+        ("orelse", "y_runtime::shared::orelse"),
+        ("Infallible", "std::convert::Infallible"),
+        ("TaskBody", "y_runtime::task::TaskBody"),
+        ("Supervision", "y_runtime::task::Supervision"),
+        ("Restart", "y_runtime::task::Restart"),
+        ("supervised", "y_runtime::task::supervised"),
+        ("Cancellation", "y_runtime::task::Cancellation"),
+        ("detach", "y_runtime::task::detach"),
+        ("Arena", "y_runtime::arena::Arena"),
+        ("Held", "y_runtime::arena::Held"),
+        ("Index", "y_runtime::arena::Index"),
+        ("Schema", "y_runtime::store::Schema"),
+        ("Store", "y_runtime::store::Store"),
+        ("StoreError", "y_runtime::store::StoreError"),
         ("require", "y_runtime::require"),
         ("ensure", "y_runtime::ensure"),
         ("invariant", "y_runtime::invariant"),
@@ -303,8 +334,13 @@ impl<'a> Lowerer<'a> {
                 self.pop_scope();
             }
             if f.fails.is_some() && f.result.is_none() && !crate::lower::diverges(&body) {
-                self.line("Ok(())");
+                // a resource held to the end is released, and its release is the function's result
+                match self.held.take() {
+                    Some(h) => self.line(format!("{h}.end()")),
+                    None => self.line("Ok(())"),
+                }
             }
+            self.held = None;
         }
         self.ind -= 1;
         self.line("}");
@@ -317,6 +353,12 @@ impl<'a> Lowerer<'a> {
         for l in doc_lines(d, None) {
             self.line(l);
         }
+        if let TypeDef::Alias(base) = &info.def {
+            let vis = if facet { "pub " } else { "" };
+            let t = self.rust_type(base);
+            self.line(format!("{vis}type {} = {t};", pascal(name)));
+            return;
+        }
         let copy = crate::model::is_copy(m, &Ty::Named(name.to_string()));
         let eq = crate::model::has_eq(m, &Ty::Named(name.to_string()));
         let mut derives = vec!["Clone"];
@@ -328,19 +370,26 @@ impl<'a> Lowerer<'a> {
         if eq {
             derives.push("Eq");
         }
-        self.line(format!("#[derive({})]", derives.join(", ")));
+        // a structure that holds an index into an arena is the arena's own, and derives nothing
+        let indexed = matches!(&info.def, TypeDef::Struct { fields, .. } if fields.iter().any(|(_, t)| matches!(t, Ty::Index(_)) || matches!(t, Ty::Opt(x) if matches!(**x, Ty::Index(_)))));
+        if !indexed {
+            self.line(format!("#[derive({})]", derives.join(", ")));
+        }
         let vis = if facet { "pub " } else { "" };
         match &info.def {
             TypeDef::Struct { fields, derived, derived_values, .. } => {
                 self.line(format!("{vis}struct {} {{", pascal(name)));
                 self.ind += 1;
-                let fvis = if facet { "pub(super) " } else { "" };
+                let fvis = if m.exported.contains(name) { "pub " } else if facet { "pub(super) " } else { "" };
                 for (f, t) in fields {
                     let t = if *t == Ty::StrLit { "&'static str".to_string() } else { self.rust_type(t) };
                     self.line(format!("{fvis}{f}: {t},"));
                 }
                 self.ind -= 1;
                 self.line("}");
+                if m.schemas.contains_key(name) {
+                    self.schema_impl(name);
+                }
                 // `derived miss_count is … = misses.count()`: a method, recomputed on every read
                 if !derived.is_empty() {
                     let fnames: Vec<String> = fields.iter().map(|f| f.0.clone()).collect();
@@ -409,6 +458,7 @@ impl<'a> Lowerer<'a> {
                 self.ind -= 1;
                 self.line("}");
             }
+            TypeDef::Alias(_) => {}
             TypeDef::Enum { cases } => {
                 self.line(format!("{vis}enum {} {{", pascal(name)));
                 self.ind += 1;
@@ -494,7 +544,7 @@ impl<'a> Lowerer<'a> {
         self.ind += 1;
         self.in_group = Some(name.to_string());
         // a value that names anything but a literal reads the module around it
-        let plain = |v: &Node| { let mut p = true; v.walk(&mut |n: &Node| if !matches!(n.kind, "literal" | "list") || (n.kind == "literal" && n.str("type") == Some("duration")) { p = false; }); p };
+        let plain = |v: &Node| { let mut p = true; v.walk(&mut |n: &Node| if !matches!(n.kind, "literal" | "list") || (n.kind == "literal" && !matches!(n.str("type"), Some("integer" | "string" | "boolean" | "character"))) { p = false; }); p };
         if !d.nodes("items").iter().all(|i| i.node("value").is_none_or(plain)) {
             self.line("use super::*;");
             self.line("");
@@ -510,7 +560,28 @@ impl<'a> Lowerer<'a> {
             let ty = i.node("type").map(Ty::from_node);
             let v = i.node("value").unwrap();
             let t = const_type(ty.as_ref(), v);
-            let code = self.const_value(v);
+            // a value a Rust constant cannot hold (a list of structures, a bag) is made by a function
+            if crate::model::needs_fn(self.module(), v) {
+                let want = ty.clone().unwrap_or(Ty::Unknown);
+                self.reset_scopes();
+                self.ctx.module = self.m.name.clone();
+                self.ctx.name = name.to_string();
+                let saved = self.in_group.take();
+                let x = self.expr_want(v, &want);
+                let code = self.owned(x, &want);
+                self.in_group = saved;
+                let rt = self.rust_type(&want);
+                self.line(format!("pub fn {}() -> {rt} {{", i.str("name").unwrap()));
+                self.line(format!("    {code}"));
+                self.line("}");
+                continue;
+            }
+            let code = if v.kind == "list" {
+                self.const_value(v)
+            } else {
+                let x = self.expr(v);
+                self.owned(x, &t)
+            };
             let rt = if t == Ty::StrLit { "&str".to_string() } else { self.rust_type(&t) };
             self.line(format!("pub const {}: {rt} = {code};", upper(i.str("name").unwrap())));
         }
@@ -563,6 +634,8 @@ impl<'a> Lowerer<'a> {
                 self.function_item(d, &f, if facet { "pub " } else { "" });
             }
             "structure" | "type_decl" => self.type_item(d, facet),
+            // a schema is its latest version's structure; the earlier versions are read by its `Schema` impl
+            "schema" if self.m.schemas.get(d.str("name").unwrap()).is_some_and(|s| s.versions.iter().map(|v| v.0).max() == d.str("version").and_then(|v| v.trim_start_matches('v').parse().ok())) => self.type_item(d, facet),
             "constants" | "service" => {
                 if self.m.types.contains_key(d.str("name").unwrap()) {
                     self.type_item(d, facet)
@@ -595,6 +668,7 @@ pub fn module_out(m: &Module, y_path: &str) -> (String, Vec<(usize, String, Stri
 
 fn module_pass<'a>(m: &'a Module<'a>, _y_path: &str, display: std::collections::BTreeSet<String>) -> Lowerer<'a> {
     let mut l = Lowerer::new(m, None);
+    l.mark_copies = true;
     l.display = display;
     let mut first = true;
     for d in m.tree.nodes("decls") {
@@ -633,7 +707,10 @@ fn module_pass<'a>(m: &'a Module<'a>, _y_path: &str, display: std::collections::
     l
 }
 
-fn module_text(m: &Module, y_path: &str, l: Lowerer) -> String {
+fn module_text(m: &Module, y_path: &str, mut l: Lowerer) -> String {
+    for e in l.rendered.clone() {
+        l.rendered_helper(&e);
+    }
     let mut out = vec![format!("//! Lowered from `{y_path}`, the Y module `{}`.", m.name)];
     out.push("//! Each Y facet is a Rust module of the same name, so a member's path keeps the facet.".into());
     out.push("//! Each named decision of the Y source is marked `// y: #name` where its condition is tested.".into());
@@ -739,6 +816,11 @@ impl<'a> Lowerer<'a> {
 
 /// `main`: the entry point, which makes the root capability.
 pub fn main_file(main: &Module, lib: &Module, lib_crate: &str, y_path: &str) -> String {
+    main_out(main, lib, lib_crate, y_path).0
+}
+
+/// `main`'s file, and its regions.
+pub fn main_out(main: &Module, lib: &Module, lib_crate: &str, y_path: &str) -> (String, Regions) {
     let mut l = Lowerer::new(main, Some(lib));
     let mut imports: Vec<String> = vec![];
     for d in main.tree.nodes("decls").into_iter().filter(|d| d.kind == "import") {
@@ -769,6 +851,10 @@ pub fn main_file(main: &Module, lib: &Module, lib_crate: &str, y_path: &str) -> 
     }
     for d in main.tree.nodes("decls").into_iter().filter(|d| matches!(d.kind, "type_decl" | "structure")) {
         l.type_item(d, false);
+        l.line("");
+    }
+    for d in main.tree.nodes("decls").into_iter().filter(|d| d.kind == "constants") {
+        l.const_item(d, false);
         l.line("");
     }
     for d in main.tree.nodes("decls").into_iter().filter(|d| d.kind == "function") {
@@ -832,8 +918,9 @@ pub fn main_file(main: &Module, lib: &Module, lib_crate: &str, y_path: &str) -> 
     }
     out.extend(all);
     out.push(String::new());
+    let regions = l.regions.clone();
     out.extend(l.out);
-    out.join("\n") + "\n"
+    (out.join("\n") + "\n", regions)
 }
 
 pub fn lib_file(module: &str) -> String {
@@ -843,6 +930,7 @@ pub fn lib_file(module: &str) -> String {
 pub fn emit(m: &Module, test_tree: &Node, test_module: &Module, main: &Module, lib_crate: &str) -> Emitted {
     let name = m.name.clone();
     let (module, copies, invariant_sites, regions) = module_out(m, &format!("y/src/{name}.y"));
+    let (main_text, main_regions) = main_out(main, m, lib_crate, "y/src/main.y");
     Emitted {
         regions,
         copies,
@@ -851,6 +939,7 @@ pub fn emit(m: &Module, test_tree: &Node, test_module: &Module, main: &Module, l
         lib: lib_file(&name),
         module,
         tests: tests_file(m, test_tree, test_module, &format!("y/src/{name}.test.y")),
-        main: main_file(main, m, lib_crate, "y/src/main.y"),
+        main: main_text,
+        main_regions,
     }
 }

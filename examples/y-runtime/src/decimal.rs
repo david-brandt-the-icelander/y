@@ -471,6 +471,11 @@ impl<D: Digits, const MIN: i128, const MAX: i128> Integer<D, MIN, MAX> {
     pub fn to_usize(&self) -> usize {
         usize::try_from(self.to_i128()).unwrap_or_else(|_| fault("y_runtime::integer", "a count below zero"))
     }
+
+    /// The value as a `u32`, for a count the runtime's list operations take: Y's integer as a `uint32`.
+    pub fn to_u32(&self) -> u32 {
+        u32::try_from(self.to_i128()).unwrap_or_else(|_| fault("y_runtime::integer", "a value outside uint32"))
+    }
 }
 
 impl<D: Digits, const MIN: i128, const MAX: i128> fmt::Display for Integer<D, MIN, MAX> {

@@ -10,8 +10,17 @@ pub enum TypeDef {
     Struct { fields: Vec<(String, Ty)>, derived: Vec<(String, Ty)>, derived_values: Vec<(usize, Node)>, invariants: Vec<(String, usize, Node)> },
     /// `type word is string:` with its `where` clauses: a newtype whose constructor checks them.
     Newtype { base: Ty, wheres: Vec<(String, usize, Node)> },
+    /// `type sku is string<character_set=ascii>`: another name for a type the runtime gives.
+    Alias(Ty),
     /// Cases, each with its fields; a constant group used as a closed type has cases with none.
     Enum { cases: Vec<(String, Vec<(String, Ty)>)> },
+}
+
+#[derive(Clone, Debug)]
+pub struct Schema {
+    pub key: String,
+    pub versions: Vec<(u32, Vec<(String, Ty)>)>,
+    pub migrations: Vec<(u32, u32, Vec<Node>)>,
 }
 
 #[derive(Clone, Debug)]
@@ -70,6 +79,10 @@ pub struct Module<'t> {
     pub fns: BTreeMap<String, FnInfo>,
     /// Each facet, in order, with its line, visibility and members' names.
     pub facets: Vec<(String, usize, String, Vec<String>)>,
+    /// The types `main` imports, whose fields it reads and makes: their fields are public.
+    pub exported: BTreeSet<String>,
+    /// Each schema: its key field, its versions with their fields, and its migrations.
+    pub schemas: BTreeMap<String, Schema>,
     /// The functions that may suspend (Y § 3.7): they wait for a capability that may, or call one that does.
     pub suspending: BTreeSet<String>,
 }
@@ -114,13 +127,13 @@ fn copy_in(m: &Module, t: &Ty, depth: usize) -> bool {
         return false;
     }
     match t {
-        Ty::U32 | Ty::I32 | Ty::U64 | Ty::U16 | Ty::Count | Ty::Int | Ty::Bool | Ty::StrLit => true,
+        Ty::U32 | Ty::I32 | Ty::U64 | Ty::U16 | Ty::Count | Ty::Int | Ty::Bool | Ty::StrLit | Ty::Decimal(..) | Ty::Integer(..) | Ty::Index(_) => true,
         Ty::Named(n) if crate::ty::COPIED.contains(&n.as_str()) => true,
         Ty::Opt(x) => copy_in(m, x, depth + 1),
         Ty::Named(n) => match m.types.get(n).map(|t| &t.def) {
             Some(TypeDef::Struct { fields, .. }) => fields.iter().all(|(_, f)| copy_in(m, f, depth + 1)),
             Some(TypeDef::Enum { cases }) => cases.iter().all(|(_, fs)| fs.iter().all(|(_, f)| copy_in(m, f, depth + 1))),
-            Some(TypeDef::Newtype { base, .. }) => copy_in(m, base, depth + 1),
+            Some(TypeDef::Newtype { base, .. }) | Some(TypeDef::Alias(base)) => copy_in(m, base, depth + 1),
             None => false,
         },
         _ => false,
@@ -148,10 +161,32 @@ fn eq_in(m: &Module, t: &Ty, depth: usize) -> bool {
     }
 }
 
+/// Whether a constant's value is one a Rust constant cannot hold: it calls a method (`bag.of(…)`), or makes a
+/// structure that holds a list, text or a number with bounds; such a constant is made by a function.
+pub fn needs_fn(m: &Module, v: &Node) -> bool {
+    let mut found = false;
+    v.walk(&mut |n: &Node| {
+        if n.kind != "call" {
+            return;
+        }
+        let c = n.node("callee").unwrap();
+        if c.kind == "member" {
+            found = true;
+        }
+        if let Some(TypeDef::Struct { fields, .. }) = c.str("name").filter(|_| c.kind == "name").and_then(|t| m.types.get(t)).map(|t| &t.def) {
+            let heavy = |t: &Ty| matches!(m.resolve(t), Ty::List(_) | Ty::Ascii | Ty::Integer(..) | Ty::Bag(_) | Ty::Queue(_) | Ty::Str);
+            if fields.iter().any(|(_, t)| heavy(t)) {
+                found = true;
+            }
+        }
+    });
+    found
+}
+
 /// A type passed by value: a number, a truth value, or a type whose values are its cases alone.
 pub fn by_value(m: &Module, t: &Ty) -> bool {
     match t {
-        Ty::U32 | Ty::I32 | Ty::U64 | Ty::U16 | Ty::Count | Ty::Int | Ty::Bool | Ty::Rune => true,
+        Ty::U32 | Ty::I32 | Ty::U64 | Ty::U16 | Ty::Count | Ty::Int | Ty::Bool | Ty::Rune | Ty::Decimal(..) | Ty::Integer(..) => true,
         Ty::Named(n) if crate::ty::COPIED.contains(&n.as_str()) => true,
         Ty::Opt(x) => by_value(m, x),
         Ty::Named(n) => matches!(m.types.get(n).map(|t| &t.def), Some(TypeDef::Enum { cases }) if cases.iter().all(|(_, f)| f.is_empty())),
@@ -185,7 +220,7 @@ impl<'t> Module<'t> {
                 }
             }
         }
-        let mut m = Module { name, tree, types: BTreeMap::new(), consts: BTreeMap::new(), fns: BTreeMap::new(), facets: vec![], suspending: BTreeSet::new() };
+        let mut m = Module { name, tree, types: BTreeMap::new(), consts: BTreeMap::new(), fns: BTreeMap::new(), facets: vec![], exported: BTreeSet::new(), schemas: BTreeMap::new(), suspending: BTreeSet::new() };
         if let Some(o) = outer {
             m.types = o.types.clone();
             m.consts = o.consts.clone();
@@ -217,6 +252,28 @@ impl<'t> Module<'t> {
                         }
                     }
                     m.types.insert(name.clone(), TypeInfo { name, facet: facet.clone(), def: TypeDef::Struct { fields, derived, derived_values, invariants }, line: d.line });
+                }
+                "type_decl" if d.node("type").is_some_and(|t| !t.nodes("args").is_empty()) && d.nodes("cases").is_empty() && d.nodes("where").is_empty() => {
+                    let base = Ty::from_node(d.node("type").unwrap());
+                    m.types.insert(name.clone(), TypeInfo { name, facet: facet.clone(), def: TypeDef::Alias(base), line: d.line });
+                }
+                // a schema, version by version: the latest is the structure; each earlier version is how a record of
+                // it is read, migrated by the `migrate` that names it
+                "schema" => {
+                    let version: u32 = d.str("version").and_then(|v| v.trim_start_matches('v').parse().ok()).unwrap_or(1);
+                    let fields: Vec<(String, Ty)> = d.nodes("members").iter().filter(|x| x.kind == "field").map(|f| (f.str("name").unwrap().to_string(), f.node("type").map(Ty::from_node).unwrap_or(Ty::Unknown))).collect();
+                    let key = d.nodes("members").iter().find(|x| x.flag("key")).and_then(|x| x.str("name")).unwrap_or("").to_string();
+                    let entry = m.schemas.entry(name.clone()).or_insert_with(|| Schema { key: key.clone(), versions: vec![], migrations: vec![] });
+                    entry.versions.push((version, fields.clone()));
+                    let latest = entry.versions.iter().map(|v| v.0).max().unwrap_or(version);
+                    if version == latest {
+                        m.types.insert(name.clone(), TypeInfo { name, facet: facet.clone(), def: TypeDef::Struct { fields, derived: vec![], derived_values: vec![], invariants: vec![] }, line: d.line });
+                    }
+                }
+                "migrate" => {
+                    let v = |k: &str| d.str(k).and_then(|v| v.trim_start_matches('v').parse::<u32>().ok()).unwrap_or(0);
+                    let body: Vec<Node> = d.nodes("body").into_iter().cloned().collect();
+                    m.schemas.entry(name.clone()).or_insert_with(|| Schema { key: String::new(), versions: vec![], migrations: vec![] }).migrations.push((v("from"), v("to"), body));
                 }
                 "type_decl" if d.node("type").is_some() && d.nodes("cases").is_empty() => {
                     let base = Ty::from_node(d.node("type").unwrap());
@@ -297,10 +354,18 @@ impl<'t> Module<'t> {
             .iter()
             .map(|p| {
                 let pname = p.str("name").unwrap().to_string();
-                let ty = doc_type(d, &pname).or_else(|| p.node("type").map(Ty::from_node)).unwrap_or(Ty::Unknown);
+                // undocumented, a parameter named as a type is one of it (`rule taxed(line)`)
+                let ty = doc_type(d, &pname).or_else(|| p.node("type").map(Ty::from_node)).unwrap_or_else(|| if self.types.contains_key(&pname) { Ty::Named(pname.clone()) } else { Ty::Unknown });
                 let (mutable, injected) = (p.flag("mutable"), p.flag("injected"));
                 let mode = if injected {
-                    if matches!(&ty, Ty::Cap(c) if c == "forever" || c == "system" || c == "http") { Mode::Ref } else { Mode::Mut }
+                    // a store is lent to change when the function makes a batch of it
+                    let batches = { let mut b = false; for x in d.nodes("body") { x.walk(&mut |n: &Node| if n.kind == "member" && n.str("name") == Some("batch") && n.node("object").and_then(|o| o.str("name")) == Some(pname.as_str()) { b = true; }); } b };
+                    match &ty {
+                        Ty::Cap(c) if c == "forever" || c == "system" || c == "http" => Mode::Ref,
+                        Ty::Shared(_) => Mode::Ref,
+                        Ty::Store(_) if !batches => Mode::Ref,
+                        _ => Mode::Mut,
+                    }
                 } else if mutable {
                     Mode::Mut
                 } else if by_value(self, &ty) || kept.contains(&pname) {
@@ -333,8 +398,30 @@ impl<'t> Module<'t> {
             Ty::Iter(e) => format!("impl Iterator<Item = {}>", self.rust_type(e)),
             Ty::Res(a, b) => format!("Result<{}, {}>", self.rust_type(a), self.rust_type(b)),
             Ty::Named(n) | Ty::Cap(n) => crate::ty::external(n).map(|(r, _)| r.to_string()).unwrap_or_else(|| pascal(n)),
+            Ty::Decimal(p, s) => format!("Decimal<{}, {p}, {s}>", crate::ty::digits(*p)),
+            Ty::Integer(lo, hi) => format!("Integer<{}, {lo}, {hi}>", crate::ty::range_digits(*lo, *hi)),
+            Ty::Rational(_) => "Rational<Big, UNBOUNDED>".into(),
+            Ty::Ascii => "AsciiString".into(),
+            Ty::Bag(e) => format!("Bag<{}>", self.rust_type(e)),
+            Ty::Queue(e) => format!("Queue<{}>", self.rust_type(e)),
+            Ty::SortedMap(k, v) => format!("SortedMap<{}, {}>", self.rust_type(k), self.rust_type(v)),
+            Ty::Shared(e) => format!("Shared<{}>", self.rust_type(e)),
+            Ty::Store(e) => format!("Store<{}>", self.rust_type(e)),
+            Ty::Index(e) => format!("Index<{}>", self.rust_type(e)),
+            Ty::Arena(e) => format!("Arena<{}>", self.rust_type(e)),
             Ty::Unit => "()".into(),
             Ty::Unknown => "_".into(),
+        }
+    }
+
+    /// A type with its aliases resolved.
+    pub fn resolve(&self, t: &Ty) -> Ty {
+        match t {
+            Ty::Named(n) => match self.types.get(n).map(|t| &t.def) {
+                Some(TypeDef::Alias(b)) => b.clone(),
+                _ => t.clone(),
+            },
+            _ => t.clone(),
         }
     }
 

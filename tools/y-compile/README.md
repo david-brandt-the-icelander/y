@@ -73,10 +73,43 @@ in its block. Its constraints become the clauses of its region subject as `regen
 A structure whose values are made in a constant group (Checkers' `level`, in `levels.all`) keeps its `string` fields
 as `&'static str`, as the hand lowering did: a constant cannot make a `YString`.
 
-## What it added to the runtime
+## Warehouse
+
+[`src/ware.rs`](src/ware.rs) lowers what Warehouse adds, by its README's table:
+
+- **Schemas.** A schema's latest version is the structure, and `impl Schema` reads every version: its key, then its
+  other fields separated by `;`, each parsed by its type, and a field an earlier version lacks from that version's
+  `migrate` (`vat_rate := tax.standard_rate`). Text is stored with its line endings escaped.
+- **Decimals and bounded integers** are `Decimal<D, P, S>` and `Integer<D, MIN, MAX>`, the digits `D` the smallest
+  that holds the precision or the range. Y's derived results follow the rule the hand lowering used: a sum or a
+  difference of two decimals is at the wider type, a product with an integer at precision 38 and the decimal's scale,
+  a product of two decimals at precision 38 and the sum of the scales; `to_decimal_rounded(scale: s, …)` gives the
+  type wanted where the context has one, and otherwise the source's precision with scale `s`. A number as written is
+  `Decimal::<…>::literal("4.50")` of the type its place has, or `of_units` in a constant.
+- **Shared state.** An `atomic` region is a closure over a transaction, run by `atomic`, `atomic_with` (for an
+  isolation level) or `orelse` (for `orelse region`s), each shared name read once (`let held_holdings =
+  tx.get(holdings);`) and written back when the region changes it; `waits until name = (p)` returns `Step::Retry`
+  while `p` does not hold. The region's value is the function's when it returns one.
+- **Tasks.** A region with `supervise(…)` runs its `task` statements as `TaskBody` closures under `supervised`, and
+  checks its `within` deadline when they have ended, failing with the case that carries an `expired`.
+- **Cancellation and detachment.** `uncancellable, within d` runs the statements in `Cancellation::held`; `detach
+  because "…", within d` runs them in `detach` and waits for them before the function ends.
+- **Arenas and resources.** `arena name:` makes `Arena::new("name")`; `filed.batch()` is held (`Held::new`) and its
+  release, `batch.end()`, is the function's result.
+- **Constants a Rust constant cannot hold** (Warehouse's `day.orders`, a list of structures that hold lists) are
+  functions, `day::orders()`, as the hand lowering wrote them.
+- **The fields of a structure `main` imports are public**, as `main` makes and reads them; any other structure's are
+  `pub(super)`.
+
+## What it added to the runtime and the examples
 
 - `y_runtime::list::sorted`, for `list.sorted()` in Memory's tests: a sorted copy as a `Vec`. The hand lowering sorted
   a clone in place, which needs a `mut` local inside an expression.
+- `Integer::to_u32`, for a bounded integer where a `uint32` is wanted (`list.repeated(each, times: payers)`). The
+  hand lowering cast with `as u32`.
+- `examples/warehouse/tests/optimistic.rs`, which is not lowered from Y, named the hand lowering's type aliases
+  (`Price`, `Rate`, `Quantity`), which no Y name gives. It now makes its line with `Decimal::literal` and
+  `Integer::from_i128`, whose types the fields give, and passes against both the hand-written and the compiled Rust.
 
 ## Decisions the proposal leaves open
 
@@ -136,6 +169,16 @@ Each kind of difference below keeps the woven Rust building and its tests passin
   `condition counted.other = (counted.owner != owner):`) names the value, `let counted = placed.piece;`, and is a
   chain; the hand lowering wrote the members out in full. One whose conditions are a case and a further test
   (`(shown == outcome.playing) and …`) is a `match` arm with a guard, as the hand lowering wrote it.
+- **Warehouse's types** are written out (`Decimal<i64, 12, 2>`) where the hand lowering named them with aliases of
+  its own (`Price`, `Rate`, `Net`, `Vat`, `Quantity`, `Payers`); only `Sku`, a Y name, is an alias. Its decimal
+  conversions are turbofish calls (`to_decimal::<i128, 38, 2>()`), which strip makes realizations of.
+- **A copy of a borrowed value** (`order.lines` of `order: &Order`, `wanted` given to a queue) is marked `// y: a
+  copy` and listed in `copies` in every example, with the reason `… is borrowed, and a value is kept`; the hand
+  lowering marked some and not others.
+- **A function lent shared state or a store** gets no effects clauses, as in the hand lowering: its regions' clauses
+  say what it may do.
+- **`rendered()` on an arena** is a function the lowering writes beside the module, as the hand lowering did: the
+  entries one per line, an entry `under` another indented by two spaces. The proposal does not define `rendered`.
 - **Imports** are the ones the code uses, found in the code; the order of the paths in `y-facts.json` is the
   enumerator's sorted order.
 - **Documentation** is made from the Y documentation mechanically: the prose, then the roles, each without its type.

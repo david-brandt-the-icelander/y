@@ -31,8 +31,48 @@ pub enum Ty {
     Named(String),
     /// A capability: `console`, `forever`, `random`, `system`, `clock`.
     Cap(String),
+    /// `decimal<precision=p, scale=s>`; a derived result without a precision has 38.
+    Decimal(u32, u32),
+    /// `integer<minimum=a, maximum=b>`.
+    Integer(i128, i128),
+    /// An exact fraction, from a value of the given precision.
+    Rational(u32),
+    /// `string<character_set=ascii>`.
+    Ascii,
+    Bag(Box<Ty>),
+    Queue(Box<Ty>),
+    SortedMap(Box<Ty>, Box<Ty>),
+    /// `shared<value_type=t>`: state that tasks share, changed in atomic regions.
+    Shared(Box<Ty>),
+    /// `store<schema_type=t>`.
+    Store(Box<Ty>),
+    /// `index<unit_type=t>`, into an arena.
+    Index(Box<Ty>),
+    Arena(Box<Ty>),
     Unit,
     Unknown,
+}
+
+/// The Rust integer that holds a decimal of a precision, or an integer of a range.
+pub fn digits(precision: u32) -> &'static str {
+    match precision {
+        0..=4 => "i16",
+        5..=9 => "i32",
+        10..=18 => "i64",
+        _ => "i128",
+    }
+}
+
+pub fn range_digits(lo: i128, hi: i128) -> &'static str {
+    if lo >= i8::MIN as i128 && hi <= i8::MAX as i128 {
+        "i8"
+    } else if lo >= i16::MIN as i128 && hi <= i16::MAX as i128 {
+        "i16"
+    } else if lo >= i32::MIN as i128 && hi <= i32::MAX as i128 {
+        "i32"
+    } else {
+        "i64"
+    }
 }
 
 pub const CAPABILITIES: [&str; 7] = ["console", "forever", "random", "system", "clock", "window", "http"];
@@ -60,6 +100,8 @@ pub fn external(name: &str) -> Option<(&'static str, &'static str)> {
         "picture" => ("Picture", "y_window"),
         "picture_error" => ("PictureError", "y_window"),
         "frame" => ("Frame", "y_window"),
+        "store_error" => ("StoreError", "y_runtime::store"),
+        "record_failure" => ("RecordFailure", "y_runtime::store"),
         "instant" => ("Instant", "std::time"),
         "duration" => ("Duration", "std::time"),
         _ => return None,
@@ -90,11 +132,26 @@ impl Ty {
             "uint16" => Ty::U16,
             "count" => Ty::Count,
             "boolean" => Ty::Bool,
+            "string" if !t.nodes("args").is_empty() => Ty::Ascii,
             "string" => Ty::Str,
             "rune" => Ty::Rune,
             "list" => Ty::List(Box::new(arg("element_type").unwrap_or(Ty::Unknown))),
             "set" => Ty::Set(Box::new(arg("element_type").unwrap_or(Ty::Unknown))),
             "optional" => Ty::Opt(Box::new(arg("value_type").unwrap_or(Ty::Unknown))),
+            "decimal" => {
+                let num = |k: &str| t.nodes("args").into_iter().find(|a| a.str("name") == Some(k)).and_then(|a| a.str("text")).and_then(|x| x.parse::<u32>().ok());
+                Ty::Decimal(num("precision").unwrap_or(38), num("scale").unwrap_or(0))
+            }
+            "integer" => {
+                let num = |k: &str| t.nodes("args").into_iter().find(|a| a.str("name") == Some(k)).and_then(|a| a.str("text")).and_then(|x| x.parse::<i128>().ok());
+                Ty::Integer(num("minimum").unwrap_or(i64::MIN as i128), num("maximum").unwrap_or(i64::MAX as i128))
+            }
+            "bag" => Ty::Bag(Box::new(arg("element_type").unwrap_or(Ty::Unknown))),
+            "queue" => Ty::Queue(Box::new(arg("element_type").unwrap_or(Ty::Unknown))),
+            "sorted_map" => Ty::SortedMap(Box::new(arg("key_type").unwrap_or(Ty::Unknown)), Box::new(arg("value_type").unwrap_or(Ty::Unknown))),
+            "shared" => Ty::Shared(Box::new(arg("value_type").unwrap_or(Ty::Unknown))),
+            "store" => Ty::Store(Box::new(arg("schema_type").unwrap_or(Ty::Unknown))),
+            "index" => Ty::Index(Box::new(arg("unit_type").unwrap_or(Ty::Unknown))),
             "result" => Ty::Res(Box::new(arg("value_type").unwrap_or(Ty::Unit)), Box::new(arg("failure_type").unwrap_or(Ty::Unknown))),
             n if CAPABILITIES.contains(&n) => Ty::Cap(n.to_string()),
             n => Ty::Named(n.to_string()),
@@ -103,7 +160,7 @@ impl Ty {
 
     pub fn elem(&self) -> Ty {
         match self {
-            Ty::List(t) | Ty::Set(t) | Ty::Array(t, _) | Ty::Opt(t) | Ty::Iter(t) => (**t).clone(),
+            Ty::List(t) | Ty::Set(t) | Ty::Array(t, _) | Ty::Opt(t) | Ty::Iter(t) | Ty::Bag(t) | Ty::Queue(t) | Ty::Shared(t) | Ty::Store(t) | Ty::Arena(t) => (**t).clone(),
             _ => Ty::Unknown,
         }
     }

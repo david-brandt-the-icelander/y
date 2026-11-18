@@ -213,6 +213,10 @@ fn function_clauses(m: &Module, decls: &BTreeMap<String, &Node>, d: &Node, y: &s
         cs.push(json!({"kind": "ensure", "text": text, "source": format!("{y}:{}", w.line), "status": {"lifted": format!("src/{}.rs: y_runtime::ensure", m.name)}}));
     }
     let at = format!("{y}:{}", d.line);
+    // a function lent shared state or a store says nothing of its effects here: its regions' clauses do
+    if f.params.iter().any(|p| p.injected && matches!(p.ty, crate::ty::Ty::Shared(_) | crate::ty::Ty::Store(_))) {
+        return cs;
+    }
     let effects = |t: &str| json!({"kind": "effects", "text": t, "source": at});
     let caps: Vec<&str> = f.params.iter().filter(|p| p.injected).map(|p| p.name.as_str()).filter(|c| !matches!(*c, "forever" | "system")).collect();
     let mutable: Vec<&str> = f.params.iter().filter(|p| p.mutable && !p.injected).map(|p| p.name.as_str()).collect();
@@ -297,7 +301,7 @@ fn type_clauses(m: &Module, name: &str, info: &crate::model::TypeInfo, y: &str, 
 }
 
 /// The bare files with what the Y lowering adds to a strip.
-pub fn lower(m: &Module, tree: &Node, source: &str, stripped: &Files, name: &str, sites: &[(String, String, String, String)], regions: &crate::emit::Regions) -> Result<Files, String> {
+pub fn lower(m: &Module, tree: &Node, source: &str, stripped: &Files, name: &str, sites: &[(String, String, String, String)], regions: &crate::emit::Regions, main_regions: &crate::emit::Regions) -> Result<Files, String> {
     let y = format!("y/src/{name}.y");
     let decls: BTreeMap<String, &Node> = declarations(tree).into_iter().filter(|(_, d)| matches!(d.kind, "function" | "rule")).map(|(_, d)| (d.str("name").unwrap().to_string(), d)).collect();
     let levels = y_levels::facet_levels(source);
@@ -362,7 +366,8 @@ pub fn lower(m: &Module, tree: &Node, source: &str, stripped: &Files, name: &str
             }
         }
         // each region of a function: a subject after the function's, with its constraints as clauses (language 6.23)
-        if !tests && !main {
+        if !tests {
+            let (regions, y) = if main { (main_regions, "y/src/main.y".to_string()) } else { (regions, y.clone()) };
             let subjects = js["subjects"].as_array_mut().unwrap();
             for (f, r, line, cs) in regions.iter().rev() {
                 let Some(k) = subjects.iter().position(|s| s["kind"] == "function" && s["name"].as_str().is_some_and(|n| n.ends_with(&format!("::{f}")))) else { continue };

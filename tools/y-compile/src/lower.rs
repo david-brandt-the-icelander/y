@@ -14,6 +14,8 @@ pub enum Form {
     Mut,
     /// A value computed in place.
     Temp,
+    /// A place inside a borrowed value, `game.heaps` of `game: &Game`: borrowed to read, copied to keep.
+    Borrowed,
 }
 
 #[derive(Clone, Debug)]
@@ -22,6 +24,8 @@ pub struct Var {
     pub form: Form,
     /// The arm of a `match` on a result that this name is bound in: `Some(true)` for `Ok`, `Some(false)` for `Err`.
     pub arm: Option<bool>,
+    /// The Rust name the Y name is read by: in an atomic region, a shared name's value read in the transaction.
+    pub alias: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -91,6 +95,18 @@ pub struct Lowerer<'a> {
     pending: Vec<String>,
     /// Each region: its function, its name, its Y line and its constraints as written.
     pub regions: Vec<(String, String, usize, Vec<String>)>,
+    /// The decimal type a value is wanted as, for a rounding that names only its scale.
+    pub want_decimal: Option<(u32, u32)>,
+    /// The arenas' element types whose `rendered()` the module calls.
+    pub rendered: BTreeSet<String>,
+    /// In an atomic region: the shared names it changes, written back before it gives its value.
+    pub atomic_result: Option<Vec<String>>,
+    /// Whether a copy of a borrowed value is marked and listed: in the module's own code, not in its tests.
+    pub mark_copies: bool,
+    /// The Y line of the statement being lowered, where a copy it makes is listed.
+    pub copy_line: usize,
+    /// A resource held until the function ends (`batch = filed.batch()`), whose release is the function's result.
+    pub held: Option<String>,
     /// Each structure invariant checked after a write: the type, the invariant, the function and the field written.
     pub invariant_sites: Vec<(String, String, String, String)>,
 }
@@ -156,6 +172,12 @@ impl<'a> Lowerer<'a> {
             pending: vec![],
             invariant_sites: vec![],
             regions: vec![],
+            want_decimal: None,
+            rendered: BTreeSet::new(),
+            atomic_result: None,
+            held: None,
+            mark_copies: false,
+            copy_line: 0,
         }
     }
 
@@ -183,11 +205,16 @@ impl<'a> Lowerer<'a> {
     }
 
     pub fn bind(&mut self, name: &str, ty: Ty, form: Form) {
-        self.scopes.last_mut().unwrap().insert(name.to_string(), Var { ty, form, arm: None });
+        self.scopes.last_mut().unwrap().insert(name.to_string(), Var { ty, form, arm: None, alias: None });
+    }
+
+    /// A Y name read by another Rust name.
+    pub fn bind_alias(&mut self, name: &str, ty: Ty, alias: &str) {
+        self.scopes.last_mut().unwrap().insert(name.to_string(), Var { ty, form: Form::Place, arm: None, alias: Some(alias.to_string()) });
     }
 
     fn bind_arm(&mut self, name: &str, ty: Ty, ok: bool) {
-        self.scopes.last_mut().unwrap().insert(name.to_string(), Var { ty, form: Form::Place, arm: Some(ok) });
+        self.scopes.last_mut().unwrap().insert(name.to_string(), Var { ty, form: Form::Place, arm: Some(ok), alias: None });
     }
 
     pub fn var(&self, name: &str) -> Option<&Var> {
@@ -207,7 +234,7 @@ impl<'a> Lowerer<'a> {
         self.m.types.get(name).or_else(|| self.lib.and_then(|l| l.types.get(name))).map(|t| &t.def)
     }
 
-    fn module(&self) -> &'a Module<'a> {
+    pub fn module(&self) -> &'a Module<'a> {
         self.lib.unwrap_or(self.m)
     }
 
@@ -252,6 +279,31 @@ impl<'a> Lowerer<'a> {
 
     /// An expression, lowered with a type it is wanted as, where the context gives one.
     pub fn expr_want(&mut self, e: &Node, want: &Ty) -> Ex {
+        // `bag.of([…])`: its elements of the type wanted
+        if let Ty::Bag(elem) = self.module().resolve(want) {
+            if e.kind == "call" && e.node("callee").is_some_and(|c| c.kind == "member" && c.str("name") == Some("of") && c.node("object").and_then(|o| o.str("name")) == Some("bag")) {
+                let items: Vec<String> = e.nodes("args")[0].node("value").unwrap().nodes("items").iter().map(|i| { let x = self.expr_want(i, &elem); self.owned(x, &elem) }).collect();
+                return ex(format!("Bag::from_iter([{}])", items.join(", ")), want.clone(), Form::Temp, ATOM);
+            }
+        }
+        // `shared.new(x)`: `x` of the type shared
+        if let Ty::Shared(inner) = self.module().resolve(want) {
+            if e.kind == "call" && e.node("callee").is_some_and(|c| c.kind == "member" && c.str("name") == Some("new") && c.node("object").and_then(|o| o.str("name")) == Some("shared")) {
+                let x = self.expr_want(e.nodes("args")[0].node("value").unwrap(), &inner);
+                let v = self.owned(x, &inner);
+                return ex(format!("Shared::new({v})"), want.clone(), Form::Temp, ATOM);
+            }
+        }
+        if let Ty::Decimal(p, s) = self.module().resolve(want) {
+            let saved = self.want_decimal.replace((p, s));
+            let x = self.expr_want_inner(e, want);
+            self.want_decimal = saved;
+            return x;
+        }
+        self.expr_want_inner(e, want)
+    }
+
+    fn expr_want_inner(&mut self, e: &Node, want: &Ty) -> Ex {
         // `list.count()` where a `uint32` or an `int32` is wanted: the runtime's count of that type
         if matches!(want, Ty::U32 | Ty::I32) && e.kind == "call" && e.nodes("args").is_empty() {
             let c = e.node("callee").unwrap();
@@ -295,7 +347,7 @@ impl<'a> Lowerer<'a> {
                 if x.ty == Ty::Int && want.is_int() {
                     x.ty = want.clone();
                 }
-                if matches!(x.ty, Ty::List(ref el) if **el == Ty::Unknown) {
+                if matches!(x.ty, Ty::List(ref el) | Ty::Bag(ref el) | Ty::Queue(ref el) if **el == Ty::Unknown) {
                     x.ty = want.clone();
                 }
                 x
@@ -305,6 +357,9 @@ impl<'a> Lowerer<'a> {
 
     /// The value of an expression as an owned value of the type wanted.
     pub fn owned(&mut self, x: Ex, want: &Ty) -> String {
+        if let Some(c) = self.ware_owned(&x, want) {
+            return c;
+        }
         // a value where an optional one is wanted: the value, there
         if let Ty::Opt(inner) = want {
             if !matches!(x.ty, Ty::Opt(_) | Ty::Unknown) && x.code != "None" {
@@ -330,13 +385,27 @@ impl<'a> Lowerer<'a> {
                 format!("List::from({})", x.code)
             }
             _ if matches!(x.form, Form::Ref | Form::Mut) && self.is_copy(&x.ty) => format!("*{}", x.code),
-            _ if matches!(x.form, Form::Ref | Form::Mut) && x.ty != Ty::Unknown => format!("{}.clone()", wrap(&x, ATOM)),
+            _ if matches!(x.form, Form::Ref | Form::Mut | Form::Borrowed) && x.ty != Ty::Unknown && !self.is_copy(&x.ty) => {
+                // a value kept from one that is borrowed: a copy (Y § 3.2)
+                let what = x.code.clone();
+                let why = format!("{what} is borrowed, and a value is kept");
+                // listed where the Y names it as the Rust does: a name, a member or an element
+                let y_like = what.chars().all(|c| c.is_alphanumeric() || "_.[]".contains(c));
+                if self.mark_copies && y_like {
+                    self.pending.push(format!(" // y: a copy, because {why}"));
+                    self.copies.push((self.copy_line, what.clone(), why));
+                }
+                format!("{}.clone()", wrap(&x, ATOM))
+            }
             _ => x.code,
         }
     }
 
     /// A shared borrow of an expression, as a parameter of the type wanted.
     pub fn by_ref(&mut self, x: Ex, want: &Ty) -> String {
+        if let Some(c) = self.ware_owned(&x, want) {
+            return format!("&{c}");
+        }
         let converts = matches!((want, &x.ty), (Ty::Str, Ty::StrLit) | (Ty::Str, Ty::HostStr) | (Ty::List(_), Ty::Array(..)));
         if converts {
             return format!("&{}", self.owned(x, want));
@@ -369,7 +438,7 @@ impl<'a> Lowerer<'a> {
             "name" => {
                 let n = e.str("name").unwrap();
                 if let Some(v) = self.var(n) {
-                    return ex(n, v.ty.clone(), v.form, ATOM);
+                    return ex(v.alias.clone().unwrap_or_else(|| n.to_string()), v.ty.clone(), v.form, ATOM);
                 }
                 ex(n, Ty::Unknown, Form::Temp, ATOM)
             }
@@ -378,7 +447,8 @@ impl<'a> Lowerer<'a> {
             "index" => {
                 let o = self.expr(e.node("object").unwrap());
                 let i = self.expr(e.node("index").unwrap());
-                ex(format!("{}[{}]", wrap(&o, ATOM), i.code), o.ty.elem(), Form::Place, ATOM)
+                let form = if matches!(o.form, Form::Ref | Form::Mut | Form::Borrowed) { Form::Borrowed } else { Form::Place };
+                ex(format!("{}[{}]", wrap(&o, ATOM), i.code), o.ty.elem(), form, ATOM)
             }
             "binary" => self.binary(e),
             "unary" => {
@@ -428,6 +498,10 @@ impl<'a> Lowerer<'a> {
         match e.str("type").unwrap_or("") {
             "integer" => ex(text, Ty::Int, Form::Temp, ATOM),
             "boolean" => ex(text, Ty::Bool, Form::Temp, ATOM),
+            "decimal" => {
+                let scale = text.split('.').nth(1).map(|f| f.len() as u32).unwrap_or(0);
+                ex(text, Ty::Decimal(38, scale), Form::Temp, ATOM)
+            }
             "duration" => {
                 let digits: String = text.chars().take_while(|c| c.is_ascii_digit()).collect();
                 let unit = &text[digits.len()..];
@@ -466,9 +540,12 @@ impl<'a> Lowerer<'a> {
             let close = rest[open..].find('}').map(|c| c + open).unwrap_or(rest.len() - 1);
             let inner = rest[open + 1..close].trim();
             let node = parse_expression(inner);
-            let x = self.expr(&node);
+            let mut x = self.expr(&node);
             if let Ty::Named(n) = &x.ty {
                 self.shown.insert(n.clone());
+            }
+            if let Ty::List(_) = &x.ty {
+                x = ex(format!("format!(\"[{{}}]\", {}.iter().map(ToString::to_string).collect::<Vec<String>>().join(\", \"))", wrap(&x, ATOM)), Ty::HostStr, Form::Temp, ATOM);
             }
             if x.code.chars().all(|c| c.is_alphanumeric() || c == '_') {
                 fmt.push_str(&format!("{{{}}}", x.code));
@@ -500,6 +577,10 @@ impl<'a> Lowerer<'a> {
             if let Some(g) = group {
                 let (_, ty, value) = g.items.iter().find(|(n, _, _)| n == name).cloned().unwrap_or((String::new(), None, Node::new("literal", 0)));
                 let ty = const_type(ty.as_ref(), &value);
+                if crate::model::needs_fn(self.module(), &value) {
+                    let t = g.items.iter().find(|(n, _, _)| n == name).and_then(|(_, t, _)| t.clone()).unwrap_or(Ty::Unknown);
+                    return ex(format!("{o}::{name}()"), t, Form::Temp, ATOM);
+                }
                 // a constant of the group being lowered is named alone
                 if self.in_group.as_deref() == Some(o) {
                     return ex(upper(name), ty, Form::Temp, ATOM);
@@ -509,14 +590,21 @@ impl<'a> Lowerer<'a> {
         }
         let o = self.expr(obj);
         if let Some(Var { arm: Some(ok), .. }) = name_of(obj).and_then(|n| self.var(n)) {
-            if *ok && name == "value" {
+            if *ok && name == "value" || !*ok && name == "failure" {
                 return o;
             }
         }
         let field = self.module().field_ty(&o.ty, name);
         match field {
             Some((t, true)) => ex(format!("{}.{name}()", wrap(&o, ATOM)), t, Form::Temp, ATOM),
-            Some((t, false)) => ex(format!("{}.{name}", wrap(&o, ATOM)), t, if o.form == Form::Temp { Form::Temp } else { Form::Place }, ATOM),
+            Some((t, false)) => {
+                let form = match o.form {
+                    Form::Temp => Form::Temp,
+                    Form::Ref | Form::Mut | Form::Borrowed => Form::Borrowed,
+                    Form::Place => Form::Place,
+                };
+                ex(format!("{}.{name}", wrap(&o, ATOM)), t, form, ATOM)
+            }
             None => ex(format!("{}.{name}", wrap(&o, ATOM)), Ty::Unknown, Form::Place, ATOM),
         }
     }
@@ -585,9 +673,25 @@ impl<'a> Lowerer<'a> {
                 ("list", "repeated") => {
                     self.use_("y_runtime::list");
                     let v = self.expr(args[0].1);
-                    let n = self.expr_want(args[1].1, &Ty::U32).code;
+                    let n = self.expr_want(args[1].1, &Ty::U32);
+                    let n = self.owned(n, &Ty::U32);
                     let ty = v.ty.clone();
                     return ex(format!("List::from(list::repeated({}, {n}))", v.code), Ty::List(Box::new(ty)), Form::Temp, ATOM);
+                }
+                ("bag", "new") | ("queue", "new") | ("sorted_map", "new") => {
+                    let t = pascal(o);
+                    let ty = match o { "bag" => Ty::Bag(Box::new(Ty::Unknown)), "queue" => Ty::Queue(Box::new(Ty::Unknown)), _ => Ty::SortedMap(Box::new(Ty::Unknown), Box::new(Ty::Unknown)) };
+                    return ex(format!("{t}::new()"), ty, Form::Temp, ATOM);
+                }
+                ("shared", "new") => {
+                    let x = self.expr(args[0].1);
+                    let t = x.ty.clone();
+                    let v = self.owned(x, &t);
+                    return ex(format!("Shared::new({v})"), Ty::Shared(Box::new(t)), Form::Temp, ATOM);
+                }
+                ("system", "store") => {
+                    let p = self.arg_str(&args, 0);
+                    return ex(format!("system.store({p})"), Ty::Store(Box::new(Ty::Unknown)), Form::Temp, ATOM);
                 }
                 ("set", "new") => {
                     self.use_("y_collections::Set");
@@ -681,10 +785,10 @@ impl<'a> Lowerer<'a> {
         match p.mode {
             Mode::Ref => self.by_ref(x, &p.ty),
             Mode::Mut => self.mut_ref(x),
-            Mode::Value if matches!(x.form, Form::Place | Form::Ref) && !self.is_copy(&x.ty) && x.ty != Ty::Unknown => {
+            Mode::Value if matches!(x.form, Form::Place | Form::Ref | Form::Borrowed) && !self.is_copy(&x.ty) && x.ty != Ty::Unknown => {
                 // a value the callee keeps, from a place that is still read: a copy (Y § 3.2)
                 let root = root_name(a);
-                let borrowed = root.as_deref().and_then(|r| self.var(r)).is_some_and(|v| matches!(v.form, Form::Ref | Form::Mut));
+                let borrowed = x.form == Form::Borrowed || root.as_deref().and_then(|r| self.var(r)).is_some_and(|v| matches!(v.form, Form::Ref | Form::Mut));
                 if borrowed || root.as_deref().is_some_and(|r| self.still_read(r)) || !name_like(&x.code) {
                     let what = y_text(a);
                     let why = format!("{} keeps its {}, and {} is still read", self.calling.clone().unwrap_or_default(), p.name, root.unwrap_or_else(|| what.clone()));
@@ -741,6 +845,9 @@ impl<'a> Lowerer<'a> {
     }
 
     fn method(&mut self, recv: Ex, name: &str, args: &[(Option<&str>, &Node)]) -> Ex {
+        if let Some(x) = self.ware_method(&recv, name, args) {
+            return x;
+        }
         if let Ty::Named(n) = &recv.ty {
             if let Some(TypeDef::Newtype { base, .. }) = self.type_def(n) {
                 let inner = ex(format!("{}.as_text()", wrap(&recv, ATOM)), base.clone(), Form::Ref, ATOM);
@@ -831,6 +938,10 @@ impl<'a> Lowerer<'a> {
                 ex(format!("time::whole_seconds({v})"), Ty::U32, Form::Temp, ATOM)
             }
             (Ty::Cap(c), "now") if c == "clock" => ex(format!("{r}.now()"), Ty::Named("instant".into()), Form::Temp, ATOM),
+            (Ty::Cap(c), "store") if c == "system" => {
+                let p = self.arg_str(args, 0);
+                ex(format!("{r}.store({p})"), Ty::Store(Box::new(Ty::Unknown)), Form::Temp, ATOM)
+            }
             (Ty::Cap(c), "http") if c == "system" => {
                 let svc = name_of(args[0].1).unwrap_or("service").to_string();
                 ex(format!("{r}.http({svc}::ADDRESS)"), Ty::Cap("http".into()), Form::Temp, ATOM)
@@ -839,6 +950,7 @@ impl<'a> Lowerer<'a> {
                 self.note_type(&Ty::Cap(cap.to_string()));
                 ex(format!("{r}.{cap}()"), Ty::Cap(cap.to_string()), Form::Temp, ATOM)
             }
+            (Ty::List(e), "count") if **e == Ty::HostStr => ex(format!("{r}.len()"), Ty::Count, Form::Temp, ATOM),
             (Ty::List(e), "last") if **e == Ty::HostStr => ex(format!("{r}.last().map(String::as_str)"), Ty::Opt(Box::new(Ty::StrLit)), Form::Temp, ATOM),
             (Ty::List(e), "contains") if **e == Ty::HostStr => {
                 let s = self.arg_str(args, 0);
@@ -1063,6 +1175,9 @@ impl<'a> Lowerer<'a> {
                 let rop = if op == "mod" { "%" } else { op };
                 let a = self.expr(l);
                 let b = self.expr_want(r, &a.ty);
+                if let Some(x) = self.decimal_binary(rop, a.clone(), b.clone()) {
+                    return x;
+                }
                 let a = if a.ty == Ty::Int && b.ty != Ty::Int { ex(a.code, b.ty.clone(), a.form, a.prec) } else { a };
                 let ty = a.ty.clone();
                 let ac = a.code.clone();
@@ -1096,10 +1211,18 @@ impl<'a> Lowerer<'a> {
             b
         };
         let a = if a.ty == Ty::Int { let t = b.ty.clone(); Ex { ty: t, ..a } } else { a };
+        // a decimal and a number as written: the number as a decimal of the same type
+        let b = match (&a.ty, &b.ty) {
+            (Ty::Decimal(p, s), _) if crate::ware::is_literal_number(&b) => ex(crate::ware::decimal_literal(&b.code, *p, *s), a.ty.clone(), Form::Temp, ATOM),
+            (Ty::Decimal(p, s), Ty::Decimal(..)) if a.ty != b.ty => { let c = self.as_decimal(&b, *p, *s); ex(c, a.ty.clone(), Form::Temp, ATOM) }
+            // a count and an integer with bounds: the integer as a count
+            (Ty::Count, Ty::Integer(..)) => ex(format!("{}.to_usize()", wrap(&b, ATOM)), Ty::Count, Form::Temp, ATOM),
+            _ => b,
+        };
         // a borrowed name meets an owned value: compare the values
         let (ac, bc) = match (a.form, b.form) {
-            (Form::Ref | Form::Mut, Form::Temp | Form::Place) if self.is_copy(&a.ty) && name_like(&a.code) => (format!("*{}", a.code), b.code.clone()),
-            (Form::Temp | Form::Place, Form::Ref | Form::Mut) if self.is_copy(&b.ty) && name_like(&b.code) => (a.code.clone(), format!("*{}", b.code)),
+            (Form::Ref | Form::Mut, Form::Temp | Form::Place | Form::Borrowed) if self.is_copy(&a.ty) && name_like(&a.code) => (format!("*{}", a.code), b.code.clone()),
+            (Form::Temp | Form::Place | Form::Borrowed, Form::Ref | Form::Mut) if self.is_copy(&b.ty) && name_like(&b.code) => (a.code.clone(), format!("*{}", b.code)),
             _ => (wrap(&a, 51), wrap(&b, 51)),
         };
         ex(format!("{ac} {op} {bc}"), Ty::Bool, Form::Temp, 50)
@@ -1146,6 +1269,10 @@ impl<'a> Lowerer<'a> {
                     Some(l) => format!("Window::fake_frames({}.into_vec())", self.expr(l).code),
                     None => "Window::fake(&[])".to_string(),
                 }
+            }
+            "store" => {
+                let lines: Vec<String> = arg("lines").map(|l| l.nodes("items").iter().map(|i| { let x = self.expr(i); self.as_str(x) }).collect()).unwrap_or_default();
+                return ex(format!("Store::fake(&[{}])", lines.join(", ")), Ty::Store(Box::new(Ty::Unknown)), Form::Temp, ATOM);
             }
             "http" => {
                 let text = arg("text").map(|t| { let x = self.expr(t); self.as_str(x) });
@@ -1245,6 +1372,11 @@ impl<'a> Lowerer<'a> {
         self.stmts(stmts, true);
     }
 
+    /// Statements in the current scope.
+    pub fn block_open_tail_or(&mut self, stmts: &[&Node], tail: bool) {
+        self.stmts(stmts, tail);
+    }
+
     pub fn block(&mut self, stmts: &[&Node], tail: bool) {
         self.push_scope();
         self.stmts(stmts, tail);
@@ -1276,13 +1408,27 @@ impl<'a> Lowerer<'a> {
         self.stmt(st, false, &[]);
     }
 
+    /// A statement, in the tail or not.
+    pub fn stmt_tail(&mut self, st: &Node, tail: bool) {
+        self.stmt(st, tail, &[]);
+    }
+
     /// A statement; `tail` when its value is the function's.
     fn stmt(&mut self, st: &Node, tail: bool, _rest: &[&Node]) {
+        self.copy_line = st.line;
         match st.kind {
             "let" => {
                 let name = st.str("name").unwrap();
                 let v = st.node("value").unwrap();
-                let x = self.expr(v);
+                let injected = if self.ctx.section.as_deref() == Some("inject") {
+                    self.module().fns.values().flat_map(|f| f.params.iter()).find(|p| p.injected && p.name == name).map(|p| p.ty.clone())
+                } else {
+                    None
+                };
+                let x = match &injected {
+                    Some(t) => self.expr_want(v, t),
+                    None => self.expr(v),
+                };
                 let claim = self.claim(st);
                 let x = if x.ty == Ty::HostStr && v.kind != "or_fail" {
                     let code = self.owned(x, &Ty::Str);
@@ -1301,8 +1447,19 @@ impl<'a> Lowerer<'a> {
                         (format!("{}.clone()", wrap(&x, ATOM)), Form::Place)
                     }
                     Form::Ref | Form::Mut => (x.code.clone(), x.form),
+                    // a member of a borrowed value: copied to change it, borrowed to read it
+                    Form::Borrowed if !self.is_copy(&x.ty) && st.flag("mutable") => {
+                        let why = self.why_copied(name, &x.code);
+                        marker = format!(" // y: a copy, because {why}");
+                        self.copies.push((st.line, crate::lower::y_text(v), why));
+                        (format!("{}.clone()", wrap(&x, ATOM)), Form::Place)
+                    }
+                    Form::Borrowed if !self.is_copy(&x.ty) => (format!("&{}", x.code), Form::Ref),
                     _ => (x.code.clone(), Form::Place),
                 };
+                if matches!(&x.ty, Ty::Named(n) if n.starts_with("batch:")) {
+                    self.held = Some(name.to_string());
+                }
                 self.line(format!("let {name} = {code};{claim}{marker}"));
                 if x.ty == Ty::HostStr && v.kind == "or_fail" {
                     self.line(format!("let {name} = YString::from({name});"));
@@ -1344,6 +1501,17 @@ impl<'a> Lowerer<'a> {
                 self.line(format!("{};{claim}", x.code));
                 self.invariants_after(st);
             }
+            "return" if self.atomic_result.is_some() => {
+                // a region's value: the shared state it changed is written, then the value is given
+                let v = st.node("value").unwrap();
+                let want = self.ctx.result.clone().unwrap_or(Ty::Unknown);
+                let x = self.expr_want(v, &want);
+                let val = self.owned(x, &want);
+                for n in self.atomic_result.clone().unwrap_or_default() {
+                    self.line(format!("tx.set({n}, held_{n});"));
+                }
+                self.line(format!("{}Ok(Step::Done({val})){}", if tail { "" } else { "return " }, if tail { "" } else { ";" }));
+            }
             "return" => {
                 let v = st.node("value").unwrap();
                 let code = self.result_value(v);
@@ -1370,6 +1538,7 @@ impl<'a> Lowerer<'a> {
             "while" => self.loop_(st),
             "for" => self.loop_(st),
             "region" => self.region(st, tail),
+            "arena" => self.arena(st, tail),
             "inject" => {
                 self.line("{");
                 self.ind += 1;
@@ -1394,6 +1563,19 @@ impl<'a> Lowerer<'a> {
     /// `region name is c₁, c₂:` and its statements: the marker `// y: region name is …` where it starts, on the line of
     /// its one statement or above several, and `// y: end region name` after them when statements follow it.
     fn region(&mut self, st: &Node, tail: bool) {
+        let words: Vec<&str> = st.nodes("constraints").iter().filter_map(|c| c.str("word")).collect();
+        if words.contains(&"atomic") {
+            return self.region_atomic(st, tail);
+        }
+        if words.contains(&"supervise") {
+            return self.region_tasks(st);
+        }
+        if words.contains(&"uncancellable") {
+            return self.region_uncancellable(st);
+        }
+        if words.contains(&"detach") {
+            return self.region_detach(st);
+        }
         let name = st.str("name").unwrap();
         let cs: Vec<String> = st.nodes("constraints").iter().map(|c| c.str("text").unwrap_or("").to_string()).collect();
         let marker = format!("// y: region {name} is {}", cs.join(", "));
@@ -1573,7 +1755,12 @@ impl<'a> Lowerer<'a> {
             self.ctx.branches.pop();
             if self.out.len() == start + 1 {
                 let v = self.out.pop().unwrap();
-                self.line(format!("{pat} => {}, // y: #{marker}", v.trim()));
+                // a marker the statement had, such as a copy's, follows the arm's
+                let (code, extra) = match v.split_once(" // y:") {
+                    Some((c, e)) => (c.trim().to_string(), format!(" // y:{e}")),
+                    None => (v.trim().to_string(), String::new()),
+                };
+                self.line(format!("{pat} => {code}, // y: #{marker}{extra}"));
                 return;
             }
             self.out.truncate(start);
@@ -1698,7 +1885,7 @@ impl<'a> Lowerer<'a> {
                     // `conditional held = …:` over an optional: `None`, and `Some(held)`, which narrows it; a place
                     // whose value is not copied is borrowed
                     let borrowed = s.form != Form::Temp && !self.is_copy(&inner);
-                    let subject = if borrowed && s.form == Form::Place { format!("&{}", s.code) } else { s.code.clone() };
+                    let subject = if borrowed && matches!(s.form, Form::Place | Form::Borrowed) { format!("&{}", s.code) } else { s.code.clone() };
                     let inner_form = if borrowed { Form::Ref } else { Form::Place };
                     self.line(format!("match {subject} {{"));
                     self.ind += 1;
