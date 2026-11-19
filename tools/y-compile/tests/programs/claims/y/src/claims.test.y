@@ -37,3 +37,30 @@ test the_smallest_is_the_first
         least = smallest([2, 5, 9])
     then:
         two = (least == 2)
+
+
+-- One number is short.
+test one_number_is_short
+        covers sized > measured.short:
+    when:
+        size = sized([4])
+    then:
+        short = (size == "short")
+
+
+-- Six numbers are long.
+test six_numbers_are_long
+        covers sized > measured.long:
+    when:
+        size = sized([1, 2, 3, 4, 5, 6])
+    then:
+        long = (size == "long")
+
+
+-- Three numbers are neither.
+test three_numbers_are_middling
+        covers sized > measured.middling:
+    when:
+        size = sized([1, 2, 3])
+    then:
+        middling = (size == "middling")

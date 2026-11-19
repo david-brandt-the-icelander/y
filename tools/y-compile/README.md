@@ -301,7 +301,7 @@ it said nothing (the pull request lists each edit).
 | `structure` with a `transient` field | A written-out `PartialEq` that compares every other field, and no `Hash`, which would disagree with it |
 | `old(e)` in an `ensures` | `let old_1 = e;` where the function starts, read by the check. Anywhere else, a compile error |
 | `assert name = (p)` | `y_runtime::assertion(p, "m::f#name")`: when `p` does not hold, a fault, as `fail not_reachable` is |
-| `assume name = p because "…"`, `allow(code) because "…"` | A comment that keeps the claim, `// y: assume name because "…"`. Neither has a run-time meaning: the first feeds the enumerator of paths (below), the second a lint |
+| `assume name = p because "…"`, `allow(code) because "…"` | A comment that keeps the claim, `// y: assume name because "…"`. Neither has a run-time meaning: the first feeds the enumerator of paths (below), the second suppresses a lint (below) |
 | `log level "text {x}"` | `y_runtime::observe::log`, with the construct's stable identity. The levels are `debug`, `info`, `warning` and `error` |
 | `metric name = value` | `y_runtime::observe::metric`, with the identity |
 | `name = lambda name(…) returns r captures c:` and `nested function name(…)` | A private function written after the one it is in, its parameters its own and then what it captures, in the order listed; and, where it captures something or is bound as a value, a closure of the same name that passes the captures. A capture not listed, and a listed name not in scope, are compile errors. Its paths are named by its own name (`covers is_larger > bigger`) |
@@ -331,7 +331,8 @@ it said nothing (the pull request lists each edit).
 - **A command's handler is the handler of the command's name**, as `handler charge_card(command, …)` in the proposal is
   `charge_card`'s.
 - **Workflows and handlers run as ordinary functions** in this runtime: delivery is immediate and in process (below).
-- **`allow` takes a lint's code**, `allow(Y2031)`; y-compile has no lints, so it keeps the claim and checks nothing.
+- **`allow` takes a lint's code or its name**, `allow(Y2006)` or `allow(repeated_call)`, and covers the block it stands
+  in and what opens it (below, "Lints"). The proposal's example code, `Y2031`, is no lint's.
 
 **What the runtime stand-ins keep and do not keep.** Each is in `examples/y-runtime` and documented there as a stand-in:
 
@@ -470,6 +471,31 @@ more things:
   `let x = f(…)?;` and `Ok(x)`, where a trace sees the `?`. Nim's `read_move` gains `read_move > chosen'fails`, which
   its test of a move the game refuses now covers; its hand lowering is written the same way.
 
+## Lints
+
+[`src/lint.rs`](src/lint.rs) runs these on the module, its tests and `main` before lowering. A lint is an error, which
+stops the build as a compile error does, unless it says it is a warning; warnings are printed with the report.
+
+| Code | Name | What it finds |
+| --- | --- | --- |
+| Y2001 | `type_argument_name` | A type argument not named `…_type`, or a value argument that is (Y § 3.1); the same lint as `tools/bare-rust/tests/y_lint` and `tools/paths/ylint.py`, whose code it includes |
+| Y2002 | `redundant_parentheses` | Parentheses around a single element (Y § 3.1) |
+| Y2003 | `function_length` | A body of more than 60 lines, a warning; of more than 120, an error (Y § 3.2) |
+| Y2004 | `too_many_paths` | A function of the module with 100 paths or more (Y § 3.14), counted by `y_paths` |
+| Y2005 | `todo_comment` | A `TODO` or `FIXME` comment (Y § 3.16) |
+| Y2006 | `repeated_call` | The same call in more than one condition of a `conditional` without a subject (Y § 3.5) |
+| Y2007 | `shadowing` | A name bound again where a parameter, or this block or one around it, already binds it. It cannot be suppressed (Y § 3.15) |
+
+- `allow(Y2006) because "…"` or `allow(repeated_call) because "…"` applies to the block it stands in and to what opens
+  that block: in a function's body, to the whole function, so it also covers its length and its paths.
+- `-- lint: allow name because "…"` applies to its line, or, alone on a line, to the line after it.
+- An `allow` of a lint that cannot be suppressed, or of a code or name no lint has, is an error; an `allow` that
+  suppresses nothing is a warning.
+- Abbreviations and unnamed decisions, the other official lints, are not here: an unnamed decision is already a
+  compile error (the parser's), and abbreviations need the project's glossary, which no example has.
+- The seven examples and every test program are clean. The claims program suppresses `redundant_parentheses` with a
+  statement and `repeated_call` with a comment; `tests/errors.rs` checks each lint and each rule above.
+
 ## What it does not handle yet
 
 It handles the forms the seven examples and the test programs use. In particular, it does not handle:
@@ -480,4 +506,3 @@ It handles the forms the seven examples and the test programs use. In particular
   at a named point. A test that forces them is a compile error.
 - **Generic declarations** of the module's own: a trait's methods take no type parameters, and an implementation is for
   a named type.
-- **A lint for `allow` to suppress**: the claim is kept as a comment.

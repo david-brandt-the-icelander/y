@@ -172,3 +172,59 @@ fn a_becomes_no_transition_declares() {
     let f = function("Shuts.\n\nd: The door, as door.open.\n\ns: It, shut, as door.shut.", "function f(d) returns s:\n    return s = d.becomes(door.shut())\n");
     refused("becomes", &format!("{st}{f}"), &["is in no transition that returns"]);
 }
+
+/// A function `f` of `n` with the body given, each line indented once.
+fn function_of(body: &str) -> String {
+    let body: Vec<String> = body.lines().map(|l| format!("    {l}")).collect();
+    format!("-------\nDoes it.\n\nn: A number, as uint32.\n\nm: Another, as uint32.\n-------\nfunction f(n) returns m:\n{}\n", body.join("\n"))
+}
+
+/// The report of a module that compiles.
+fn compiled(name: &str, module: &str) -> String {
+    let dir = package(name, module);
+    let out = std::env::temp_dir().join("y-compile-errors").join(format!("{name}-rust"));
+    let opts = y_compile::Options { out: None, rust: Some(out) };
+    y_compile::compile(&dir, &opts).unwrap_or_else(|e| panic!("{name}: does not compile: {e}"))
+}
+
+#[test]
+fn a_lint_is_an_error_until_an_allow_suppresses_it() {
+    refused("lint_parentheses", &function_of("return m = (n)"), &["y/src/m.y:", "redundant_parentheses (Y2002)", "a name"]);
+    // by its code or its name, as a statement over its block, or as a comment over its line
+    compiled("lint_allowed_by_code", &function_of("allow(Y2002) because \"shown\"\nreturn m = (n)"));
+    compiled("lint_allowed_by_name", &function_of("allow(redundant_parentheses) because \"shown\"\nreturn m = (n)"));
+    compiled("lint_allowed_inline", &function_of("return m = (n)  -- lint: allow redundant_parentheses because \"shown\""));
+    compiled("lint_allowed_above", &function_of("-- lint: allow redundant_parentheses because \"shown\"\nreturn m = (n)"));
+}
+
+#[test]
+fn an_allow_of_no_lint_and_one_that_suppresses_nothing() {
+    refused("lint_unknown", &function_of("allow(Y9999) because \"no such lint\"\nreturn m = n"), &["`allow(Y9999)`: no lint has the code or name `Y9999`"]);
+    let report = compiled("lint_unused", &function_of("allow(repeated_call) because \"nothing repeats\"\nreturn m = n"));
+    assert!(report.contains("warning: y/src/m.y:") && report.contains("`allow(Y2006)` suppresses nothing"), "{report}");
+}
+
+#[test]
+fn shadowing_cannot_be_suppressed() {
+    refused("lint_shadowing", &function_of("k = n\nk = n + 1\nreturn m = k"), &["shadowing (Y2007): `k` is already bound here"]);
+    refused("lint_shadowing_parameter", &function_of("n = 3\nreturn m = n"), &["shadowing (Y2007): `n`"]);
+    refused("lint_shadowing_allowed", &function_of("allow(shadowing) because \"tried\"\nk = n\nk = n + 1\nreturn m = k"), &["`shadowing` (Y2007) cannot be suppressed"]);
+}
+
+#[test]
+fn a_repeated_call_a_todo_and_a_long_function() {
+    let repeated = "conditional sized:\n    condition sized.small = (n.min(9) < 2):\n        return m = 1\n    condition sized.large = (n.min(9) > 5):\n        return m = 2\n    else sized.middling:\n        return m = 3";
+    refused("lint_repeated", &function_of(repeated), &["repeated_call (Y2006): `n.min(9)` is called again, as on line"]);
+    refused("lint_todo", &function_of("-- TODO: something better\nreturn m = n"), &["todo_comment (Y2005)"]);
+    // a body of 61 to 120 lines is a warning; of more, an error, which an `allow` in the body suppresses
+    let lines = |k: usize| (0..k).map(|i| format!("v{i} = n + {i}")).collect::<Vec<_>>().join("\n") + "\nreturn m = n";
+    let report = compiled("lint_long", &function_of(&lines(70)));
+    assert!(report.contains("function_length (Y2003): `f`'s body has 71 lines, more than 60"), "{report}");
+    refused("lint_too_long", &function_of(&lines(130)), &["function_length (Y2003): `f`'s body has 131 lines, more than 120"]);
+    compiled("lint_too_long_allowed", &function_of(&format!("allow(function_length) because \"generated\"\n{}", lines(130))));
+}
+
+#[test]
+fn a_type_argument_named_against_the_convention() {
+    refused("lint_type_argument", "-- A box.\nstructure box:\n    items is list<element=uint32>\n", &["type_argument_name (Y2001): `element` takes a type"]);
+}

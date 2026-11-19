@@ -1983,6 +1983,11 @@ Some things the compiler cannot check. Y does not pretend otherwise; it makes ea
 - The review packet always shows claims that are new or changed. Claims are never sampled.
 - Compiler errors cannot be suppressed at all. A small set of lints cannot be suppressed either (YAPL's "official lint
   rules, which cannot be suppressed"), including shadowing, abbreviations and unnamed decisions.
+- `allow(…)` names a lint by its code or by its name: `allow(Y2006)` and `allow(repeated_call)` are the same claim.
+  It applies to the block it stands in and to the statement or declaration that opens that block, so an `allow` in a
+  function's body also covers what is judged at the function, such as its length. The inline form, `-- lint: allow
+  name because "…"`, applies to its own line, or, alone on a line, to the next. An `allow` that suppresses nothing is
+  a warning.
 - Accepted oracle disagreements are claims too, recorded in the project with their construct and reason (§ 4.6).
 
 The number of claims in a module is a number worth watching. It should be small and should not drift upward unnoticed.
