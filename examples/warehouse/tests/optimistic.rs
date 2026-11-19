@@ -2,16 +2,17 @@
 //! again (Y § 3.8).
 //! This is not a lowered Y test: it makes another task's commit land between a region's read and its commit, with the
 //! runtime's `after_next_read`, so the re-run happens every time and not only when the scheduler gives one.
-use warehouse_example::warehouse::catalogue::{Price, Rate, Sku};
-use warehouse_example::warehouse::pricing::{Line, Quantity};
+use warehouse_example::warehouse::catalogue::Sku;
+use warehouse_example::warehouse::pricing::Line;
 use warehouse_example::warehouse::stock::{reserve, Holdings, Reservation};
 use y_collections::Queue;
+use y_runtime::decimal::{Decimal, Integer};
 use y_runtime::shared::{after_next_read, reruns, Engine, Shared};
 use y_runtime::System;
 
 fn teas(quantity: i128) -> Line {
     let sku = Sku::new("tea-1").expect("a stock-keeping unit");
-    Line { sku, quantity: Quantity::from_i128(quantity), unit_price: Price::literal("4.50"), vat_rate: Rate::literal("0.2400") }
+    Line { sku, quantity: Integer::from_i128(quantity), unit_price: Decimal::literal("4.50"), vat_rate: Decimal::literal("0.2400") }
 }
 
 #[test]

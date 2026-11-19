@@ -1,0 +1,17 @@
+[package]
+name = "y-compile"
+version = "0.0.0"
+edition = "2021"
+description = "The Y compiler: lowers an example's Y source to bare Rust bodies, constraint files and y-facts.json"
+
+[[bin]]
+name = "y-compile"
+path = "src/main.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+y-parse = { path = "../y-parse" }
+bare-rust = { path = "../bare-rust" }
+serde_json = { version = "1", features = ["preserve_order"] }
