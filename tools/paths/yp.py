@@ -78,8 +78,14 @@ def text(e, top=True):
         out = ("not " if e["op"] == "not" else "-") + text(e["operand"], False)
     elif k == "list":
         out = "[" + ", ".join(text(i, False) for i in e["items"]) + "]"
-    elif k in ("mutable", "fake", "compile"):
+    elif k in ("mutable", "fake", "compile", "submit"):
         out = f"{k} {text(e['value'], False)}"
+    elif k == "lambda":
+        out = f"lambda {e['name']}"
+    elif k == "old":
+        out = f"old({text(e['value'], False)})"
+    elif k == "reveal":
+        out = f"reveal({text(e['value'], False)}) because \"{e['because']}\""
     elif k == "or_fail":
         out = f"{text(e['value'], False)} or fail"
     elif k == "forever":
@@ -229,7 +235,11 @@ class Module:
                         if n["kind"] == "binary" and n["op"] in (">=", ">", "<=", "<", "==") and text(n["left"]) == "value.count()" \
                                 and n["right"]["kind"] == "literal" and n["right"]["type"] == "integer":
                             self.refinements.setdefault(d["name"], []).append((n["op"], int(n["right"]["text"])))
-            elif d["kind"] == "function":
+            elif d["kind"] == "enumeration":
+                # an enumeration's members, in order: what `for x in it` goes over, so it runs for sure
+                self.values[d["name"]] = {"kind": "list", "items": [{"kind": "name", "name": i["name"]} for i in d["items"]]}
+        for d in callables(tree):
+            if True:
                 # a parameter's or the result's type, from a documentation entry on one line: `name: …, as type.`
                 types = {}
                 for e in (d["doc"] or {}).get("entries", []):
@@ -973,10 +983,35 @@ class Function:
         return f
 
 
+CALLABLE = ("function", "transition", "handler", "workflow")
+
+
+def callables(tree):
+    """Every callable of a file, each with its own paths: its functions, transitions, handlers and workflows, the
+    methods of its implementations, and the lambdas and nested functions in their bodies."""
+    out = []
+    def inner(d):
+        for n in ytree.walk({"kind": "x", "body": d["body"]}):
+            if n["kind"] == "lambda":
+                out.append(n)
+            if n["kind"] == "nested":
+                out.append(n["function"])
+    for _, d in ytree.declarations(tree):
+        if d["kind"] in CALLABLE and not d.get("native"):
+            out.append(d)
+            inner(d)
+        if d["kind"] == "implementation":
+            for x in d["decls"]:
+                if x["kind"] == "function":
+                    out.append(x)
+                    inner(x)
+    # a lambda's or nested function's own lambdas
+    return out
+
+
 def functions(module):
-    for _, d in ytree.declarations(module.tree):
-        if d["kind"] == "function":
-            yield Function(module, d)
+    for d in callables(module.tree):
+        yield Function(module, d)
 
 
 def path_id(n, steps):

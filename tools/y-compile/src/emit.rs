@@ -23,6 +23,11 @@ fn entry_text(t: &str) -> String {
     lower_first(&t)
 }
 
+/// The documentation of a declaration as `///` lines, for the other lowerings.
+pub fn doc_lines_of(d: &Node, f: Option<&FnInfo>) -> Vec<String> {
+    doc_lines(d, f)
+}
+
 /// The documentation of a declaration as `///` lines: its prose, then its roles as a list.
 fn doc_lines(d: &Node, f: Option<&FnInfo>) -> Vec<String> {
     let mut out = vec![];
@@ -152,11 +157,14 @@ pub fn imports_for(code: &str) -> std::collections::BTreeSet<String> {
         ("Frame", "y_window::Frame"),
         ("time", "y_runtime::time"),
         ("Ordering", "std::cmp::Ordering"),
+        ("LazyLock", "std::sync::LazyLock"),
         ("Decimal", "y_runtime::decimal::Decimal"),
         ("Integer", "y_runtime::decimal::Integer"),
         ("Rational", "y_runtime::decimal::Rational"),
         ("Rounding", "y_runtime::decimal::Rounding"),
         ("Big", "y_runtime::decimal::Big"),
+        ("I256", "y_runtime::decimal::I256"),
+        ("Inexact", "y_runtime::decimal::Inexact"),
         ("UNBOUNDED", "y_runtime::decimal::UNBOUNDED"),
         ("AsciiString", "y_string::AsciiString"),
         ("Bag", "y_collections::Bag"),
@@ -166,6 +174,16 @@ pub fn imports_for(code: &str) -> std::collections::BTreeSet<String> {
         ("Tx", "y_runtime::shared::Tx"),
         ("Step", "y_runtime::shared::Step"),
         ("Isolation", "y_runtime::shared::Isolation"),
+        ("Aborted", "y_runtime::shared::Aborted"),
+        ("Undelivered", "y_runtime::command::Undelivered"),
+        ("Submit", "y_runtime::command::Submit"),
+        ("Outbox", "y_runtime::command::Outbox"),
+        ("Command", "y_runtime::command::Command"),
+        ("Policy", "y_runtime::command::Policy"),
+        ("OnAbandon", "y_runtime::command::OnAbandon"),
+        ("Sensitive", "y_runtime::claims::Sensitive"),
+        ("Reveal", "y_runtime::claims::Reveal"),
+        ("assertion", "y_runtime::assertion"),
         ("atomic", "y_runtime::shared::atomic"),
         ("atomic_with", "y_runtime::shared::atomic_with"),
         ("orelse", "y_runtime::shared::orelse"),
@@ -187,6 +205,9 @@ pub fn imports_for(code: &str) -> std::collections::BTreeSet<String> {
         ("invariant", "y_runtime::invariant"),
         ("not_reachable", "y_runtime::not_reachable"),
         ("not_implemented", "y_runtime::not_implemented"),
+        ("narrowed", "y_runtime::narrowed"),
+        ("narrowed_ok", "y_runtime::narrowed_ok"),
+        ("narrowed_err", "y_runtime::narrowed_err"),
     ] {
         let used = match name {
             // a trait's method: `system.window()`
@@ -204,6 +225,12 @@ pub fn imports_for(code: &str) -> std::collections::BTreeSet<String> {
     }
     if code.contains("number::to_") {
         out.insert("y_runtime::number".into());
+    }
+    if code.contains("observe::") {
+        out.insert("y_runtime::observe".into());
+    }
+    if code.contains("pattern::matches") {
+        out.insert("y_runtime::pattern".into());
     }
     if code.contains("list::") {
         out.insert("y_runtime::list".into());
@@ -231,8 +258,16 @@ fn header(uses: &std::collections::BTreeSet<String>) -> Vec<String> {
 }
 
 impl<'a> Lowerer<'a> {
+    pub fn signature(&mut self, f: &FnInfo, vis: &str) -> String {
+        self.fn_signature(f, vis)
+    }
+
     fn fn_signature(&mut self, f: &FnInfo, vis: &str) -> String {
         let mut ps = vec![];
+        // a method's `me`: `&self`, or `&mut self` for a `mutable function` (Y § 3.6)
+        if let Some((_, mutable)) = &f.me {
+            ps.push(if *mutable { "&mut self".to_string() } else { "&self".to_string() });
+        }
         for p in &f.params {
             let t = self.rust_type(&p.ty);
             let t = match p.mode {
@@ -269,7 +304,7 @@ impl<'a> Lowerer<'a> {
             result: f.result.as_ref().map(|r| r.1.clone()),
             fails: f.fails.clone(),
             branches: vec![],
-            section: None,
+            section: None, ..Default::default()
         };
         for p in &f.params {
             let form = match p.mode {
@@ -279,6 +314,17 @@ impl<'a> Lowerer<'a> {
             };
             self.bind(&p.name, p.ty.clone(), form);
         }
+        self.bind_me(f);
+        // `native because "…"`: the body is the module's native implementation, called with the same arguments
+        if f.native.is_some() {
+            let args: Vec<String> = f.params.iter().map(|p| p.name.clone()).collect();
+            self.line(format!("crate::{}::native::{}({}) // y: native because \"{}\"", self.m.name, f.name, args.join(", "), f.native.clone().unwrap_or_default()));
+            self.ind -= 1;
+            self.line("}");
+            return;
+        }
+        // what `old(…)` reads in an `ensures`: the value when the function was called (Y § 3.11)
+        self.bind_olds(d);
         for w in d.nodes("where") {
             self.use_("y_runtime::require");
             let c = self.expr(w.node("condition").unwrap());
@@ -290,49 +336,55 @@ impl<'a> Lowerer<'a> {
         } else {
             let body = d.nodes("body");
             let ensures = d.nodes("ensures");
+            let r = f.result.as_ref().map(|r| r.0.clone()).unwrap_or_else(|| "result".into());
+            self.ctx.ensures = ensures.iter().map(|n| (*n).clone()).collect();
+            self.ctx.result_name = r.clone();
+            // a function without failures whose last statement gives its value: the value is bound to the result's
+            // name, checked, then given; every other `return` checks it where it returns
+            let tail_value = f.fails.is_none() && f.result.is_some() && body.last().is_some_and(|l| matches!(l.kind, "return" | "if" | "conditional" | "compare"));
             if ensures.is_empty() {
                 self.block(&body, true);
-            } else {
-                // `ensures name = p`: the result is bound to its Y name, checked, then given
-                let r = f.result.as_ref().map(|r| r.0.clone()).unwrap_or_else(|| "result".into());
+            } else if f.fails.is_some() && body.last().is_some_and(|l| l.kind == "return") {
+                // a function that may fail: the value it gives is checked, then given as its result
                 self.push_scope();
-                if f.fails.is_some() && body.last().is_some_and(|l| l.kind == "return") {
-                    // a function that may fail: the value it gives is checked, then given as its result
-                    let (init, last) = body.split_at(body.len() - 1);
-                    self.block_open_tail(init);
-                    let want = f.result.as_ref().map(|r| r.1.clone()).unwrap_or(Ty::Unknown);
-                    let x = self.expr_want(last[0].node("value").unwrap(), &want);
-                    let v = self.owned(x, &want);
-                    self.line(format!("let {r} = {v};"));
-                    self.bind(&r, want, Form::Place);
-                    for w in &ensures {
-                        self.use_("y_runtime::ensure");
-                        let c = self.expr(w.node("condition").unwrap());
-                        self.line(format!("ensure({}, \"{}::{}#{}\");", c.code, self.m.name, f.name, w.str("name").unwrap()));
-                    }
-                    self.line(format!("Ok({r})"));
-                    self.pop_scope();
-                    self.ind -= 1;
-                    self.line("}");
-                    return;
-                }
+                let (init, last) = body.split_at(body.len() - 1);
+                self.block_open_tail(init);
+                let want = f.result.as_ref().map(|r| r.1.clone()).unwrap_or(Ty::Unknown);
+                let x = self.expr_want(last[0].node("value").unwrap(), &want);
+                let v = self.owned(x, &want);
+                self.line(format!("let {r} = {v};"));
+                self.bind(&r, want, Form::Place);
+                self.ensure_lines();
+                self.line(format!("Ok({r})"));
+                self.pop_scope();
+                self.ind -= 1;
+                self.line("}");
+                self.ctx.ensures.clear();
+                return;
+            } else if tail_value {
+                self.push_scope();
                 self.block_open_tail(&body);
                 let start = self.last_start;
                 let ind = "    ".repeat(self.ind);
-                self.out[start] = format!("{ind}let {r} = {};", self.out[start].trim_start());
                 let end = self.out.len() - 1;
+                // the statement's first line, bound: on one line, ended; on several, ended at its last
+                self.out[start] = if start == end { format!("{ind}let {r} = {};", self.out[start].trim_start()) } else { format!("{ind}let {r} = {}", self.out[start].trim_start()) };
                 if !self.out[end].ends_with(';') {
                     self.out[end].push(';');
                 }
                 self.bind(&r, f.result.as_ref().map(|r| r.1.clone()).unwrap_or(Ty::Unknown), Form::Place);
-                for w in ensures {
-                    self.use_("y_runtime::ensure");
-                    let c = self.expr(w.node("condition").unwrap());
-                    self.line(format!("ensure({}, \"{}::{}#{}\");", c.code, self.m.name, f.name, w.str("name").unwrap()));
-                }
+                self.ensure_lines();
                 self.line(r);
                 self.pop_scope();
+            } else {
+                // each `return` checks what is ensured, and so does the end of a function that has no result
+                self.ctx.ensure_tail = true;
+                self.block(&body, true);
+                if f.result.is_none() && !crate::lower::diverges(&body) {
+                    self.ensure_lines();
+                }
             }
+            self.ctx.ensures.clear();
             if f.fails.is_some() && f.result.is_none() && !crate::lower::diverges(&body) {
                 // a resource held to the end is released, and its release is the function's result
                 match self.held.take() {
@@ -344,12 +396,23 @@ impl<'a> Lowerer<'a> {
         }
         self.ind -= 1;
         self.line("}");
+        // the lambdas and nested functions of the body, each a function of its own after it
+        let after = std::mem::take(&mut self.after_fn);
+        let base = "    ".repeat(self.ind);
+        for l in after {
+            self.out.push(if l.is_empty() { l } else { format!("{base}{l}") });
+        }
+        self.locals_fns.clear();
     }
 
     fn type_item(&mut self, d: &Node, facet: bool) {
         let name = d.str("name").unwrap();
         let m = self.m;
         let info = &m.types[name];
+        // a unit is erased, and a trait is written by `trait_item`: neither is an item here
+        if matches!(info.def, TypeDef::Unit { .. } | TypeDef::Trait) {
+            return;
+        }
         for l in doc_lines(d, None) {
             self.line(l);
         }
@@ -359,9 +422,29 @@ impl<'a> Lowerer<'a> {
             self.line(format!("{vis}type {} = {t};", pascal(name)));
             return;
         }
+        let vis = if facet { "pub " } else { "" };
+        match &info.def {
+            TypeDef::Enumeration { .. } => return self.enumeration_item(name, vis),
+            TypeDef::State { .. } => return self.state_item(name, vis),
+            TypeDef::Command { .. } => return self.command_item(name, vis),
+            TypeDef::Native { .. } => return self.native_type_item(name, vis),
+            // a kind of collection is the runtime's kind with the same constraints (Y § 3.13)
+            TypeDef::Collection { kind, clauses } => {
+                if kind.is_empty() {
+                    self.error(format!("`type {name}`: no kind of the runtime keeps the constraints {}", clauses.join(", ")));
+                }
+                self.line(format!("/// The kind of collection whose constraints are: {}.", clauses.join("; ")));
+                let params = if d.node("type").and_then(|t| t.str("name")) == Some("mapping") { "K, V" } else { "T" };
+                self.line(format!("{vis}type {}<{params}> = y_collections::{kind}<{params}>;", pascal(name)));
+                return;
+            }
+            // a unit is erased: its values are its base type's (Y § 3.3)
+            TypeDef::Unit { .. } | TypeDef::Trait => return,
+            _ => {}
+        }
         let copy = crate::model::is_copy(m, &Ty::Named(name.to_string()));
         let eq = crate::model::has_eq(m, &Ty::Named(name.to_string()));
-        let mut derives = vec!["Clone"];
+        let mut derives: Vec<&str> = vec!["Clone"];
         if copy {
             derives.push("Copy");
         }
@@ -372,6 +455,11 @@ impl<'a> Lowerer<'a> {
         }
         // a structure that holds an index into an arena is the arena's own, and derives nothing
         let indexed = matches!(&info.def, TypeDef::Struct { fields, .. } if fields.iter().any(|(_, t)| matches!(t, Ty::Index(_)) || matches!(t, Ty::Opt(x) if matches!(**x, Ty::Index(_)))));
+        // a `transient` field is left out of equality (Y § 3.3): `PartialEq` is written out, without it
+        let transient: Vec<String> = d.nodes("members").iter().filter(|x| x.flag("transient")).filter_map(|x| x.str("name").map(str::to_string)).collect();
+        if !transient.is_empty() {
+            derives.retain(|x| *x != "PartialEq" && *x != "Eq" && *x != "Hash");
+        }
         if !indexed {
             self.line(format!("#[derive({})]", derives.join(", ")));
         }
@@ -387,6 +475,16 @@ impl<'a> Lowerer<'a> {
                 }
                 self.ind -= 1;
                 self.line("}");
+                if !transient.is_empty() {
+                    let kept: Vec<String> = fields.iter().filter(|(f, _)| !transient.contains(f)).map(|(f, _)| format!("self.{f} == other.{f}")).collect();
+                    self.line("");
+                    self.line(format!("/// Equality leaves out the `transient` fields: {}.", transient.iter().map(|t| format!("`{t}`")).collect::<Vec<_>>().join(", ")));
+                    self.line(format!("impl PartialEq for {} {{", pascal(name)));
+                    self.line("    fn eq(&self, other: &Self) -> bool {");
+                    self.line(format!("        {}", if kept.is_empty() { "true".to_string() } else { kept.join(" && ") }));
+                    self.line("    }");
+                    self.line("}");
+                }
                 if m.schemas.contains_key(name) {
                     self.schema_impl(name);
                 }
@@ -458,7 +556,7 @@ impl<'a> Lowerer<'a> {
                 self.ind -= 1;
                 self.line("}");
             }
-            TypeDef::Alias(_) => {}
+            TypeDef::Alias(_) | TypeDef::Enumeration { .. } | TypeDef::State { .. } | TypeDef::Command { .. } | TypeDef::Unit { .. } | TypeDef::Native { .. } | TypeDef::Collection { .. } | TypeDef::Trait => {}
             TypeDef::Enum { cases } => {
                 self.line(format!("{vis}enum {} {{", pascal(name)));
                 self.ind += 1;
@@ -610,7 +708,7 @@ impl<'a> Lowerer<'a> {
                 return match pat.as_str() {
                     "^[a-z]*$" => format!("{}.runes().all(|letter| letter.is_ascii_lowercase())", obj.code),
                     "^[A-Z]*$" => format!("{}.runes().all(|letter| letter.is_ascii_uppercase())", obj.code),
-                    p => format!("/* y-compile: the pattern {p} is not supported */ false"),
+                    _ => self.pattern_match(&pat, obj),
                 };
             }
         }
@@ -629,11 +727,23 @@ impl<'a> Lowerer<'a> {
 
     fn decl(&mut self, d: &Node, facet: bool) {
         match d.kind {
-            "function" | "rule" => {
+            "function" | "rule" | "transition" | "handler" | "workflow" => {
                 let f = self.m.fns[d.str("name").unwrap()].clone();
+                if f.kind == "workflow" {
+                    self.workflow_check(&f);
+                }
                 self.function_item(d, &f, if facet { "pub " } else { "" });
             }
-            "structure" | "type_decl" => self.type_item(d, facet),
+            "structure" | "type_decl" | "enumeration" | "state" | "command" | "unit" => self.type_item(d, facet),
+            "trait" => {
+                for l in doc_lines(d, None) {
+                    self.line(l);
+                }
+                self.trait_item(d, if facet { "pub " } else { "" })
+            }
+            "implementation" => self.implementation_item(d),
+            // `allow(code) because "…"` above a declaration: a claim, kept as a marker
+            "allow" => self.line(format!("// y: allow({}) because \"{}\"", d.str("code").unwrap_or(""), d.str("because").unwrap_or(""))),
             // a schema is its latest version's structure; the earlier versions are read by its `Schema` impl
             "schema" if self.m.schemas.get(d.str("name").unwrap()).is_some_and(|s| s.versions.iter().map(|v| v.0).max() == d.str("version").and_then(|v| v.trim_start_matches('v').parse().ok())) => self.type_item(d, facet),
             "constants" | "service" => {
@@ -689,7 +799,7 @@ fn module_pass<'a>(m: &'a Module<'a>, _y_path: &str, display: std::collections::
         first = false;
         if d.kind == "facet" {
             let name = d.str("name").unwrap();
-            let doc = d.str("comment").map(|c| c.trim_start_matches("--").trim().to_string()).unwrap_or_default();
+            let doc = d.str("comment").map(|c| c.lines().map(|l| l.trim_start_matches("--").trim()).collect::<Vec<_>>().join(" ")).unwrap_or_default();
             let doc = doc.trim_end_matches('.').to_string();
             // `-- Moves: reading them, …` above `facet moves`: the facet's name is said once
             let doc = match doc.split_once(": ") {
@@ -722,7 +832,7 @@ fn module_text(m: &Module, y_path: &str, mut l: Lowerer) -> String {
     out.push("//! Each Y facet is a Rust module of the same name, so a member's path keeps the facet.".into());
     out.push("//! Each named decision of the Y source is marked `// y: #name` where its condition is tested.".into());
     out.push(String::new());
-    let mut body = l.out.join("\n");
+    let mut body = [l.statics.join("\n"), l.out.join("\n"), l.compile_tests.join("\n")].join("\n");
     // the facets' own `use` lines name nothing
     body = body.replace("use super::*;", "");
     let mut uses = imports_for(&body);
@@ -737,8 +847,35 @@ fn module_text(m: &Module, y_path: &str, mut l: Lowerer) -> String {
     out.push("#[cfg(test)]".into());
     out.push("mod tests;".into());
     out.push(String::new());
-    out.extend(l.out);
+    // the module's native implementations (Y § 3.18), in the package's folder for its backend
+    let native = { let mut n = false; m.tree.walk(&mut |x: &Node| if x.str("native").is_some() { n = true; }); n };
+    if native {
+        out.push(format!("/// The native implementations of the module's `native` declarations, written by hand (Y § 3.18)."));
+        out.push(format!("#[path = \"../native/rust/{}.rs\"]", m.name));
+        out.push("mod native;".into());
+        out.push(String::new());
+    }
+    out.extend(l.statics.clone());
+    out.extend(l.out.clone());
+    compiled_tests(&mut out, &l.compile_tests);
     out.join("\n") + "\n"
+}
+
+/// The tests generated for a file's `compile`s: each call, made at run time, gives the value the build wrote down.
+fn compiled_tests(out: &mut Vec<String>, tests: &[String]) {
+    if tests.is_empty() {
+        return;
+    }
+    out.push(String::new());
+    out.push("/// Generated for every `compile`: the run-time call gives the value the build wrote down (Y § 3.17).".into());
+    out.push("#[cfg(test)]".into());
+    out.push("mod compiled {".into());
+    out.push("    use super::*;".into());
+    for t in tests {
+        out.push(String::new());
+        out.extend(t.lines().map(|l| format!("    {l}")));
+    }
+    out.push("}".into());
 }
 
 fn comment_above(l: &Lowerer, line: usize) -> Option<String> {
@@ -756,6 +893,7 @@ fn comment_above(l: &Lowerer, line: usize) -> Option<String> {
 pub fn tests_file(m: &Module, test_tree: &Node, test_module: &Module, y_path: &str) -> String {
     let lib: &Module = m;
     let mut l = Lowerer::new(test_module, Some(lib));
+    l.file = y_path.to_string();
     l.block_on = true;
     // the test file's own constants and functions, which its tests use
     for d in test_tree.nodes("decls").into_iter().filter(|d| d.kind == "constants") {
@@ -777,10 +915,29 @@ pub fn tests_file(m: &Module, test_tree: &Node, test_module: &Module, y_path: &s
             l.line(format!("// y: covers {}", c.str("text").unwrap()));
         }
         l.reset_scopes();
-        l.ctx = Ctx { module: m.name.clone(), name: name.to_string(), result: None, fails: None, branches: vec![], section: None };
+        l.ctx = Ctx { module: m.name.clone(), name: name.to_string(), result: None, fails: None, branches: vec![], section: None, ..Default::default() };
         for s in t.nodes("sections") {
             let section = s.str("name").unwrap();
             l.ctx.section = Some(section.to_string());
+            if section == "faults" {
+                // what the test forces where the code under test runs (Y § 3.14), through the runtime's stand-in
+                for f in s.nodes("body") {
+                    let at = f.str("at").unwrap_or("");
+                    let times = f.node("times").and_then(|t| t.str("text")).unwrap_or("1");
+                    let kind = match f.str("fault") {
+                        Some("conflict") => "Conflict",
+                        Some("expire") => "Expire",
+                        Some(other) => {
+                            l.copy_line = f.line;
+                            l.error(format!("`{other} …`: y-compile's runtime stand-in forces `conflict at` and `expire at` an atomic region, and not `{other}` (y_runtime::faults)"));
+                            continue;
+                        }
+                        None => continue,
+                    };
+                    l.line(format!("y_runtime::faults::force(y_runtime::faults::Kind::{kind}, \"{}::{at}\", {times}); // y: faults {} at {at}", m.name, f.str("fault").unwrap_or("")));
+                }
+                continue;
+            }
             for st in s.nodes("body") {
                 if section == "then" && st.kind == "let" {
                     let c = l.expr(st.node("value").unwrap());
@@ -829,6 +986,7 @@ pub fn main_file(main: &Module, lib: &Module, lib_crate: &str, y_path: &str) -> 
 /// `main`'s file, and its regions.
 pub fn main_out(main: &Module, lib: &Module, lib_crate: &str, y_path: &str) -> (String, Regions) {
     let mut l = Lowerer::new(main, Some(lib));
+    l.file = y_path.to_string();
     let mut imports: Vec<String> = vec![];
     for d in main.tree.nodes("decls").into_iter().filter(|d| d.kind == "import") {
         let from = d.str("from").unwrap_or("");
@@ -899,7 +1057,7 @@ pub fn main_out(main: &Module, lib: &Module, lib_crate: &str, y_path: &str) -> (
         }
         l.ind += 1;
         l.reset_scopes();
-        l.ctx = Ctx { module: main.name.clone(), name: "main".into(), result: None, fails: f.fails.clone(), branches: vec![], section: None };
+        l.ctx = Ctx { module: main.name.clone(), name: "main".into(), result: None, fails: f.fails.clone(), branches: vec![], section: None, ..Default::default() };
         for p in f.params.iter().filter(|p| p.injected) {
             l.use_("y_runtime::System");
             l.line(format!("let {} = System::root();", p.name));
@@ -916,8 +1074,21 @@ pub fn main_out(main: &Module, lib: &Module, lib_crate: &str, y_path: &str) -> (
     imports.sort();
     let mut all: Vec<String> = imports;
     // the module's own names that main uses are imported above; the runtime's here
-    let mut uses = imports_for(&l.out.join("\n"));
+    let mut uses = imports_for(&[l.out.join("\n"), l.statics.join("\n"), l.compile_tests.join("\n")].join("\n"));
     uses.retain(|u| !all.iter().any(|a| a.contains(u.rsplit("::").next().unwrap())));
+    // the module's types a `compile`'s value is built as, which `main` names only there
+    let statics = l.statics.join("\n");
+    for (t, info) in &lib.types {
+        let rust = pascal(t);
+        let named = statics.split(|c: char| !(c.is_alphanumeric() || c == '_')).any(|w| w == rust);
+        if named && !all.iter().any(|a| a.split(|c: char| !(c.is_alphanumeric() || c == '_')).any(|w| w == rust)) {
+            let path = match &info.facet {
+                Some(f) => format!("{lib_crate}::{}::{f}::{rust}", lib.name),
+                None => format!("{lib_crate}::{}::{rust}", lib.name),
+            };
+            all.push(format!("use {path};"));
+        }
+    }
     for h in header(&uses) {
         if !all.iter().any(|a| a == &h) {
             all.push(h);
@@ -926,7 +1097,9 @@ pub fn main_out(main: &Module, lib: &Module, lib_crate: &str, y_path: &str) -> (
     out.extend(all);
     out.push(String::new());
     let regions = l.regions.clone();
-    out.extend(l.out);
+    out.extend(l.statics.clone());
+    out.extend(l.out.clone());
+    compiled_tests(&mut out, &l.compile_tests);
     (out.join("\n") + "\n", regions)
 }
 

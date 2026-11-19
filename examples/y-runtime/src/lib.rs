@@ -5,10 +5,15 @@
 //! and, in [`decimal`], the constrained integers, decimals, rationals and rounding modes of Y § 3.3; in [`shared`],
 //! shared state and atomic regions, kept with one lock (Y § 3.9); in [`task`], supervised tasks, detached work and
 //! cancellation (Y § 3.8); in [`arena`], arenas and resources (Y § 3.6); in [`store`], stored records of a schema and
-//! their migrations (Y § 3.12).
+//! their migrations (Y § 3.12); in [`pattern`], the matcher for `matches(pattern"…")` (Y § 3.1).
 //! It is only as large as the examples need. Where it is simpler than Y's semantics, the item says so.
 pub mod arena;
+pub mod claims;
+pub mod command;
+pub mod faults;
+pub mod observe;
 pub mod decimal;
+pub mod pattern;
 pub mod shared;
 pub mod store;
 pub mod task;
@@ -51,6 +56,31 @@ pub fn ensure(holds: bool, identity: &str) {
 pub fn assertion(holds: bool, identity: &str) {
     if !holds {
         fault(identity, "assertion broken");
+    }
+}
+
+/// The value of an optional that a condition has narrowed (Y § 3.3): where `x != optional.none` held, `x` is the value.
+/// The condition was tested just before, so absence here is a fault, a bug of the lowering.
+pub fn narrowed<T>(value: &Option<T>) -> &T {
+    match value {
+        Some(v) => v,
+        None => fault("y_runtime::narrowed", "an optional a condition narrowed is absent"),
+    }
+}
+
+/// The value of a result that a condition has narrowed to a success: where `r == result.ok` held, `r.value`.
+pub fn narrowed_ok<T, E>(value: &Result<T, E>) -> &T {
+    match value {
+        Ok(v) => v,
+        Err(_) => fault("y_runtime::narrowed_ok", "a result a condition narrowed to a success failed"),
+    }
+}
+
+/// The failure of a result that a condition has narrowed to a failure: where `r == result.err` held, `r.failure`.
+pub fn narrowed_err<T, E>(value: &Result<T, E>) -> &E {
+    match value {
+        Err(e) => e,
+        Ok(_) => fault("y_runtime::narrowed_err", "a result a condition narrowed to a failure succeeded"),
     }
 }
 
@@ -536,5 +566,11 @@ impl Forever {
     /// The capability, for a test.
     pub fn fake() -> Forever {
         Forever { _private: () }
+    }
+
+    /// Runs what a region that is `forever because "…"` holds, whose waits have no bound: an atomic region's `waits
+    /// until`, or a region's tasks. The capability is what lets them wait so; it does nothing else.
+    pub fn wait_on<R>(&self, body: impl FnOnce() -> R) -> R {
+        body()
     }
 }

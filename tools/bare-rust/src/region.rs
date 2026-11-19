@@ -343,7 +343,9 @@ pub fn check_body_with(brs: &str, js: &Value, name: &str, facts: Option<&[crate:
         // passed in (whose effects nothing says), and nothing it calls that needs `effects` (language 6.22)
         for (n, ty, injected) in &params {
             let used = all.iter().any(|x| x.kind() == "identifier" && text(*x, brs) == n);
-            if *injected && !ty.contains("Shared<") && used {
+            // the right to wait without bound is no effect: an atomic region that is `forever` waits, by `waits until`
+            let forever = ty == "Forever" || ty.ends_with("<target_type=Forever>");
+            if *injected && !ty.contains("Shared<") && used && !(forever && has("forever because")) {
                 return Err(format!("region `{name}` is atomic and may run again, so it holds no external effect, and it uses the capability `{n}`"));
             }
             // a call of it that rustc resolved to the crate's functions and closures that may be passed is held to what they
@@ -371,7 +373,15 @@ pub fn check_body_with(brs: &str, js: &Value, name: &str, facts: Option<&[crate:
             None => crate::level::uses_with(&[(file, brs.to_string(), js.clone())], facts.map(|_| &by_file)),
         };
         let waits_inside = |what: &str| what.starts_with("a wait, `waits until");
-        if let Some(u) = effects.iter().find(|u| u.function == f && u.level == 4 && u.line >= rows.0 && u.line <= rows.1 && !waits_inside(&u.what)) {
+        // what keeps the region's own constraints is not an effect of its body: the deadline a `within` starts, the
+        // `Forever` a `forever` gives its wait, and the hold an `uncancellable` puts on cancellation
+        let forevers: Vec<String> = params.iter().filter(|(_, ty, _)| ty == "Forever" || ty.ends_with("<target_type=Forever>")).map(|(n, ..)| format!("the capability `{n}`")).collect();
+        let keeps_constraint = |what: &str| {
+            (has("within") && what.contains("y_runtime::Deadline"))
+                || (has("forever because") && (what.contains("y_runtime::Forever") || what == "a region that waits forever or is detached" || forevers.iter().any(|c| c == what)))
+                || (has("uncancellable") && what.contains("y_runtime::task::Cancellation"))
+        };
+        if let Some(u) = effects.iter().find(|u| u.function == f && u.level == 4 && u.line >= rows.0 && u.line <= rows.1 && !waits_inside(&u.what) && !keeps_constraint(&u.what)) {
             return Err(format!("region `{name}` is atomic and may run again, so it holds no external effect, and it has {} at line {} (language 6.22: `effects`)", u.what.trim_end_matches(','), u.line));
         }
     }

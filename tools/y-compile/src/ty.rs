@@ -37,11 +37,28 @@ pub enum Ty {
     Integer(i128, i128),
     /// An exact fraction, from a value of the given precision.
     Rational(u32),
+    /// `float64`.
+    F64,
+    /// `order.created`: a value of a `state` known to be in one of its states.
+    StateCase(String, String),
+    /// `enqueue<command_type=c>`'s outbox, held in shared state: the commands an atomic region submits.
+    Outbox(Box<Ty>),
+    /// `submit<command_type=c>`: where a workflow submits a command and waits for its handler's outcome.
+    Submit(Box<Ty>),
+    /// `undelivered<failure_type=e>`: why a submitted command has no outcome.
+    Undelivered(Box<Ty>),
+    /// `sensitive<value_type=t>`.
+    Sensitive(Box<Ty>),
+    /// A kind of collection or mapping the module declares, with its type arguments.
+    Kind(String, Vec<(String, Ty)>),
     /// `string<character_set=ascii>`.
     Ascii,
     Bag(Box<Ty>),
     Queue(Box<Ty>),
     SortedMap(Box<Ty>, Box<Ty>),
+    /// Another of `y_collections`' kinds (`SortedSet`, `Stack`, …), by its Rust name, with its type arguments in order:
+    /// its methods are the crate's own.
+    Coll(&'static str, Vec<Ty>),
     /// `shared<value_type=t>`: state that tasks share, changed in atomic regions.
     Shared(Box<Ty>),
     /// `store<schema_type=t>`.
@@ -59,8 +76,24 @@ pub fn digits(precision: u32) -> &'static str {
         0..=4 => "i16",
         5..=9 => "i32",
         10..=18 => "i64",
-        _ => "i128",
+        19..=38 => "i128",
+        39..=76 => "I256",
+        _ => "Big",
     }
+}
+
+/// The precision of a decimal that holds any number of digits: the runtime's `UNBOUNDED`.
+pub const UNBOUNDED: u32 = u32::MAX;
+
+/// The derived precision of a result, at most what the runtime's largest fixed size holds, and unbounded past it.
+pub fn capped(p: u32) -> u32 {
+    if p > 76 { UNBOUNDED } else { p.max(1) }
+}
+
+/// How many decimal digits the largest magnitude of a range has.
+pub fn range_precision(lo: i128, hi: i128) -> u32 {
+    let m = lo.unsigned_abs().max(hi.unsigned_abs());
+    (m.checked_ilog10().unwrap_or(0) + 1).max(1)
 }
 
 pub fn range_digits(lo: i128, hi: i128) -> &'static str {
@@ -70,12 +103,14 @@ pub fn range_digits(lo: i128, hi: i128) -> &'static str {
         "i16"
     } else if lo >= i32::MIN as i128 && hi <= i32::MAX as i128 {
         "i32"
-    } else {
+    } else if lo >= i64::MIN as i128 && hi <= i64::MAX as i128 {
         "i64"
+    } else {
+        "i128"
     }
 }
 
-pub const CAPABILITIES: [&str; 7] = ["console", "forever", "random", "system", "clock", "window", "http"];
+pub const CAPABILITIES: [&str; 8] = ["console", "forever", "random", "system", "clock", "window", "http", "reveal"];
 
 /// Types the runtime gives whose values are copied, as numbers are: passed by value.
 pub const COPIED: [&str; 5] = ["colour", "key", "instant", "duration", "point"];
@@ -97,6 +132,9 @@ pub fn external(name: &str) -> Option<(&'static str, &'static str)> {
         "http" => ("Http", "y_http"),
         "http_error" => ("HttpError", "y_http"),
         "expired" => ("Expired", "y_runtime"),
+        "reveal" => ("Reveal", "y_runtime::claims"),
+        "abandonment" => ("Abandonment", "y_runtime::command"),
+        "inexact" => ("Inexact", "y_runtime::decimal"),
         "picture" => ("Picture", "y_window"),
         "picture_error" => ("PictureError", "y_window"),
         "frame" => ("Frame", "y_window"),
@@ -132,6 +170,8 @@ impl Ty {
             "uint16" => Ty::U16,
             "count" => Ty::Count,
             "boolean" => Ty::Bool,
+            "float64" => Ty::F64,
+            "rational" => Ty::Rational(UNBOUNDED),
             "string" if !t.nodes("args").is_empty() => Ty::Ascii,
             "string" => Ty::Str,
             "rune" => Ty::Rune,
@@ -148,12 +188,22 @@ impl Ty {
             }
             "bag" => Ty::Bag(Box::new(arg("element_type").unwrap_or(Ty::Unknown))),
             "queue" => Ty::Queue(Box::new(arg("element_type").unwrap_or(Ty::Unknown))),
+            n if coll_kind(n).is_some() => Ty::Coll(coll_kind(n).unwrap().0, ["element_type", "key_type", "value_type"].iter().filter_map(|k| arg(k)).collect()),
             "sorted_map" => Ty::SortedMap(Box::new(arg("key_type").unwrap_or(Ty::Unknown)), Box::new(arg("value_type").unwrap_or(Ty::Unknown))),
             "shared" => Ty::Shared(Box::new(arg("value_type").unwrap_or(Ty::Unknown))),
             "store" => Ty::Store(Box::new(arg("schema_type").unwrap_or(Ty::Unknown))),
             "index" => Ty::Index(Box::new(arg("unit_type").unwrap_or(Ty::Unknown))),
             "result" => Ty::Res(Box::new(arg("value_type").unwrap_or(Ty::Unit)), Box::new(arg("failure_type").unwrap_or(Ty::Unknown))),
+            "enqueue" => Ty::Shared(Box::new(Ty::Outbox(Box::new(arg("command_type").unwrap_or(Ty::Unknown))))),
+            "submit" => Ty::Submit(Box::new(arg("command_type").unwrap_or(Ty::Unknown))),
+            "undelivered" => Ty::Undelivered(Box::new(arg("failure_type").unwrap_or(Ty::Unknown))),
+            "sensitive" => Ty::Sensitive(Box::new(arg("value_type").unwrap_or(Ty::Unknown))),
             n if CAPABILITIES.contains(&n) => Ty::Cap(n.to_string()),
+            n if n.contains('.') => {
+                let (st, case) = n.split_once('.').unwrap();
+                Ty::StateCase(st.to_string(), case.to_string())
+            }
+            n if !t.nodes("args").is_empty() => Ty::Kind(n.to_string(), t.nodes("args").iter().map(|a| (a.str("name").unwrap_or("").to_string(), a.node("value").map(Ty::from_node).unwrap_or(Ty::Unknown))).collect()),
             n => Ty::Named(n.to_string()),
         }
     }
@@ -161,6 +211,7 @@ impl Ty {
     pub fn elem(&self) -> Ty {
         match self {
             Ty::List(t) | Ty::Set(t) | Ty::Array(t, _) | Ty::Opt(t) | Ty::Iter(t) | Ty::Bag(t) | Ty::Queue(t) | Ty::Shared(t) | Ty::Store(t) | Ty::Arena(t) => (**t).clone(),
+            Ty::Coll(_, a) if a.len() == 1 => a[0].clone(),
             _ => Ty::Unknown,
         }
     }
@@ -172,4 +223,21 @@ impl Ty {
     pub fn is_text(&self) -> bool {
         matches!(self, Ty::Str | Ty::HostStr | Ty::StrLit)
     }
+}
+
+/// The kinds of `y_collections` without a type of their own here: Y name, Rust name, Rust path.
+pub const COLL_KINDS: &[(&str, &str, &str)] = &[
+    ("stack", "Stack", "y_collections::Stack"),
+    ("deque", "Deque", "y_collections::Deque"),
+    ("sorted_list", "SortedList", "y_collections::SortedList"),
+    ("sorted_set", "SortedSet", "y_collections::SortedSet"),
+    ("unordered_set", "UnorderedSet", "y_collections::UnorderedSet"),
+    ("unordered_map", "UnorderedMap", "y_collections::UnorderedMap"),
+    ("multimap", "MultiMap", "y_collections::MultiMap"),
+    ("map", "Map", "y_collections::Map"),
+];
+
+/// A kind of `COLL_KINDS`, by its Y name or its Rust name: (Rust name, Y name, Rust path).
+pub fn coll_kind(n: &str) -> Option<(&'static str, &'static str, &'static str)> {
+    COLL_KINDS.iter().find(|(y, r, _)| *y == n || *r == n).map(|(y, r, p)| (*r, *y, *p))
 }

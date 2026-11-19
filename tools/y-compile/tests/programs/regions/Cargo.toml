@@ -1,0 +1,12 @@
+[package]
+name = "regions-program"
+version = "0.0.0"
+edition = "2021"
+description = "A Y test program: regions with the combinations of constraints the constraint language allows."
+
+[dependencies]
+y-runtime = { path = "../y-runtime" }
+y-string = { path = "../y-string" }
+y-collections = { path = "../y-collections" }
+
+[workspace]

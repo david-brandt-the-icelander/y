@@ -329,34 +329,56 @@ pub fn orelse<R, E>(name: &str, deadline: Option<&Deadline>, alternatives: Vec<A
 
 /// As [`orelse`], with the region's isolation.
 pub fn orelse_with<R, E>(
-    _name: &str,
+    name: &str,
     deadline: Option<&Deadline>,
     isolation: Isolation,
     mut alternatives: Vec<Alternative<'_, R, E>>,
 ) -> Result<R, Aborted<E>> {
+    // a test that forces the region's deadline to pass (`faults: expire at f#region`)
+    if crate::faults::take(crate::faults::Kind::Expire, name) {
+        return Err(Aborted::Expired(Expired::fake()));
+    }
     match engine_for_a_run() {
-        Engine::OneLock => one_lock(deadline, &mut alternatives),
-        Engine::Optimistic => optimistic(deadline, isolation, &mut alternatives),
+        Engine::OneLock => one_lock(name, deadline, &mut alternatives),
+        Engine::Optimistic => optimistic(name, deadline, isolation, &mut alternatives),
     }
 }
 
+/// Whether a run that would commit is made to conflict instead, by a test's `faults: conflict at f#region`: it is
+/// discarded, with what it logged, and run again, as a conflicting commit would make it.
+fn forced_conflict(name: &str) -> bool {
+    let forced = crate::faults::take(crate::faults::Kind::Conflict, name);
+    if forced {
+        RERUNS.fetch_add(1, Ordering::SeqCst);
+        crate::observe::discard_run();
+    }
+    forced
+}
+
 /// Every alternative under one hold of the lock: never run again.
-fn one_lock<R, E>(deadline: Option<&Deadline>, alternatives: &mut [Alternative<'_, R, E>]) -> Result<R, Aborted<E>> {
+fn one_lock<R, E>(name: &str, deadline: Option<&Deadline>, alternatives: &mut [Alternative<'_, R, E>]) -> Result<R, Aborted<E>> {
     let mut held = hold();
-    loop {
+    'run: loop {
         for alternative in alternatives.iter_mut() {
             let mut tx = Tx::new(None);
+            crate::observe::begin_run();
             match alternative(&mut tx) {
+                // a conflicting commit makes the region run again, at once
+                Ok(Step::Done(_)) if forced_conflict(name) => continue 'run,
                 Ok(Step::Done(r)) => {
                     if !tx.apply.is_empty() {
                         *held += 1;
                         tx.commit(*held);
                         CHANGED.notify_all();
                     }
+                    crate::observe::commit_run();
                     return Ok(r);
                 }
-                Ok(Step::Retry) => {}
-                Err(e) => return Err(Aborted::Failed(e)),
+                Ok(Step::Retry) => crate::observe::discard_run(),
+                Err(e) => {
+                    crate::observe::discard_run();
+                    return Err(Aborted::Failed(e));
+                }
             }
         }
         held = wait(held, deadline).map_err(Aborted::Expired)?;
@@ -365,17 +387,19 @@ fn one_lock<R, E>(deadline: Option<&Deadline>, alternatives: &mut [Alternative<'
 
 /// Each run without the lock, at the version committed when it starts; the lock only to commit. A run that a commit
 /// invalidated, whatever it decided, is run again.
-fn optimistic<R, E>(deadline: Option<&Deadline>, isolation: Isolation, alternatives: &mut [Alternative<'_, R, E>]) -> Result<R, Aborted<E>> {
+fn optimistic<R, E>(name: &str, deadline: Option<&Deadline>, isolation: Isolation, alternatives: &mut [Alternative<'_, R, E>]) -> Result<R, Aborted<E>> {
     'run: loop {
         let stamp = *hold();
         // what the alternatives that retried read: the run waits until a commit changes some of it
         let mut watched: Vec<VersionOf> = vec![];
         for alternative in alternatives.iter_mut() {
             let mut tx = Tx::new(Some(stamp));
+            crate::observe::begin_run();
             let decided = alternative(&mut tx);
             let mut held = hold();
-            if !tx.valid(isolation) {
+            if !tx.valid(isolation) || (matches!(decided, Ok(Step::Done(_))) && crate::faults::take(crate::faults::Kind::Conflict, name)) {
                 drop(held);
+                crate::observe::discard_run();
                 RERUNS.fetch_add(1, Ordering::SeqCst);
                 continue 'run;
             }
@@ -386,10 +410,17 @@ fn optimistic<R, E>(deadline: Option<&Deadline>, isolation: Isolation, alternati
                         tx.commit(*held);
                         CHANGED.notify_all();
                     }
+                    crate::observe::commit_run();
                     return Ok(r);
                 }
-                Ok(Step::Retry) => watched.extend(tx.read.borrow().values().cloned()),
-                Err(e) => return Err(Aborted::Failed(e)),
+                Ok(Step::Retry) => {
+                    crate::observe::discard_run();
+                    watched.extend(tx.read.borrow().values().cloned())
+                }
+                Err(e) => {
+                    crate::observe::discard_run();
+                    return Err(Aborted::Failed(e));
+                }
             }
         }
         // every alternative retried: wait until a commit changes what they read (Y § 3.9: `retry` waits until something

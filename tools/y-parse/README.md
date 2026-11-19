@@ -1,8 +1,8 @@
 # y-parse
 
-A parser for Y ([`proposal/Y-proposal.md`](../../proposal/Y-proposal.md)), as far as the repository's examples use it.
-It parses every `.y` file of the seven examples under [`../../examples`](../../examples/) (each module, its tests and
-its `main`) into a tree whose every node carries the line it starts on. It checks the form of the source, not its
+A parser for Y ([`proposal/Y-proposal.md`](../../proposal/Y-proposal.md)), as far as the repository's examples and the
+compiler's test programs use it. It parses every `.y` file of the seven examples under [`../../examples`](../../examples/)
+and of [`../y-compile/tests/programs`](../y-compile/tests/programs/) (each module, its tests and its `main`) into a tree whose every node carries the line it starts on. It checks the form of the source, not its
 meaning: it resolves no names and infers no types.
 
 ```text
@@ -39,14 +39,24 @@ Python a node is a dict, and `ytree.walk` and `ytree.nodes` read it.
 | `module`, `import` | `name`; `from` and `names` |
 | `facet` | `name`, `decls` |
 | `constants`, `service` | `name`, `items`: `constant` or `setting` nodes with `name`, `type` (or null) and `value` |
-| `type_decl` | `name`, `type` (what it refines, or null), `where` (clauses), `cases` (`case` nodes with `name` and `fields`) |
-| `structure`, `schema` | `name`, `members`: `field` (`name`, `key`, `type`), `derived` (`name`, `type`, `value`), `invariant` (`name`, `condition`); a schema has its `version` |
+| `type_decl` | `name`, `type` (what it refines, or null), `where` (clauses), `cases` (`case` nodes with `name` and `fields`); `native`, the reason of `type t native because "…"`; `collection`, the `collection_clause` nodes of `type t is collection:` or `is mapping:`, each with its `word` (`ordered`, `unique`, `unordered`, `offers`, `count`, `costs` or `values`), its `text`, and for some words more: `ordered` has `by` and `using` (or none), `offers` the words offered, `count` `fixed` or `at_most` |
+| `enumeration` | `name`, `type` (`is string`, or null), `items`: `constant` nodes with `name` and `value` (or null) |
+| `state` | `name`, `members` (the shared `field`s), `cases` (`case` nodes with `name` and `fields`) |
+| `trait`, `implementation` | `name`, `decls` (method signatures: `function` nodes without a body); `trait`, `type`, `decls` |
+| `unit` | `name`, `symbol`, and either `type` (a base unit) or `factor` and `of` (`unit kilometre symbol km is 1000 metre`) |
+| `command` | `name`, `members` (`field`s), `policy`: a `policy` node whose `entries` are `policy_entry` nodes with `name` and `value`; `on_abandon`'s value is a `compensate` node (`value`, the command it builds) or the name `park` |
+| `allow` | `code`, `because`; as a declaration or a statement |
+| `structure`, `schema` | `name`, `members`: `field` (`name`, `key`, `type`, and `transient` when it is), `derived` (`name`, `type`, `value`), `invariant` (`name`, `condition`); a schema has its `version` |
 | `migrate` | `name`, `from`, `to`, `body` |
-| `function` | `name`, `params` (`param` nodes: `name`, `injected`, `mutable`, `type`), `returns`, `fails` (a list of names), `where` and `ensures` (clauses: `name`, `condition`), `body` |
+| `function`, `transition`, `handler`, `workflow`, `lambda` | `name`, `params` (`param` nodes: `name`, `injected`, `mutable`, `type`), `returns`, `fails` (a list of names), `where` and `ensures` (clauses: `name`, `condition`), `body`; `captures` (`capture` nodes: `name`, `mutable`) when it lists any; `native`, the reason, in place of a body; `mutable`, a trait's or an implementation's `mutable function` |
 | `rule` | `name`, `params`, `value` |
-| `test` | `name`, `covers` (a `path` node with its `text` and its `steps`, or null), `sections` (`section` nodes: `name` is `given`, `inject`, `when` or `then`, and `body`) |
+| `test` | `name`, `covers` (a `path` node with its `text` and its `steps`, or null), `sections` (`section` nodes: `name` is `given`, `inject`, `faults`, `when` or `then`, and `body`); a `faults` section's body is `fault` nodes with `fault` (`conflict`, `expire`, `crash` or `cancel`), `at` (`function#name`) and `times` (or null) |
 | `doc` | `text`, its lines without the rules' indentation; `entries`: a line that starts with a name and `: ` (`game: The game, as game.`, `fails guess_error.empty: …`), with the indented lines that continue it, as `doc_entry` nodes with `name`, `text`, `end`, and `type`, the type after its last word `as`, or null when it does not end in `as type.` |
-| `let` | `name`, `mutable`, `value`: `a = …`, `mutable a = …`, and a test's `then:` condition |
+| `let` | `name`, `mutable`, `value`: `a = …`, `mutable a = …`, and a test's `then:` condition; a lambda is a `let` whose `value` is the `lambda` |
+| `nested` | `function`: a `nested function` in a body |
+| `assert`, `assume` | `name`, `condition`; an `assume` has its `because` |
+| `log`, `metric` | `level` (`debug`, `info`, `warning` or `error`) and `value`; `name` and `value` |
+| `enqueue` | `value`, the command's call |
 | `assign`, `expr` | `target` and `value` (`a.b := …`); `value` (a statement that is an expression) |
 | `if`, `while` | `name`, `condition`, `body`, `else` |
 | `for` | `name`, `iterable`, `body`, `else` |
@@ -60,11 +70,12 @@ Python a node is a dict, and `ytree.walk` and `ytree.nodes` read it.
 | `continue`, `break`, `retry` | none |
 | `name`, `member`, `call`, `index` | `name`; `object`, `name`; `callee`, `args` (`arg` nodes: `name` or null, `value`); `object`, `index` |
 | `binary`, `unary` | `op`, `left`, `right`; `op` (`not` or `-`), `operand` |
-| `literal` | `type` (`integer`, `decimal`, `duration`, `string`, `character`, `boolean`, `path`, `pattern`, `url`), `text` as written, and for a string or a character its `value`, the text between the quotes |
+| `literal` | `type` (`integer`, `decimal`, `duration`, `string`, `character`, `boolean`, `path`, `pattern`, `url`, `quantity`), `text` as written, and for a string or a character its `value`, the text between the quotes; a quantity (`5km`, of a unit the module or its sibling module declares) has its `number` and `unit` |
 | `list` | `items` |
 | (any expression) | `parens`, true when it is written in brackets, `(a or b)`; the tree has no node for brackets |
 | `or_fail`, `forever` | `value` (`e or fail`); `value`, `because` (`e forever because "…"`) |
-| `mutable`, `fake`, `compile` | `value`: an argument `mutable g`, a test's `fake store(…)`, `main`'s `compile f(…)` |
+| `mutable`, `fake`, `compile`, `submit`, `old` | `value`: an argument `mutable g`, a test's `fake store(…)` or `fake enqueue<command_type=c>` (a `type`), `main`'s `compile f(…)`, a workflow's `submit c(…)`, an `ensures`'s `old(x)` |
+| `reveal` | `value`, `because`: `reveal(x) because "…"` |
 | `type` | `name`, `args` (`type_arg` nodes: `name`, `value`, a type or a literal, and `text`, the value as written), `text` as written |
 
 ## How lines become a tree
@@ -82,7 +93,11 @@ word after it decides: a keyword followed by `=`, `:=`, `.`, `(` or `[` starts n
 
 ## Forms the proposal does not fix
 
-The examples write these, and the parser accepts them as written:
+The examples and the compiler's test programs write these, and the parser accepts them as written:
+
+- `unit name symbol s is type` and `unit name symbol s is n other`, `trait name:`, `implementation trait for type:`,
+  `log level "…"` and `metric name = value`: the proposal names these declarations and statements without their form
+  (the compiler's README records each decision).
 
 - `service openmoji:` and its settings, `address = url"…"` (memory): the proposal has `http<service=…>` and the
   prefix `url"…"`, but no declaration of a service, and `service` is not among its reserved words.
@@ -98,14 +113,16 @@ The examples write these, and the parser accepts them as written:
 
 ## What it does not handle yet
 
-The proposal has forms that no example uses, and the parser rejects them, or reads them as ordinary names and calls
-(`old(x)` in an `ensures`): `enumeration`, `state` and `transition`; `trait` and `implementation`; `unit`; `command`,
-`handler` and `workflow`; `transient` and `me`; `old` and `assert`; `lambda`, `nested` and `captures`; `enqueue` and
-`submit`; `native because "…"` in place of a body, and `native` types; `assume`, `allow` and `reveal`; a test's
-`faults`; `log` and `metric`; a collection's `ordered by`, `unique` and the other words of its declaration; `policy`
-and `compensate`. It does not check that a name is a reserved word used where only that word may stand, nor the layout
-and lint rules of § 3.1, § 3.2 and § 3.5, which `tools/bare-rust/tests/y_examples.rs` checks on the tree. It does
-refuse two forms the lint rules forbid, with an error of their own: an `else if` ladder, and an `else` without a name.
+It reads every declaration and statement of the proposal that the compiler takes. It does not check that a name is a
+reserved word used where only that word may stand, nor the layout and lint rules of § 3.1, § 3.2 and § 3.5, which
+`tools/bare-rust/tests/y_examples.rs` checks on the tree. It does refuse forms the language forbids, each with an error
+of its own: an `else if` ladder, an `else` without a name, a command without a `policy:`, a trait's method with a body,
+an `assume` or a `reveal` without `because`, a lambda bound to another name than its own, a `log` severity that is
+not one of the four, a fault that is not one of the four, and a collection clause that is not one of § 3.13's.
+
+A quantity literal's unit is known by its symbol: the parser collects the module's `unit` declarations before it
+reads expressions, and a test file also sees its module's units. A literal such as `12parsecs` whose suffix is
+neither a duration nor a declared unit is an error.
 
 ## Who uses it
 
