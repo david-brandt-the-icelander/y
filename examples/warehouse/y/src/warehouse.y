@@ -134,6 +134,7 @@ public facet pricing:
     function split(total, payers) returns shares:
         each = (total.to_rational() / payers.to_rational()).to_decimal_rounded(scale: 2, rounding: rounding.toward_negative)
         left = total - (each * payers)
+        assume settled = (left >= 0.00) because "each share is rounded down, so the shares never add up to more than the bill"
         mutable owed = list.repeated(each, times: payers)
 
         if even = (left == 0.00):

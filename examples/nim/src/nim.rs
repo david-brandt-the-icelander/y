@@ -112,7 +112,8 @@ pub mod moves {
     /// - Fails `NotTwoNumbers`, `NoSuchHeap`, `NothingTaken`, `TooMany`: as `parse_move` and `check` say.
     pub fn read_move(game: &Game, line: &YString) -> Result<Move, MoveError> {
         let parsed = parse_move(line)?;
-        check(game, &parsed)
+        let chosen = check(game, &parsed)?;
+        Ok(chosen)
     }
 
     /// Makes a move.

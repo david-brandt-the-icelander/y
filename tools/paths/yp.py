@@ -33,6 +33,9 @@ import ytree
 
 ORDERED = {"int32", "uint32", "uint16", "int64", "uint64", "duration", "instant", "count", "int"}
 UNSIGNED = {"uint32", "uint16", "uint64", "duration", "count"}
+# ordered types with values between any two whole numbers: an interval bounds them, its ends included, and `x < 3`
+# shows only `x <= 3`
+DENSE = {"decimal"}
 EXEMPT = ("not_reachable", "not_implemented")
 PRECEDENCE = {"or": 1, "and": 2, "==": 4, "!=": 4, "<": 4, "<=": 4, ">": 4, ">=": 4, "+": 5, "-": 5, "*": 6, "/": 6, "%": 6}
 
@@ -166,6 +169,14 @@ def type_text(t):
     return t["text"] if t else None
 
 
+def integer_bounds(t):
+    """The range `integer<minimum=a, maximum=b>` names, as an interval."""
+    if not t or t["name"] != "integer":
+        return None
+    bound = {a["name"]: int(a["text"]) for a in t["args"] if re.fullmatch(r"-?\d+", a.get("text") or "")}
+    return bound.get("minimum"), bound.get("maximum")
+
+
 def element(t):
     """The element type of `list<element_type=T>`."""
     if t and t["name"] == "list" and len(t["args"]) == 1 and t["args"][0]["name"] == "element_type" and t["args"][0]["value"]["kind"] == "type":
@@ -280,6 +291,8 @@ class Module:
                 return ty("string")
             if e["type"] == "boolean":
                 return ty("boolean")
+            if e["type"] == "decimal":
+                return ty("decimal")
             return None
         if k == "unary":
             return ty("boolean") if e["op"] == "not" else self.type_of(e["operand"], env)
@@ -387,6 +400,9 @@ class Facts:
             return v, v
         if e["kind"] == "literal" and e["type"] == "boolean":
             return (1, 1) if e["text"] == "true" else (0, 0)
+        if e["kind"] == "literal" and e["type"] == "decimal" and re.fullmatch(r"\d+\.0*", e["text"]):
+            v = int(e["text"].split(".")[0])
+            return v, v
         counted = method(e, "count", args=0)
         if counted is not None and self.module.length(counted) is not None:
             n = self.module.length(counted)
@@ -407,6 +423,9 @@ class Facts:
             i = meet(i, (0, None))
         if t == "boolean":
             i = meet(i, (0, 1))
+        bounds = integer_bounds(self.module.type_of(e, self.env))
+        if bounds:
+            i = meet(i, bounds)
         return i
 
     def add(self, e, i):
@@ -489,22 +508,23 @@ class Facts:
             if not any(text(x).startswith(("optional.", "result.")) or text(x).split(".")[0] in self.module.groups for x in (left, right)):
                 self.module.unknown.append(f"{text(left, False)} ? {text(right, False)}")
             return None
-        if not any(type_text(t) in ORDERED for t in known):
+        if not any(type_text(t) in ORDERED or t["name"] in ("integer", *DENSE) for t in known):
             return None
         return order_possible(self.interval(left), self.interval(right))
 
     def constrain(self, left, right, o):
         """Adds what order `o` of `left` to `right` shows: False when it cannot be."""
+        step = 0 if any(t and t["name"] in DENSE for t in (self.module.type_of(left, self.env), self.module.type_of(right, self.env))) else 1
         a, b = self.interval(left), self.interval(right)
         if o not in order_possible(a, b):
             return False
         if o == "eq":
             return self.add(left, b) and self.add(right, a)
         if o == "lt":
-            return self.add(left, (None, None if b[1] is None else b[1] - 1)) and \
-                self.add(right, (None if a[0] is None else a[0] + 1, None))
-        return self.add(left, (None if b[0] is None else b[0] + 1, None)) and \
-            self.add(right, (None, None if a[1] is None else a[1] - 1))
+            return self.add(left, (None, None if b[1] is None else b[1] - step)) and \
+                self.add(right, (None if a[0] is None else a[0] + step, None))
+        return self.add(left, (None if b[0] is None else b[0] + step, None)) and \
+            self.add(right, (None, None if a[1] is None else a[1] - step))
 
 
 def renamed(e, old, new):
@@ -712,7 +732,7 @@ def failing_name(s):
     e = last_expression(s)
     if e is None or e["kind"] != "or_fail":
         return None
-    if s["kind"] == "let":
+    if s["kind"] in ("let", "return") and s.get("name"):
         return s["name"]
     if s["kind"] == "assign" and s["target"]["kind"] == "name":
         return s["target"]["name"]
@@ -725,7 +745,7 @@ def failing_name(s):
 
 def site(s):
     """What identifies an `or fail` site: two that read the same are one."""
-    t = s.get("name") if s["kind"] == "let" else text(s["target"]) if s["kind"] == "assign" else None
+    t = s.get("name") if s["kind"] in ("let", "return") else text(s["target"]) if s["kind"] == "assign" else None
     return s["kind"], s.get("mutable"), t, text(last_expression(s))
 
 
@@ -860,7 +880,7 @@ class Function:
         if k == "while":
             return self.loop(s["name"], s["condition"], None, s, facts, f"while {s['name']}")
 
-        if k == "return":
+        if k == "return" and not failing_name(s):
             return [("return", [], facts)]
         if k == "fail" and s["value"] and s["value"]["kind"] == "name" and s["value"]["name"] in EXEMPT:
             return [(s["value"]["name"], [], facts)]
@@ -869,7 +889,14 @@ class Function:
         if k in ("continue", "break"):
             return [(k, [], facts)]
 
-        outs = [("next", [], facts)]
+        if k == "assume":
+            # a claim (Y § 3.15): what it says holds from here on, without proof
+            alts = assume(self.module, self.env, s["condition"], True, facts)
+            if not alts:
+                self.problem(f"`assume {s['name']}` cannot hold where it is")
+                return [("next", [], facts)]
+            return [("next", [], join(alts))]
+        outs = [("return" if k == "return" else "next", [], facts)]
         if k in ("region", "arena", "inject"):
             outs = self.seq(s["body"], facts)
         n = failing_name(s)
@@ -880,6 +907,8 @@ class Function:
                 self.order[key] = self.fails_seen[n]
             label = n if self.fails_total[n] == 1 else f"{n}'{self.order[key]}"
             outs = outs + [("fail", [f"{label}'fails"], facts.copy())]
+        if k == "return":
+            return outs
         # what the statement changes, and what a new name stands for
         changed = changes(s)
         obj = method(unwrap(s["value"]), "push", "extend") if k == "expr" else None

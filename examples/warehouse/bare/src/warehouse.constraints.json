@@ -299,23 +299,23 @@
       "kind": "region",
       "name": "warehouse_example::warehouse::stock::reserve#take_from_shelf",
       "clauses": [
-        { "kind": "region", "text": "atomic", "source": "y/src/warehouse.y:171" },
+        { "kind": "region", "text": "atomic", "source": "y/src/warehouse.y:172" },
         {
           "kind": "region",
           "text": "waits until enough : holdings.on_shelf.count_of(wanted.sku) >= wanted.quantity",
-          "source": "y/src/warehouse.y:171"
+          "source": "y/src/warehouse.y:172"
         },
-        { "kind": "region", "text": "may run again", "source": "y/src/warehouse.y:171" },
-        { "kind": "region", "text": "on failure unchanged", "source": "y/src/warehouse.y:171" }
+        { "kind": "region", "text": "may run again", "source": "y/src/warehouse.y:172" },
+        { "kind": "region", "text": "on failure unchanged", "source": "y/src/warehouse.y:172" }
       ]
     },
     {
       "kind": "region",
       "name": "warehouse_example::warehouse::stock::reserve#put_on_backorder",
       "clauses": [
-        { "kind": "region", "text": "atomic", "source": "y/src/warehouse.y:174" },
-        { "kind": "region", "text": "may run again", "source": "y/src/warehouse.y:174" },
-        { "kind": "region", "text": "on failure unchanged", "source": "y/src/warehouse.y:174" }
+        { "kind": "region", "text": "atomic", "source": "y/src/warehouse.y:175" },
+        { "kind": "region", "text": "may run again", "source": "y/src/warehouse.y:175" },
+        { "kind": "region", "text": "on failure unchanged", "source": "y/src/warehouse.y:175" }
       ]
     },
     {
@@ -336,10 +336,10 @@
       "kind": "region",
       "name": "warehouse_example::warehouse::stock::units_on_shelf#counted",
       "clauses": [
-        { "kind": "region", "text": "atomic", "source": "y/src/warehouse.y:188" },
-        { "kind": "region", "text": "isolation snapshot", "source": "y/src/warehouse.y:188" },
-        { "kind": "region", "text": "may run again", "source": "y/src/warehouse.y:188" },
-        { "kind": "region", "text": "on failure unchanged", "source": "y/src/warehouse.y:188" }
+        { "kind": "region", "text": "atomic", "source": "y/src/warehouse.y:189" },
+        { "kind": "region", "text": "isolation snapshot", "source": "y/src/warehouse.y:189" },
+        { "kind": "region", "text": "may run again", "source": "y/src/warehouse.y:189" },
+        { "kind": "region", "text": "on failure unchanged", "source": "y/src/warehouse.y:189" }
       ]
     },
     {
@@ -371,7 +371,7 @@
         }
       ],
       "result": { "type": "list<element_type=Line> as 'List'" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/warehouse.y:206" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/warehouse.y:207" }]
     },
     {
       "kind": "function",
@@ -401,9 +401,9 @@
       "kind": "region",
       "name": "warehouse_example::warehouse::packing::pack_orders#count_sale",
       "clauses": [
-        { "kind": "region", "text": "atomic", "source": "y/src/warehouse.y:225" },
-        { "kind": "region", "text": "may run again", "source": "y/src/warehouse.y:225" },
-        { "kind": "region", "text": "on failure unchanged", "source": "y/src/warehouse.y:225" }
+        { "kind": "region", "text": "atomic", "source": "y/src/warehouse.y:226" },
+        { "kind": "region", "text": "may run again", "source": "y/src/warehouse.y:226" },
+        { "kind": "region", "text": "on failure unchanged", "source": "y/src/warehouse.y:226" }
       ]
     },
     {
@@ -435,11 +435,11 @@
       "kind": "region",
       "name": "warehouse_example::warehouse::packing::pack_day#packing",
       "clauses": [
-        { "kind": "region", "text": "within 10s", "source": "y/src/warehouse.y:246" },
+        { "kind": "region", "text": "within 10s", "source": "y/src/warehouse.y:247" },
         {
           "kind": "region",
           "text": "supervise(restart: restart_policy.each_failed, at_most: 2, per: 1min)",
-          "source": "y/src/warehouse.y:246"
+          "source": "y/src/warehouse.y:247"
         }
       ]
     },
@@ -549,7 +549,7 @@
         }
       ],
       "result": { "type": "string as 'YString'" },
-      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/warehouse.y:273" }]
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/warehouse.y:274" }]
     },
     {
       "kind": "function",
@@ -574,8 +574,8 @@
       "kind": "region",
       "name": "warehouse_example::warehouse::receipts::file_receipts#filing",
       "clauses": [
-        { "kind": "region", "text": "uncancellable", "source": "y/src/warehouse.y:297" },
-        { "kind": "region", "text": "within 50ms", "source": "y/src/warehouse.y:297" }
+        { "kind": "region", "text": "uncancellable", "source": "y/src/warehouse.y:298" },
+        { "kind": "region", "text": "within 50ms", "source": "y/src/warehouse.y:298" }
       ]
     }
   ],

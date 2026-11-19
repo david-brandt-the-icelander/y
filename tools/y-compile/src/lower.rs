@@ -741,7 +741,7 @@ impl<'a> Lowerer<'a> {
             return ex("()", Ty::Unknown, Form::Temp, ATOM);
         };
         let Some(data) = crate::evaluate::data(self.module(), &ok, 0) else {
-            self.error(format!("`compile {what}`: its value, a `{}`, is not one y-compile writes as data (numbers, truth values, strings, refined types over them, closed types without payloads, decimals, and lists of these)", self.module().rust_type(&ok)));
+            self.error(format!("`compile {what}`: its value, a `{}`, is not one y-compile writes as data (numbers, truth values, strings, refined types over them, decimals, structures and closed types of these, and lists, sets and maps of these)", self.module().rust_type(&ok)));
             return ex("()", Ty::Unknown, Form::Temp, ATOM);
         };
         let base = self.binding.clone().unwrap_or_else(|| format!("value_{}", e.line));
@@ -2097,6 +2097,21 @@ impl<'a> Lowerer<'a> {
                     }
                     return;
                 };
+                // `return r = f(…) or fail`: a way out of its own, so the call is bound as `r`, with its `?` where a path
+                // trace sees it
+                if let (true, Some(name), Some(_)) = (v.kind == "or_fail", st.str("name"), &self.ctx.fails) {
+                    let want = self.ctx.result.clone().unwrap_or(Ty::Unknown);
+                    let saved = self.want_decimal;
+                    if let Ty::Decimal(p, s) = self.module().resolve(&want) {
+                        self.want_decimal = Some((p, s));
+                    }
+                    let x = self.expr_want(v, &want);
+                    self.want_decimal = saved;
+                    let val = self.owned(x, &want);
+                    self.line(format!("let {name} = {val};"));
+                    self.ret(format!("Ok({name})"), tail);
+                    return;
+                }
                 let code = self.result_value(v);
                 self.ret(code, tail);
             }

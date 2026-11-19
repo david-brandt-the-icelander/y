@@ -291,7 +291,7 @@ it said nothing (the pull request lists each edit).
 | `structure` with a `transient` field | A written-out `PartialEq` that compares every other field, and no `Hash`, which would disagree with it |
 | `old(e)` in an `ensures` | `let old_1 = e;` where the function starts, read by the check. Anywhere else, a compile error |
 | `assert name = (p)` | `y_runtime::assertion(p, "m::f#name")`: when `p` does not hold, a fault, as `fail not_reachable` is |
-| `assume name = p because "…"`, `allow(code) because "…"` | A comment that keeps the claim, `// y: assume name because "…"`. Neither has a run-time meaning: the first is for a prover, the second for a lint |
+| `assume name = p because "…"`, `allow(code) because "…"` | A comment that keeps the claim, `// y: assume name because "…"`. Neither has a run-time meaning: the first feeds the enumerator of paths (below), the second a lint |
 | `log level "text {x}"` | `y_runtime::observe::log`, with the construct's stable identity. The levels are `debug`, `info`, `warning` and `error` |
 | `metric name = value` | `y_runtime::observe::metric`, with the identity |
 | `name = lambda name(…) returns r captures c:` and `nested function name(…)` | A private function written after the one it is in, its parameters its own and then what it captures, in the order listed; and, where it captures something or is bound as a value, a closure of the same name that passes the captures. A capture not listed, and a listed name not in scope, are compile errors. Its paths are named by its own name (`covers is_larger > bigger`) |
@@ -444,6 +444,22 @@ Warehouse's are its type aliases (`Price` and the others), its `rendered` (here 
 functions its hand-written tests and `main` used to build lines (`sku`, `line`, `order`, `shelf`), which the compiler
 writes out in place.
 
+## Paths: decimals, assumptions and a returned failure
+
+The enumerators of paths (`tools/bare-rust/tests/y_paths`, `tools/paths/yp.py`, which give the same paths) know three
+more things:
+
+- **Decimals are ordered.** A comparison of a `decimal<…>` has the sub-outcomes an integer's has: `not (price < limit)`
+  is `'eq` or `'gt`. A decimal has values between any two whole numbers, so what a comparison shows of it is kept with
+  its ends included (`x < 3` shows `x <= 3`), and a decimal literal is a known value only when it is whole (`0.00`).
+  `integer<minimum=a, maximum=b>` is ordered too, and bounded by its range.
+- **`assume name = p because "…"` holds from where it is**, without proof (Y § 3.15): the prover takes `p` as a fact.
+  An assumption that cannot hold where it is is a problem, as a loop that may never run is. Warehouse's `split` assumes
+  `left >= 0.00`, since every share is rounded down, and so `else uneven` is one path, not `'lt` and `'gt`.
+- **`return x = f() or fail` is a way out**, `x'fails`, as `x = f() or fail` is. y-compile lowers it
+  `let x = f(…)?;` and `Ok(x)`, where a trace sees the `?`. Nim's `read_move` gains `read_move > chosen'fails`, which
+  its test of a move the game refuses now covers; its hand lowering is written the same way.
+
 ## What it does not handle yet
 
 It handles the forms the seven examples and the test programs use. In particular, it does not handle:
@@ -454,9 +470,6 @@ It handles the forms the seven examples and the test programs use. In particular
   at a named point. A test that forces them is a compile error.
 - **Generic declarations** of the module's own: a trait's methods take no type parameters, and an implementation is for
   a named type.
-- **A lint for `allow` to suppress**, and a prover for `assume` to feed: both claims are kept as comments.
+- **A lint for `allow` to suppress**: the claim is kept as a comment.
 - **A `compile` of a value y-compile cannot write as data**: a structure, a closed type with payloads, a set or a map.
   It is a compile error.
-- **Narrowing that the enumerator of paths does not see**: the paths of a decision come from `tools/bare-rust/tests/
-  y_paths` and `tools/paths/yp.py`, which do not know that decimals are ordered or that `return x = f() or fail` is a
-  way out of the function. A test that would claim those paths cannot.

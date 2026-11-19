@@ -109,7 +109,7 @@
       "because": "a player may think for as long as they like",
       "requires": "Forever",
       "y": "y/src/nim.y:268",
-      "bare": "bare/src/nim.brs:254"
+      "bare": "bare/src/nim.brs:255"
     }
   ],
   "suspensions": [],
@@ -194,12 +194,12 @@
           {
             "name": "lost",
             "y": "y/src/nim.y:143",
-            "bare": "bare/src/nim.brs:135"
+            "bare": "bare/src/nim.brs:136"
           },
           {
             "name": "winnable",
             "y": "y/src/nim.y:147",
-            "bare": "bare/src/nim.brs:138"
+            "bare": "bare/src/nim.brs:139"
           }
         ]
       },
@@ -209,12 +209,12 @@
           {
             "name": "number",
             "y": "y/src/nim.y:149",
-            "bare": "bare/src/nim.brs:140"
+            "bare": "bare/src/nim.brs:141"
           },
           {
             "name": "no_heaps",
             "y": "y/src/nim.y:157",
-            "bare": "bare/src/nim.brs:150"
+            "bare": "bare/src/nim.brs:151"
           }
         ]
       },
@@ -224,12 +224,12 @@
           {
             "name": "winning",
             "y": "y/src/nim.y:153",
-            "bare": "bare/src/nim.brs:144"
+            "bare": "bare/src/nim.brs:145"
           },
           {
             "name": "not_this_heap",
             "y": "y/src/nim.y:155",
-            "bare": "bare/src/nim.brs:146"
+            "bare": "bare/src/nim.brs:147"
           }
         ]
       }
@@ -241,12 +241,12 @@
           {
             "name": "heap",
             "y": "y/src/nim.y:172",
-            "bare": "bare/src/nim.brs:164"
+            "bare": "bare/src/nim.brs:165"
           },
           {
             "name": "no_heaps",
             "y": "y/src/nim.y:174",
-            "bare": "bare/src/nim.brs:164"
+            "bare": "bare/src/nim.brs:165"
           }
         ]
       }
@@ -258,12 +258,12 @@
           {
             "name": "heap",
             "y": "y/src/nim.y:188",
-            "bare": "bare/src/nim.brs:176"
+            "bare": "bare/src/nim.brs:177"
           },
           {
             "name": "no_heaps",
             "y": "y/src/nim.y:190",
-            "bare": "bare/src/nim.brs:176"
+            "bare": "bare/src/nim.brs:177"
           }
         ]
       }
@@ -275,12 +275,12 @@
           {
             "name": "heap",
             "y": "y/src/nim.y:205",
-            "bare": "bare/src/nim.brs:189"
+            "bare": "bare/src/nim.brs:190"
           },
           {
             "name": "no_heaps",
             "y": "y/src/nim.y:209",
-            "bare": "bare/src/nim.brs:189"
+            "bare": "bare/src/nim.brs:190"
           }
         ]
       }
@@ -292,12 +292,12 @@
           {
             "name": "playing",
             "y": "y/src/nim.y:238",
-            "bare": "bare/src/nim.brs:228"
+            "bare": "bare/src/nim.brs:229"
           },
           {
             "name": "nothing_to_play",
             "y": "y/src/nim.y:249",
-            "bare": "bare/src/nim.brs:228"
+            "bare": "bare/src/nim.brs:229"
           }
         ]
       },
@@ -307,12 +307,12 @@
           {
             "name": "persons_turn",
             "y": "y/src/nim.y:242",
-            "bare": "bare/src/nim.brs:231"
+            "bare": "bare/src/nim.brs:232"
           },
           {
             "name": "computers_turn",
             "y": "y/src/nim.y:244",
-            "bare": "bare/src/nim.brs:233"
+            "bare": "bare/src/nim.brs:234"
           }
         ]
       }
@@ -324,12 +324,12 @@
           {
             "name": "closed",
             "y": "y/src/nim.y:270",
-            "bare": "bare/src/nim.brs:255"
+            "bare": "bare/src/nim.brs:256"
           },
           {
             "name": "line_read",
             "y": "y/src/nim.y:272",
-            "bare": "bare/src/nim.brs:255"
+            "bare": "bare/src/nim.brs:256"
           }
         ]
       },
@@ -341,12 +341,12 @@
           {
             "name": "attempted.valid",
             "y": "y/src/nim.y:274",
-            "bare": "bare/src/nim.brs:259"
+            "bare": "bare/src/nim.brs:260"
           },
           {
             "name": "attempted.invalid",
             "y": "y/src/nim.y:277",
-            "bare": "bare/src/nim.brs:263"
+            "bare": "bare/src/nim.brs:264"
           }
         ]
       }
@@ -360,22 +360,22 @@
           {
             "name": "wrong.not_a_move",
             "y": "y/src/nim.y:291",
-            "bare": "bare/src/nim.brs:276"
+            "bare": "bare/src/nim.brs:277"
           },
           {
             "name": "wrong.no_heap",
             "y": "y/src/nim.y:293",
-            "bare": "bare/src/nim.brs:277"
+            "bare": "bare/src/nim.brs:278"
           },
           {
             "name": "wrong.none_taken",
             "y": "y/src/nim.y:295",
-            "bare": "bare/src/nim.brs:278"
+            "bare": "bare/src/nim.brs:279"
           },
           {
             "name": "wrong.too_many",
             "y": "y/src/nim.y:297",
-            "bare": "bare/src/nim.brs:279"
+            "bare": "bare/src/nim.brs:280"
           }
         ]
       }
@@ -387,12 +387,12 @@
           {
             "name": "computer_won",
             "y": "y/src/nim.y:311",
-            "bare": "bare/src/nim.brs:289"
+            "bare": "bare/src/nim.brs:290"
           },
           {
             "name": "person_won",
             "y": "y/src/nim.y:313",
-            "bare": "bare/src/nim.brs:291"
+            "bare": "bare/src/nim.brs:292"
           }
         ]
       }
@@ -462,6 +462,10 @@
     {
       "path": "read_move",
       "ends": "returns"
+    },
+    {
+      "path": "read_move > chosen'fails",
+      "ends": "fails"
     },
     {
       "path": "remove",
@@ -764,300 +768,302 @@
     "a_move_the_game_does_not_allow_is_refused": {
       "y": "y/src/nim.test.y:168",
       "rust": "nim_example::nim::tests::a_move_the_game_does_not_allow_is_refused",
-      "covers": []
+      "covers": [
+        "read_move > chosen'fails"
+      ]
     },
     "a_move_takes_counters_from_its_heap": {
-      "y": "y/src/nim.test.y:178",
+      "y": "y/src/nim.test.y:179",
       "rust": "nim_example::nim::tests::a_move_takes_counters_from_its_heap",
       "covers": [
         "remove"
       ]
     },
     "a_losing_computer_takes_one_from_the_largest_heap": {
-      "y": "y/src/nim.test.y:189",
+      "y": "y/src/nim.test.y:190",
       "rust": "nim_example::nim::tests::a_losing_computer_takes_one_from_the_largest_heap",
       "covers": [
         "computer_move > lost"
       ]
     },
     "the_computer_takes_a_lone_heap": {
-      "y": "y/src/nim.test.y:201",
+      "y": "y/src/nim.test.y:202",
       "rust": "nim_example::nim::tests::the_computer_takes_a_lone_heap",
       "covers": [
         "computer_move > winnable > number > winning"
       ]
     },
     "the_computer_finds_the_winning_move": {
-      "y": "y/src/nim.test.y:212",
+      "y": "y/src/nim.test.y:213",
       "rust": "nim_example::nim::tests::the_computer_finds_the_winning_move",
       "covers": [
         "computer_move > winnable > number'many > winning"
       ]
     },
     "no_heaps_leave_no_counters": {
-      "y": "y/src/nim.test.y:225",
+      "y": "y/src/nim.test.y:226",
       "rust": "nim_example::nim::tests::no_heaps_leave_no_counters",
       "covers": [
         "counters_left > no_heaps"
       ]
     },
     "a_lone_heap_is_all_that_is_left": {
-      "y": "y/src/nim.test.y:236",
+      "y": "y/src/nim.test.y:237",
       "rust": "nim_example::nim::tests::a_lone_heap_is_all_that_is_left",
       "covers": [
         "counters_left > heap"
       ]
     },
     "the_counters_of_every_heap_are_counted": {
-      "y": "y/src/nim.test.y:247",
+      "y": "y/src/nim.test.y:248",
       "rust": "nim_example::nim::tests::the_counters_of_every_heap_are_counted",
       "covers": [
         "counters_left > heap'many"
       ]
     },
     "no_heaps_sum_to_zero": {
-      "y": "y/src/nim.test.y:258",
+      "y": "y/src/nim.test.y:259",
       "rust": "nim_example::nim::tests::no_heaps_sum_to_zero",
       "covers": [
         "nim_sum > no_heaps"
       ]
     },
     "a_lone_heap_sums_to_its_size": {
-      "y": "y/src/nim.test.y:267",
+      "y": "y/src/nim.test.y:268",
       "rust": "nim_example::nim::tests::a_lone_heap_sums_to_its_size",
       "covers": [
         "nim_sum > heap"
       ]
     },
     "heaps_are_summed_with_exclusive_or": {
-      "y": "y/src/nim.test.y:276",
+      "y": "y/src/nim.test.y:277",
       "rust": "nim_example::nim::tests::heaps_are_summed_with_exclusive_or",
       "covers": [
         "nim_sum > heap'many"
       ]
     },
     "no_heaps_draw_nothing": {
-      "y": "y/src/nim.test.y:285",
+      "y": "y/src/nim.test.y:286",
       "rust": "nim_example::nim::tests::no_heaps_draw_nothing",
       "covers": [
         "shown > no_heaps"
       ]
     },
     "a_lone_heap_is_drawn_on_one_line": {
-      "y": "y/src/nim.test.y:296",
+      "y": "y/src/nim.test.y:297",
       "rust": "nim_example::nim::tests::a_lone_heap_is_drawn_on_one_line",
       "covers": [
         "shown > heap"
       ]
     },
     "heaps_are_drawn_one_line_each": {
-      "y": "y/src/nim.test.y:307",
+      "y": "y/src/nim.test.y:308",
       "rust": "nim_example::nim::tests::heaps_are_drawn_one_line_each",
       "covers": [
         "shown > heap'many"
       ]
     },
     "a_player_who_plays_perfectly_wins": {
-      "y": "y/src/nim.test.y:318",
+      "y": "y/src/nim.test.y:319",
       "rust": "nim_example::nim::tests::a_player_who_plays_perfectly_wins",
       "covers": [
         "play > playing'many > persons_turn"
       ]
     },
     "a_player_who_plays_carelessly_loses": {
-      "y": "y/src/nim.test.y:330",
+      "y": "y/src/nim.test.y:331",
       "rust": "nim_example::nim::tests::a_player_who_plays_carelessly_loses",
       "covers": [
         "play > playing'many > computers_turn"
       ]
     },
     "a_player_is_told_what_was_wrong": {
-      "y": "y/src/nim.test.y:342",
+      "y": "y/src/nim.test.y:343",
       "rust": "nim_example::nim::tests::a_player_is_told_what_was_wrong",
       "covers": []
     },
     "a_failing_console_ends_the_game": {
-      "y": "y/src/nim.test.y:358",
+      "y": "y/src/nim.test.y:359",
       "rust": "nim_example::nim::tests::a_failing_console_ends_the_game",
       "covers": []
     },
     "a_console_that_cannot_greet_ends_play": {
-      "y": "y/src/nim.test.y:369",
+      "y": "y/src/nim.test.y:370",
       "rust": "nim_example::nim::tests::a_console_that_cannot_greet_ends_play",
       "covers": [
         "play > write_line'1'fails"
       ]
     },
     "a_console_that_cannot_draw_the_heaps_ends_play": {
-      "y": "y/src/nim.test.y:381",
+      "y": "y/src/nim.test.y:382",
       "rust": "nim_example::nim::tests::a_console_that_cannot_draw_the_heaps_ends_play",
       "covers": [
         "play > playing > write_line'2'fails"
       ]
     },
     "a_console_that_cannot_draw_the_heaps_again_ends_play": {
-      "y": "y/src/nim.test.y:393",
+      "y": "y/src/nim.test.y:394",
       "rust": "nim_example::nim::tests::a_console_that_cannot_draw_the_heaps_again_ends_play",
       "covers": [
         "play > playing'many > write_line'2'fails"
       ]
     },
     "a_console_that_cannot_ask_for_a_move_ends_play": {
-      "y": "y/src/nim.test.y:405",
+      "y": "y/src/nim.test.y:406",
       "rust": "nim_example::nim::tests::a_console_that_cannot_ask_for_a_move_ends_play",
       "covers": [
         "play > playing > persons_turn > turn'fails"
       ]
     },
     "a_console_that_fails_on_a_later_turn_ends_play": {
-      "y": "y/src/nim.test.y:417",
+      "y": "y/src/nim.test.y:418",
       "rust": "nim_example::nim::tests::a_console_that_fails_on_a_later_turn_ends_play",
       "covers": [
         "play > playing'many > persons_turn > turn'fails"
       ]
     },
     "a_console_that_cannot_tell_the_computers_move_ends_play": {
-      "y": "y/src/nim.test.y:429",
+      "y": "y/src/nim.test.y:430",
       "rust": "nim_example::nim::tests::a_console_that_cannot_tell_the_computers_move_ends_play",
       "covers": [
         "play > playing'many > computers_turn > write_line'3'fails"
       ]
     },
     "a_console_that_cannot_announce_the_computers_win_ends_play": {
-      "y": "y/src/nim.test.y:441",
+      "y": "y/src/nim.test.y:442",
       "rust": "nim_example::nim::tests::a_console_that_cannot_announce_the_computers_win_ends_play",
       "covers": [
         "play > playing'many > computers_turn > announce'fails"
       ]
     },
     "a_console_that_cannot_announce_a_win_ends_play": {
-      "y": "y/src/nim.test.y:453",
+      "y": "y/src/nim.test.y:454",
       "rust": "nim_example::nim::tests::a_console_that_cannot_announce_a_win_ends_play",
       "covers": [
         "play > playing'many > persons_turn > announce'fails"
       ]
     },
     "a_console_that_cannot_announce_a_quick_win_ends_play": {
-      "y": "y/src/nim.test.y:465",
+      "y": "y/src/nim.test.y:466",
       "rust": "nim_example::nim::tests::a_console_that_cannot_announce_a_quick_win_ends_play",
       "covers": [
         "play > playing > persons_turn > announce'fails"
       ]
     },
     "a_console_that_cannot_announce_at_once_ends_play": {
-      "y": "y/src/nim.test.y:477",
+      "y": "y/src/nim.test.y:478",
       "rust": "nim_example::nim::tests::a_console_that_cannot_announce_at_once_ends_play",
       "covers": [
         "play > nothing_to_play > announce'fails"
       ]
     },
     "a_game_with_no_counters_is_over_at_once": {
-      "y": "y/src/nim.test.y:489",
+      "y": "y/src/nim.test.y:490",
       "rust": "nim_example::nim::tests::a_game_with_no_counters_is_over_at_once",
       "covers": [
         "play > nothing_to_play"
       ]
     },
     "one_move_can_win_a_game": {
-      "y": "y/src/nim.test.y:502",
+      "y": "y/src/nim.test.y:503",
       "rust": "nim_example::nim::tests::one_move_can_win_a_game",
       "covers": [
         "play > playing > persons_turn"
       ]
     },
     "a_move_cannot_be_asked_for": {
-      "y": "y/src/nim.test.y:515",
+      "y": "y/src/nim.test.y:516",
       "rust": "nim_example::nim::tests::a_move_cannot_be_asked_for",
       "covers": [
         "persons_move > write'fails"
       ]
     },
     "a_move_cannot_be_read": {
-      "y": "y/src/nim.test.y:529",
+      "y": "y/src/nim.test.y:530",
       "rust": "nim_example::nim::tests::a_move_cannot_be_read",
       "covers": [
         "persons_move > typed'fails"
       ]
     },
     "a_closed_console_has_no_move": {
-      "y": "y/src/nim.test.y:543",
+      "y": "y/src/nim.test.y:544",
       "rust": "nim_example::nim::tests::a_closed_console_has_no_move",
       "covers": [
         "persons_move > closed"
       ]
     },
     "a_players_move_is_made": {
-      "y": "y/src/nim.test.y:557",
+      "y": "y/src/nim.test.y:558",
       "rust": "nim_example::nim::tests::a_players_move_is_made",
       "covers": [
         "persons_move > line_read > attempted.valid"
       ]
     },
     "a_player_is_told_what_is_wrong_and_asked_again": {
-      "y": "y/src/nim.test.y:572",
+      "y": "y/src/nim.test.y:573",
       "rust": "nim_example::nim::tests::a_player_is_told_what_is_wrong_and_asked_again",
       "covers": [
         "persons_move > line_read > attempted.invalid"
       ]
     },
     "a_complaint_cannot_be_written": {
-      "y": "y/src/nim.test.y:588",
+      "y": "y/src/nim.test.y:589",
       "rust": "nim_example::nim::tests::a_complaint_cannot_be_written",
       "covers": [
         "persons_move > line_read > attempted.invalid > write_line'fails"
       ]
     },
     "not_a_move_is_answered_with_the_form": {
-      "y": "y/src/nim.test.y:602",
+      "y": "y/src/nim.test.y:603",
       "rust": "nim_example::nim::tests::not_a_move_is_answered_with_the_form",
       "covers": [
         "complaint > wrong.not_a_move"
       ]
     },
     "no_such_heap_is_answered": {
-      "y": "y/src/nim.test.y:611",
+      "y": "y/src/nim.test.y:612",
       "rust": "nim_example::nim::tests::no_such_heap_is_answered",
       "covers": [
         "complaint > wrong.no_heap"
       ]
     },
     "nothing_taken_is_answered": {
-      "y": "y/src/nim.test.y:620",
+      "y": "y/src/nim.test.y:621",
       "rust": "nim_example::nim::tests::nothing_taken_is_answered",
       "covers": [
         "complaint > wrong.none_taken"
       ]
     },
     "too_many_is_answered": {
-      "y": "y/src/nim.test.y:629",
+      "y": "y/src/nim.test.y:630",
       "rust": "nim_example::nim::tests::too_many_is_answered",
       "covers": [
         "complaint > wrong.too_many"
       ]
     },
     "the_computers_win_is_announced": {
-      "y": "y/src/nim.test.y:638",
+      "y": "y/src/nim.test.y:639",
       "rust": "nim_example::nim::tests::the_computers_win_is_announced",
       "covers": [
         "announce > computer_won"
       ]
     },
     "the_players_win_is_announced": {
-      "y": "y/src/nim.test.y:649",
+      "y": "y/src/nim.test.y:650",
       "rust": "nim_example::nim::tests::the_players_win_is_announced",
       "covers": [
         "announce > person_won"
       ]
     },
     "a_computers_win_cannot_be_announced": {
-      "y": "y/src/nim.test.y:660",
+      "y": "y/src/nim.test.y:661",
       "rust": "nim_example::nim::tests::a_computers_win_cannot_be_announced",
       "covers": [
         "announce > computer_won > write_line'1'fails"
       ]
     },
     "a_players_win_cannot_be_announced": {
-      "y": "y/src/nim.test.y:671",
+      "y": "y/src/nim.test.y:672",
       "rust": "nim_example::nim::tests::a_players_win_cannot_be_announced",
       "covers": [
         "announce > person_won > write_line'2'fails"

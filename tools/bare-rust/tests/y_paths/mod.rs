@@ -33,6 +33,9 @@ use y_parse::{Node, Value};
 
 const ORDERED: [&str; 9] = ["int32", "uint32", "uint16", "int64", "uint64", "duration", "instant", "count", "int"];
 const UNSIGNED: [&str; 5] = ["uint32", "uint16", "uint64", "duration", "count"];
+/// Ordered types with values between any two whole numbers: an interval bounds them, its ends included, and `x < 3`
+/// shows only `x <= 3`.
+const DENSE: [&str; 1] = ["decimal"];
 /// How a path that needs no test ends.
 pub const EXEMPT: [&str; 2] = ["not_reachable", "not_implemented"];
 const ORDERS3: [&str; 3] = ["lt", "eq", "gt"];
@@ -194,6 +197,13 @@ fn ty(name: &str) -> Node {
 
 fn type_text(t: &Option<Node>) -> Option<&str> {
     t.as_ref().map(|t| s(t, "text"))
+}
+
+/// The range `integer<minimum=a, maximum=b>` names, as an interval.
+fn integer_bounds(t: &Option<Node>) -> Option<I> {
+    let t = t.as_ref().filter(|t| s(t, "name") == "integer")?;
+    let bound = |k: &str| t.nodes("args").iter().find(|a| s(a, "name") == k).and_then(|a| a.str("text")).and_then(|x| x.parse().ok());
+    Some((bound("minimum"), bound("maximum")))
 }
 
 /// The element type of `list<element_type=T>`.
@@ -456,6 +466,7 @@ impl Module {
                 "duration" if s(e, "text").starts_with(|c: char| c.is_ascii_digit()) && (unit == "ms" || unit == "s") => Some(ty("duration")),
                 "string" => Some(ty("string")),
                 "boolean" => Some(ty("boolean")),
+                "decimal" => Some(ty("decimal")),
                 _ => None,
             };
         }
@@ -576,6 +587,15 @@ impl Facts {
             let v = i64::from(s(e, "text") == "true");
             return (Some(v), Some(v));
         }
+        if is_literal(e, "decimal") {
+            if let Some((whole, fraction)) = s(e, "text").split_once('.') {
+                if !whole.is_empty() && whole.bytes().all(|c| c.is_ascii_digit()) && fraction.bytes().all(|c| c == b'0') {
+                    if let Ok(v) = whole.parse() {
+                        return (Some(v), Some(v));
+                    }
+                }
+            }
+        }
         let counted = method(e, &["count"], Some(0));
         if let Some(k) = counted.and_then(|c| m.length(c)) {
             return (Some(k), Some(k));
@@ -603,10 +623,15 @@ impl Facts {
                 i = meet(i, (Some(1), None));
             }
         }
-        match type_text(&m.type_of(e, env)) {
+        let typed = m.type_of(e, env);
+        let i = match type_text(&typed) {
             Some(x) if UNSIGNED.contains(&x) => meet(i, (Some(0), None)),
             Some("boolean") => meet(i, (Some(0), Some(1))),
             _ => i,
+        };
+        match integer_bounds(&typed) {
+            Some(bounds) => meet(i, bounds),
+            None => i,
         }
     }
 
@@ -713,7 +738,7 @@ impl Facts {
 
     fn possible_orders(&self, m: &Module, env: &Env, left: &Node, right: &Node) -> Option<BTreeSet<&'static str>> {
         let known: Vec<Node> = [m.type_of(left, env), m.type_of(right, env)].into_iter().flatten().collect();
-        if known.is_empty() || !known.iter().any(|x| ORDERED.contains(&s(x, "text"))) {
+        if known.is_empty() || !known.iter().any(|x| ORDERED.contains(&s(x, "text")) || s(x, "name") == "integer" || DENSE.contains(&s(x, "name"))) {
             return None;
         }
         Some(order_possible(self.interval(m, env, left), self.interval(m, env, right)))
@@ -721,14 +746,16 @@ impl Facts {
 
     /// Adds what order `o` of `left` to `right` shows: false when it cannot be.
     fn constrain(&mut self, m: &Module, env: &Env, left: &Node, right: &Node, o: &str) -> bool {
+        let dense = [m.type_of(left, env), m.type_of(right, env)].iter().flatten().any(|x| DENSE.contains(&s(x, "name")));
+        let step = if dense { 0 } else { 1 };
         let (a, b) = (self.interval(m, env, left), self.interval(m, env, right));
         if !order_possible(a, b).contains(o) {
             return false;
         }
         match o {
             "eq" => self.add(m, env, left, b) && self.add(m, env, right, a),
-            "lt" => self.add(m, env, left, (None, b.1.map(|x| x - 1))) && self.add(m, env, right, (a.0.map(|x| x + 1), None)),
-            _ => self.add(m, env, left, (b.0.map(|x| x + 1), None)) && self.add(m, env, right, (None, a.1.map(|x| x - 1))),
+            "lt" => self.add(m, env, left, (None, b.1.map(|x| x - step))) && self.add(m, env, right, (a.0.map(|x| x + step), None)),
+            _ => self.add(m, env, left, (b.0.map(|x| x + step), None)) && self.add(m, env, right, (None, a.1.map(|x| x - step))),
         }
     }
 }
@@ -1010,7 +1037,7 @@ fn failing_name(st: &Node) -> Option<String> {
     if e.kind != "or_fail" {
         return None;
     }
-    if st.kind == "let" {
+    if (st.kind == "let" || st.kind == "return") && !s(st, "name").is_empty() {
         return Some(s(st, "name").to_string());
     }
     if st.kind == "assign" && n(st, "target").kind == "name" {
@@ -1028,7 +1055,7 @@ fn failing_name(st: &Node) -> Option<String> {
 /// What identifies an `or fail` site: two that read the same are one.
 fn site(st: &Node) -> String {
     let bound = match st.kind {
-        "let" => s(st, "name").to_string(),
+        "let" | "return" => s(st, "name").to_string(),
         "assign" => t(n(st, "target")),
         _ => String::new(),
     };
@@ -1267,7 +1294,7 @@ impl<'m> Function<'m> {
             return self.run_loop(s(st, "name"), Some(n(st, "condition")), None, st, facts, &what);
         }
 
-        if k == "return" {
+        if k == "return" && failing_name(st).is_none() {
             return vec![("return".to_string(), vec![], facts)];
         }
         if k == "fail" {
@@ -1278,7 +1305,20 @@ impl<'m> Function<'m> {
             return vec![(k.to_string(), vec![], facts)];
         }
 
-        let mut outs = if ["region", "arena", "inject"].contains(&k) { self.seq(&st.nodes("body"), facts.clone()) } else { vec![("next".to_string(), vec![], facts.clone())] };
+        if k == "assume" {
+            // a claim (Y § 3.15): what it says holds from here on, without proof
+            let alts = assume(m, &self.env.borrow(), n(st, "condition"), true, &facts);
+            if alts.is_empty() {
+                self.problem(format!("`assume {}` cannot hold where it is", s(st, "name")));
+                return vec![("next".to_string(), vec![], facts)];
+            }
+            return vec![("next".to_string(), vec![], join(&alts))];
+        }
+        let mut outs = if ["region", "arena", "inject"].contains(&k) {
+            self.seq(&st.nodes("body"), facts.clone())
+        } else {
+            vec![(if k == "return" { "return" } else { "next" }.to_string(), vec![], facts.clone())]
+        };
         if let Some(name) = failing_name(st) {
             let key = (name.clone(), site(st));
             let mut order = self.order.borrow_mut();
@@ -1290,6 +1330,9 @@ impl<'m> Function<'m> {
             }
             let label = if self.fails_total[&name] == 1 { name.clone() } else { format!("{name}'{}", order[&key]) };
             outs.push(("fail".to_string(), vec![format!("{label}'fails")], facts.clone()));
+        }
+        if k == "return" {
+            return outs;
         }
         // what the statement changes, and what a new name stands for
         let mut changed = changes(st);

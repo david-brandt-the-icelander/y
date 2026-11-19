@@ -774,3 +774,61 @@ fn a_loop_that_may_never_run_needs_its_else_and_one_sure_to_run_has_none() {
     // three elements: the loop runs more than once, and only so
     assert_eq!(paths.keys().collect::<Vec<_>>(), ["counted > attempt'many"]);
 }
+
+const DECIMAL_PATHS: &str = "module m
+public facet f:
+    ----------------------------------------------------------------------------------------------------------------
+    Whether a price is below a limit.
+
+    price: A price, as decimal<precision=6, scale=2>.
+    limit: A limit, as decimal<precision=6, scale=2>.
+
+    below: Whether it is, as boolean.
+    ----------------------------------------------------------------------------------------------------------------
+    function is_below(price, limit) returns below:
+        if cheaper = (price < limit):
+            return below = true
+        else dearer:
+            return below = false
+
+
+    ----------------------------------------------------------------------------------------------------------------
+    What is left of a bill, which is never less than nothing.
+
+    left: What is left, as decimal<precision=6, scale=2>.
+
+    owed: Whether anything is, as boolean.
+    ----------------------------------------------------------------------------------------------------------------
+    function is_owed(left) returns owed:
+        assume settled = (left >= 0.00) because \"the shares are rounded down\"
+        if nothing = (left == 0.00):
+            return owed = false
+        else something:
+            return owed = true
+
+
+    ----------------------------------------------------------------------------------------------------------------
+    A share of a bill, exactly.
+
+    bill: The bill, as decimal<precision=6, scale=2>.
+
+    each: A share, as decimal<precision=6, scale=2>.
+
+    fails inexact: It does not divide to the cent.
+    ----------------------------------------------------------------------------------------------------------------
+    function third(bill) returns each fails inexact:
+        return each = bill.divide_exact(3.00) or fail
+";
+
+#[test]
+fn decimals_are_ordered_an_assumption_narrows_and_a_returned_failure_is_a_way_out() {
+    let (paths, problems) = y_paths::all_paths(DECIMAL_PATHS);
+    assert!(problems.is_empty(), "{problems:#?}");
+    let ids: Vec<&str> = paths.keys().map(String::as_str).collect();
+    // `not (price < limit)` is equal or greater; `left == 0.00` failing, with `left >= 0.00` assumed, is only greater
+    assert_eq!(ids, [
+        "is_below > cheaper", "is_below > dearer'eq", "is_below > dearer'gt", "is_owed > nothing", "is_owed > something",
+        "third", "third > each'fails",
+    ]);
+    assert_eq!(paths["third > each'fails"], "fail");
+}
