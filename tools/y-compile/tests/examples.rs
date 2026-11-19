@@ -124,3 +124,18 @@ fn program_ensures() {
 fn program_library() {
     program("library");
 }
+
+#[test]
+fn program_orders() {
+    program("orders");
+}
+
+#[test]
+fn program_shapes() {
+    program("shapes");
+}
+
+#[test]
+fn program_claims() {
+    program("claims");
+}

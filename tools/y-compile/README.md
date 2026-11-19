@@ -124,6 +124,13 @@ as `&'static str`, as the hand lowering did: a constant cannot make a `YString`.
 - `y_runtime::pattern`, the matcher for `matches(pattern"…")`, with `check`, which y-compile calls at compile time.
 - `y_runtime::narrowed`, `narrowed_ok` and `narrowed_err`, which read a name a condition narrowed.
 - `Forever::wait_on`, which runs what a region that is `forever` holds and gives its waits the capability.
+- The stand-ins `y_runtime::command`, `faults`, `observe` and `claims`, and `y_runtime::assertion`, for the
+  declarations no example uses (below). Atomic regions consult `faults` and buffer `observe`'s entries per run.
+- In the tools: the enumerators of paths (`tools/paths/yp.py`, `tools/bare-rust/tests/y_paths`) take every callable,
+  `transition`, `handler`, `workflow`, a lambda and a nested function as well as a `function`, and an enumeration's
+  members; `tools/paths/ytrace.rs` records no path for a call that faults; `trace.py` copies a package's `native/`; and
+  bare-rust's region check lets an atomic region keep a `Deadline` it is `within`, a `Forever` it is `forever` with,
+  and a `Cancellation` it is `uncancellable` with.
 
 ## `compile`: evaluation while building
 
@@ -263,6 +270,71 @@ and lists what the type offers, and so is a method a structure or closed type of
 operations the lowering's own rules call are listed in `LOWERED`, and `tests/library.rs` checks each against the
 crates.
 
+## The declarations and statements no example uses
+
+The test programs `orders`, `shapes` and `claims` prove each of these through the whole chain. Where the proposal
+leaves a meaning or a spelling open, the decision is recorded here, and the proposal's own text is settled only where
+it said nothing (the pull request lists each edit).
+
+| Y | Lowered to |
+|---|---|
+| `enumeration e [is t]:` | A Rust `enum`, its members in the order written (so `<` follows the order), `E::ALL`, the members in order, for `for x in e`, and `value()`, each member's value when the enumeration names a type, its position from 0 otherwise. `Display` writes the value |
+| `state s:` and its `case`s | `struct S<St = SState>`, the shared fields and `state: St`; a module `s` with a structure per case, its own fields; `SState`, the enum of the cases, into which each converts. `s.c(…)` makes a value in a state, of type `S<s::C>`; a case's field is read through `.state` |
+| `transition t(from, …) returns to` | A function that takes the value it starts from by value, so the name passed to it cannot be used afterwards: a later read is a compile error. `from.becomes(s.c(…))` keeps the shared fields and replaces the state, and is a compile error where no transition of the module returns `s.c` |
+| A value in a state where the state is not known (`stored: …, as s`) | `S<SState>`; a value in a known state is lent there as a copy with its state forgotten (`forget()`). `conditional x = v:` with `condition x.c = (x == s.c)` matches `known()`, each arm the value in its state |
+| `trait t:` | A Rust trait of its methods' signatures; `me` is `&self`, or `&mut self` in a `mutable function`. A method in a trait has no body |
+| `implementation t for x:` | `impl T for X`. A method the trait does not declare, and one the trait declares that is not given, are compile errors. A method's paths are named by the method's name, like a function's |
+| `unit u symbol s is t` and `unit u symbol s is n other` | Erased: a quantity is its base type. Literals take the unit by its symbol (`5m`, `3km`). `+`, `-` and comparison need one unit on both sides; `*` takes a plain number; any other mix is a compile error naming both units. `x.to_other()` converts a unit to the one it is made of, multiplying by the factor |
+| `structure` with a `transient` field | A written-out `PartialEq` that compares every other field, and no `Hash`, which would disagree with it |
+| `old(e)` in an `ensures` | `let old_1 = e;` where the function starts, read by the check. Anywhere else, a compile error |
+| `assert name = (p)` | `y_runtime::assertion(p, "m::f#name")`: when `p` does not hold, a fault, as `fail not_reachable` is |
+| `assume name = p because "…"`, `allow(code) because "…"` | A comment that keeps the claim, `// y: assume name because "…"`. Neither has a run-time meaning: the first is for a prover, the second for a lint |
+| `log level "text {x}"` | `y_runtime::observe::log`, with the construct's stable identity. The levels are `debug`, `info`, `warning` and `error` |
+| `metric name = value` | `y_runtime::observe::metric`, with the identity |
+| `name = lambda name(…) returns r captures c:` and `nested function name(…)` | A private function written after the one it is in, its parameters its own and then what it captures, in the order listed; and, where it captures something or is bound as a value, a closure of the same name that passes the captures. A capture not listed, and a listed name not in scope, are compile errors. Its paths are named by its own name (`covers is_larger > bigger`) |
+| `command c:` with `policy:` | A structure of its fields and `impl y_runtime::command::Command`: its `Policy` and the key duplicates collapse on (`deduplicate_by`). Each policy field is required; a missing one is a compile error |
+| `enqueue c(…)` | Added to the `enqueue<command_type=c>` in scope, an `Outbox` held in `shared`, inside the atomic region it is in. Outside one, a compile error |
+| `handler c(command, …)` | A function |
+| `workflow w(…)` | A function. A workflow that holds a capability other than `store`, `shared`, `submit` and `enqueue` is a compile error |
+| `submit c(…)` | `charges.submit(c)` on the `submit<command_type=c>` in scope, whose result is `result<value_type=r, failure_type=undelivered<failure_type=e>>` from the handler's `returns r fails e`. `submit.to(c)` makes one, the handler's capabilities taken from where it is made, and the compensation `on_abandon: compensate d(…)` names, delivered to `d`'s handler |
+| `function f(…) native because "…"` | A call of `crate::<module>::native::f`, in `native/rust/<module>.rs` of the package, which the module includes by `#[path]`. The claim is kept as a comment |
+| `type t native because "…"` | `pub use` of the native implementation's type of the same name |
+| `sensitive<value_type=t>` and `reveal(x) because "…"` | `y_runtime::claims::Sensitive<T>`, which writes as `<sensitive>`; `reveal` is a capability, `Reveal`, and `reveal(x)` borrows the value through it |
+| `type t is collection:` with `ordered by`, `unique`, `unordered`, `values many`, `offers` | The y-collections kind those constraints describe (Y § 3.13's table): `ordered by position` with `offers back_add, front_take` is `Queue`, `unique` and `ordered by value` is `SortedSet`, and so on. Its methods are the crate's |
+| A test's `faults:` | `y_runtime::faults::force` before the test's `when`: `conflict at f#txn, times: n` and `expire at f#txn` |
+
+**Decisions where the proposal is open.**
+
+- **A unit's declaration** is `unit name symbol s is type` for a base unit and `unit name symbol s is n other` for one
+  made of another; `x.to_other()` is its one conversion. The proposal says only that the factor is declared once on
+  the unit.
+- **A trait** is `trait name:` and its methods' signatures, each documented; **an implementation** is `implementation
+  trait for type:` and its methods. Neither is spelled in the proposal.
+- **`log` takes a level and a string**, `log warning "…"`, from `debug`, `info`, `warning` and `error`; **`metric`** is
+  `metric name = value`. The proposal names both statements without their form.
+- **`enqueue.new()`** makes an empty outbox where a test has no `fake enqueue<command_type=c>`; both are the same.
+  **`submit.to(handler)`** makes the capability that delivers to a handler; the proposal names the type
+  `submit<command_type=c>` and not how one is made.
+- **A command's handler is the handler of the command's name**, as `handler charge_card(command, …)` in the proposal is
+  `charge_card`'s.
+- **Workflows and handlers run as ordinary functions** in this runtime: delivery is immediate and in process (below).
+- **`allow` takes a lint's code**, `allow(Y2031)`; y-compile has no lints, so it keeps the claim and checks nothing.
+
+**What the runtime stand-ins keep and do not keep.** Each is in `examples/y-runtime` and documented there as a stand-in:
+
+- `command`: `Command`, `Policy`, `Outbox`, `Submit`, `Undelivered`. A submitted command is delivered at once, in the
+  process; a handler that faults (panics) is retried with the policy's backoff while it is idempotent and within its
+  deadline, then abandoned and compensated or parked. Nothing is durable: commands and outcomes do not outlive the
+  process, and a workflow does not resume after a crash.
+- `faults`: `conflict at` and `expire at` an atomic region. `crash after commit` and `cancel at` are not kept; a test
+  that forces them is a compile error naming the fault.
+- `observe`: `log` and `metric` write one line each to standard error, buffered inside an atomic run and written only if
+  it commits.
+- `claims`: `Sensitive` and `Reveal`.
+
+The tracer (`tools/paths/trace.py`) copies a package's `native/` folder with its sources, and a call that faults (a
+handler forced to panic) takes no path, so a test of a retried handler claims only the attempts that returned.
+
 ## Where its output differs from the hand lowering
 
 Each kind of difference below keeps the woven Rust building and its tests passing.
@@ -373,10 +445,13 @@ writes out in place.
 
 It handles the forms the seven examples and the test programs use. In particular, it does not handle:
 
-- **The forms the parser does not read** ([`../y-parse`](../y-parse/README.md)): `enumeration`, `state`,
-  `transition`, `trait`, `implementation`, `unit`, `command`, `handler`, `workflow`, `lambda`, `old`, `assert`,
-  `native`, `assume`, `allow`, `reveal`, `log`, `metric`, `policy`, `compensate`, a test's `faults`, and the rest of
-  that list.
+- **Durability**: commands, outcomes and workflows live only as long as the process (above). Y's durable command log,
+  its workers and a workflow's resumption are a runtime, not a lowering, and this one is a stand-in.
+- **The faults `crash after commit` and `cancel at`**, which need a runtime that can crash and resume, or cancel a task
+  at a named point. A test that forces them is a compile error.
+- **Generic declarations** of the module's own: a trait's methods take no type parameters, and an implementation is for
+  a named type.
+- **A lint for `allow` to suppress**, and a prover for `assume` to feed: both claims are kept as comments.
 - **A `compile` of a value y-compile cannot write as data**: a structure, a closed type with payloads, a set or a map.
   It is a compile error.
 - **Narrowing that the enumerator of paths does not see**: the paths of a decision come from `tools/bare-rust/tests/

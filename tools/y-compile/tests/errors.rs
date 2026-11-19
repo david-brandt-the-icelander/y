@@ -120,3 +120,55 @@ fn a_compile_of_an_argument_not_known_while_building() {
         &["`x` is not known while the program is built"],
     );
 }
+
+const RULE: &str = "------------------------------------------------------------------------------------------------------------------------";
+
+/// A function of the module, documented as the parser requires.
+fn function(doc: &str, text: &str) -> String {
+    format!("{RULE}\n{doc}\n{RULE}\n{text}")
+}
+
+#[test]
+fn quantities_of_different_units_added() {
+    let units = "-- A metre.\nunit metre symbol m is uint32\n\n\n-- A second.\nunit second symbol s is uint32\n\n\n";
+    let f = function("Adds.\n\na: A length, as metre.\nb: A time, as second.\n\nc: Their sum, as metre.", "function f(a, b) returns c:\n    return c = a + b\n");
+    refused("units", &format!("{units}{f}"), &["quantities of different units do not mix"]);
+}
+
+#[test]
+fn an_enqueue_outside_an_atomic_region() {
+    let cmd = "-- Pings.\ncommand ping:\n    id is uint32\n\n    policy:\n        deduplicate_by: id\n        idempotent: true\n        retry: backoff(first: 1ms, factor: 1, attempts: 1)\n        deadline: 1s\n        on_abandon: park\n\n\n";
+    let f = function("Sends.\n\nid: The id, as uint32.\n\noutbox: Where pings wait, as enqueue<command_type=ping>.", "function f(id, injected outbox):\n    enqueue ping(id: id)\n");
+    refused("enqueue", &format!("{cmd}{f}"), &["is outside an atomic region"]);
+}
+
+#[test]
+fn a_policy_without_a_deadline() {
+    let cmd = "-- Pings.\ncommand ping:\n    id is uint32\n\n    policy:\n        deduplicate_by: id\n        idempotent: true\n        retry: backoff(first: 1ms, factor: 1, attempts: 1)\n        on_abandon: park\n";
+    refused("policy", cmd, &["policy has no `deadline`"]);
+}
+
+#[test]
+fn a_workflow_that_holds_a_clock() {
+    let f = function("Waits.\n\nclock: The time, as clock.\n\nn: A number, as uint32.", "workflow f(injected clock) returns n:\n    return n = 1\n");
+    refused("workflow", &f, &["workflow `f` holds `clock`"]);
+}
+
+#[test]
+fn a_lambda_that_reads_what_it_does_not_capture() {
+    let f = function("Adds.\n\na: A number, as uint32.\n\nb: The sum, as uint32.", "function f(a) returns b:\n    -------\n    Adds a.\n\n    x: A number, as uint32.\n\n    y: The sum, as uint32.\n    -------\n    add = lambda add(x) returns y:\n        return y = x + a\n    return b = add(1)\n");
+    refused("capture", &f, &["reads `a`, which it does not capture"]);
+}
+
+#[test]
+fn an_implementation_missing_a_method() {
+    let tr = "-- Measured.\ntrait measured:\n    -------\n    Its area.\n\n    size: The area, as uint32.\n    -------\n    function area() returns size\n\n\n-- A square.\nstructure square:\n    side is uint32\n\n\n";
+    refused("implementation", &format!("{tr}-- A square is measured.\nimplementation measured for square:\n    -------\n    Grows.\n    -------\n    function other():\n        return\n"), &["`other` is not a method of `measured`", "does not implement `area`"]);
+}
+
+#[test]
+fn a_becomes_no_transition_declares() {
+    let st = "-- A door.\nstate door:\n    id is uint32\n\n    case open\n    case shut\n\n\n";
+    let f = function("Shuts.\n\nd: The door, as door.open.\n\ns: It, shut, as door.shut.", "function f(d) returns s:\n    return s = d.becomes(door.shut())\n");
+    refused("becomes", &format!("{st}{f}"), &["is in no transition that returns"]);
+}

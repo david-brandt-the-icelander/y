@@ -377,7 +377,9 @@ impl<'a> Lowerer<'a> {
             (Ty::List(e), "filter") | (Ty::Iter(e), "filter") => {
                 let f = args[0].1.str("name").unwrap_or("").to_string();
                 let it = if matches!(ty, Ty::List(_)) { format!("{r}.iter()") } else { r.clone() };
-                ex(format!("{it}.filter(|item| {f}(item))"), Ty::Iter(e.clone()), Form::Temp, ATOM)
+                // a lambda is a closure, whose arguments are not coerced: it is given the element's reference
+                let item = if self.locals_fns.contains_key(&f) { "*item" } else { "item" };
+                ex(format!("{it}.filter(|item| {f}({item}))"), Ty::Iter(e.clone()), Form::Temp, ATOM)
             }
             (Ty::Iter(e), "flatten") => {
                 let inner = e.elem();
@@ -460,6 +462,9 @@ impl<'a> Lowerer<'a> {
                     if x.kind == "assign" && y_text(x.node("target").unwrap()).starts_with(n) {
                         c = true;
                     }
+                    if x.kind == "enqueue" {
+                        c = true;
+                    }
                 });
             }
             c
@@ -523,6 +528,24 @@ impl<'a> Lowerer<'a> {
         }
         for b in body {
             see(b);
+        }
+        // the outbox of each command the region enqueues
+        for b in body {
+            b.walk(&mut |x: &Node| {
+                if x.kind != "enqueue" {
+                    return;
+                }
+                let cmd = x.node("value").and_then(|v| v.node("callee")).and_then(|c| c.str("name")).unwrap_or("").to_string();
+                for s in self.scopes.iter().rev() {
+                    for (n, v) in s {
+                        if let Ty::Shared(t) = &v.ty {
+                            if matches!(&**t, Ty::Outbox(c) if **c == Ty::Named(cmd.clone())) && !names.iter().any(|(m, _)| m == n) {
+                                names.push((n.clone(), (**t).clone()));
+                            }
+                        }
+                    }
+                }
+            });
         }
         names
     }

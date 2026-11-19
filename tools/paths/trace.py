@@ -346,8 +346,11 @@ def main():
     work = os.path.join(SCRATCH, os.path.basename(example))
     shutil.rmtree(work, ignore_errors=True)
     os.makedirs(work)
-    for item in ("Cargo.toml", "src"):
+    # the package's native implementations (Y § 3.18) are compiled with its Rust
+    for item in ("Cargo.toml", "src", "native"):
         src = os.path.join(example, item)
+        if item == "native" and not os.path.isdir(src):
+            continue
         (shutil.copytree if os.path.isdir(src) else shutil.copy)(src, os.path.join(work, item))
     toml = open(os.path.join(work, "Cargo.toml")).read().replace('path = "../', f'path = "{os.path.dirname(example)}/')
     open(os.path.join(work, "Cargo.toml"), "w").write(toml)

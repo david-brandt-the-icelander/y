@@ -181,13 +181,22 @@ pub fn facts(dir: &Path, m: &Module, tree: &Node, test_tree: &Node, main_tree: &
     for (dname, dtree, dy, dbare) in [(name.to_string(), tree, y.clone(), bare.clone()), ("main".to_string(), main_tree, "y/src/main.y".to_string(), "bare/src/main.brs".to_string())] {
         // the decisions of each function, in the order of the lines that open them
         let mut groups: Vec<(String, Vec<Value>)> = vec![];
-        for (_, d) in declarations(dtree) {
-            if d.kind != "function" {
-                continue;
-            }
+        for d in y_paths::callables(dtree) {
             let mut opened: Vec<(usize, Value)> = vec![];
             let branch = |b: &Node| json!({"name": b.str("name").unwrap(), "y": format!("{dy}:{}", b.line)});
+            // the lines of the lambdas and nested functions inside it, whose decisions are their own
+            let mut inner: Vec<(usize, usize)> = vec![];
+            for b in d.nodes("body") {
+                b.walk(&mut |n: &Node| {
+                    let nested = n.kind == "nested" || (n.kind == "let" && n.node("value").is_some_and(|v| v.kind == "lambda"));
+                    if nested {
+                        inner.push((n.line, n.num("end").unwrap_or(n.line)));
+                    }
+                });
+            }
+            let outside = |n: &Node| !inner.iter().any(|(a, b)| n.line >= *a && n.line <= *b);
             d.walk(&mut |n: &Node| match n.kind {
+                _ if !outside(n) => {}
                 "if" | "while" | "for" => {
                     let mut bs = vec![branch(n)];
                     bs.extend(n.nodes("else").into_iter().map(branch));

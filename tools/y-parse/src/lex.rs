@@ -226,6 +226,13 @@ pub fn lex(l: &str, no: usize, off: usize, toks: &mut Vec<Token>, depth: &mut i3
                 i = string_end(l, i, no)?;
                 push(toks, Kind::Prefixed, s, i);
             } else {
+                // a region's or a task's address, `f#txn`, in a test's `faults`: one token
+                if b.get(i) == Some(&b'#') && b.get(i + 1).is_some_and(|c| c.is_ascii_alphabetic() || *c == b'_') {
+                    i += 1;
+                    while i < b.len() && (b[i].is_ascii_alphanumeric() || b[i] == b'_') {
+                        i += 1;
+                    }
+                }
                 push(toks, Kind::Ident, s, i);
             }
         } else if c.is_ascii_digit() {

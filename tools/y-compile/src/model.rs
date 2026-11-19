@@ -14,6 +14,21 @@ pub enum TypeDef {
     Alias(Ty),
     /// Cases, each with its fields; a constant group used as a closed type has cases with none.
     Enum { cases: Vec<(String, Vec<(String, Ty)>)> },
+    /// `enumeration name [is type]:` its members in order, each with its value when it has one, and the type of the
+    /// values.
+    Enumeration { items: Vec<(String, Option<Node>)>, value: Option<Ty> },
+    /// `state name:` the fields every state shares, and each state's own.
+    State { fields: Vec<(String, Ty)>, cases: Vec<(String, Vec<(String, Ty)>)> },
+    /// `command name:` its fields and its delivery policy.
+    Command { fields: Vec<(String, Ty)>, policy: Node },
+    /// `unit name symbol s is type`, or `is n other`: a unit, its symbol, and its base type or its factor of another.
+    Unit { symbol: String, base: Ty, factor: Option<(i128, String)> },
+    /// `type name native because "…"`: a type whose representation the backend gives.
+    Native { because: String },
+    /// `type name is collection:` or `mapping:` with its constraints: the kind of the runtime that keeps them.
+    Collection { kind: String, clauses: Vec<String> },
+    /// A trait: its methods' signatures.
+    Trait,
 }
 
 #[derive(Clone, Debug)]
@@ -63,6 +78,12 @@ pub struct FnInfo {
     pub fails: Option<Ty>,
     pub rule: bool,
     pub line: usize,
+    /// What it is: `function`, `rule`, `transition`, `handler`, `workflow`, or `method` of an implementation.
+    pub kind: String,
+    /// A method's `me`: the type it is a method of, and whether it changes it (`mutable function`).
+    pub me: Option<(String, bool)>,
+    /// `native because "…"`, in place of a body.
+    pub native: Option<String>,
 }
 
 impl FnInfo {
@@ -85,6 +106,13 @@ pub struct Module<'t> {
     pub schemas: BTreeMap<String, Schema>,
     /// The functions that may suspend (Y § 3.7): they wait for a capability that may, or call one that does.
     pub suspending: BTreeSet<String>,
+    /// Each trait's methods, by the trait.
+    pub traits: BTreeMap<String, Vec<FnInfo>>,
+    /// Each implementation's methods, by the type and the method; and the traits each type implements.
+    pub methods: BTreeMap<String, BTreeMap<String, FnInfo>>,
+    pub implements: BTreeMap<String, Vec<String>>,
+    /// The units, by their symbols.
+    pub unit_symbols: BTreeMap<String, String>,
 }
 
 /// The declarations of a file with the facet each is in.
@@ -134,7 +162,9 @@ fn copy_in(m: &Module, t: &Ty, depth: usize) -> bool {
             Some(TypeDef::Struct { fields, .. }) => fields.iter().all(|(_, f)| copy_in(m, f, depth + 1)),
             Some(TypeDef::Enum { cases }) => cases.iter().all(|(_, fs)| fs.iter().all(|(_, f)| copy_in(m, f, depth + 1))),
             Some(TypeDef::Newtype { base, .. }) | Some(TypeDef::Alias(base)) => copy_in(m, base, depth + 1),
-            None => false,
+            Some(TypeDef::Enumeration { .. }) => true,
+            Some(TypeDef::Unit { base, .. }) => copy_in(m, base, depth + 1),
+            _ => false,
         },
         _ => false,
     }
@@ -189,7 +219,7 @@ pub fn by_value(m: &Module, t: &Ty) -> bool {
         Ty::U32 | Ty::I32 | Ty::U64 | Ty::U16 | Ty::Count | Ty::Int | Ty::Bool | Ty::Rune | Ty::Decimal(..) | Ty::Integer(..) | Ty::F64 => true,
         Ty::Named(n) if crate::ty::COPIED.contains(&n.as_str()) => true,
         Ty::Opt(x) => by_value(m, x),
-        Ty::Named(n) => matches!(m.types.get(n).map(|t| &t.def), Some(TypeDef::Enum { cases }) if cases.iter().all(|(_, f)| f.is_empty())),
+        Ty::Named(n) => matches!(m.types.get(n).map(|t| &t.def), Some(TypeDef::Enum { cases }) if cases.iter().all(|(_, f)| f.is_empty())) || matches!(m.types.get(n).map(|t| &t.def), Some(TypeDef::Enumeration { .. })) || matches!(m.types.get(n).map(|t| &t.def), Some(TypeDef::Unit { base, .. }) if by_value(m, base)),
         _ => false,
     }
 }
@@ -207,7 +237,7 @@ impl<'t> Module<'t> {
         let mut used_as_type = BTreeSet::new();
         type_names(tree, &mut used_as_type);
         for (_, d) in &decls {
-            if d.kind == "function" {
+            if matches!(d.kind, "function" | "transition" | "handler" | "workflow") {
                 for f in d.str("fails").into_iter() {
                     used_as_type.insert(f.to_string());
                 }
@@ -220,10 +250,14 @@ impl<'t> Module<'t> {
                 }
             }
         }
-        let mut m = Module { name, tree, types: BTreeMap::new(), consts: BTreeMap::new(), fns: BTreeMap::new(), facets: vec![], exported: BTreeSet::new(), schemas: BTreeMap::new(), suspending: BTreeSet::new() };
+        let mut m = Module { name, tree, types: BTreeMap::new(), consts: BTreeMap::new(), fns: BTreeMap::new(), facets: vec![], exported: BTreeSet::new(), schemas: BTreeMap::new(), suspending: BTreeSet::new(), traits: BTreeMap::new(), methods: BTreeMap::new(), implements: BTreeMap::new(), unit_symbols: BTreeMap::new() };
         if let Some(o) = outer {
             m.types = o.types.clone();
             m.consts = o.consts.clone();
+            m.traits = o.traits.clone();
+            m.methods = o.methods.clone();
+            m.implements = o.implements.clone();
+            m.unit_symbols = o.unit_symbols.clone();
         }
         for d in tree.nodes("decls") {
             if d.kind == "facet" {
@@ -252,6 +286,15 @@ impl<'t> Module<'t> {
                         }
                     }
                     m.types.insert(name.clone(), TypeInfo { name, facet: facet.clone(), def: TypeDef::Struct { fields, derived, derived_values, invariants }, line: d.line });
+                }
+                "type_decl" if d.str("native").is_some() => {
+                    m.types.insert(name.clone(), TypeInfo { name, facet: facet.clone(), def: TypeDef::Native { because: d.str("native").unwrap().to_string() }, line: d.line });
+                }
+                "type_decl" if !d.nodes("collection").is_empty() || d.node("type").and_then(|t| t.str("name")).is_some_and(|n| n == "collection" || n == "mapping") => {
+                    let clauses: Vec<String> = d.nodes("collection").iter().map(|c| c.str("text").unwrap_or("").to_string()).collect();
+                    let shape = d.node("type").and_then(|t| t.str("name")).unwrap_or("collection");
+                    let kind = collection_kind(shape, &clauses);
+                    m.types.insert(name.clone(), TypeInfo { name, facet: facet.clone(), def: TypeDef::Collection { kind, clauses }, line: d.line });
                 }
                 "type_decl" if d.node("type").is_some_and(|t| !t.nodes("args").is_empty()) && d.nodes("cases").is_empty() && d.nodes("where").is_empty() => {
                     let base = Ty::from_node(d.node("type").unwrap());
@@ -291,6 +334,30 @@ impl<'t> Module<'t> {
                         .collect();
                     m.types.insert(name.clone(), TypeInfo { name, facet: facet.clone(), def: TypeDef::Enum { cases }, line: d.line });
                 }
+                "enumeration" => {
+                    let items = d.nodes("items").iter().map(|i| (i.str("name").unwrap().to_string(), i.node("value").cloned())).collect();
+                    let value = d.node("type").map(Ty::from_node);
+                    m.types.insert(name.clone(), TypeInfo { name, facet: facet.clone(), def: TypeDef::Enumeration { items, value }, line: d.line });
+                }
+                "state" => {
+                    let fields = d.nodes("members").iter().filter(|x| x.kind == "field").map(|f| (f.str("name").unwrap().to_string(), f.node("type").map(Ty::from_node).unwrap_or(Ty::Unknown))).collect();
+                    let cases = d.nodes("cases").iter().map(|c| (c.str("name").unwrap().to_string(), c.nodes("fields").iter().map(|f| (f.str("name").unwrap().to_string(), f.node("type").map(Ty::from_node).unwrap_or(Ty::Unknown))).collect())).collect();
+                    m.types.insert(name.clone(), TypeInfo { name, facet: facet.clone(), def: TypeDef::State { fields, cases }, line: d.line });
+                }
+                "command" => {
+                    let fields = d.nodes("members").iter().filter(|x| x.kind == "field").map(|f| (f.str("name").unwrap().to_string(), f.node("type").map(Ty::from_node).unwrap_or(Ty::Unknown))).collect();
+                    m.types.insert(name.clone(), TypeInfo { name, facet: facet.clone(), def: TypeDef::Command { fields, policy: d.node("policy").cloned().unwrap() }, line: d.line });
+                }
+                "unit" => {
+                    let symbol = d.str("symbol").unwrap_or("").to_string();
+                    m.unit_symbols.insert(symbol.clone(), name.clone());
+                    let factor = d.str("factor").and_then(|f| f.replace('_', "").parse::<i128>().ok()).zip(d.str("of").map(str::to_string));
+                    let base = d.node("type").map(Ty::from_node).unwrap_or(Ty::Unknown);
+                    m.types.insert(name.clone(), TypeInfo { name, facet: facet.clone(), def: TypeDef::Unit { symbol, base, factor }, line: d.line });
+                }
+                "trait" => {
+                    m.types.insert(name.clone(), TypeInfo { name, facet: facet.clone(), def: TypeDef::Trait, line: d.line });
+                }
                 "constants" | "service" => {
                     let items: Vec<(String, Option<Ty>, Node)> =
                         d.nodes("items").iter().map(|i| (i.str("name").unwrap().to_string(), i.node("type").map(Ty::from_node), i.node("value").cloned().unwrap_or_else(|| Node::new("literal", i.line)))).collect();
@@ -324,10 +391,37 @@ impl<'t> Module<'t> {
                 }
             }
         }
+        // a unit's base type, for one made of another
+        let units: Vec<String> = m.types.iter().filter(|(_, t)| matches!(t.def, TypeDef::Unit { .. })).map(|(n, _)| n.clone()).collect();
+        for _ in 0..4 {
+            for u in &units {
+                if let Some(TypeDef::Unit { factor: Some((_, of)), .. }) = m.types.get(u).map(|t| t.def.clone()) {
+                    if let Some(TypeDef::Unit { base, .. }) = m.types.get(&of).map(|t| t.def.clone()) {
+                        if let Some(TypeDef::Unit { base: b, .. }) = m.types.get_mut(u).map(|t| &mut t.def) {
+                            *b = base;
+                        }
+                    }
+                }
+            }
+        }
         for (facet, d) in &decls {
-            if d.kind == "function" || d.kind == "rule" {
+            if matches!(d.kind, "function" | "rule" | "transition" | "handler" | "workflow") {
                 let f = m.function(d, facet.clone());
                 m.fns.insert(f.name.clone(), f);
+            }
+            if d.kind == "trait" {
+                let sigs = d.nodes("decls").iter().filter(|x| x.kind == "function").map(|x| m.function(x, facet.clone())).collect();
+                m.traits.insert(d.str("name").unwrap().to_string(), sigs);
+            }
+            if d.kind == "implementation" {
+                let (tr, ty) = (d.str("trait").unwrap().to_string(), d.str("type").unwrap().to_string());
+                m.implements.entry(ty.clone()).or_default().push(tr);
+                for x in d.nodes("decls").into_iter().filter(|x| x.kind == "function") {
+                    let mut f = m.function(x, facet.clone());
+                    f.kind = "method".into();
+                    f.me = Some((ty.clone(), x.flag("mutable")));
+                    m.methods.entry(ty.clone()).or_default().insert(f.name.clone(), f);
+                }
             }
         }
         if let Some(o) = outer {
@@ -335,6 +429,11 @@ impl<'t> Module<'t> {
         }
         m.suspending.extend(suspending(&decls, outer.map(|o| &o.suspending)));
         m
+    }
+
+    /// A callable's `FnInfo`: a lambda's or nested function's, as a function's.
+    pub fn function_of(&self, d: &Node, facet: Option<String>) -> FnInfo {
+        self.function(d, facet)
     }
 
     fn function(&self, d: &Node, facet: Option<String>) -> FnInfo {
@@ -361,14 +460,14 @@ impl<'t> Module<'t> {
                     // a store is lent to change when the function makes a batch of it
                     let batches = { let mut b = false; for x in d.nodes("body") { x.walk(&mut |n: &Node| if n.kind == "member" && n.str("name") == Some("batch") && n.node("object").and_then(|o| o.str("name")) == Some(pname.as_str()) { b = true; }); } b };
                     match &ty {
-                        Ty::Cap(c) if c == "forever" || c == "system" || c == "http" => Mode::Ref,
-                        Ty::Shared(_) => Mode::Ref,
+                        Ty::Cap(c) if c == "forever" || c == "system" || c == "http" || c == "reveal" => Mode::Ref,
+                        Ty::Shared(_) | Ty::Submit(_) => Mode::Ref,
                         Ty::Store(_) if !batches => Mode::Ref,
                         _ => Mode::Mut,
                     }
                 } else if mutable {
                     Mode::Mut
-                } else if by_value(self, &ty) || kept.contains(&pname) {
+                } else if by_value(self, &ty) || kept.contains(&pname) || matches!(ty, Ty::StateCase(..)) {
                     Mode::Value
                 } else {
                     Mode::Ref
@@ -376,7 +475,7 @@ impl<'t> Module<'t> {
                 Param { name: pname, ty, mutable, injected, mode }
             })
             .collect();
-        FnInfo { name, facet, params, result, fails, rule, line: d.line }
+        FnInfo { name, facet, params, result, fails, rule, line: d.line, kind: d.kind.to_string(), me: None, native: d.str("native").map(str::to_string) }
     }
 
     pub fn rust_type(&self, t: &Ty) -> String {
@@ -397,7 +496,30 @@ impl<'t> Module<'t> {
             Ty::Opt(e) => format!("Option<{}>", self.rust_type(e)),
             Ty::Iter(e) => format!("impl Iterator<Item = {}>", self.rust_type(e)),
             Ty::Res(a, b) => format!("Result<{}, {}>", self.rust_type(a), self.rust_type(b)),
+            // a unit is erased: its value's type (Y § 3.3, "Units are erased before code generation")
+            Ty::Named(n) if matches!(self.types.get(n).map(|t| &t.def), Some(TypeDef::Unit { .. })) => match &self.types[n].def {
+                TypeDef::Unit { base, .. } => self.rust_type(base),
+                _ => unreachable!(),
+            },
+            Ty::Named(n) if matches!(self.types.get(n).map(|t| &t.def), Some(TypeDef::Trait)) => format!("dyn {}", pascal(n)),
             Ty::Named(n) | Ty::Cap(n) => crate::ty::external(n).map(|(r, _)| r.to_string()).unwrap_or_else(|| pascal(n)),
+            Ty::StateCase(st, c) => format!("{}<{}::{}>", pascal(st), st, pascal(c)),
+            Ty::Outbox(c) => format!("Outbox<{}>", self.rust_type(c)),
+            Ty::Submit(c) => {
+                let name = match &**c { Ty::Named(n) => n.clone(), _ => String::new() };
+                let (r, e) = self.fns.get(&name).map(|f| (f.result.as_ref().map(|r| r.1.clone()).unwrap_or(Ty::Unit), f.fails.clone().unwrap_or(Ty::Unit))).unwrap_or((Ty::Unknown, Ty::Unknown));
+                format!("Submit<{}, {}, {}>", self.rust_type(c), self.rust_type(&r), self.rust_type(&e))
+            }
+            Ty::Undelivered(e) => format!("Undelivered<{}>", self.rust_type(e)),
+            Ty::Sensitive(t) => format!("Sensitive<{}>", self.rust_type(t)),
+            Ty::Kind(..) => match self.resolve(t) {
+                Ty::Kind(k, args) => {
+                    let kind = match self.types.get(&k).map(|t| &t.def) { Some(TypeDef::Collection { kind, .. }) => kind.clone(), _ => pascal(&k) };
+                    let a: Vec<String> = args.iter().map(|(_, t)| self.rust_type(t)).collect();
+                    format!("{kind}<{}>", a.join(", "))
+                }
+                r => self.rust_type(&r),
+            },
             Ty::Decimal(p, s) => format!("Decimal<{}>", crate::ware::decimal_args(*p, *s)),
             Ty::F64 => "f64".into(),
             Ty::Integer(lo, hi) => {
@@ -409,6 +531,7 @@ impl<'t> Module<'t> {
             Ty::Bag(e) => format!("Bag<{}>", self.rust_type(e)),
             Ty::Queue(e) => format!("Queue<{}>", self.rust_type(e)),
             Ty::SortedMap(k, v) => format!("SortedMap<{}, {}>", self.rust_type(k), self.rust_type(v)),
+            Ty::Coll(k, a) => format!("y_collections::{k}<{}>", a.iter().map(|t| self.rust_type(t)).collect::<Vec<_>>().join(", ")),
             Ty::Shared(e) => format!("Shared<{}>", self.rust_type(e)),
             Ty::Store(e) => format!("Store<{}>", self.rust_type(e)),
             Ty::Index(e) => format!("Index<{}>", self.rust_type(e)),
@@ -425,6 +548,24 @@ impl<'t> Module<'t> {
                 Some(TypeDef::Alias(b)) => b.clone(),
                 _ => t.clone(),
             },
+            // a kind of collection the module declares is the runtime's kind with the same constraints
+            Ty::Kind(k, args) => {
+                let arg = |n: &str| args.iter().find(|a| a.0 == n).map(|a| Box::new(a.1.clone())).unwrap_or(Box::new(Ty::Unknown));
+                match self.types.get(k).map(|t| &t.def) {
+                    Some(TypeDef::Collection { kind, .. }) => match kind.as_str() {
+                        "List" => Ty::List(arg("element_type")),
+                        "Set" => Ty::Set(arg("element_type")),
+                        "Bag" => Ty::Bag(arg("element_type")),
+                        "Queue" => Ty::Queue(arg("element_type")),
+                        "SortedMap" => Ty::SortedMap(arg("key_type"), arg("value_type")),
+                        k => match crate::ty::coll_kind(k) {
+                            Some((r, ..)) => Ty::Coll(r, ["element_type", "key_type", "value_type"].iter().filter_map(|n| args.iter().find(|a| a.0 == *n).map(|a| a.1.clone())).collect()),
+                            None => t.clone(),
+                        },
+                    },
+                    _ => t.clone(),
+                }
+            }
             _ => t.clone(),
         }
     }
@@ -443,6 +584,53 @@ impl<'t> Module<'t> {
     pub fn facet_of(&self, name: &str) -> Option<&str> {
         self.types.get(name).and_then(|t| t.facet.as_deref()).or_else(|| self.fns.get(name).and_then(|f| f.facet.as_deref())).or_else(|| self.consts.get(name).and_then(|c| c.facet.as_deref()))
     }
+}
+
+/// The runtime's kind for a collection's or a mapping's constraints (Y § 3.13): the standard library's kind with the
+/// same constraints, which a backend keeps in one Rust type; an empty name when none has them.
+pub fn collection_kind(shape: &str, clauses: &[String]) -> String {
+    let has = |c: &str| clauses.iter().any(|x| x == c || x.starts_with(&format!("{c} ")));
+    let offers: Vec<String> = clauses.iter().filter_map(|c| c.strip_prefix("offers ")).flat_map(|o| o.split(',').map(|w| w.trim().to_string())).collect();
+    let offer = |w: &str| offers.iter().any(|o| o == w);
+    let ordered = |by: &str| clauses.iter().any(|c| c == &format!("ordered by {by}") || c.starts_with(&format!("ordered by {by} ")));
+    let kind = if shape == "mapping" {
+        if has("values many") {
+            "MultiMap"
+        } else if ordered("key") {
+            "SortedMap"
+        } else if has("unordered") {
+            "UnorderedMap"
+        } else {
+            "Map"
+        }
+    } else if has("unique") {
+        if ordered("value") {
+            "SortedSet"
+        } else if has("unordered") {
+            "UnorderedSet"
+        } else {
+            "Set"
+        }
+    } else if has("unordered") {
+        "Bag"
+    } else if ordered("value") {
+        "SortedList"
+    } else if offer("iterate_only") {
+        "Enumerable"
+    } else if offer("cursor") {
+        "LinkedList"
+    } else if has("count fixed") {
+        "Array"
+    } else if offer("back_add") && offer("front_take") && !offer("index") {
+        "Queue"
+    } else if offer("back") && !offer("front") && !offer("index") {
+        "Stack"
+    } else if offer("front") && offer("back") && !offer("index") {
+        "Deque"
+    } else {
+        "List"
+    };
+    kind.to_string()
 }
 
 /// The points where a function may suspend: a capability's wait (`window.next_frame()`, `site.get(…)`), or a call of

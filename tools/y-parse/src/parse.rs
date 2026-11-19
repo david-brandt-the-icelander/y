@@ -44,8 +44,30 @@ fn build<'a>(lines: &'a [Line], pos: &mut usize, indent: usize) -> Result<Vec<En
     Ok(out)
 }
 
+thread_local! {
+    /// The symbols of the units the file being parsed declares, which a number may carry: `12km`.
+    static UNITS: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// The symbols a source's `unit` declarations give: `unit kilometre symbol km is 1000 metre`.
+pub fn unit_symbols(src: &str) -> Vec<String> {
+    src.lines()
+        .filter_map(|l| {
+            let w: Vec<&str> = l.split_whitespace().collect();
+            (w.first() == Some(&"unit") && w.get(2) == Some(&"symbol")).then(|| w.get(3).map(|s| s.to_string())).flatten()
+        })
+        .collect()
+}
+
 /// Parses a Y source file: a module, its `main`, or its tests.
 pub fn parse(src: &str) -> Result<Node, Error> {
+    parse_with_units(src, &[])
+}
+
+/// As `parse`, where the file may also write the quantities of units another file declares: a test file, those of its
+/// module (`crate::parse_file`).
+pub fn parse_with_units(src: &str, more: &[String]) -> Result<Node, Error> {
+    UNITS.with(|u| *u.borrow_mut() = unit_symbols(src).into_iter().chain(more.iter().cloned()).collect());
     let (lines, comments) = lex::lines(src)?;
     let mut pos = 0;
     let entries = build(&lines, &mut pos, 0)?;
@@ -259,8 +281,14 @@ impl<'a> P<'a> {
             let e = self.unary()?;
             return Ok(Node::new("unary", line).with("op", "-").with("operand", e));
         }
-        // `mutable x` as an argument, `fake store(…)` in a test, `compile f(…)` in `main`
-        for (word, kind) in [("mutable", "mutable"), ("fake", "fake"), ("compile", "compile")] {
+        // `fake enqueue<command_type=c>` in a test: a fake of a capability named by its type
+        if self.is("fake") && self.ident_at(1) && self.is_at(2, "<") {
+            self.i += 1;
+            let t = self.ty()?;
+            return Ok(Node::new("fake", line).with("value", t));
+        }
+        // `mutable x` as an argument, `fake store(…)` in a test, `compile f(…)` in `main`, `submit c(…)` in a workflow
+        for (word, kind) in [("mutable", "mutable"), ("fake", "fake"), ("compile", "compile"), ("submit", "submit")] {
             if self.is(word) && (self.ident_at(1) || self.is_at(1, "(") || self.is_at(1, "[")) {
                 self.i += 1;
                 let e = self.unary()?;
@@ -323,6 +351,24 @@ impl<'a> P<'a> {
                 self.i += 1;
                 Ok(literal(line, "boolean", &t.text, None))
             }
+            // `old(x)` in an `ensures`: the value `x` had when the function was called (Y § 3.11)
+            Kind::Ident if t.text == "old" && self.is_at(1, "(") => {
+                self.i += 2;
+                let e = self.expr()?;
+                self.expect(")")?;
+                Ok(Node::new("old", line).with("value", e))
+            }
+            // `reveal(secret) because "…"`: a claim that a sensitive value may be seen here (Y § 3.15)
+            Kind::Ident if t.text == "reveal" && self.is_at(1, "(") => {
+                self.i += 2;
+                let e = self.expr()?;
+                self.expect(")")?;
+                if !self.eat("because") {
+                    return self.err("`because` and the reason a sensitive value may be seen here");
+                }
+                let because = self.string("the reason, a string")?;
+                Ok(Node::new("reveal", line).with("value", e).with("because", because))
+            }
             Kind::Ident => {
                 self.i += 1;
                 Ok(Node::new("name", line).with("name", t.text.clone()))
@@ -335,7 +381,11 @@ impl<'a> P<'a> {
                     "" if digits.contains('.') => "decimal",
                     "" => "integer",
                     "ns" | "us" | "ms" | "s" | "min" | "h" | "d" => "duration",
-                    _ => return Err(Error::new(line, &format!("`{}`: `{unit}` is not a unit of time", t.text))),
+                    // a quantity of a unit the file declares (Y § 3.3, "Units")
+                    u if UNITS.with(|us| us.borrow().iter().any(|x| x == u)) => {
+                        return Ok(literal(line, "quantity", &t.text, None).with("number", digits).with("unit", unit));
+                    }
+                    _ => return Err(Error::new(line, &format!("`{}`: `{unit}` is not a unit of time, nor the symbol of a unit this file declares", t.text))),
                 };
                 Ok(literal(line, kind, &t.text, None))
             }
@@ -418,6 +468,19 @@ impl<'a> P<'a> {
         }
     }
 
+    /// What a lambda or a nested function captures, after `captures`: each `name` or `mutable name`.
+    fn captures(&mut self) -> Result<Vec<Node>, Error> {
+        let mut out = vec![];
+        loop {
+            let line = self.here();
+            let mutable = self.is("mutable") && self.ident_at(1) && self.eat("mutable");
+            out.push(Node::new("capture", line).with("name", self.ident()?).with("mutable", mutable));
+            if !self.eat(",") {
+                return Ok(out);
+            }
+        }
+    }
+
     /// A parameter list, after its `(` and through its `)`: each `name`, `injected name` or `mutable name`, with an
     /// optional `is type`.
     fn params(&mut self) -> Result<Vec<Node>, Error> {
@@ -450,6 +513,189 @@ fn literal(line: usize, ty: &str, text: &str, value: Option<&str>) -> Node {
 enum Context {
     File,
     Facet,
+    /// A trait's declarations: its methods' signatures, without bodies.
+    Trait,
+    /// An implementation's methods.
+    Implementation,
+}
+
+/// A callable's head and body, after its keyword: `name(params) returns r fails e where … ensures …:` and its block.
+/// One without a body ends in `native because "…"` (§ 3.18), or is a trait's method (`signature`).
+fn callable(p: &mut P, e: &Entry, src: &str, line: usize, kind: &'static str, signature: bool) -> Result<Node, Error> {
+    let name = p.ident()?;
+    p.expect("(")?;
+    let params = p.params()?;
+    let (mut returns, mut fails, mut wheres, mut ensures, mut captures) = (None, vec![], vec![], vec![], vec![]);
+    loop {
+        if p.eat("returns") {
+            returns = Some(p.ident()?);
+        } else if p.eat("fails") {
+            fails.push(p.dotted()?);
+            while p.eat(",") {
+                fails.push(p.dotted()?);
+            }
+        } else if p.eat("where") {
+            wheres.extend(p.clauses("where")?);
+        } else if p.eat("ensures") {
+            ensures.extend(p.clauses("ensures")?);
+        } else if p.eat("captures") {
+            captures = p.captures()?;
+        } else {
+            break;
+        }
+    }
+    let native = if p.is("native") && p.is_at(1, "because") {
+        p.i += 2;
+        Some(p.string("the reason, a string")?)
+    } else {
+        None
+    };
+    let bodiless = native.is_some() || signature;
+    if signature && p.is(":") {
+        return Err(Error::new(line, "a trait's method is a signature: it has no body, and its implementations give one"));
+    }
+    p.finish(!bodiless)?;
+    if bodiless && !e.children.is_empty() {
+        return Err(Error::new(e.children[0].line.line, "a native function or a trait's method has no body"));
+    }
+    let mut n = Node::new(kind, line)
+        .with("name", name)
+        .with("params", params)
+        .with("returns", returns)
+        .with("fails", fails)
+        .with("where", wheres)
+        .with("ensures", ensures)
+        .with("body", stmts(&e.children, src)?);
+    if !captures.is_empty() {
+        n.set("captures", captures);
+    }
+    if let Some(b) = native {
+        n.set("native", b);
+    }
+    Ok(n)
+}
+
+/// `allow(Y2031) because "…"`, after its first word.
+fn allow(p: &mut P, line: usize) -> Result<Node, Error> {
+    p.i += 2;
+    let start = p.i;
+    while !p.done() && !p.is(")") {
+        p.i += 1;
+    }
+    let code = p.text(start, p.i);
+    p.expect(")")?;
+    if !p.eat("because") {
+        return p.err("`because` and the reason the lint does not apply");
+    }
+    let because = p.string("the reason, a string")?;
+    p.finish(false)?;
+    Ok(Node::new("allow", line).with("code", code).with("because", because))
+}
+
+/// A command's `policy:` block: each line `name: value`, and `on_abandon: compensate c(…)` or `on_abandon: park`.
+fn policy_node(e: &Entry, src: &str) -> Result<Node, Error> {
+    let mut entries = vec![];
+    for c in &e.children {
+        let mut q = P::new(c.line, src);
+        let cline = q.here();
+        let name = q.ident()?;
+        q.expect(":")?;
+        let value = if q.is("compensate") && !q.is_at(1, ":") {
+            let l = q.next().line;
+            Node::new("compensate", l).with("value", q.expr()?)
+        } else {
+            q.expr()?
+        };
+        q.finish(false)?;
+        entries.push(Node::new("policy_entry", cline).with("name", name).with("value", value));
+    }
+    Ok(Node::new("policy", e.line.line).with("entries", entries))
+}
+
+/// A constraint of a collection's or a mapping's declaration: `ordered by position`, `offers back_add, front_take`,
+/// `unique`, `unordered`, `count fixed`, `count at most 10`, `costs constant for cursor insert`, `values many`.
+fn collection_clause(e: &Entry, src: &str, shape: &str) -> Result<Node, Error> {
+    let mut p = P::new(e.line, src);
+    let line = p.here();
+    let word = p.ident()?;
+    let mut n = Node::new("collection_clause", line).with("word", word.clone());
+    match word.as_str() {
+        "ordered" => {
+            p.expect("by")?;
+            let by = p.ident()?;
+            let ok = if shape == "mapping" { ["position", "insertion", "key"].contains(&by.as_str()) } else { ["position", "insertion", "value"].contains(&by.as_str()) };
+            if !ok {
+                return Err(Error::new(line, &format!("`ordered by {by}`: a {shape} is ordered by {}", if shape == "mapping" { "`position`, `insertion` or `key`" } else { "`position`, `insertion` or `value`" })));
+            }
+            n.set("by", by);
+            if p.eat("using") {
+                n.set("using", p.ident()?);
+            }
+        }
+        "offers" => {
+            let mut what = vec![p.ident()?];
+            while p.eat(",") {
+                what.push(p.ident()?);
+            }
+            n.set("offers", what);
+        }
+        "count" => {
+            if p.eat("fixed") {
+                n.set("fixed", true);
+            } else {
+                p.expect("at")?;
+                p.expect("most")?;
+                n.set("at_most", p.unary()?);
+            }
+        }
+        "costs" => {
+            while !p.done() {
+                p.i += 1;
+            }
+        }
+        "values" => p.expect("many")?,
+        "unique" | "unordered" => {}
+        _ => return Err(Error::new(line, &format!("`{word}` is not a constraint of a {shape}'s declaration: `ordered by`, `unordered`, `unique`, `count`, `offers`, `costs`{}", if shape == "mapping" { ", `values many`" } else { "" }))),
+    }
+    let start_text = P::new(e.line, src);
+    n.set("text", start_text.text(0, start_text.t.len()));
+    p.finish(false)?;
+    Ok(n)
+}
+
+/// A test's `faults:` section: each line a fault to force (Y § 3.14): `conflict at f#txn, times: 2`, `crash after
+/// commit f#txn`, `expire at f#txn`, `cancel at f#task`.
+fn faults(entries: &[Entry], src: &str) -> Result<Vec<Node>, Error> {
+    let mut out = vec![];
+    for e in entries {
+        let mut p = P::new(e.line, src);
+        let line = p.here();
+        let kind = p.ident()?;
+        let at = match kind.as_str() {
+            "conflict" | "expire" | "cancel" => {
+                p.expect("at")?;
+                p.ident()?
+            }
+            "crash" => {
+                p.expect("after")?;
+                p.expect("commit")?;
+                p.ident()?
+            }
+            _ => return Err(Error::new(line, &format!("`{kind}` is not a fault a test forces: `conflict at`, `crash after commit`, `expire at`, `cancel at`"))),
+        };
+        if !at.contains('#') {
+            return Err(Error::new(line, &format!("`{at}`: a fault is forced at a region or a task, `function#name`")));
+        }
+        let mut n = Node::new("fault", line).with("fault", kind).with("at", at);
+        if p.eat(",") {
+            p.expect("times")?;
+            p.expect(":")?;
+            n.set("times", p.unary()?);
+        }
+        p.finish(false)?;
+        out.push(n.with("end", e.end()).with("blank", e.line.blank).with("gap", e.line.gap));
+    }
+    Ok(out)
 }
 
 /// A documentation block: its text, and its entries. An entry is a line that starts with a name and `: ` (`game: The
@@ -573,6 +819,15 @@ fn decls(entries: &[Entry], src: &str, ctx: Context) -> Result<Vec<Node>, Error>
             "type" => {
                 p.i += 1;
                 let name = p.ident()?;
+                // `type http native because "…"`: a type whose representation the backend gives (Y § 3.18)
+                if p.is("native") && p.is_at(1, "because") {
+                    p.i += 2;
+                    let because = p.string("the reason, a string")?;
+                    p.finish(false)?;
+                    let n = Node::new("type_decl", line).with("name", name).with("type", Value::Null).with("where", Vec::<Node>::new()).with("cases", Vec::<Node>::new()).with("native", because);
+                    out.push(declared(n, e, vis.as_deref()));
+                    continue;
+                }
                 let ty = if p.eat("is") { Some(p.ty()?) } else { None };
                 // `type quantity is int64 where positive = (value > 0)`: the restrictions on the head's line (§ 3.3)
                 let (mut wheres, mut cases) = (vec![], vec![]);
@@ -580,6 +835,17 @@ fn decls(entries: &[Entry], src: &str, ctx: Context) -> Result<Vec<Node>, Error>
                     wheres.extend(p.clauses("where")?);
                 }
                 p.finish(!e.children.is_empty())?;
+                // `type queue is collection:` and its constraints, one to a line (Y § 3.13)
+                let shape = ty.as_ref().and_then(|t| t.str("name")).filter(|n| *n == "collection" || *n == "mapping").map(str::to_string);
+                if let Some(shape) = shape {
+                    let mut clauses = vec![];
+                    for c in &e.children {
+                        clauses.push(collection_clause(c, src, &shape)?);
+                    }
+                    let n = Node::new("type_decl", line).with("name", name).with("type", ty).with("where", Vec::<Node>::new()).with("cases", Vec::<Node>::new()).with("collection", clauses);
+                    out.push(declared(n, e, vis.as_deref()));
+                    continue;
+                }
                 for c in &e.children {
                     let mut q = P::new(c.line, src);
                     let cline = q.here();
@@ -620,38 +886,106 @@ fn decls(entries: &[Entry], src: &str, ctx: Context) -> Result<Vec<Node>, Error>
                 p.finish(true)?;
                 Node::new("migrate", line).with("name", name).with("from", from).with("to", to).with("body", stmts(&e.children, src)?)
             }
-            "function" => {
+            "function" | "transition" | "handler" | "workflow" => {
+                p.i += 1;
+                callable(&mut p, e, src, line, if word == "function" { "function" } else if word == "transition" { "transition" } else if word == "handler" { "handler" } else { "workflow" }, ctx == Context::Trait)?
+            }
+            // `mutable function cancel(reason)`: a method that changes `me` (Y § 3.6)
+            "mutable" if p.is_at(1, "function") && (ctx == Context::Implementation || ctx == Context::Trait) => {
+                p.i += 2;
+                callable(&mut p, e, src, line, "function", ctx == Context::Trait)?.with("mutable", true)
+            }
+            "enumeration" => {
                 p.i += 1;
                 let name = p.ident()?;
-                p.expect("(")?;
-                let params = p.params()?;
-                let (mut returns, mut fails, mut wheres, mut ensures) = (None, vec![], vec![], vec![]);
-                loop {
-                    if p.eat("returns") {
-                        returns = Some(p.ident()?);
-                    } else if p.eat("fails") {
-                        fails.push(p.dotted()?);
-                        while p.eat(",") {
-                            fails.push(p.dotted()?);
-                        }
-                    } else if p.eat("where") {
-                        wheres.extend(p.clauses("where")?);
-                    } else if p.eat("ensures") {
-                        ensures.extend(p.clauses("ensures")?);
+                let ty = if p.eat("is") { Some(p.ty()?) } else { None };
+                p.finish(true)?;
+                let mut items = vec![];
+                for c in &e.children {
+                    let mut q = P::new(c.line, src);
+                    let cline = q.here();
+                    let cname = q.ident()?;
+                    let value = if q.eat("=") { Some(q.expr()?) } else { None };
+                    q.finish(false)?;
+                    items.push(declared(Node::new("constant", cline).with("name", cname).with("type", Value::Null).with("value", value), c, None));
+                }
+                Node::new("enumeration", line).with("name", name).with("type", ty).with("items", items)
+            }
+            // `state order:` with its shared fields and its cases (Y § 3.11, "Typestate")
+            "state" => {
+                p.i += 1;
+                let name = p.ident()?;
+                p.finish(true)?;
+                let (mut members, mut cases) = (vec![], vec![]);
+                for c in &e.children {
+                    let mut q = P::new(c.line, src);
+                    let cline = q.here();
+                    if q.eat("case") {
+                        let cname = q.ident()?;
+                        let fields = if q.eat("(") { q.params()? } else { vec![] };
+                        q.finish(false)?;
+                        cases.push(declared(Node::new("case", cline).with("name", cname).with("fields", fields), c, None));
                     } else {
-                        break;
+                        members.push(declared(member(c, src)?, c, None));
                     }
                 }
-                p.finish(true)?;
-                Node::new("function", line)
-                    .with("name", name)
-                    .with("params", params)
-                    .with("returns", returns)
-                    .with("fails", fails)
-                    .with("where", wheres)
-                    .with("ensures", ensures)
-                    .with("body", stmts(&e.children, src)?)
+                Node::new("state", line).with("name", name).with("members", members).with("cases", cases)
             }
+            "trait" if ctx != Context::Trait && ctx != Context::Implementation => {
+                p.i += 1;
+                let name = p.ident()?;
+                p.finish(true)?;
+                Node::new("trait", line).with("name", name).with("decls", decls(&e.children, src, Context::Trait)?)
+            }
+            // `implementation describable for shape:` and its methods
+            "implementation" if ctx != Context::Trait && ctx != Context::Implementation => {
+                p.i += 1;
+                let tr = p.ident()?;
+                p.expect("for")?;
+                let ty = p.ident()?;
+                p.finish(true)?;
+                Node::new("implementation", line).with("trait", tr).with("type", ty).with("decls", decls(&e.children, src, Context::Implementation)?)
+            }
+            // `unit metre symbol m is integer`, `unit kilometre symbol km is 1000 metre`
+            "unit" => {
+                p.i += 1;
+                let name = p.ident()?;
+                p.expect("symbol")?;
+                let symbol = p.ident()?;
+                p.expect("is")?;
+                let mut n = Node::new("unit", line).with("name", name).with("symbol", symbol);
+                if p.peek().is_some_and(|t| t.kind == Kind::Number) {
+                    let factor = p.next().text.clone();
+                    n.set("factor", factor);
+                    n.set("of", p.ident()?);
+                    n.set("type", Value::Null);
+                } else {
+                    n.set("factor", Value::Null);
+                    n.set("of", Value::Null);
+                    n.set("type", p.ty()?);
+                }
+                p.finish(false)?;
+                n
+            }
+            // `command charge_card:` with its fields and its delivery `policy:` (Y § 3.10)
+            "command" => {
+                p.i += 1;
+                let name = p.ident()?;
+                p.finish(true)?;
+                let (mut members, mut policy) = (vec![], None);
+                for c in &e.children {
+                    let q = P::new(c.line, src);
+                    if q.is("policy") && q.is_at(1, ":") {
+                        policy = Some(policy_node(c, src)?);
+                    } else {
+                        members.push(declared(member(c, src)?, c, None));
+                    }
+                }
+                let Some(policy) = policy else { return Err(Error::new(line, &format!("command `{name}` has no `policy:`: a command's delivery policy is not optional (Y § 3.10)"))) };
+                Node::new("command", line).with("name", name).with("members", members).with("policy", policy)
+            }
+            // `allow(Y2031) because "…"`: a lint that does not apply to the declaration below (Y § 3.15)
+            "allow" if p.is_at(1, "(") => allow(&mut p, line)?,
             "rule" => {
                 p.i += 1;
                 let name = p.ident()?;
@@ -684,10 +1018,11 @@ fn decls(entries: &[Entry], src: &str, ctx: Context) -> Result<Vec<Node>, Error>
                 for c in &e.children {
                     let mut q = P::new(c.line, src);
                     let cline = q.here();
-                    let Some(s) = ["given", "inject", "when", "then"].into_iter().find(|s| q.is(s)) else { return q.err("`given:`, `inject:`, `when:` or `then:`") };
+                    let Some(s) = ["given", "inject", "faults", "when", "then"].into_iter().find(|s| q.is(s)) else { return q.err("`given:`, `inject:`, `faults:`, `when:` or `then:`") };
                     q.i += 1;
                     q.finish(true)?;
-                    sections.push(Node::new("section", cline).with("name", s).with("end", c.end()).with("body", stmts(&c.children, src)?));
+                    let body = if s == "faults" { faults(&c.children, src)? } else { stmts(&c.children, src)? };
+                    sections.push(Node::new("section", cline).with("name", s).with("end", c.end()).with("body", body));
                 }
                 Node::new("test", line).with("name", name).with("covers", covers).with("sections", sections)
             }
@@ -724,9 +1059,12 @@ fn member(e: &Entry, src: &str) -> Result<Node, Error> {
         Node::new("derived", line).with("name", name).with("type", ty).with("value", p.expr()?)
     } else {
         let key = p.is("key") && p.ident_at(1) && p.eat("key");
+        // `transient cache is …`: a field equality, hashing and serialisation leave out (Y § 3.3)
+        let transient = p.is("transient") && p.ident_at(1) && p.eat("transient");
         let name = p.ident()?;
         p.expect("is")?;
-        Node::new("field", line).with("name", name).with("key", key).with("type", p.ty()?)
+        let n = Node::new("field", line).with("name", name).with("key", key).with("type", p.ty()?);
+        if transient { n.with("transient", true) } else { n }
     };
     p.finish(false)?;
     Ok(n)
@@ -870,6 +1208,69 @@ fn stmts(entries: &[Entry], src: &str) -> Result<Vec<Node>, Error> {
                 p.finish(true)?;
                 Node::new("inject", line).with("bindings", bindings).with("body", stmts(&e.children, src)?)
             }
+            // `log warning "the hold {hold} expired"` and `metric holds_expired = count` (Y § 3.7, "Observability")
+            "log" if keyword && p.ident_at(1) => {
+                p.i += 1;
+                let level = p.ident()?;
+                if !["debug", "info", "warning", "error"].contains(&level.as_str()) {
+                    return Err(Error::new(line, &format!("`log {level}`: a log entry's severity is `debug`, `info`, `warning` or `error`")));
+                }
+                let value = p.expr()?;
+                p.finish(false)?;
+                Node::new("log", line).with("level", level).with("value", value)
+            }
+            "metric" if keyword && p.ident_at(1) && p.is_at(2, "=") => {
+                p.i += 1;
+                let name = p.ident()?;
+                p.i += 1;
+                let value = p.expr()?;
+                p.finish(false)?;
+                Node::new("metric", line).with("name", name).with("value", value)
+            }
+            // `assert charged_once = (…)`: `fail not_reachable` wherever it does not hold (Y § 3.4)
+            "assert" if keyword && p.ident_at(1) && p.is_at(2, "=") => {
+                p.i += 1;
+                let c = p.clauses("assert")?.remove(0);
+                p.finish(false)?;
+                Node::new("assert", line).with("name", c.str("name").unwrap()).with("condition", c.node("condition").unwrap().clone())
+            }
+            // `assume name = p because "…"`: a claim the prover may take as true (Y § 3.15)
+            "assume" if keyword && p.ident_at(1) && p.is_at(2, "=") => {
+                p.i += 1;
+                let c = p.clauses("assume")?.remove(0);
+                if !p.eat("because") {
+                    return p.err("`because` and the reason the prover may take it as true");
+                }
+                let because = p.string("the reason, a string")?;
+                p.finish(false)?;
+                Node::new("assume", line).with("name", c.str("name").unwrap()).with("condition", c.node("condition").unwrap().clone()).with("because", because)
+            }
+            "allow" if p.is_at(1, "(") => allow(&mut p, line)?,
+            // `enqueue charge_card(…)`: a command submitted with the transaction it is in (Y § 3.10)
+            "enqueue" if keyword && p.ident_at(1) => {
+                p.i += 1;
+                let value = p.expr()?;
+                p.finish(false)?;
+                Node::new("enqueue", line).with("value", value)
+            }
+            // `nested function helper(x) returns y captures z:`, a callable only its function calls (Y § 3.1)
+            "nested" if p.is_at(1, "function") => {
+                p.i += 2;
+                let f = callable(&mut p, e, src, line, "function", false)?;
+                let f = f.with("doc", e.line.doc.as_ref().map(doc_node));
+                Node::new("nested", line).with("function", f)
+            }
+            // `name = lambda name(…) returns r captures c:`, a callable bound to a name (Y § 3.1)
+            _ if p.ident_at(0) && p.is_at(1, "=") && p.is_at(2, "lambda") => {
+                let name = p.ident()?;
+                p.i += 2;
+                let f = callable(&mut p, e, src, line, "lambda", false)?;
+                if f.str("name") != Some(name.as_str()) {
+                    return Err(Error::new(line, &format!("a lambda is bound to its own name: `{name} = lambda {name}(…)`")));
+                }
+                let f = f.with("doc", e.line.doc.as_ref().map(doc_node));
+                Node::new("let", line).with("name", name).with("mutable", false).with("value", f)
+            }
             "return" if !p.is_at(1, "=") => {
                 p.i += 1;
                 let mut n = Node::new("return", line);
@@ -925,7 +1326,8 @@ fn stmts(entries: &[Entry], src: &str) -> Result<Vec<Node>, Error> {
                 }
             }
         };
-        let n = if block && n.get("body").is_none() && n.get("conditions").is_none() { return Err(Error::new(line, "this statement opens no block")) } else { n };
+        let opens = n.get("body").is_some() || n.get("conditions").is_some() || matches!(n.kind, "nested") || n.node("value").is_some_and(|v| v.kind == "lambda");
+        let n = if block && !opens { return Err(Error::new(line, "this statement opens no block")) } else { n };
         out.push(n.with("end", e.end()).with("blank", e.line.blank).with("gap", e.line.gap));
     }
     Ok(out)

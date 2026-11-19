@@ -83,7 +83,10 @@ fn text(e: &Node, top: bool) -> String {
         "binary" => format!("{} {} {}", text(n(e, "left"), false), s(e, "op"), text(n(e, "right"), false)),
         "unary" => format!("{}{}", if s(e, "op") == "not" { "not " } else { "-" }, text(n(e, "operand"), false)),
         "list" => format!("[{}]", e.nodes("items").iter().map(|i| text(i, false)).collect::<Vec<_>>().join(", ")),
-        "mutable" | "fake" | "compile" => format!("{} {}", e.kind, text(n(e, "value"), false)),
+        "mutable" | "fake" | "compile" | "submit" => format!("{} {}", e.kind, text(n(e, "value"), false)),
+        "old" => format!("old({})", text(n(e, "value"), false)),
+        "lambda" => format!("lambda {}", s(e, "name")),
+        "reveal" => format!("reveal({}) because \"{}\"", text(n(e, "value"), false), s(e, "because")),
         "or_fail" => format!("{} or fail", text(n(e, "value"), false)),
         "forever" => format!("{} forever because \"{}\"", text(n(e, "value"), false), s(e, "because")),
         k => panic!("no text for a {k}"),
@@ -380,7 +383,18 @@ impl Module {
                         });
                     }
                 }
-                "function" => {
+                "enumeration" => {
+                    // an enumeration's members, in order: what `for x in it` goes over, so it runs for sure
+                    let items: Vec<Node> = d.nodes("items").iter().map(|i| Node::new("name", i.line).with("name", s(i, "name"))).collect();
+                    self.values.insert(name.to_string(), Node::new("list", d.line).with("items", items));
+                }
+                _ => {}
+            }
+        }
+        for d in callables(tree) {
+            let name = s(d, "name");
+            {
+                {
                     // a parameter's or the result's type, from a documentation entry on one line: `name: …, as type.`
                     let mut types: HashMap<&str, Node> = HashMap::new();
                     for e in d.node("doc").map(|doc| doc.nodes("entries")).unwrap_or_default() {
@@ -401,7 +415,6 @@ impl Module {
                     contracts.extend(d.nodes("ensures").iter().map(|w| ("ensures", n(w, "condition").clone())));
                     self.contracts.insert(name.to_string(), contracts);
                 }
-                _ => {}
             }
         }
     }
@@ -1436,8 +1449,39 @@ impl<'m> Function<'m> {
     }
 }
 
+/// Every callable of a file, each with its own paths: its functions, transitions, handlers and workflows, the methods
+/// of its implementations, and the lambdas and nested functions in their bodies.
+pub fn callables(tree: &Node) -> Vec<&Node> {
+    fn inner<'t>(d: &'t Node, out: &mut Vec<&'t Node>) {
+        for b in d.nodes("body") {
+            b.walk(&mut |x: &'t Node| {
+                if x.kind == "lambda" {
+                    out.push(x);
+                }
+                if x.kind == "nested" {
+                    out.extend(x.node("function"));
+                }
+            });
+        }
+    }
+    let mut out = vec![];
+    for d in declarations(tree) {
+        if ["function", "transition", "handler", "workflow"].contains(&d.kind) && d.str("native").is_none() {
+            out.push(d);
+            inner(d, &mut out);
+        }
+        if d.kind == "implementation" {
+            for x in d.nodes("decls").into_iter().filter(|x| x.kind == "function") {
+                out.push(x);
+                inner(x, &mut out);
+            }
+        }
+    }
+    out
+}
+
 fn functions(module: &Module) -> Vec<Function<'_>> {
-    declarations(&module.tree).into_iter().filter(|d| d.kind == "function").map(|d| Function::new(module, d)).collect()
+    callables(&module.tree).into_iter().map(|d| Function::new(module, d)).collect()
 }
 
 /// A path's identifier: the function, then each named outcome along it.

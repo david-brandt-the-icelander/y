@@ -497,7 +497,9 @@ active_users = users.filter(is_active)
 - There are no classes, singletons, factory methods or inheritance.
 - A constructor is an ordinary function returning the type (`new`, `parse`, `from_…`).
 - Behaviour is shared through traits with explicit `implementation`s. Every iteration that had more kinds of type than
-  this spent its time reconciling them.
+  this spent its time reconciling them. A `trait name:` holds its methods' documented signatures, without bodies; an
+  `implementation trait for type:` gives each of them a body, where `me` is the value, and a `mutable function` may
+  change it. A method the trait does not declare, or one it declares and the implementation leaves out, is an error.
 
 **Constants, constant groups and enumerations** keep the toolchain's syntax (`y-language-toolchain`, language reference
 § 3, "Constant, Constants, and Enumeration Declarations"):
@@ -888,6 +890,9 @@ type word is string:
   factor declared once on the unit.
 - A currency is a dimension, not a scale factor, so ISK and EUR never convert at an ambient rate.
 - Units are erased before code generation.
+- A unit is declared with its symbol, either on a base type or as a whole number of another unit, which is where its
+  factor is declared: `unit metre symbol m is uint32`, `unit kilometre symbol km is 1000 metre`. The one conversion is
+  to the unit it is made of, `distance.to_metre()`.
 
 The same mechanism gives every length and index its unit:
 
@@ -1321,7 +1326,8 @@ needs no annotation because the missing clause is the annotation. Contract expre
   colouring every caller.
 - `y explain` lists the exact suspension points.
 
-**Observability is the one ambient exception.** `log` and `metric` statements need no capability:
+**Observability is the one ambient exception.** `log` and `metric` statements need no capability. A log entry is
+`log severity "text"`, its severity one of `debug`, `info`, `warning` and `error`; a metric is `metric name = value`.
 
 - They are write-only: nothing in a program can read them back, so they cannot change results.
 - They carry the current stable identity and trace context automatically.
@@ -2570,7 +2576,8 @@ values         true false
 contextual     as key reads reverse policy compensate park on, less equal greater (in `compare`), not_reachable
                not_implemented (after `fail`), isolation serializable snapshot (in a region's constraints), ordered by unordered
                unique count offers costs values (in a
-               collection's declaration), and the field names of
+               collection's declaration), symbol (in a unit's declaration), debug info warning error
+               (after `log`), and the field names of
                `policy`, `supervise` and `faults` clauses (reserved only inside those clauses)
 ```
 

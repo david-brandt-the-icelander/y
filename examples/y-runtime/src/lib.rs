@@ -8,6 +8,10 @@
 //! their migrations (Y § 3.12); in [`pattern`], the matcher for `matches(pattern"…")` (Y § 3.1).
 //! It is only as large as the examples need. Where it is simpler than Y's semantics, the item says so.
 pub mod arena;
+pub mod claims;
+pub mod command;
+pub mod faults;
+pub mod observe;
 pub mod decimal;
 pub mod pattern;
 pub mod shared;

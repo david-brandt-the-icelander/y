@@ -212,6 +212,7 @@ pub fn owner_of(t: &crate::ty::Ty) -> Option<(&'static str, &'static str)> {
         Ty::Bag(_) => ("y_collections::Bag", "bag"),
         Ty::Queue(_) => ("y_collections::Queue", "queue"),
         Ty::SortedMap(..) => ("y_collections::SortedMap", "sorted_map"),
+        Ty::Coll(k, _) => crate::ty::coll_kind(k).map(|(_, y, p)| (p, y))?,
         Ty::Str => ("y_string::YString", "string"),
         Ty::Ascii => ("y_string::AsciiString", "string<character_set=ascii>"),
         Ty::Rune => ("y_string::Rune", "rune"),

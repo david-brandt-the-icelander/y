@@ -39,6 +39,11 @@ pub fn enter(name: &'static str) -> Guard {
 impl Drop for Guard {
     fn drop(&mut self) {
         let frame = STACK.with(|s| s.borrow_mut().pop());
+        // a call that a fault ended took no path: a fault is a bug, not an outcome (Y § 3.4), and a path that ends in
+        // one, `fail not_reachable` or a failed `assert`, needs no test
+        if std::thread::panicking() {
+            return;
+        }
         if let (Some(frame), Ok(path)) = (frame, std::env::var("YTRACE_OUT")) {
             let test = std::thread::current().name().unwrap_or("?").to_string();
             let _lock = OUT.lock();

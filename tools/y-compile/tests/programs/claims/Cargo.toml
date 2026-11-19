@@ -1,0 +1,12 @@
+[package]
+name = "claims-program"
+version = "0.0.0"
+edition = "2021"
+description = "A Y test program: claims, the trust surface: native functions and types, assume, allow, and reveal."
+
+[dependencies]
+y-runtime = { path = "../y-runtime" }
+y-string = { path = "../y-string" }
+y-collections = { path = "../y-collections" }
+
+[workspace]

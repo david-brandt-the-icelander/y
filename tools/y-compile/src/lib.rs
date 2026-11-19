@@ -9,6 +9,7 @@ pub mod bare;
 pub mod facts;
 pub mod library;
 pub mod evaluate;
+pub mod kinds;
 
 use std::fs;
 use std::path::{Path, PathBuf};
