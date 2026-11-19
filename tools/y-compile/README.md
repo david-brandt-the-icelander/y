@@ -496,6 +496,32 @@ stops the build as a compile error does, unless it says it is a warning; warning
 - The seven examples and every test program are clean. The claims program suppresses `redundant_parentheses` with a
   statement and `repeated_call` with a comment; `tests/errors.rs` checks each lint and each rule above.
 
+## Open types: generic declarations
+
+Y § 3.1 says a declaration lists no type parameters: it leaves a constraint open, and a use fills it. The proposal
+leaves generics open to its owners (§ 8, question 2, which leans to "invariant generics with trait bounds"). y-compile
+takes that lean and the § 3.1 spelling, and does not settle the question in the proposal:
+
+- **An open type is a name of the `…_type` convention that the module does not declare**, used as a type: `left: One
+  value, as item_type.` It lowers to a Rust type parameter, `ItemType`.
+- **A function's or a method's open types are bounded by its documentation**, an entry like a parameter's: `item_type:
+  What the values are, as ordered.` A bound is a trait of the module or one of `any`, `equatable` (`PartialEq`),
+  `ordered` (`Ord`), `hashable` (`Hash + Eq`) and `shown` (`Display`); any other is a compile error. Every open type
+  is also `Clone + PartialEq + Debug`, which a Y value is, so a test can copy, compare and show it.
+- **A structure leaves a type open with a member `item_type is bound`**, then uses it as a field's type. `pair<item_type=
+  parcel>` fills it, and lowers to `Pair<Parcel>`. Its bounds are the bounds of its implementations, not of the Rust
+  structure, as Rust's style is.
+- **An implementation for such a structure is one for every type it may hold**: `impl<ItemType: … + Weighed> Weighed
+  for Pair<ItemType>`.
+- **A trait's method may have open types of its own**: `function balances(other) returns same`, with `other_type:
+  What the other is, as weighed.` An implementation's method takes the trait's open types and bounds, which is what
+  Rust allows.
+- A call fills the open types by its arguments' types, as Rust infers them. A value of an open type has the methods of
+  the traits that bound it.
+
+The `generics` program has all of these: `larger` over numbers and texts, `heavier` over parcels and pairs, a trait
+method that takes a weighed thing of any kind, and `holds` over a list of any equatable type.
+
 ## What it does not handle yet
 
 It handles the forms the seven examples and the test programs use. In particular, it does not handle:
@@ -504,5 +530,3 @@ It handles the forms the seven examples and the test programs use. In particular
   its workers and a workflow's resumption are a runtime, not a lowering, and this one is a stand-in.
 - **The faults `crash after commit` and `cancel at`**, which need a runtime that can crash and resume, or cancel a task
   at a named point. A test that forces them is a compile error.
-- **Generic declarations** of the module's own: a trait's methods take no type parameters, and an implementation is for
-  a named type.

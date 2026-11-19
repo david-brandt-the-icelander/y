@@ -84,6 +84,9 @@ pub struct FnInfo {
     pub me: Option<(String, bool)>,
     /// `native because "…"`, in place of a body.
     pub native: Option<String>,
+    /// The open types its parameters and result name (`item_type`), each with its bounds, the traits a documentation
+    /// entry gives it (`item_type: What the items are, as ordered.`): its Rust type parameters.
+    pub generics: Vec<(String, Vec<String>)>,
 }
 
 impl FnInfo {
@@ -113,7 +116,21 @@ pub struct Module<'t> {
     pub implements: BTreeMap<String, Vec<String>>,
     /// The units, by their symbols.
     pub unit_symbols: BTreeMap<String, String>,
+    /// Each structure that leaves a type open, with its open types in order and the bounds its `x_type is bound` lines
+    /// give them.
+    pub open: BTreeMap<String, Vec<(String, Vec<String>)>>,
+    /// The names the module declares, and the module it is in.
+    pub declared: BTreeSet<String>,
 }
+
+/// The bounds an open type may have that the module does not declare, and the Rust traits each is.
+pub const BOUNDS: &[(&str, &[&str])] = &[
+    ("any", &[]),
+    ("equatable", &["PartialEq"]),
+    ("ordered", &["Ord"]),
+    ("hashable", &["std::hash::Hash", "Eq"]),
+    ("shown", &["std::fmt::Display"]),
+];
 
 /// The declarations of a file with the facet each is in.
 pub fn declarations(tree: &Node) -> Vec<(Option<String>, &Node)> {
@@ -128,6 +145,32 @@ pub fn declarations(tree: &Node) -> Vec<(Option<String>, &Node)> {
         }
     }
     out
+}
+
+/// Whether a name used as a type is an open type: named `…_type` (Y § 3.1's convention), and neither declared by the
+/// module nor given by the runtime. A declaration does not list type parameters; it leaves the type open, and a use
+/// fills it (`pair<item_type=parcel>`).
+pub fn is_open_name(name: &str, declared: &BTreeSet<String>) -> bool {
+    name.ends_with("_type") && name.len() > 5 && !declared.contains(name) && crate::ty::external(name).is_none()
+}
+
+/// The open types a type names, in order, added to `out` once each.
+pub fn open_in(t: &Ty, declared: &BTreeSet<String>, out: &mut Vec<String>) {
+    match t {
+        Ty::Named(n) if is_open_name(n, declared) => {
+            if !out.contains(n) {
+                out.push(n.clone());
+            }
+        }
+        Ty::List(e) | Ty::Set(e) | Ty::Array(e, _) | Ty::Opt(e) | Ty::Iter(e) | Ty::Bag(e) | Ty::Queue(e) | Ty::Shared(e) | Ty::Sensitive(e) => open_in(e, declared, out),
+        Ty::Res(a, b) | Ty::SortedMap(a, b) => {
+            open_in(a, declared, out);
+            open_in(b, declared, out);
+        }
+        Ty::Kind(_, args) => args.iter().for_each(|(_, a)| open_in(a, declared, out)),
+        Ty::Coll(_, args) => args.iter().for_each(|a| open_in(a, declared, out)),
+        _ => {}
+    }
 }
 
 /// The type a documentation entry gives a name, from the `doc` node of a declaration.
@@ -250,7 +293,7 @@ impl<'t> Module<'t> {
                 }
             }
         }
-        let mut m = Module { name, tree, types: BTreeMap::new(), consts: BTreeMap::new(), fns: BTreeMap::new(), facets: vec![], exported: BTreeSet::new(), schemas: BTreeMap::new(), suspending: BTreeSet::new(), traits: BTreeMap::new(), methods: BTreeMap::new(), implements: BTreeMap::new(), unit_symbols: BTreeMap::new() };
+        let mut m = Module { name, tree, types: BTreeMap::new(), consts: BTreeMap::new(), fns: BTreeMap::new(), facets: vec![], exported: BTreeSet::new(), schemas: BTreeMap::new(), suspending: BTreeSet::new(), traits: BTreeMap::new(), methods: BTreeMap::new(), implements: BTreeMap::new(), unit_symbols: BTreeMap::new(), open: BTreeMap::new(), declared: BTreeSet::new() };
         if let Some(o) = outer {
             m.types = o.types.clone();
             m.consts = o.consts.clone();
@@ -265,6 +308,13 @@ impl<'t> Module<'t> {
                 m.facets.push((d.str("name").unwrap().to_string(), d.line, d.str("visibility").unwrap_or("private").to_string(), members));
             }
         }
+        // every name the module, or the one it is in, declares: a `…_type` among them is no open type
+        m.declared = decls.iter().filter_map(|(_, d)| d.str("name").map(str::to_string)).collect();
+        if let Some(o) = outer {
+            m.declared.extend(o.declared.iter().cloned());
+            m.open = o.open.clone();
+        }
+        let declared_types = m.declared.clone();
         for (facet, d) in &decls {
             let name = d.str("name").unwrap_or("").to_string();
             match d.kind {
@@ -273,10 +323,26 @@ impl<'t> Module<'t> {
                     let mut derived = vec![];
                     let mut derived_values = vec![];
                     let mut invariants = vec![];
+                    let mut open: Vec<(String, Vec<String>)> = vec![];
                     for mem in d.nodes("members") {
                         let t = mem.node("type").map(Ty::from_node).unwrap_or(Ty::Unknown);
+                        let fname = mem.str("name").unwrap_or("");
                         match mem.kind {
-                            "field" => fields.push((mem.str("name").unwrap().to_string(), t)),
+                            // `item_type is ordered`: the structure leaves `item_type` open, and bounds it
+                            "field" if is_open_name(fname, &declared_types) => {
+                                let bound = match &t { Ty::Named(b) => vec![b.clone()], _ => vec![] };
+                                open.push((fname.to_string(), bound.into_iter().filter(|b| b != "any").collect()));
+                            }
+                            "field" => {
+                                let mut found = vec![];
+                                open_in(&t, &declared_types, &mut found);
+                                for o in found {
+                                    if !open.iter().any(|x| x.0 == o) {
+                                        open.push((o, vec![]));
+                                    }
+                                }
+                                fields.push((fname.to_string(), t))
+                            }
                             "derived" => {
                                 derived.push((mem.str("name").unwrap().to_string(), t));
                                 derived_values.push((mem.line, mem.node("value").cloned().unwrap_or_else(|| Node::new("literal", mem.line))));
@@ -284,6 +350,9 @@ impl<'t> Module<'t> {
                             "invariant" => invariants.push((mem.str("name").unwrap().to_string(), mem.line, mem.node("condition").cloned().unwrap())),
                             _ => {}
                         }
+                    }
+                    if !open.is_empty() {
+                        m.open.insert(name.clone(), open);
                     }
                     m.types.insert(name.clone(), TypeInfo { name, facet: facet.clone(), def: TypeDef::Struct { fields, derived, derived_values, invariants }, line: d.line });
                 }
@@ -475,7 +544,23 @@ impl<'t> Module<'t> {
                 Param { name: pname, ty, mutable, injected, mode }
             })
             .collect();
-        FnInfo { name, facet, params, result, fails, rule, line: d.line, kind: d.kind.to_string(), me: None, native: d.str("native").map(str::to_string) }
+        // the open types it names, in order, each bounded by what its documentation entry gives it
+        let mut found = vec![];
+        for p in &params {
+            let p: &Param = p;
+            open_in(&p.ty, &self.declared, &mut found);
+        }
+        if let Some((_, t)) = &result {
+            open_in(t, &self.declared, &mut found);
+        }
+        let generics = found
+            .into_iter()
+            .map(|o| {
+                let bounds = match doc_type(d, &o) { Some(Ty::Named(b)) if b != "any" => vec![b], _ => vec![] };
+                (o, bounds)
+            })
+            .collect();
+        FnInfo { name, facet, params, result, fails, rule, line: d.line, kind: d.kind.to_string(), me: None, native: d.str("native").map(str::to_string), generics }
     }
 
     pub fn rust_type(&self, t: &Ty) -> String {
@@ -515,7 +600,11 @@ impl<'t> Module<'t> {
             Ty::Kind(..) => match self.resolve(t) {
                 Ty::Kind(k, args) => {
                     let kind = match self.types.get(&k).map(|t| &t.def) { Some(TypeDef::Collection { kind, .. }) => kind.clone(), _ => pascal(&k) };
-                    let a: Vec<String> = args.iter().map(|(_, t)| self.rust_type(t)).collect();
+                    // a structure's open types, filled in the order the structure leaves them
+                    let a: Vec<String> = match self.open.get(&k) {
+                        Some(open) => open.iter().map(|(g, _)| args.iter().find(|a| &a.0 == g).map(|a| self.rust_type(&a.1)).unwrap_or_else(|| "_".into())).collect(),
+                        None => args.iter().map(|(_, t)| self.rust_type(t)).collect(),
+                    };
                     format!("{kind}<{}>", a.join(", "))
                 }
                 r => self.rust_type(&r),

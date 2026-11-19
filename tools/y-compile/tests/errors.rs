@@ -228,3 +228,12 @@ fn a_repeated_call_a_todo_and_a_long_function() {
 fn a_type_argument_named_against_the_convention() {
     refused("lint_type_argument", "-- A box.\nstructure box:\n    items is list<element=uint32>\n", &["type_argument_name (Y2001): `element` takes a type"]);
 }
+
+#[test]
+fn an_open_type_bounded_by_no_trait() {
+    refused(
+        "open_type_bound",
+        "-------\nThe first.\n\nleft: One, as item_type.\n\nitem_type: What it is, as sortable.\n\nfirst: It, as item_type.\n-------\nfunction f(left) returns first:\n    return first = left\n",
+        &["`item_type` is bounded by `sortable`, which is neither a trait of the module nor one of any, equatable, ordered, hashable, shown"],
+    );
+}

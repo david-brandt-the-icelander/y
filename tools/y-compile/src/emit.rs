@@ -262,6 +262,32 @@ impl<'a> Lowerer<'a> {
         self.fn_signature(f, vis)
     }
 
+    /// `<ItemType: Clone + PartialEq + std::fmt::Debug + Ord>`: the Rust type parameters of open types, each with the
+    /// traits its bounds are. With `base`, each is also one a Y value may be: copied, compared and shown in a test.
+    pub fn generic_params(&mut self, gens: &[(String, Vec<String>)], base: bool) -> String {
+        if gens.is_empty() {
+            return String::new();
+        }
+        let mut parts = vec![];
+        for (g, bounds) in gens {
+            let mut rs: Vec<String> = if base { vec!["Clone".into(), "PartialEq".into(), "std::fmt::Debug".into()] } else { vec![] };
+            for b in bounds {
+                match crate::model::BOUNDS.iter().find(|(n, _)| n == b) {
+                    Some((_, r)) => rs.extend(r.iter().map(|x| x.to_string())),
+                    None if self.module().traits.contains_key(b) => rs.push(pascal(b)),
+                    None => {
+                        let known: Vec<&str> = crate::model::BOUNDS.iter().map(|(n, _)| *n).collect();
+                        self.error(format!("`{g}` is bounded by `{b}`, which is neither a trait of the module nor one of {}", known.join(", ")));
+                    }
+                }
+            }
+            let mut seen = std::collections::BTreeSet::new();
+            rs.retain(|r| seen.insert(r.clone()));
+            parts.push(if rs.is_empty() { pascal(g) } else { format!("{}: {}", pascal(g), rs.join(" + ")) });
+        }
+        format!("<{}>", parts.join(", "))
+    }
+
     fn fn_signature(&mut self, f: &FnInfo, vis: &str) -> String {
         let mut ps = vec![];
         // a method's `me`: `&self`, or `&mut self` for a `mutable function` (Y § 3.6)
@@ -287,7 +313,8 @@ impl<'a> Lowerer<'a> {
             (None, None) => String::new(),
         };
         let asynchronous = if self.m.suspending.contains(&f.name) { "async " } else { "" };
-        format!("{vis}{asynchronous}fn {}({}){rt}", f.name, ps.join(", "))
+        let generics = self.generic_params(&f.generics, true);
+        format!("{vis}{asynchronous}fn {}{generics}({}){rt}", f.name, ps.join(", "))
     }
 
     pub fn function_item(&mut self, d: &Node, f: &FnInfo, vis: &str) {
@@ -306,6 +333,7 @@ impl<'a> Lowerer<'a> {
             branches: vec![],
             section: None, ..Default::default()
         };
+        self.ctx.generics = f.generics.iter().chain(self.impl_generics.iter()).cloned().collect();
         for p in &f.params {
             let form = match p.mode {
                 Mode::Ref => Form::Ref,
@@ -477,7 +505,9 @@ impl<'a> Lowerer<'a> {
         let vis = if facet { "pub " } else { "" };
         match &info.def {
             TypeDef::Struct { fields, derived, derived_values, .. } => {
-                self.line(format!("{vis}struct {} {{", pascal(name)));
+                // a structure that leaves types open has them as type parameters; their bounds are its implementations'
+                let params = m.open.get(name).map(|o| format!("<{}>", o.iter().map(|(g, _)| pascal(g)).collect::<Vec<_>>().join(", "))).unwrap_or_default();
+                self.line(format!("{vis}struct {}{params} {{", pascal(name)));
                 self.ind += 1;
                 let fvis = if m.exported.contains(name) { "pub " } else if facet { "pub(super) " } else { "" };
                 for (f, t) in fields {

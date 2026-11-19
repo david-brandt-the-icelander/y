@@ -68,6 +68,8 @@ pub struct Ctx {
     /// The names the function returns as its result as they are (`return r = name`): an empty collection bound to one
     /// takes the result's type.
     pub returned: Vec<String>,
+    /// The open types the function names, and an implementation's for its type, each with its bounds.
+    pub generics: Vec<(String, Vec<String>)>,
 }
 
 pub struct Lowerer<'a> {
@@ -136,6 +138,8 @@ pub struct Lowerer<'a> {
     pub locals_fns: BTreeMap<String, (FnInfo, Vec<(String, bool)>)>,
     /// What `old(e)` reads in the function's `ensures`: by `e`'s text, the local the value was kept in.
     pub olds: Vec<(String, String, Ty)>,
+    /// In an implementation for a structure that leaves types open: those types, with the structure's bounds.
+    pub impl_generics: Vec<(String, Vec<String>)>,
 }
 
 thread_local! {
@@ -273,6 +277,7 @@ impl<'a> Lowerer<'a> {
             compile_bound: vec![],
             after_fn: vec![],
             locals_fns: BTreeMap::new(),
+            impl_generics: vec![],
             olds: vec![],
         }
     }

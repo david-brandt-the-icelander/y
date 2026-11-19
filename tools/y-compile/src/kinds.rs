@@ -251,15 +251,25 @@ impl<'a> Lowerer<'a> {
                 self.error(format!("`implementation {tr} for {ty}` does not implement `{}`", s.name));
             }
         }
-        self.line(format!("impl {} for {} {{", pascal(tr), pascal(ty)));
+        // for a structure that leaves types open, one implementation for every type it may hold, as its bounds allow
+        let open = self.m.open.get(ty).cloned().unwrap_or_default();
+        let params = self.generic_params(&open, true);
+        let args = if open.is_empty() { String::new() } else { format!("<{}>", open.iter().map(|(g, _)| pascal(g)).collect::<Vec<_>>().join(", ")) };
+        self.line(format!("impl{params} {} for {}{args} {{", pascal(tr), pascal(ty)));
         self.ind += 1;
+        self.impl_generics = open;
         for (k, x) in d.nodes("decls").into_iter().enumerate() {
             if k > 0 {
                 self.line("");
             }
-            let Some(f) = self.m.methods.get(ty).and_then(|ms| ms.get(x.str("name").unwrap())).cloned() else { continue };
+            let Some(mut f) = self.m.methods.get(ty).and_then(|ms| ms.get(x.str("name").unwrap())).cloned() else { continue };
+            // a method's own open types are the trait's: Rust takes an implementation's bounds only as the trait's
+            if let Some(s) = sigs.iter().find(|s| s.name == f.name) {
+                f.generics = s.generics.clone();
+            }
             self.function_item(x, &f, "");
         }
+        self.impl_generics = vec![];
         self.ind -= 1;
         self.line("}");
     }
@@ -548,7 +558,12 @@ impl<'a> Lowerer<'a> {
     pub fn kind_method(&mut self, recv: &crate::lower::Ex, name: &str, args: &[(Option<&str>, &Node)]) -> Option<crate::lower::Ex> {
         let ex = |code: String, ty: Ty| crate::lower::Ex { code, ty, form: Form::Temp, prec: 100 };
         let r = if recv.prec < 100 { format!("({})", recv.code) } else { recv.code.clone() };
-        match &recv.ty {
+        // a structure that leaves a type open, filled (`pair<item_type=parcel>`), has the structure's methods
+        let ty = match &recv.ty {
+            Ty::Kind(k, _) if self.module().open.contains_key(k) => Ty::Named(k.clone()),
+            t => t.clone(),
+        };
+        match &ty {
             // `charges.committed()`: the commands an outbox holds, which its atomic regions committed (Y § 2)
             Ty::Shared(o) if name == "committed" && args.is_empty() && matches!(&**o, Ty::Outbox(_)) => {
                 let Ty::Outbox(c) = &**o else { unreachable!() };
@@ -593,7 +608,15 @@ impl<'a> Lowerer<'a> {
             // a method an implementation gives the type, or a trait's on a value of the trait
             Ty::Named(t) => {
                 let m = self.module();
-                let f = m.methods.get(t).and_then(|ms| ms.get(name)).cloned().or_else(|| m.traits.get(t).and_then(|sigs| sigs.iter().find(|s| s.name == name)).cloned())?;
+                // a value of an open type has the methods of the traits that bound it
+                let bounds: Vec<String> = self.ctx.generics.iter().filter(|(g, _)| g == t).flat_map(|(_, b)| b.clone()).collect();
+                let f = m
+                    .methods
+                    .get(t)
+                    .and_then(|ms| ms.get(name))
+                    .cloned()
+                    .or_else(|| m.traits.get(t).and_then(|sigs| sigs.iter().find(|s| s.name == name)).cloned())
+                    .or_else(|| bounds.iter().find_map(|b| m.traits.get(b).and_then(|sigs| sigs.iter().find(|s| s.name == name)).cloned()))?;
                 let mut parts = vec![];
                 let plain: Vec<crate::model::Param> = f.params.iter().filter(|p| !p.injected).cloned().collect();
                 for (k, p) in plain.iter().enumerate() {

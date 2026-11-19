@@ -136,6 +136,11 @@ fn program_shapes() {
 }
 
 #[test]
+fn program_generics() {
+    program("generics");
+}
+
+#[test]
 fn program_claims() {
     program("claims");
 }

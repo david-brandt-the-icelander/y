@@ -1,0 +1,12 @@
+[package]
+name = "generics-program"
+version = "0.0.0"
+edition = "2021"
+description = "A Y test program: open types, filled where they are used, with their bounds; a trait method with an open type; an implementation for a structure that leaves a type open."
+
+[dependencies]
+y-runtime = { path = "../y-runtime" }
+y-string = { path = "../y-string" }
+y-collections = { path = "../y-collections" }
+
+[workspace]
