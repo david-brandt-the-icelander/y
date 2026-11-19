@@ -127,7 +127,7 @@ fn copy_in(m: &Module, t: &Ty, depth: usize) -> bool {
         return false;
     }
     match t {
-        Ty::U32 | Ty::I32 | Ty::U64 | Ty::U16 | Ty::Count | Ty::Int | Ty::Bool | Ty::StrLit | Ty::Decimal(..) | Ty::Integer(..) | Ty::Index(_) => true,
+        Ty::U32 | Ty::I32 | Ty::U64 | Ty::U16 | Ty::Count | Ty::Int | Ty::Bool | Ty::StrLit | Ty::Decimal(..) | Ty::Integer(..) | Ty::Index(_) | Ty::F64 => true,
         Ty::Named(n) if crate::ty::COPIED.contains(&n.as_str()) => true,
         Ty::Opt(x) => copy_in(m, x, depth + 1),
         Ty::Named(n) => match m.types.get(n).map(|t| &t.def) {
@@ -186,7 +186,7 @@ pub fn needs_fn(m: &Module, v: &Node) -> bool {
 /// A type passed by value: a number, a truth value, or a type whose values are its cases alone.
 pub fn by_value(m: &Module, t: &Ty) -> bool {
     match t {
-        Ty::U32 | Ty::I32 | Ty::U64 | Ty::U16 | Ty::Count | Ty::Int | Ty::Bool | Ty::Rune | Ty::Decimal(..) | Ty::Integer(..) => true,
+        Ty::U32 | Ty::I32 | Ty::U64 | Ty::U16 | Ty::Count | Ty::Int | Ty::Bool | Ty::Rune | Ty::Decimal(..) | Ty::Integer(..) | Ty::F64 => true,
         Ty::Named(n) if crate::ty::COPIED.contains(&n.as_str()) => true,
         Ty::Opt(x) => by_value(m, x),
         Ty::Named(n) => matches!(m.types.get(n).map(|t| &t.def), Some(TypeDef::Enum { cases }) if cases.iter().all(|(_, f)| f.is_empty())),
@@ -398,8 +398,12 @@ impl<'t> Module<'t> {
             Ty::Iter(e) => format!("impl Iterator<Item = {}>", self.rust_type(e)),
             Ty::Res(a, b) => format!("Result<{}, {}>", self.rust_type(a), self.rust_type(b)),
             Ty::Named(n) | Ty::Cap(n) => crate::ty::external(n).map(|(r, _)| r.to_string()).unwrap_or_else(|| pascal(n)),
-            Ty::Decimal(p, s) => format!("Decimal<{}, {p}, {s}>", crate::ty::digits(*p)),
-            Ty::Integer(lo, hi) => format!("Integer<{}, {lo}, {hi}>", crate::ty::range_digits(*lo, *hi)),
+            Ty::Decimal(p, s) => format!("Decimal<{}>", crate::ware::decimal_args(*p, *s)),
+            Ty::F64 => "f64".into(),
+            Ty::Integer(lo, hi) => {
+                let arg = |v: i128| if v < 0 { format!("{{ {v} }}") } else { v.to_string() };
+                format!("Integer<{}, {}, {}>", crate::ty::range_digits(*lo, *hi), arg(*lo), arg(*hi))
+            }
             Ty::Rational(_) => "Rational<Big, UNBOUNDED>".into(),
             Ty::Ascii => "AsciiString".into(),
             Ty::Bag(e) => format!("Bag<{}>", self.rust_type(e)),

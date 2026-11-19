@@ -55,6 +55,9 @@ fn a_type_with_where_clauses_and_one_with_cases() {
     let t = decl("type play_error:\n    case input_closed\n    case console(error is console_error)\n");
     let cases = t.nodes("cases");
     assert_eq!((s(cases[0], "name"), s(cases[1].nodes("fields")[0], "name")), ("input_closed", "error"));
+    // a refined type's restrictions on its head's line (Y § 3.3)
+    let t = decl("type quantity is int64 where positive = (value > 0) and small = (value < 10)\n");
+    assert_eq!(t.nodes("where").iter().map(|w| s(w, "name")).collect::<Vec<_>>(), ["positive", "small"]);
     let t = decl("type sku is string<character_set=ascii>\n");
     assert_eq!(s(t.node("type").unwrap(), "name"), "string");
 }

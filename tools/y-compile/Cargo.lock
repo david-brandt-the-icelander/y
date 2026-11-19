@@ -779,10 +779,15 @@ dependencies = [
  "bare-rust",
  "serde_json",
  "y-parse",
+ "y-runtime",
 ]
 
 [[package]]
 name = "y-parse"
+version = "0.0.0"
+
+[[package]]
+name = "y-runtime"
 version = "0.0.0"
 
 [[package]]

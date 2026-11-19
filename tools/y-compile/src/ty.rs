@@ -37,6 +37,8 @@ pub enum Ty {
     Integer(i128, i128),
     /// An exact fraction, from a value of the given precision.
     Rational(u32),
+    /// `float64`.
+    F64,
     /// `string<character_set=ascii>`.
     Ascii,
     Bag(Box<Ty>),
@@ -59,8 +61,24 @@ pub fn digits(precision: u32) -> &'static str {
         0..=4 => "i16",
         5..=9 => "i32",
         10..=18 => "i64",
-        _ => "i128",
+        19..=38 => "i128",
+        39..=76 => "I256",
+        _ => "Big",
     }
+}
+
+/// The precision of a decimal that holds any number of digits: the runtime's `UNBOUNDED`.
+pub const UNBOUNDED: u32 = u32::MAX;
+
+/// The derived precision of a result, at most what the runtime's largest fixed size holds, and unbounded past it.
+pub fn capped(p: u32) -> u32 {
+    if p > 76 { UNBOUNDED } else { p.max(1) }
+}
+
+/// How many decimal digits the largest magnitude of a range has.
+pub fn range_precision(lo: i128, hi: i128) -> u32 {
+    let m = lo.unsigned_abs().max(hi.unsigned_abs());
+    (m.checked_ilog10().unwrap_or(0) + 1).max(1)
 }
 
 pub fn range_digits(lo: i128, hi: i128) -> &'static str {
@@ -70,8 +88,10 @@ pub fn range_digits(lo: i128, hi: i128) -> &'static str {
         "i16"
     } else if lo >= i32::MIN as i128 && hi <= i32::MAX as i128 {
         "i32"
-    } else {
+    } else if lo >= i64::MIN as i128 && hi <= i64::MAX as i128 {
         "i64"
+    } else {
+        "i128"
     }
 }
 
@@ -97,6 +117,7 @@ pub fn external(name: &str) -> Option<(&'static str, &'static str)> {
         "http" => ("Http", "y_http"),
         "http_error" => ("HttpError", "y_http"),
         "expired" => ("Expired", "y_runtime"),
+        "inexact" => ("Inexact", "y_runtime::decimal"),
         "picture" => ("Picture", "y_window"),
         "picture_error" => ("PictureError", "y_window"),
         "frame" => ("Frame", "y_window"),
@@ -132,6 +153,8 @@ impl Ty {
             "uint16" => Ty::U16,
             "count" => Ty::Count,
             "boolean" => Ty::Bool,
+            "float64" => Ty::F64,
+            "rational" => Ty::Rational(UNBOUNDED),
             "string" if !t.nodes("args").is_empty() => Ty::Ascii,
             "string" => Ty::Str,
             "rune" => Ty::Rune,

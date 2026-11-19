@@ -159,12 +159,16 @@ pub fn facts(dir: &Path, m: &Module, tree: &Node, test_tree: &Node, main_tree: &
     f.insert("suspensions".into(), Value::Array(suspensions));
     // each `compile`: the call, and where the entry point computes its value
     let mut compiled = vec![];
-    let ml = lines(files, "bare/src/main.brs");
-    for n in main_tree.find("compile") {
-        let call = crate::lower::y_text(n.node("value").unwrap());
-        let marker = format!("// y: compile {call}");
-        if let Some(k) = ml.iter().position(|l| l.contains(&marker)) {
-            compiled.push(json!({"call": call, "value": "computed by the entry point when it starts", "y": format!("y/src/main.y:{}", n.line), "bare": format!("bare/src/main.brs:{}", k + 1)}));
+    for (yp, t, bp) in [(y.clone(), tree, bare.clone()), ("y/src/main.y".to_string(), main_tree, "bare/src/main.brs".to_string())] {
+        let ml = lines(files, &bp);
+        let mut used = BTreeSet::new();
+        for n in t.find("compile") {
+            let call = crate::lower::y_text(n.node("value").unwrap());
+            let marker = format!("// y: compile {call}");
+            if let Some(k) = ml.iter().enumerate().position(|(k, l)| l.contains(&marker) && !used.contains(&k)) {
+                used.insert(k);
+                compiled.push(json!({"call": call, "value": "evaluated while building, by y-compile's build step, and written as data", "y": format!("{yp}:{}", n.line), "bare": format!("{bp}:{}", k + 1)}));
+            }
         }
     }
     f.insert("compiled".into(), Value::Array(compiled));

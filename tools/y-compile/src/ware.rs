@@ -1,7 +1,7 @@
 //! The lowering of what Warehouse adds: schemas and their migrations, decimals and bounded integers, shared state
 //! changed in atomic regions (with `orelse` and `waits until`), tasks under supervision, regions that hold off
 //! cancellation or run detached, arenas, and resources held until the function ends.
-use crate::lower::{y_text, Ex, Form, Lowerer};
+use crate::lower::{y_text, Ex, Form, Lowerer, Var};
 use crate::ty::{digits, pascal, Ty};
 use y_parse::Node;
 
@@ -13,7 +13,30 @@ fn ex(code: impl Into<String>, ty: Ty, form: Form, prec: u8) -> Ex {
 
 /// A decimal's Rust type arguments: `i64, 12, 2`.
 pub fn decimal_args(p: u32, s: u32) -> String {
+    if p == crate::ty::UNBOUNDED {
+        return format!("Big, UNBOUNDED, {s}");
+    }
     format!("{}, {p}, {s}", digits(p))
+}
+
+/// The precision a value of a type has, as a decimal operand: a decimal's own, an integer's range's digits.
+fn operand_precision(t: &Ty) -> Option<(u32, u32)> {
+    match t {
+        Ty::Decimal(p, s) => Some((*p, *s)),
+        Ty::Integer(lo, hi) => Some((crate::ty::range_precision(*lo, *hi), 0)),
+        _ => None,
+    }
+}
+
+/// The range of `a op b` for integers of two ranges: the extremes of the operands' extremes.
+fn integer_range(op: &str, (a0, a1): (i128, i128), (b0, b1): (i128, i128)) -> (i128, i128) {
+    let at = |x: i128, y: i128| match op {
+        "+" => x.saturating_add(y),
+        "-" => x.saturating_sub(y),
+        _ => x.saturating_mul(y),
+    };
+    let all = [at(a0, b0), at(a0, b1), at(a1, b0), at(a1, b1)];
+    (*all.iter().min().unwrap(), *all.iter().max().unwrap())
 }
 
 impl<'a> Lowerer<'a> {
@@ -111,37 +134,102 @@ impl<'a> Lowerer<'a> {
     pub fn as_decimal(&mut self, x: &Ex, p: u32, s: u32) -> String {
         match x.ty {
             Ty::Decimal(xp, xs) if xp == p && xs == s => wrap(x),
+            Ty::Decimal(_, xs) if xs > s => {
+                // a scale never falls silently (Y § 3.3)
+                self.error(format!("a decimal of scale {xs} where one of scale {s} is wanted: `to_decimal_rounded(scale: {s}, rounding: …)` lowers it, as named"));
+                wrap(x)
+            }
             _ => format!("{}.to_decimal::<{}>()", wrap(x), decimal_args(p, s)),
         }
     }
 
-    /// Arithmetic of decimals (Y § 3.3): a sum or a difference at the wider of the two types, a product of a decimal and
-    /// an integer at the full precision and the decimal's scale, and a product of two decimals at the full precision
-    /// and the sum of their scales.
+    /// Arithmetic of decimals, rationals and integers (Y § 3.3), with the result's constraints derived from the
+    /// operands', so that the arithmetic itself never overflows: a sum or a difference has the larger scale, and the
+    /// precision the larger whole part needs plus that scale and one; a product of two decimals has the sum of their
+    /// precisions and the sum of their scales; a decimal times an integer keeps the decimal's scale, and adds the
+    /// integer's digits to its precision. Each operand is converted to the result's size first. A rational's `+`, `-`,
+    /// `*` and `/` are exact; an integer's range is the extremes of its operands'.
     pub fn decimal_binary(&mut self, op: &str, a: Ex, b: Ex) -> Option<Ex> {
+        let lit_int = |x: &Ex| x.ty == Ty::Int && is_literal_number(x) && !x.code.contains('.');
         match (op, &a.ty, &b.ty) {
             ("+" | "-", Ty::Decimal(p1, s1), Ty::Decimal(p2, s2)) => {
-                let (p, s) = if (p1, s1) == (p2, s2) { (*p1, *s1) } else { (38, (*s1).max(*s2)) };
+                let s = (*s1).max(*s2);
+                let p = crate::ty::capped((p1 - s1).max(p2 - s2) + s + 1);
                 let (l, r) = (self.as_decimal(&a, p, s), self.as_decimal(&b, p, s));
                 Some(ex(format!("{l} {op} {r}"), Ty::Decimal(p, s), Form::Temp, 70))
             }
             ("+" | "-", Ty::Decimal(p, s), _) if is_literal_number(&b) => {
-                let r = decimal_literal(&b.code, *p, *s);
-                Some(ex(format!("{} {op} {r}", a.code), a.ty.clone(), Form::Temp, 70))
+                let rt = crate::ty::capped(p + 1);
+                let l = self.as_decimal(&a, rt, *s);
+                let r = decimal_literal(&b.code, rt, *s);
+                Some(ex(format!("{l} {op} {r}"), Ty::Decimal(rt, *s), Form::Temp, 70))
             }
-            ("*", Ty::Decimal(_, s), Ty::Integer(..)) => {
-                let l = self.as_decimal(&a, 38, *s);
-                Some(ex(format!("{l}.times({}.to_i128())", wrap(&b)), Ty::Decimal(38, *s), Form::Temp, ATOM))
+            ("+" | "-", _, Ty::Decimal(p, s)) if is_literal_number(&a) => {
+                let rt = crate::ty::capped(p + 1);
+                let l = decimal_literal(&a.code, rt, *s);
+                let r = self.as_decimal(&b, rt, *s);
+                Some(ex(format!("{l} {op} {r}"), Ty::Decimal(rt, *s), Form::Temp, 70))
             }
-            ("*", Ty::Integer(..), Ty::Decimal(_, s)) => {
-                let r = self.as_decimal(&b, 38, *s);
-                Some(ex(format!("{r}.times({}.to_i128())", wrap(&a)), Ty::Decimal(38, *s), Form::Temp, ATOM))
+            ("*", Ty::Decimal(p, s), Ty::Integer(..)) | ("*", Ty::Integer(..), Ty::Decimal(p, s)) => {
+                let (d, i) = if matches!(a.ty, Ty::Decimal(..)) { (&a, &b) } else { (&b, &a) };
+                let (q, _) = operand_precision(&i.ty).unwrap();
+                let rt = crate::ty::capped(p + q);
+                let l = self.as_decimal(d, rt, *s);
+                Some(ex(format!("{l}.times({}.to_i128())", wrap(i)), Ty::Decimal(rt, *s), Form::Temp, ATOM))
             }
-            ("*", Ty::Decimal(_, s1), Ty::Decimal(_, s2)) => {
-                let (l, r) = (self.as_decimal(&a, 38, *s1), self.as_decimal(&b, 38, *s2));
-                Some(ex(format!("{l}.multiply({r})"), Ty::Decimal(38, s1 + s2), Form::Temp, ATOM))
+            ("*", Ty::Decimal(p, s), _) | ("*", _, Ty::Decimal(p, s)) if lit_int(&a) || lit_int(&b) => {
+                let (d, n) = if matches!(a.ty, Ty::Decimal(..)) { (&a, &b) } else { (&b, &a) };
+                let v: i128 = n.code.parse().unwrap_or(0);
+                let rt = crate::ty::capped(p + crate::ty::range_precision(v, v));
+                let l = self.as_decimal(d, rt, *s);
+                Some(ex(format!("{l}.times({v})"), Ty::Decimal(rt, *s), Form::Temp, ATOM))
             }
-            ("/", Ty::Rational(p1), Ty::Rational(p2)) => Some(ex(format!("{} / {}", wrap(&a), wrap(&b)), Ty::Rational((*p1).max(*p2)), Form::Temp, 80)),
+            ("*", Ty::Decimal(p1, s1), Ty::Decimal(p2, s2)) => {
+                let (p, s) = (crate::ty::capped(p1 + p2), s1 + s2);
+                let (l, r) = (self.as_decimal(&a, p, *s1), self.as_decimal(&b, p, *s2));
+                let (pt, st) = (if p == crate::ty::UNBOUNDED { "UNBOUNDED".to_string() } else { p.to_string() }, s2);
+                Some(ex(format!("{l}.multiply::<{pt}, {st}, {pt}, {s}>({r})"), Ty::Decimal(p, s), Form::Temp, ATOM))
+            }
+            ("+" | "-" | "*" | "/", Ty::Rational(p1), Ty::Rational(p2)) => {
+                let p = if op == "+" || op == "-" { 70 } else { 80 };
+                Some(ex(format!("{} {op} {}", wrap_at(&a, p), wrap_at(&b, p + 1)), Ty::Rational((*p1).max(*p2)), Form::Temp, p))
+            }
+            ("+" | "-" | "*", Ty::Integer(a0, a1), Ty::Integer(b0, b1)) => {
+                let (lo, hi) = integer_range(op, (*a0, *a1), (*b0, *b1));
+                let t = Ty::Integer(lo, hi);
+                let rt = self.module().rust_type(&t);
+                Some(ex(format!("{rt}::from_i128({}.to_i128() {op} {}.to_i128())", wrap(&a), wrap(&b)).replacen('<', "::<", 1), t, Form::Temp, ATOM))
+            }
+            ("+" | "-" | "*", Ty::Integer(a0, a1), _) if lit_int(&b) => {
+                let v: i128 = b.code.parse().unwrap_or(0);
+                let (lo, hi) = integer_range(op, (*a0, *a1), (v, v));
+                let t = Ty::Integer(lo, hi);
+                let rt = self.module().rust_type(&t);
+                Some(ex(format!("{rt}::from_i128({}.to_i128() {op} {v})", wrap(&a)).replacen('<', "::<", 1), t, Form::Temp, ATOM))
+            }
+            ("/", Ty::Decimal(..), _) | ("/", _, Ty::Decimal(..)) | ("/", Ty::Integer(..), _) => {
+                self.error("`/` is defined on rationals and `float64` only: a decimal divides with `divide_rounded` or `divide_exact`, an integer with `divide_floor` and the like (Y § 3.1, § 3.3)");
+                None
+            }
+            _ => None,
+        }
+    }
+
+    /// Two decimals, or two integers, compared exactly across their constraints: each in one type that holds both.
+    pub fn compare_numbers(&mut self, a: &Ex, b: &Ex) -> Option<(String, String)> {
+        // a number as written takes the other's type, below
+        if (is_literal_number(a) || is_literal_number(b)) && (matches!(a.ty, Ty::Decimal(..)) || matches!(b.ty, Ty::Decimal(..))) {
+            return None;
+        }
+        match (&a.ty, &b.ty) {
+            (Ty::Decimal(p1, s1), Ty::Decimal(p2, s2)) if (p1, s1) != (p2, s2) => {
+                let s = (*s1).max(*s2);
+                let p = crate::ty::capped((p1 - s1).max(p2 - s2) + s);
+                Some((self.as_decimal(a, p, s), self.as_decimal(b, p, s)))
+            }
+            (Ty::Integer(..), Ty::Integer(..)) if a.ty != b.ty => Some((format!("{}.to_i128()", wrap(a)), format!("{}.to_i128()", wrap(b)))),
+            (Ty::Integer(..), Ty::Int) => Some((format!("{}.to_i128()", wrap(a)), b.code.clone())),
+            (Ty::Int, Ty::Integer(..)) => Some((a.code.clone(), format!("{}.to_i128()", wrap(b)))),
             _ => None,
         }
     }
@@ -161,9 +249,50 @@ impl<'a> Lowerer<'a> {
                     Some((wp, ws)) if *ws == s => (*wp, *ws),
                     _ => (*p, s),
                 };
-                let mode = arg("rounding").and_then(|x| x.str("name")).map(pascal).unwrap_or_else(|| "HalfEven".into());
-                let from = if let Ty::Decimal(..) = ty { self.as_decimal(recv, 38, max_scale(&ty)) } else { r.clone() };
+                let mode = arg("rounding").and_then(rounding_mode).unwrap_or_else(|| "HalfEven".into());
+                let from = r.clone();
                 ex(format!("{from}.to_decimal_rounded::<{}>(Rounding::{mode})", decimal_args(p, s)), Ty::Decimal(p, s), Form::Temp, ATOM)
+            }
+            // `a.divide_rounded(b, rounding.half_even)`: the quotient at the dividend's scale, rounded as named; the two
+            // in one size, the larger precision of theirs
+            (Ty::Decimal(p1, s1), "divide_rounded" | "divide_exact") => {
+                let b = self.expr(args[0].1);
+                let Ty::Decimal(p2, s2) = b.ty.clone() else {
+                    self.error(format!("`{name}` divides a decimal by a decimal"));
+                    return None;
+                };
+                let p = (*p1).max(p2);
+                let (l, rr) = (self.as_decimal(recv, p, *s1), self.as_decimal(&b, p, s2));
+                if name == "divide_exact" {
+                    let t = Ty::Res(Box::new(Ty::Decimal(p, *s1)), Box::new(Ty::Named("inexact".into())));
+                    ex(format!("{l}.divide_exact({rr})"), t, Form::Temp, ATOM)
+                } else {
+                    let mode = args.get(1).map(|a| a.1).or(arg("rounding")).and_then(rounding_mode).unwrap_or_else(|| {
+                        self.error("`divide_rounded` names its rounding mode: `divide_rounded(b, rounding.half_even)` (Y § 3.3)");
+                        "HalfEven".into()
+                    });
+                    ex(format!("{l}.divide_rounded({rr}, Rounding::{mode})"), Ty::Decimal(p, *s1), Form::Temp, ATOM)
+                }
+            }
+            // `to_integer_rounded(rounding.half_even)`: the whole number nearest, as an integer of the range the
+            // decimal's whole part has
+            (Ty::Decimal(p, s), "to_integer_rounded") => {
+                let mode = args.first().map(|a| a.1).and_then(rounding_mode).unwrap_or_else(|| "HalfEven".into());
+                let m = 10i128.saturating_pow(p - s);
+                let t = Ty::Integer(-m, m);
+                let rt = self.module().rust_type(&t).replacen('<', "::<", 1);
+                ex(format!("{rt}::from_i128({r}.to_integer_rounded(Rounding::{mode}))"), t, Form::Temp, ATOM)
+            }
+            (Ty::Decimal(..), "to_float64_nearest") => ex(format!("{r}.to_float64_nearest()"), Ty::F64, Form::Temp, ATOM),
+            // `to_decimal_exact(scale: s)`: the decimal, or `inexact` when it cannot hold the rational
+            (Ty::Rational(_), "to_decimal_exact") => {
+                let s: u32 = arg("scale").and_then(|x| x.str("text")).and_then(|t| t.parse().ok()).unwrap_or(0);
+                let (p, s) = match &self.want_decimal {
+                    Some((wp, ws)) if *ws == s => (*wp, *ws),
+                    _ => (38, s),
+                };
+                let t = Ty::Res(Box::new(Ty::Decimal(p, s)), Box::new(Ty::Named("inexact".into())));
+                ex(format!("{r}.to_decimal_exact::<{}>()", decimal_args(p, s)), t, Form::Temp, ATOM)
             }
             (Ty::Count | Ty::U32 | Ty::I32, "divide_floor") => {
                 let n = self.expr_want(args[0].1, &ty).code;
@@ -399,6 +528,19 @@ impl<'a> Lowerer<'a> {
     }
 }
 
+/// A rounding mode as the runtime names it: `rounding.half_even` is `HalfEven`.
+fn rounding_mode(n: &Node) -> Option<String> {
+    (n.kind == "member" && n.node("object").and_then(|o| o.str("name")) == Some("rounding")).then(|| n.str("name").map(pascal)).flatten()
+}
+
+fn wrap_at(e: &Ex, min: u8) -> String {
+    if e.prec < min {
+        format!("({})", e.code)
+    } else {
+        e.code.clone()
+    }
+}
+
 fn wrap(e: &Ex) -> String {
     if e.prec < ATOM {
         format!("({})", e.code)
@@ -407,12 +549,6 @@ fn wrap(e: &Ex) -> String {
     }
 }
 
-fn max_scale(t: &Ty) -> u32 {
-    match t {
-        Ty::Decimal(_, s) => *s,
-        _ => 0,
-    }
-}
 
 /// Whether an expression is a number as written: `4.50`, `3`.
 pub fn is_literal_number(x: &Ex) -> bool {
@@ -424,7 +560,54 @@ pub fn decimal_literal(text: &str, p: u32, s: u32) -> String {
     format!("Decimal::<{}>::literal(\"{text}\")", decimal_args(p, s))
 }
 
+/// The constraints of a region that wrap what keeps its others: its bound, whether its expiry is a failure, whether
+/// it holds cancellation, and the `forever` capability its waits are given.
+pub struct Wrapping {
+    pub bound: Option<String>,
+    pub or_fail: bool,
+    pub uncancellable: bool,
+    pub forever: Option<String>,
+}
+
 impl<'a> Lowerer<'a> {
+    /// What wraps a region's core: its `within` bound, `uncancellable` and `forever`.
+    pub fn wrapping(&mut self, st: &Node) -> Wrapping {
+        let cs = st.nodes("constraints");
+        let within = cs.iter().find(|c| c.str("word") == Some("within"));
+        let bound = within.and_then(|c| c.node("bound")).map(|b| self.expr(b).code);
+        let forever = cs.iter().any(|c| c.str("word") == Some("forever")).then(|| match self.var("forever").map(|v| v.form) {
+            Some(Form::Ref | Form::Mut) => "forever".to_string(),
+            _ => "&forever".to_string(),
+        });
+        Wrapping { bound, or_fail: within.is_some_and(|c| c.flag("or_fail")), uncancellable: cs.iter().any(|c| c.str("word") == Some("uncancellable")), forever }
+    }
+
+    /// The text that opens and closes what wraps a call that keeps a region's core: `Cancellation::new().held(…, || `
+    /// for `uncancellable`, `Forever::wait_on(forever, || ` for `forever`.
+    pub fn wrap_call(&mut self, w: &Wrapping, label: &str) -> (String, String) {
+        let (mut open, mut close) = (String::new(), String::new());
+        if let Some(f) = &w.forever {
+            open.push_str(&format!("Forever::wait_on({f}, || "));
+            close.push(')');
+        }
+        if w.uncancellable {
+            let b = w.bound.clone().unwrap_or_else(|| "Duration::MAX".into());
+            open.push_str(&format!("Cancellation::new().held(\"{label}\", {b}, || "));
+            close.push(')');
+        }
+        (open, close)
+    }
+
+    /// The function's failure for a deadline that passed: its type's case that carries an `expired`, with the case's
+    /// field.
+    pub fn expired_case(&self) -> Option<(String, String, String)> {
+        let Some(Ty::Named(n)) = self.ctx.fails.clone() else { return None };
+        match self.module().types.get(&n).map(|t| &t.def) {
+            Some(crate::model::TypeDef::Enum { cases }) => cases.iter().find(|(_, fs)| matches!(&fs[..], [(_, Ty::Named(t))] if t == "expired")).map(|(c, fs)| (pascal(&n), pascal(c), fs[0].0.clone())),
+            _ => None,
+        }
+    }
+
     /// The Rust type of what an atomic region gives: the function's result when the region returns it.
     fn region_result(&mut self, alternatives: &[&Node]) -> (Ty, String) {
         let returns = alternatives.iter().any(|a| a.nodes("body").iter().any(|s| s.kind == "return"));
@@ -445,6 +628,10 @@ impl<'a> Lowerer<'a> {
         let (rt, rust) = self.region_result(&alternatives);
         let label = format!("{}::{}", self.ctx.module, self.ctx.name);
         let returns = rt != Ty::Unit;
+        let w = self.wrapping(st);
+        let deadline = if w.bound.is_some() { "Some(&deadline)" } else { "None" };
+        let (open, close) = self.wrap_call(&w, &format!("{label}#{}", st.str("name").unwrap()));
+        let expiry = if w.bound.is_some() && w.or_fail { self.expired_case() } else { None };
         for a in &alternatives {
             let cs: Vec<String> = a.nodes("constraints").iter().map(|c| c.str("text").unwrap_or("").to_string()).collect();
             self.regions.push((self.ctx.name.clone(), a.str("name").unwrap().to_string(), a.line, cs));
@@ -462,23 +649,52 @@ impl<'a> Lowerer<'a> {
                 names.push(format!("&mut {name}"));
             }
             let last = alternatives.last().unwrap().str("name").unwrap();
-            let call = format!("orelse(\"{label}\", None, vec![{}])", names.join(", "));
-            self.finish_atomic(&call, returns, tail, &result_name, &format!("{label}#{last}"));
+            if let Some(b) = &w.bound {
+                self.line(format!("let deadline = Deadline::after({b});"));
+            }
+            let call = format!("{open}orelse(\"{label}\", {deadline}, vec![{}]){close}", names.join(", "));
+            self.finish_atomic_with(&call, returns, tail, &result_name, &format!("{label}#{last}"), expiry.as_ref());
             return;
         }
         let name = st.str("name").unwrap();
         let cs: Vec<String> = st.nodes("constraints").iter().map(|c| c.str("text").unwrap_or("").to_string()).collect();
         self.line(format!("// y: region {name} is {}", cs.join(", ")));
+        if let Some(b) = &w.bound {
+            // the deadline every wait of the region shares: its `waits until`
+            self.line(format!("let deadline = Deadline::after({b});"));
+        }
         let isolation = st.nodes("constraints").iter().find(|c| c.str("word") == Some("isolation")).and_then(|c| c.str("level")).map(pascal);
         let head = match &isolation {
-            Some(level) => format!("let {name} = atomic_with(\"{label}#{name}\", None, Isolation::{level}, |tx| -> Result<Step<{rust}>, Infallible> {{"),
-            None => format!("let {name} = atomic(\"{label}#{name}\", None, |tx| -> Result<Step<{rust}>, Infallible> {{"),
+            Some(level) => format!("let {name} = {open}atomic_with(\"{label}#{name}\", {deadline}, Isolation::{level}, |tx| -> Result<Step<{rust}>, Infallible> {{"),
+            None => format!("let {name} = {open}atomic(\"{label}#{name}\", {deadline}, |tx| -> Result<Step<{rust}>, Infallible> {{"),
         };
         self.line(head);
         let body = self.atomic_closure(st, &rt);
         self.out.extend(body);
-        self.line("});");
-        self.finish_atomic(name, returns, tail, &result_name, &format!("{label}#{name}"));
+        self.line(format!("}}){close};"));
+        self.finish_atomic_with(name, returns, tail, &result_name, &format!("{label}#{name}"), expiry.as_ref());
+        if !returns && !self.rest.is_empty() {
+            self.line(format!("// y: end region {name}"));
+        }
+    }
+
+    /// What an atomic region's runner gives: its value; when its deadline passed, the function's failure that carries
+    /// the expiry, for a region that is `within d or fail`; and otherwise a fault, as nothing else aborts it.
+    fn finish_atomic_with(&mut self, call: &str, returns: bool, tail: bool, result_name: &str, label: &str, expiry: Option<&(String, String, String)>) {
+        let Some((en, case, field)) = expiry else { return self.finish_atomic(call, returns, tail, result_name, label) };
+        self.use_("y_runtime::shared::Aborted");
+        let ok = if self.ctx.fails.is_some() { format!("Ok({result_name})") } else { result_name.to_string() };
+        if returns {
+            let lead = if tail { "" } else { "return " };
+            self.line(format!("{lead}match {call} {{"));
+            self.line(format!("    Ok({result_name}) => {ok},"));
+        } else {
+            self.line(format!("match {call} {{"));
+            self.line("    Ok(()) => {}");
+        }
+        self.line(format!("    Err(Aborted::Expired({field})) => return Err({en}::{case} {{ {field} }}),"));
+        self.line(format!("    Err(_) => not_reachable(\"{label}\"),"));
+        self.line(if returns && tail { "}" } else if returns { "};" } else { "}" });
     }
 
     /// What an atomic region's runner gives: its value, or, when it was aborted, a fault, as nothing aborts it.
@@ -486,7 +702,8 @@ impl<'a> Lowerer<'a> {
         if returns {
             let lead = if tail { "" } else { "return " };
             self.line(format!("{lead}match {call} {{"));
-            self.line(format!("    Ok({result_name}) => {result_name},"));
+            let ok = if self.ctx.fails.is_some() { format!("Ok({result_name})") } else { result_name.to_string() };
+            self.line(format!("    Ok({result_name}) => {ok},"));
             self.line(format!("    Err(_) => not_reachable(\"{label}\"),"));
             self.line(if tail { "}" } else { "};" });
         } else {
@@ -504,9 +721,16 @@ impl<'a> Lowerer<'a> {
         self.regions.push((self.ctx.name.clone(), name.to_string(), st.line, cs.clone()));
         self.line(format!("// y: region {name} is {}", cs.join(", ")));
         let within = st.nodes("constraints").iter().find(|c| c.str("word") == Some("within")).and_then(|c| c.node("bound")).cloned();
+        // `detach because "…"`: the tasks run on work of their own, which may outlive the function
+        let detached = st.nodes("constraints").iter().any(|c| c.str("word") == Some("detach"));
         if let Some(b) = &within {
             let b = self.expr(b).code;
             self.line(format!("let deadline = Deadline::after({b});"));
+            if detached {
+                self.detach_shared(st);
+                self.line(format!("let {name} = detach(deadline.remaining().unwrap_or_default(), move || {{"));
+                self.ind += 1;
+            }
         }
         let mut tasks = vec![];
         for t in st.nodes("body").into_iter().filter(|t| t.kind == "task") {
@@ -530,21 +754,25 @@ impl<'a> Lowerer<'a> {
             }
         }
         self.line(format!("let policy = Supervision {{ restart: Restart::{restart}, at_most: {at_most} }};"));
-        self.line(format!("if let Err(failed) = supervised(policy, vec![{}]) {{", tasks.join(", ")));
+        let w = self.wrapping(st);
+        let (open, close) = self.wrap_call(&w, &format!("{}::{}#{name}", self.ctx.module, self.ctx.name));
+        self.line(format!("if let Err(failed) = {open}supervised(policy, vec![{}]){close} {{", tasks.join(", ")));
         self.line("    match failed.failure {}");
         self.line("}");
-        if within.is_some() {
+        if within.is_some() && !detached {
             // the function's failure for a deadline that passed: the case that carries an `expired`
-            let case = self.ctx.fails.clone().and_then(|f| match f {
-                Ty::Named(n) => match self.module().types.get(&n).map(|t| &t.def) {
-                    Some(crate::model::TypeDef::Enum { cases }) => cases.iter().find(|(_, fs)| matches!(&fs[..], [(_, Ty::Named(t))] if t == "expired")).map(|(c, fs)| (pascal(&n), pascal(c), fs[0].0.clone())),
-                    _ => None,
-                },
-                _ => None,
-            });
-            if let Some((en, c, f)) = case {
+            if let Some((en, c, f)) = self.expired_case() {
                 self.line(format!("deadline.remaining().map_err(|{f}| {en}::{c} {{ {f} }})?;"));
             }
+        }
+        if detached {
+            self.ind -= 1;
+            self.line("});");
+            self.line(format!("// y: end region {name}"));
+            // its tasks may outlive the function; it is waited for, no longer than its bound, before the function ends
+            self.line(format!("let _ = {name}.wait();"));
+        } else if !self.rest.is_empty() {
+            self.line(format!("// y: end region {name}"));
         }
     }
 
@@ -570,22 +798,67 @@ impl<'a> Lowerer<'a> {
         let cs: Vec<String> = st.nodes("constraints").iter().map(|c| c.str("text").unwrap_or("").to_string()).collect();
         self.regions.push((self.ctx.name.clone(), name.to_string(), st.line, cs.clone()));
         let bound = st.nodes("constraints").iter().find(|c| c.str("word") == Some("within")).and_then(|c| c.node("bound")).map(|b| self.expr(b).code).unwrap_or_else(|| "Duration::MAX".into());
-        // what its `or fail`s fail with: the console's failure, the one the examples' detached regions have
+        // what its `or fail`s fail with: the console's failure, the one the examples' detached regions have, in a
+        // function that may fail; in one that cannot, the work does not fail either
+        let fallible = self.ctx.fails.is_some();
         let fails = Ty::Named("console_error".into());
-        let ft = self.rust_type(&fails);
+        let ft = if fallible { self.rust_type(&fails) } else { "std::convert::Infallible".into() };
         self.line(format!("// y: region {name} is {}", cs.join(", ")));
+        self.detach_shared(st);
         self.line(format!("let {name} = detach({bound}, move || -> Result<(), {ft}> {{"));
         self.ind += 1;
         let saved = self.ctx.fails.replace(fails);
+        let held = st.nodes("constraints").iter().any(|c| c.str("word") == Some("uncancellable"));
+        if held {
+            // `uncancellable`: cancellation is held off while the detached work runs, for no longer than its bound
+            self.line(format!("Cancellation::new().held(\"{}::{}#{name}\", {bound}, || -> Result<(), {ft}> {{", self.ctx.module, self.ctx.name));
+            self.ind += 1;
+        }
         self.block(&st.nodes("body"), false);
         self.ctx.fails = saved;
         self.line("Ok(())");
+        if held {
+            self.ind -= 1;
+            self.line("})");
+        }
         self.ind -= 1;
         self.line("});");
         self.line(format!("// y: end region {name}"));
-        self.line(format!("if let Ok(done) = {name}.wait() {{"));
-        self.line("    done?;");
-        self.line("}");
+        if fallible {
+            self.line(format!("if let Ok(done) = {name}.wait() {{"));
+            self.line("    done?;");
+            self.line("}");
+        } else {
+            self.line(format!("let _ = {name}.wait();"));
+        }
+    }
+
+    /// The shared state a detached region uses, each a handle of its own that the detached work takes with it: a
+    /// `shared<…>` is a handle to one state, and the work may outlive the borrow the function was lent.
+    pub fn detach_shared(&mut self, st: &Node) {
+        // the names its statements read, and the capabilities injected into the functions they call
+        let mut names = vec![];
+        for b in st.nodes("body") {
+            b.walk(&mut |n: &Node| {
+                let mut add = |nm: String| if !names.contains(&nm) { names.push(nm) };
+                if n.kind == "name" {
+                    add(n.str("name").unwrap().to_string());
+                }
+                if n.kind == "call" {
+                    if let Some(f) = n.node("callee").and_then(|c| (c.kind == "name").then(|| c.str("name")).flatten()).and_then(|f| self.function(f)) {
+                        for p in f.injected() {
+                            add(p.name.clone());
+                        }
+                    }
+                }
+            });
+        }
+        for n in names {
+            if let Some(Var { ty: t @ Ty::Shared(_), .. }) = self.var(&n).cloned() {
+                self.line(format!("let {n} = {n}.clone();"));
+                self.bind(&n, t, Form::Place);
+            }
+        }
     }
 
     /// `arena name:`: an arena made where the block starts, released when the function ends.

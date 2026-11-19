@@ -574,8 +574,12 @@ fn decls(entries: &[Entry], src: &str, ctx: Context) -> Result<Vec<Node>, Error>
                 p.i += 1;
                 let name = p.ident()?;
                 let ty = if p.eat("is") { Some(p.ty()?) } else { None };
-                p.finish(!e.children.is_empty())?;
+                // `type quantity is int64 where positive = (value > 0)`: the restrictions on the head's line (§ 3.3)
                 let (mut wheres, mut cases) = (vec![], vec![]);
+                if ty.is_some() && p.eat("where") {
+                    wheres.extend(p.clauses("where")?);
+                }
+                p.finish(!e.children.is_empty())?;
                 for c in &e.children {
                     let mut q = P::new(c.line, src);
                     let cline = q.here();

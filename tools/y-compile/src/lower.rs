@@ -50,6 +50,7 @@ fn wrap(e: &Ex, min: u8) -> String {
     }
 }
 
+#[derive(Default)]
 pub struct Ctx {
     pub module: String,
     pub name: String,
@@ -58,6 +59,12 @@ pub struct Ctx {
     pub branches: Vec<String>,
     /// In a test: `or fail` lowers to `expect` with the section's name.
     pub section: Option<String>,
+    /// The function's `ensures` clauses, checked where it gives its result.
+    pub ensures: Vec<Node>,
+    /// Whether a `return` in the function's tail checks them too, or the function checks its tail's value itself.
+    pub ensure_tail: bool,
+    /// The function's result's Y name.
+    pub result_name: String,
 }
 
 pub struct Lowerer<'a> {
@@ -78,7 +85,7 @@ pub struct Lowerer<'a> {
     /// The closed types to give a `Display`, found by an earlier pass.
     pub display: BTreeSet<String>,
     /// The statements after it in its block.
-    rest: Vec<Node>,
+    pub rest: Vec<Node>,
     /// The statements after it in its block and the blocks around it, up to the function's.
     rest_outer: Vec<Node>,
     /// The loops it is in, whose bodies run again.
@@ -109,6 +116,77 @@ pub struct Lowerer<'a> {
     pub held: Option<String>,
     /// Each structure invariant checked after a write: the type, the invariant, the function and the field written.
     pub invariant_sites: Vec<(String, String, String, String)>,
+    /// What the source asks for that the lowering cannot give, each with its Y line: compile errors.
+    pub errors: Vec<(usize, String)>,
+    /// The Y file being lowered, for the errors: `y/src/hangman.y`.
+    pub file: String,
+    /// The constants and statics that hold the values of the file's `compile`s, and the tests that check each against
+    /// its call at run time.
+    pub statics: Vec<String>,
+    pub compile_tests: Vec<String>,
+    /// The name the statement being lowered binds, and the names `compile`s have bound in the function.
+    pub binding: Option<String>,
+    pub compile_bound: Vec<String>,
+}
+
+thread_local! {
+    /// Each `compile` of the lowering under way, for the build step that evaluates them (`crate::evaluate`).
+    pub static SITES: std::cell::RefCell<Vec<crate::evaluate::Site>> = const { std::cell::RefCell::new(Vec::new()) };
+    /// The values the build step gave the `compile`s, by site, once it has run: Rust data.
+    pub static COMPILED: std::cell::RefCell<Option<BTreeMap<String, String>>> = const { std::cell::RefCell::new(None) };
+    /// The compile errors of the lowering under way, `file:line: message`, which `crate::compile` reports.
+    pub static ERRORS: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// What a condition shows of a name, where it holds or fails: that an optional is there, or that a result succeeded
+/// or failed (Y § 3.3, "A condition narrows").
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Narrow {
+    Some,
+    Ok,
+    Err,
+}
+
+/// The names a condition narrows where it has the value `truth`: `x != optional.none` and `x == result.ok` where they
+/// hold, `x == optional.none` where it does not; through `and` where it holds, `or` where it does not, and `not`.
+pub fn narrowings(e: &Node, truth: bool) -> Vec<(String, Narrow)> {
+    match (e.kind, e.str("op")) {
+        ("unary", Some("not")) => narrowings(e.node("operand").unwrap(), !truth),
+        ("binary", Some("and")) if truth => {
+            let mut v = narrowings(e.node("left").unwrap(), true);
+            v.extend(narrowings(e.node("right").unwrap(), true));
+            v
+        }
+        ("binary", Some("or")) if !truth => {
+            let mut v = narrowings(e.node("left").unwrap(), false);
+            v.extend(narrowings(e.node("right").unwrap(), false));
+            v
+        }
+        ("binary", Some(op @ ("==" | "!="))) => {
+            let (l, r) = (e.node("left").unwrap(), e.node("right").unwrap());
+            let Some(x) = name_of(l) else { return vec![] };
+            let holds = truth == (op == "==");
+            let case = |o: &str, n: &str| r.kind == "member" && is_member(r, o, n) || r.kind == "call" && r.node("callee").is_some_and(|c| is_member(c, o, n));
+            if is_member(r, "optional", "none") && !holds {
+                return vec![(x.to_string(), Narrow::Some)];
+            }
+            if is_member(r, "result", "ok") {
+                return vec![(x.to_string(), if holds { Narrow::Ok } else { Narrow::Err })];
+            }
+            if is_member(r, "result", "err") {
+                return vec![(x.to_string(), if holds { Narrow::Err } else { Narrow::Ok })];
+            }
+            // a case with its payload: only where it holds
+            if holds && case("result", "ok") {
+                return vec![(x.to_string(), Narrow::Ok)];
+            }
+            if holds && case("result", "err") {
+                return vec![(x.to_string(), Narrow::Err)];
+            }
+            vec![]
+        }
+        _ => vec![],
+    }
 }
 
 fn find_forever(e: &Node) -> Option<String> {
@@ -157,7 +235,7 @@ impl<'a> Lowerer<'a> {
             ind: 0,
             scopes: vec![BTreeMap::new()],
             uses: BTreeSet::new(),
-            ctx: Ctx { module: m.name.clone(), name: String::new(), result: None, fails: None, branches: vec![], section: None },
+            ctx: Ctx { module: m.name.clone(), name: String::new(), result: None, fails: None, branches: vec![], section: None, ..Default::default() },
             comments,
             shown: BTreeSet::new(),
             copies: vec![],
@@ -178,6 +256,12 @@ impl<'a> Lowerer<'a> {
             held: None,
             mark_copies: false,
             copy_line: 0,
+            errors: vec![],
+            file: format!("y/src/{}.y", m.name),
+            statics: vec![],
+            compile_tests: vec![],
+            binding: None,
+            compile_bound: vec![],
         }
     }
 
@@ -189,6 +273,16 @@ impl<'a> Lowerer<'a> {
             self.out.push(String::new());
         } else {
             self.out.push(format!("{}{}", "    ".repeat(self.ind), s));
+        }
+    }
+
+    /// A compile error at the statement being lowered.
+    pub fn error(&mut self, msg: impl Into<String>) {
+        let e = (self.copy_line, msg.into());
+        if !self.errors.contains(&e) {
+            let text = format!("{}:{}: {}", self.file, e.0, e.1);
+            ERRORS.with(|es| if !es.borrow().contains(&text) { es.borrow_mut().push(text) });
+            self.errors.push(e);
         }
     }
 
@@ -213,8 +307,71 @@ impl<'a> Lowerer<'a> {
         self.scopes.last_mut().unwrap().insert(name.to_string(), Var { ty, form: Form::Place, arm: None, alias: Some(alias.to_string()) });
     }
 
-    fn bind_arm(&mut self, name: &str, ty: Ty, ok: bool) {
-        self.scopes.last_mut().unwrap().insert(name.to_string(), Var { ty, form: Form::Place, arm: Some(ok), alias: None });
+
+    /// The Rust that reads a name a condition narrowed, and the type it is then: `narrowed(&x)`, `*narrowed(&x)` for a
+    /// copied value, `narrowed_ok(&r)`.
+    fn narrowed_read(&self, name: &str, kind: Narrow) -> Option<(String, Ty, Option<bool>)> {
+        let v = self.var(name)?;
+        let (helper, inner, arm) = match (kind, &v.ty) {
+            (Narrow::Some, Ty::Opt(t)) => ("narrowed", (**t).clone(), None),
+            (Narrow::Ok, Ty::Res(t, _)) => ("narrowed_ok", (**t).clone(), Some(true)),
+            (Narrow::Err, Ty::Res(_, e)) => ("narrowed_err", (**e).clone(), Some(false)),
+            _ => return None,
+        };
+        let code = v.alias.clone().unwrap_or_else(|| name.to_string());
+        let arg = if matches!(v.form, Form::Ref | Form::Mut) { code } else { format!("&{code}") };
+        Some((format!("{helper}({arg})"), inner, arm))
+    }
+
+    /// Binds the names a condition narrows, read through the runtime's `narrowed` where they are used: for the
+    /// operands of a chain after the one that narrows, and the conditions of a `conditional` after one that did not hold.
+    pub fn bind_narrowed_aliases(&mut self, ns: &[(String, Narrow)]) {
+        for (n, k) in ns {
+            if let Some((code, ty, arm)) = self.narrowed_read(n, *k) {
+                let copied = self.is_copy(&ty) && arm.is_none();
+                let (code, form) = if copied { (format!("(*{code})"), Form::Place) } else { (code, Form::Ref) };
+                self.scopes.last_mut().unwrap().insert(n.clone(), Var { ty, form, arm, alias: Some(code) });
+            }
+        }
+    }
+
+    /// Binds the names a condition narrows at the start of the block it guards: `let x = narrowed(&x);`.
+    pub fn bind_narrowed_lets(&mut self, ns: &[(String, Narrow)], body: &[&Node]) {
+        let mut seen = BTreeSet::new();
+        for (n, k) in ns {
+            let read = body.iter().any(|b| { let mut u = false; b.walk(&mut |x: &Node| if x.kind == "name" && x.str("name") == Some(n.as_str()) { u = true; }); u });
+            // the fact ends where the value may change: a name the block assigns or lends `mutable` is not narrowed
+            let changed = body.iter().any(|b| {
+                let mut c = false;
+                b.walk(&mut |x: &Node| {
+                    if (x.kind == "assign" && x.node("target").and_then(root_name).as_deref() == Some(n.as_str())) || (x.kind == "mutable" && x.node("value").and_then(root_name).as_deref() == Some(n.as_str())) {
+                        c = true;
+                    }
+                });
+                c
+            });
+            if !seen.insert(n.clone()) || !read || changed {
+                continue;
+            }
+            if let Some((code, ty, arm)) = self.narrowed_read(n, *k) {
+                let copied = self.is_copy(&ty) && arm.is_none();
+                let (code, form) = if copied { (format!("*{code}"), Form::Place) } else { (code, Form::Ref) };
+                self.line(format!("let {n} = {code};"));
+                self.scopes.last_mut().unwrap().insert(n.clone(), Var { ty, form, arm, alias: None });
+            }
+        }
+    }
+
+    /// A branch's block, with the names its condition narrows bound at its start.
+    fn branch_block_narrowed(&mut self, name: &str, body: &[&Node], tail: bool, ns: &[(String, Narrow)]) {
+        self.ctx.branches.push(name.to_string());
+        self.ind += 1;
+        self.push_scope();
+        self.bind_narrowed_lets(ns, body);
+        self.stmts(body, tail);
+        self.pop_scope();
+        self.ind -= 1;
+        self.ctx.branches.pop();
     }
 
     pub fn var(&self, name: &str) -> Option<&Var> {
@@ -292,6 +449,24 @@ impl<'a> Lowerer<'a> {
                 let x = self.expr_want(e.nodes("args")[0].node("value").unwrap(), &inner);
                 let v = self.owned(x, &inner);
                 return ex(format!("Shared::new({v})"), want.clone(), Form::Temp, ATOM);
+            }
+        }
+        // `optional.some(x)`, `result.ok(x)`, `result.err(x)`: `x` of the type the optional or result holds
+        let wrapped = |o: &str, n: &str| e.kind == "call" && e.node("callee").is_some_and(|c| is_member(c, o, n)) && e.nodes("args").len() == 1;
+        if let Ty::Opt(inner) = self.module().resolve(want) {
+            if wrapped("optional", "some") {
+                let x = self.expr_want(e.nodes("args")[0].node("value").unwrap(), &inner);
+                let v = self.owned(x, &inner);
+                return ex(format!("Some({v})"), want.clone(), Form::Temp, ATOM);
+            }
+        }
+        if let Ty::Res(ok, err) = self.module().resolve(want) {
+            for (n, t, w) in [("ok", ok, "Ok"), ("err", err, "Err")] {
+                if wrapped("result", n) && *t != Ty::Unknown {
+                    let x = self.expr_want(e.nodes("args")[0].node("value").unwrap(), &t);
+                    let v = self.owned(x, &t);
+                    return ex(format!("{w}({v})"), want.clone(), Form::Temp, ATOM);
+                }
             }
         }
         if let Ty::Decimal(p, s) = self.module().resolve(want) {
@@ -478,19 +653,85 @@ impl<'a> Lowerer<'a> {
                 ex(code, x.ty, Form::Mut, 90)
             }
             "fake" => self.fake(e.node("value").unwrap()),
-            // `compile f(…)`: the value, computed where the entry point starts (y-compile does not evaluate it while
-            // building)
-            "compile" => {
-                let v = e.node("value").unwrap();
-                let x = self.expr(v);
-                let ok = match &x.ty {
-                    Ty::Res(a, _) => (**a).clone(),
-                    t => t.clone(),
-                };
-                ex(format!("{}.expect(\"y: compile {}\")", wrap(&x, ATOM), y_text(v)), ok, Form::Temp, ATOM)
-            }
+            // `compile f(…)`: the value the build step evaluated, written as data (Y § 3.17), or, before it has run,
+            // the call
+            "compile" => self.compiled(e),
             k => ex(format!("/* {k} */"), Ty::Unknown, Form::Temp, ATOM),
         }
+    }
+
+    fn compiled(&mut self, e: &Node) -> Ex {
+        let v = e.node("value").unwrap();
+        let what = y_text(v);
+        if v.kind != "call" || v.node("callee").is_none_or(|c| c.kind != "name") || v.node("callee").and_then(name_of).and_then(|f| self.function(f)).is_none() {
+            self.error(format!("`compile {what}`: the operand of `compile` is one call of a function (Y § 3.17)"));
+            return ex("()", Ty::Unknown, Form::Temp, ATOM);
+        }
+        let f = self.function(name_of(v.node("callee").unwrap()).unwrap()).unwrap();
+        if !f.injected().is_empty() {
+            self.error(format!("`compile {what}`: `{}` has `injected` parameters, and only a pure function is evaluated while building (Y § 3.17)", f.name));
+        }
+        for a in v.nodes("args") {
+            let x = a.node("value").unwrap();
+            if !crate::evaluate::known(x, &self.compile_bound) {
+                self.error(format!("`compile {what}`: `{}` is not known while the program is built: an argument is a literal, a constant, or a name another `compile` bound (Y § 3.17)", y_text(x)));
+            }
+        }
+        let x = self.expr(v);
+        let (ok, fails) = match &x.ty {
+            Ty::Res(a, _) => ((**a).clone(), true),
+            t => (t.clone(), false),
+        };
+        let id = format!("{}:{}", self.file, e.line);
+        if let Some(b) = self.binding.clone() {
+            self.compile_bound.push(b);
+        }
+        let values = COMPILED.with(|c| c.borrow().clone());
+        let Some(values) = values else {
+            let site = crate::evaluate::Site { id: id.clone(), function: self.ctx.name.clone(), call: x.code.clone(), ty: ok.clone(), fails, binding: self.binding.clone() };
+            SITES.with(|s| if !s.borrow().iter().any(|t| t.id == id) { s.borrow_mut().push(site) });
+            let code = if fails { format!("{}.expect(\"y: compile {what}\")", wrap(&x, ATOM)) } else { x.code.clone() };
+            return ex(code, ok, Form::Temp, ATOM);
+        };
+        let Some(value) = values.get(&id).cloned() else {
+            self.error(format!("`compile {what}`: the build step gave it no value"));
+            return ex("()", Ty::Unknown, Form::Temp, ATOM);
+        };
+        let Some(data) = crate::evaluate::data(self.module(), &ok, 0) else {
+            self.error(format!("`compile {what}`: its value, a `{}`, is not one y-compile writes as data (numbers, truth values, strings, refined types over them, closed types without payloads, decimals, and lists of these)", self.module().rust_type(&ok)));
+            return ex("()", Ty::Unknown, Form::Temp, ATOM);
+        };
+        let base = self.binding.clone().unwrap_or_else(|| format!("value_{}", e.line));
+        let n = if self.file.ends_with("main.y") { upper(&base) } else { format!("{}_{}", upper(&self.ctx.name), upper(&base)) };
+        let rt = self.rust_type(&ok);
+        self.statics.push(format!("/// The value of `compile {what}`, which the build evaluated (Y § 3.17): data."));
+        let (code, form) = if data.plain {
+            self.statics.push(format!("const {n}: {} = {value};", data.ty));
+            (n.clone(), Form::Place)
+        } else if self.file.ends_with("main.y") {
+            self.statics.push(format!("const COMPILED_{n}: {} = {value};", data.ty));
+            self.statics.push(String::new());
+            self.statics.push(format!("/// The value of `compile {what}`, built once, on first use, from `COMPILED_{n}`."));
+            self.statics.push(format!("static {n}: LazyLock<{rt}> = LazyLock::new(|| {});", data.build.replace("$D", &format!("COMPILED_{n}"))));
+            (format!("&*{n}"), Form::Ref)
+        } else {
+            // in a library module, built from the data where it is read: a static built on first use is shared state,
+            // which a module below `shared` does not hold (Y § 3.19)
+            let f = n.to_lowercase();
+            self.statics.push(format!("const COMPILED_{n}: {} = {value};", data.ty));
+            self.statics.push(String::new());
+            self.statics.push(format!("/// The value of `compile {what}`, built from `COMPILED_{n}`."));
+            self.statics.push(format!("fn {f}() -> {rt} {{"));
+            self.statics.push(format!("    {}", data.build.replace("$D", &format!("COMPILED_{n}"))));
+            self.statics.push("}".into());
+            (format!("{f}()"), Form::Temp)
+        };
+        self.statics.push(String::new());
+        // the generated test: the call at run time gives the value the build wrote down (Y § 3.17)
+        let value_code = if data.plain { n.clone() } else if self.file.ends_with("main.y") { format!("{n}.clone()") } else { format!("{}()", n.to_lowercase()) };
+        let expected = if fails { format!("Ok({value_code})") } else { value_code };
+        self.compile_tests.push(format!("#[test]\nfn compiled_{}_is_the_run_time_value() {{\n    assert!({} == {expected}, \"y: compile {what}\");\n}}", n.to_lowercase(), x.code));
+        ex(code, ok, form, ATOM)
     }
 
     fn literal(&mut self, e: &Node) -> Ex {
@@ -561,6 +802,10 @@ impl<'a> Lowerer<'a> {
     }
 
     fn member(&mut self, e: &Node) -> Ex {
+        // a field of a case a condition narrowed to, bound by the arm's pattern: `loaded.failure.id`
+        if let Some(v) = self.var(&y_text(e)) {
+            return ex(v.alias.clone().unwrap_or_default(), v.ty.clone(), v.form, ATOM);
+        }
         let name = e.str("name").unwrap();
         let obj = e.node("object").unwrap();
         if let Some(o) = name_of(obj).filter(|o| self.var(o).is_none()) {
@@ -703,6 +948,23 @@ impl<'a> Lowerer<'a> {
                     let elem = args[0].1.nodes("items").first().map(|i| self.expr(i).ty).unwrap_or(Ty::Unknown);
                     return ex(format!("Set::from_iter([{}])", items.join(", ")), Ty::Set(Box::new(elem)), Form::Temp, ATOM);
                 }
+                // `rational.new(numerator: 1, denominator: 3)`: an exact fraction, in lowest terms
+                ("rational", "new") => {
+                    let mut parts = vec![];
+                    for k in ["numerator", "denominator"] {
+                        let a = args.iter().find(|(n, _)| *n == Some(k)).or_else(|| args.get(if k == "numerator" { 0 } else { 1 })).map(|(_, a)| *a);
+                        let Some(a) = a else {
+                            self.error("`rational.new` takes a `numerator` and a `denominator`");
+                            continue;
+                        };
+                        let x = self.expr(a);
+                        parts.push(match x.ty {
+                            Ty::Integer(..) => format!("{}.to_i128()", wrap(&x, ATOM)),
+                            _ => x.code,
+                        });
+                    }
+                    return ex(format!("Rational::<Big, UNBOUNDED>::new({})", parts.join(", ")), Ty::Rational(crate::ty::UNBOUNDED), Form::Temp, ATOM);
+                }
                 ("list", "new") => {
                     self.use_("y_collections::List");
                     return ex("List::new()", Ty::List(Box::new(Ty::Unknown)), Form::Temp, ATOM);
@@ -762,6 +1024,41 @@ impl<'a> Lowerer<'a> {
         }
         let recv = self.expr(obj);
         self.method(recv, method, &args)
+    }
+
+    /// The pattern for a case with fields that a condition compares a label with, `shape.circle` or
+    /// `result.err(customer_error.not_found)`: the case with the fields its block reads bound, `CustomerError::NotFound
+    /// { id: loaded_id, .. }`, each field then read by its Y path (`loaded.failure.id`, `s.radius`). `None` for a case
+    /// without fields.
+    fn case_pattern(&mut self, case: &Node, label: &str, body: &[&Node], form: Form) -> Option<String> {
+        let (wrapper, via, inner) = match case.kind {
+            "call" if case.node("callee").is_some_and(|c| is_member(c, "result", "ok")) => ("Ok", "value", case.nodes("args").first()?.node("value")?),
+            "call" if case.node("callee").is_some_and(|c| is_member(c, "result", "err")) => ("Err", "failure", case.nodes("args").first()?.node("value")?),
+            "member" => ("", "", case),
+            _ => return None,
+        };
+        let t = name_of(inner.node("object")?)?;
+        let c = inner.str("name")?;
+        let Some(TypeDef::Enum { cases }) = self.type_def(t) else { return None };
+        let fields = cases.iter().find(|(n, _)| n == c)?.1.clone();
+        if fields.is_empty() {
+            return None;
+        }
+        let prefix = if via.is_empty() { label.to_string() } else { format!("{label}.{via}") };
+        let mut parts = vec![];
+        for (f, ft) in &fields {
+            let path = format!("{prefix}.{f}");
+            let used = body.iter().any(|b| { let mut u = false; b.walk(&mut |n: &Node| if n.kind == "member" && y_text(n) == path { u = true; }); u });
+            if used {
+                let local = format!("{label}_{f}");
+                parts.push(format!("{f}: {local}"));
+                let fform = form;
+                self.scopes.last_mut().unwrap().insert(path, Var { ty: ft.clone(), form: fform, arm: None, alias: Some(local) });
+            }
+        }
+        parts.push("..".into());
+        let p = format!("{}::{} {{ {} }}", pascal(t), pascal(c), parts.join(", "));
+        Some(if wrapper.is_empty() { p } else { format!("{wrapper}({p})") })
     }
 
     fn construct(&mut self, path: &str, fields: &[(String, Ty)], args: &[(Option<&str>, &Node)], ty: Ty) -> Ex {
@@ -1063,6 +1360,11 @@ impl<'a> Lowerer<'a> {
             }
             (Ty::Str, "runes") => ex(format!("{r}.runes()"), Ty::Iter(Box::new(Ty::Rune)), Form::Temp, ATOM),
             (Ty::Str, "is_empty") => ex(format!("{r}.is_empty()"), Ty::Bool, Form::Temp, ATOM),
+            (Ty::Str | Ty::StrLit | Ty::HostStr, "matches") if args.len() == 1 && args[0].1.str("type") == Some("pattern") => {
+                let pat = args[0].1.str("value").unwrap_or("").to_string();
+                let code = self.pattern_match(&pat, recv.clone());
+                ex(code, Ty::Bool, Form::Temp, ATOM)
+            }
             (Ty::Str, "to_string") => {
                 let t = recv.ty.clone();
                 let v = self.owned(recv, &t);
@@ -1140,11 +1442,61 @@ impl<'a> Lowerer<'a> {
                 ex(format!("{r}.{name}({o})"), t, Form::Temp, ATOM)
             }
             (Ty::Res(_, e), "failure") => ex(format!("{r}.expect_err(\"a failure\")"), (**e).clone(), Form::Temp, ATOM),
-            _ => {
-                let parts: Vec<String> = args.iter().map(|(_, a)| self.expr(a).code).collect();
-                ex(format!("{r}.{name}({})", parts.join(", ")), Ty::Unknown, Form::Temp, ATOM)
-            }
+            _ => self.library_method(recv, name, args),
         }
+    }
+
+    /// A method that no rule of the lowering has: the method of that name on the receiver's Rust type, as the runtime
+    /// crate gives it (`crate::library`), or a compile error that names it.
+    fn library_method(&mut self, recv: Ex, name: &str, args: &[(Option<&str>, &Node)]) -> Ex {
+        let r = wrap(&recv, ATOM);
+        let ty = self.module().resolve(&recv.ty);
+        let Some((owner, y_name)) = crate::library::owner_of(&ty) else {
+            if let Ty::Named(n) = &ty {
+                if self.type_def(n).is_some() {
+                    self.error(format!("`{}.{name}(…)`: the type `{n}` has no method `{name}`", y_text_of(&recv.code)));
+                }
+            }
+            let parts: Vec<String> = args.iter().map(|(_, a)| self.expr(a).code).collect();
+            return ex(format!("{r}.{name}({})", parts.join(", ")), Ty::Unknown, Form::Temp, ATOM);
+        };
+        let lib = crate::library::library();
+        let Some(m) = lib.method(owner, name).cloned() else {
+            let offered = lib.offered(owner);
+            self.error(format!("`{}.{name}(…)`: `{y_name}` has no method `{name}`; {owner} offers {}", y_text_of(&recv.code), offered.join(", ")));
+            return ex(format!("{r}.{name}()"), Ty::Unknown, Form::Temp, ATOM);
+        };
+        if m.params.len() != args.len() {
+            self.error(format!("`{}.{name}(…)`: {owner}::{name} takes {} arguments, and the call gives {}", y_text_of(&recv.code), m.params.len(), args.len()));
+        }
+        let elem = ty.elem();
+        let mut parts = vec![];
+        for (k, (_, a)) in args.iter().enumerate() {
+            let pt = m.params.get(k).map(|p| p.1.clone()).unwrap_or_default();
+            let want = crate::library::y_type(&pt, &elem);
+            let x = self.expr_want(a, &want);
+            parts.push(if pt.starts_with("ref<") { self.by_ref(x, &want) } else { self.owned(x, &want) });
+        }
+        // a method call borrows its receiver as the method takes it
+        let call = format!("{r}.{name}({})", parts.join(", "));
+        match m.result.as_deref() {
+            None => ex(call, Ty::Unit, Form::Temp, ATOM),
+            // a borrowed element, which may be absent: copied out, as a Y value is
+            Some(t) if t.starts_with("ref<") && t.ends_with('?') => ex(format!("{call}.cloned()"), Ty::Opt(Box::new(crate::library::y_type(&t[..t.len() - 1], &elem))), Form::Temp, ATOM),
+            Some(t) if t.starts_with("ref<") => ex(call, crate::library::y_type(t, &elem), Form::Ref, ATOM),
+            Some(t) => ex(call, crate::library::y_type(t, &elem), Form::Temp, ATOM),
+        }
+    }
+
+    /// `text.matches(pattern"…")`: the runtime's matcher (`y_runtime::pattern`), on a pattern the compiler has checked
+    /// is in the subset it takes; one that is not is a compile error.
+    pub fn pattern_match(&mut self, pattern: &str, text: Ex) -> String {
+        if let Err(e) = y_runtime::pattern::check(pattern) {
+            self.error(e);
+        }
+        self.use_("y_runtime::pattern");
+        let t = self.as_str(text);
+        format!("pattern::matches({pattern:?}, {t})")
     }
 
     fn binary(&mut self, e: &Node) -> Ex {
@@ -1154,7 +1506,12 @@ impl<'a> Lowerer<'a> {
             "and" | "or" => {
                 let (rop, p) = if op == "and" { ("&&", 40) } else { ("||", 30) };
                 let a = self.expr(l);
+                // what the left operand shows holds where the right one is evaluated
+                self.push_scope();
+                let ns = narrowings(l, op == "and");
+                self.bind_narrowed_aliases(&ns);
                 let b = self.expr(r);
+                self.pop_scope();
                 ex(format!("{} {rop} {}", wrap(&a, p), wrap(&b, p + 1)), Ty::Bool, Form::Temp, p)
             }
             "==" | "!=" => {
@@ -1166,6 +1523,10 @@ impl<'a> Lowerer<'a> {
                 if is_member(r, "result", "ok") {
                     let a = self.expr(l);
                     return ex(format!("{}.{}()", wrap(&a, ATOM), if neg { "is_err" } else { "is_ok" }), Ty::Bool, Form::Temp, ATOM);
+                }
+                if is_member(r, "result", "err") {
+                    let a = self.expr(l);
+                    return ex(format!("{}.{}()", wrap(&a, ATOM), if neg { "is_ok" } else { "is_err" }), Ty::Bool, Form::Temp, ATOM);
                 }
                 self.compare(l, r, op)
             }
@@ -1211,10 +1572,27 @@ impl<'a> Lowerer<'a> {
             b
         };
         let a = if a.ty == Ty::Int { let t = b.ty.clone(); Ex { ty: t, ..a } } else { a };
+        // an optional and a value, as where a condition has narrowed one of two optionals: the value, there
+        let (a, b) = match (&a.ty, &b.ty) {
+            (Ty::Opt(x), y) if **x == *y && matches!(op, "==" | "!=") => {
+                let t = a.ty.clone();
+                let v = self.owned(b, &t);
+                (a, ex(v, t, Form::Temp, ATOM))
+            }
+            (x, Ty::Opt(y)) if **y == *x && matches!(op, "==" | "!=") => {
+                let t = b.ty.clone();
+                let v = self.owned(a, &t);
+                (ex(v, t, Form::Temp, ATOM), b)
+            }
+            _ => (a, b),
+        };
         // a decimal and a number as written: the number as a decimal of the same type
+        // two decimals or two integers of different constraints: each in one type that holds both
+        if let Some((ac, bc)) = self.compare_numbers(&a, &b) {
+            return ex(format!("{ac} {op} {bc}"), Ty::Bool, Form::Temp, 50);
+        }
         let b = match (&a.ty, &b.ty) {
             (Ty::Decimal(p, s), _) if crate::ware::is_literal_number(&b) => ex(crate::ware::decimal_literal(&b.code, *p, *s), a.ty.clone(), Form::Temp, ATOM),
-            (Ty::Decimal(p, s), Ty::Decimal(..)) if a.ty != b.ty => { let c = self.as_decimal(&b, *p, *s); ex(c, a.ty.clone(), Form::Temp, ATOM) }
             // a count and an integer with bounds: the integer as a count
             (Ty::Count, Ty::Integer(..)) => ex(format!("{}.to_usize()", wrap(&b, ATOM)), Ty::Count, Form::Temp, ATOM),
             _ => b,
@@ -1420,6 +1798,7 @@ impl<'a> Lowerer<'a> {
             "let" => {
                 let name = st.str("name").unwrap();
                 let v = st.node("value").unwrap();
+                self.binding = Some(name.to_string());
                 let injected = if self.ctx.section.as_deref() == Some("inject") {
                     self.module().fns.values().flat_map(|f| f.params.iter()).find(|p| p.injected && p.name == name).map(|p| p.ty.clone())
                 } else {
@@ -1429,6 +1808,7 @@ impl<'a> Lowerer<'a> {
                     Some(t) => self.expr_want(v, t),
                     None => self.expr(v),
                 };
+                self.binding = None;
                 let claim = self.claim(st);
                 let x = if x.ty == Ty::HostStr && v.kind != "or_fail" {
                     let code = self.owned(x, &Ty::Str);
@@ -1512,8 +1892,17 @@ impl<'a> Lowerer<'a> {
                 }
                 self.line(format!("{}Ok(Step::Done({val})){}", if tail { "" } else { "return " }, if tail { "" } else { ";" }));
             }
+            "return" if !self.ctx.ensures.is_empty() && (!tail || self.ctx.ensure_tail) => self.return_checked(st, tail),
             "return" => {
-                let v = st.node("value").unwrap();
+                // a function without a result: its `return` takes no value
+                let Some(v) = st.node("value") else {
+                    if self.ctx.fails.is_some() {
+                        self.ret("Ok(())".into(), tail);
+                    } else if !tail {
+                        self.line("return;");
+                    }
+                    return;
+                };
                 let code = self.result_value(v);
                 self.ret(code, tail);
             }
@@ -1564,17 +1953,37 @@ impl<'a> Lowerer<'a> {
     /// its one statement or above several, and `// y: end region name` after them when statements follow it.
     fn region(&mut self, st: &Node, tail: bool) {
         let words: Vec<&str> = st.nodes("constraints").iter().filter_map(|c| c.str("word")).collect();
-        if words.contains(&"atomic") {
+        // what goes with what (constraint language § 6.23); a region that breaks it does not compile
+        let has = |w: &str| words.contains(&w);
+        let name = st.str("name").unwrap_or("");
+        let mut seen = BTreeSet::new();
+        for w in &words {
+            if !seen.insert(*w) {
+                self.error(format!("region `{name}` says `{w}` twice"));
+            }
+            if !["within", "forever", "uncancellable", "atomic", "isolation", "waits", "supervise", "detach"].contains(w) {
+                self.error(format!("region `{name}`: `{w}` is not a constraint a region takes (Y § 3.8)"));
+            }
+        }
+        for (w, needs, why) in [("isolation", "atomic", "is what an atomic region observes"), ("waits", "atomic", "starts a region once its condition holds, which only an atomic region can wait for"), ("uncancellable", "within", "holds cancellation off for a bounded time"), ("detach", "within", "lets work outlive its scope for an explicit time")] {
+            if has(w) && !has(needs) {
+                self.error(format!("region `{name}`: `{w}` {why}, and the region is not `{needs}`"));
+            }
+        }
+        if has("within") && has("forever") {
+            self.error(format!("region `{name}` is `within` a bound or waits `forever`, not both"));
+        }
+        if has("atomic") {
             return self.region_atomic(st, tail);
         }
         if words.contains(&"supervise") {
             return self.region_tasks(st);
         }
-        if words.contains(&"uncancellable") {
-            return self.region_uncancellable(st);
-        }
         if words.contains(&"detach") {
             return self.region_detach(st);
+        }
+        if words.contains(&"uncancellable") {
+            return self.region_uncancellable(st);
         }
         let name = st.str("name").unwrap();
         let cs: Vec<String> = st.nodes("constraints").iter().map(|c| c.str("text").unwrap_or("").to_string()).collect();
@@ -1616,13 +2025,52 @@ impl<'a> Lowerer<'a> {
         }
     }
 
+    /// The function's `ensures` clauses, checked on its result as its Y name binds it.
+    pub fn ensure_lines(&mut self) {
+        for w in self.ctx.ensures.clone() {
+            self.use_("y_runtime::ensure");
+            let c = self.expr(w.node("condition").unwrap());
+            self.line(format!("ensure({}, \"{}::{}#{}\");", c.code, self.ctx.module, self.ctx.name, w.str("name").unwrap()));
+        }
+    }
+
+    /// A `return` of a function with `ensures`: the value is bound to the result's name, checked, and given (Y § 3.11:
+    /// what a function ensures holds on every way it returns).
+    fn return_checked(&mut self, st: &Node, tail: bool) {
+        let r = self.ctx.result_name.clone();
+        let Some(v) = st.node("value") else {
+            self.ensure_lines();
+            if self.ctx.fails.is_some() {
+                self.ret("Ok(())".into(), tail);
+            } else if !tail {
+                self.line("return;");
+            }
+            return;
+        };
+        let want = self.ctx.result.clone().unwrap_or(Ty::Unknown);
+        let x = self.expr_want(v, &want);
+        let val = self.owned(x, &want);
+        self.line(format!("let {r} = {val};"));
+        self.push_scope();
+        self.bind(&r, want, Form::Place);
+        self.ensure_lines();
+        self.pop_scope();
+        let out = if self.ctx.fails.is_some() { format!("Ok({r})") } else { r };
+        self.ret(out, tail);
+    }
+
     /// The value a `return` gives, wrapped as the function's result.
     fn result_value(&mut self, v: &Node) -> String {
         let want = self.ctx.result.clone().unwrap_or(Ty::Unknown);
         if self.ctx.fails.is_some() {
             // `return r = f(…) or fail` with the same failure: the call's result is the function's
             if v.kind == "or_fail" {
+                let saved = self.want_decimal;
+                if let Ty::Decimal(p, s) = self.module().resolve(&want) {
+                    self.want_decimal = Some((p, s));
+                }
                 let x = self.expr(v.node("value").unwrap());
+                self.want_decimal = saved;
                 if let Ty::Res(_, e) = &x.ty {
                     if Some(&**e) == self.ctx.fails.as_ref() {
                         return x.code;
@@ -1736,12 +2184,37 @@ impl<'a> Lowerer<'a> {
             self.line("}");
             return;
         }
+        // `if a = (r == result.ok):`: a `match`, with the result narrowed in each arm
+        if els.is_some() && cond.kind == "binary" && matches!(cond.str("op"), Some("==" | "!=")) && (is_member(cond.node("right").unwrap(), "result", "ok") || is_member(cond.node("right").unwrap(), "result", "err")) {
+            if let Some(x) = name_of(cond.node("left").unwrap()) {
+                if let Some(Ty::Res(ok, err)) = self.var(x).map(|v| v.ty.clone()) {
+                    let holds_ok = (cond.str("op") == Some("==")) == is_member(cond.node("right").unwrap(), "result", "ok");
+                    let subject = match self.var(x).map(|v| v.form) { Some(Form::Ref | Form::Mut) => x.to_string(), _ if self.is_copy(&ok) && self.is_copy(&err) => x.to_string(), _ => format!("&{x}") };
+                    let (ok_form, err_form) = if subject != x || matches!(self.var(x).map(|v| v.form), Some(Form::Ref | Form::Mut)) { (Form::Ref, Form::Ref) } else { (Form::Place, Form::Place) };
+                    self.line(format!("match {subject} {{"));
+                    self.ind += 1;
+                    let arms = if holds_ok { [(true, name, &body), (false, ename, &ebody)] } else { [(false, name, &body), (true, ename, &ebody)] };
+                    for (is_ok, n, b) in arms {
+                        self.push_scope();
+                        let t = if is_ok { (*ok).clone() } else { (*err).clone() };
+                        self.scopes.last_mut().unwrap().insert(x.to_string(), Var { ty: t, form: if is_ok { ok_form } else { err_form }, arm: Some(is_ok), alias: None });
+                        let used = b.iter().any(|st| { let mut u = false; st.walk(&mut |m: &Node| if m.kind == "name" && m.str("name") == Some(x) { u = true; }); u });
+                        let bound = if used { x } else { "_" };
+                        self.arm(&format!("{}({bound})", if is_ok { "Ok" } else { "Err" }), n, n, b, tail);
+                        self.pop_scope();
+                    }
+                    self.ind -= 1;
+                    self.line("}");
+                    return;
+                }
+            }
+        }
         let c = self.expr(cond);
         self.line(format!("if {} {{ // y: #{name}", c.code));
-        self.branch_block(name, &body, tail);
+        self.branch_block_narrowed(name, &body, tail, &narrowings(cond, true));
         if els.is_some() {
             self.line(format!("}} else {{ // y: #{ename}"));
-            self.branch_block(ename, &ebody, tail);
+            self.branch_block_narrowed(ename, &ebody, tail, &narrowings(cond, false));
         }
         self.line("}");
     }
@@ -1801,6 +2274,9 @@ impl<'a> Lowerer<'a> {
                     self.bind(&x, inner, Form::Place);
                     conds = conds[k + 1..].to_vec();
                 }
+                // what the conditions before one show by not holding holds where it is tested, and in its block
+                let mut before: Vec<(String, Narrow)> = vec![];
+                self.push_scope();
                 for (k, c) in conds.iter().enumerate() {
                     let t = c.node("test").unwrap();
                     let name = c.str("name").unwrap();
@@ -1819,29 +2295,44 @@ impl<'a> Lowerer<'a> {
                     }
                     let x = self.expr(t);
                     self.line(format!("{lead}if {} {{ // y: #{name}", x.code));
-                    self.branch_block(name, &c.nodes("body"), tail);
+                    let mut ns = before.clone();
+                    ns.extend(narrowings(t, true));
+                    self.branch_block_narrowed(name, &c.nodes("body"), tail, &ns);
+                    let shown = narrowings(t, false);
+                    self.bind_narrowed_aliases(&shown);
+                    before.extend(shown);
                 }
                 if let Some(e) = els {
                     let name = e.str("name").unwrap();
                     self.line(format!("}} else {{ // y: #{name}"));
-                    self.branch_block(name, &e.nodes("body"), tail);
+                    self.branch_block_narrowed(name, &e.nodes("body"), tail, &before);
                 }
+                self.pop_scope();
                 self.line("}");
             }
             Some(subject) => {
                 let s = self.expr(subject);
+                // a condition that is one test of the label against a case, with no other test joined to it
+                let plain_case = |t: &Node| t.kind == "binary" && matches!(t.str("op"), Some("==" | "!=")) && name_of(t.node("left").unwrap()) == Some(label);
+                let all_plain = conds.iter().all(|c| plain_case(c.node("test").unwrap()));
                 let by_pattern = conds.iter().all(|c| {
                     let t = c.node("test").unwrap();
                     t.kind == "binary" && t.node("right").is_some_and(|r| r.kind == "call")
                 });
-                if matches!(s.ty, Ty::Res(..)) && by_pattern {
+                if matches!(s.ty, Ty::Res(..)) && by_pattern && all_plain {
                     // `condition said.hit = (said == result.ok(verdict.hit))`: an arm per value
                     self.line(format!("match {} {{", s.code));
                     self.ind += 1;
                     for c in &conds {
-                        let pat = self.expr(c.node("test").unwrap().node("right").unwrap()).code;
+                        let right = c.node("test").unwrap().node("right").unwrap();
+                        self.push_scope();
+                        let pat = match self.case_pattern(right, label, &c.nodes("body"), if matches!(s.form, Form::Ref | Form::Mut) { Form::Ref } else { Form::Place }) {
+                            Some(p) => p,
+                            None => self.expr(right).code,
+                        };
                         let name = c.str("name").unwrap();
                         self.arm(&pat, name, name, &c.nodes("body"), tail);
+                        self.pop_scope();
                     }
                     if let Some(e) = els {
                         let name = e.str("name").unwrap();
@@ -1851,29 +2342,40 @@ impl<'a> Lowerer<'a> {
                     self.line("}");
                     return;
                 }
-                if let Ty::Res(ok, err) = s.ty.clone() {
+                if let (Ty::Res(ok, err), true) = (s.ty.clone(), all_plain) {
+                    // a borrowed result is matched as it is, and its arms bind references
+                    let arm_form = if matches!(s.form, Form::Ref | Form::Mut) { Form::Ref } else { Form::Place };
                     self.line(format!("match {} {{", s.code));
                     self.ind += 1;
-                    let mut arms: Vec<(bool, String, Vec<&Node>)> = vec![];
+                    // each arm: success or failure (`None` for the rest), its name, its block, and the case it names
+                    let mut arms: Vec<(Option<bool>, String, Vec<&Node>, Option<&Node>)> = vec![];
                     for c in &conds {
-                        let t = c.node("test").unwrap();
-                        let is_ok = t.kind == "binary" && is_member(t.node("right").unwrap(), "result", "ok");
-                        arms.push((is_ok, c.str("name").unwrap().to_string(), c.nodes("body")));
+                        let r = c.node("test").unwrap().node("right").unwrap();
+                        let with_case = |n: &str| r.kind == "call" && r.node("callee").is_some_and(|c| is_member(c, "result", n));
+                        let (is_ok, case) = if with_case("ok") { (true, Some(r)) } else if with_case("err") { (false, Some(r)) } else { (is_member(r, "result", "ok"), None) };
+                        arms.push((Some(is_ok), c.str("name").unwrap().to_string(), c.nodes("body"), case));
                     }
                     if let Some(e) = els {
-                        let has_ok = arms.iter().any(|a| a.0);
-                        arms.push((!has_ok, e.str("name").unwrap().to_string(), e.nodes("body")));
+                        let cased = arms.iter().any(|a| a.3.is_some());
+                        let has_ok = arms.iter().any(|a| a.0 == Some(true) && a.3.is_none());
+                        arms.push((if cased { None } else { Some(!has_ok) }, e.str("name").unwrap().to_string(), e.nodes("body"), None));
                     }
-                    for (is_ok, name, body) in arms {
+                    for (is_ok, name, body, case) in arms {
                         self.push_scope();
-                        if is_ok {
-                            self.bind_arm(label, (*ok).clone(), true);
-                        } else {
-                            self.bind_arm(label, (*err).clone(), false);
-                        }
-                        let used = body.iter().any(|b| { let mut u = false; b.walk(&mut |n: &Node| if n.kind == "name" && n.str("name") == Some(label) { u = true; }); u });
-                        let bound = if used { label.to_string() } else { "_".to_string() };
-                        let pat = if is_ok { format!("Ok({bound})") } else { format!("Err({bound})") };
+                        let pat = match (is_ok, case) {
+                            (None, _) => "_".to_string(),
+                            (Some(_), Some(r)) => match self.case_pattern(r, label, &body, arm_form) {
+                                Some(p) => p,
+                                None => self.expr(r).code,
+                            },
+                            (Some(is_ok), None) => {
+                                let t = if is_ok { (*ok).clone() } else { (*err).clone() };
+                                self.scopes.last_mut().unwrap().insert(label.to_string(), Var { ty: t, form: arm_form, arm: Some(is_ok), alias: None });
+                                let used = body.iter().any(|b| { let mut u = false; b.walk(&mut |n: &Node| if n.kind == "name" && n.str("name") == Some(label) { u = true; }); u });
+                                let bound = if used { label.to_string() } else { "_".to_string() };
+                                if is_ok { format!("Ok({bound})") } else { format!("Err({bound})") }
+                            }
+                        };
                         self.arm(&pat, &name, &name, &body, tail);
                         self.pop_scope();
                     }
@@ -1881,7 +2383,7 @@ impl<'a> Lowerer<'a> {
                     self.line("}");
                     return;
                 }
-                if let Ty::Opt(inner) = s.ty.clone() {
+                if let (Ty::Opt(inner), true) = (s.ty.clone(), all_plain) {
                     // `conditional held = …:` over an optional: `None`, and `Some(held)`, which narrows it; a place
                     // whose value is not copied is borrowed
                     let borrowed = s.form != Form::Temp && !self.is_copy(&inner);
@@ -1914,7 +2416,7 @@ impl<'a> Lowerer<'a> {
                 }
                 let is_case = |o: &Node| o.kind == "binary" && o.str("op") == Some("==") && name_of(o.node("left").unwrap()) == Some(label) && o.node("right").is_some_and(|r| r.kind == "member");
                 let guarded = |t: &Node| t.kind == "binary" && t.str("op") == Some("and") && is_case(t.node("left").unwrap());
-                let by_case = conds.iter().all(|c| {
+                let by_case = !matches!(s.ty, Ty::Opt(_) | Ty::Res(..)) && conds.iter().all(|c| {
                     let t = c.node("test").unwrap();
                     is_case(t) || guarded(t) || (or_operands(t).len() > 1 && or_operands(t).iter().all(|o| is_case(o)))
                 });
@@ -1928,17 +2430,27 @@ impl<'a> Lowerer<'a> {
                     let form = if matches!(s.form, Form::Temp) || self.is_copy(&s.ty) { Form::Place } else { Form::Ref };
                     self.line(format!("let {label} = {code};"));
                     self.bind(label, s.ty.clone(), form);
+                    // what the conditions before one show by not holding holds where it is tested, and in its block
+                    let mut before: Vec<(String, Narrow)> = vec![];
+                    self.push_scope();
                     for (k, c) in conds.iter().enumerate() {
-                        let x = self.expr(c.node("test").unwrap());
+                        let t = c.node("test").unwrap();
+                        let x = self.expr(t);
                         let name = c.str("name").unwrap();
                         self.line(format!("{}if {} {{ // y: #{name}", if k == 0 { "" } else { "} else " }, x.code));
-                        self.branch_block(name, &c.nodes("body"), tail);
+                        let mut ns = before.clone();
+                        ns.extend(narrowings(t, true));
+                        self.branch_block_narrowed(name, &c.nodes("body"), tail, &ns);
+                        let shown = narrowings(t, false);
+                        self.bind_narrowed_aliases(&shown);
+                        before.extend(shown);
                     }
                     if let Some(e) = els {
                         let name = e.str("name").unwrap();
                         self.line(format!("}} else {{ // y: #{name}"));
-                        self.branch_block(name, &e.nodes("body"), tail);
+                        self.branch_block_narrowed(name, &e.nodes("body"), tail, &before);
                     }
+                    self.pop_scope();
                     self.line("}");
                     return;
                 }
@@ -1960,7 +2472,11 @@ impl<'a> Lowerer<'a> {
                         }
                         continue;
                     }
-                    let pat = if is_case(t) {
+                    self.push_scope();
+                    let fielded = if is_case(t) { self.case_pattern(t.node("right").unwrap(), label, &c.nodes("body"), if matches!(s.form, Form::Ref | Form::Mut) { Form::Ref } else { Form::Place }) } else { None };
+                    let pat = if let Some(p) = fielded {
+                        p
+                    } else if is_case(t) {
                         self.expr(t.node("right").unwrap()).code
                     } else if guarded(t) {
                         // `(shown == outcome.playing) and p`: the case, with `p` as the arm's guard
@@ -1972,6 +2488,7 @@ impl<'a> Lowerer<'a> {
                         format!("_ if {}", x.code)
                     };
                     self.arm(&pat, name, name, &c.nodes("body"), tail);
+                    self.pop_scope();
                 }
                 if let Some(e) = els {
                     let name = e.str("name").unwrap();
@@ -2075,7 +2592,12 @@ impl<'a> Lowerer<'a> {
         if ran {
             self.line("ran = true;");
         }
+        // what a `while`'s condition shows holds in its body (Y § 3.3)
+        let shown = if st.kind == "while" { narrowings(st.node("condition").unwrap(), true) } else { vec![] };
+        self.push_scope();
+        self.bind_narrowed_lets(&shown, &st.nodes("body"));
         self.block(&st.nodes("body"), false);
+        self.pop_scope();
         self.loops.pop();
         self.ind -= 1;
         self.ctx.branches.pop();
@@ -2159,6 +2681,11 @@ fn or_operands(e: &Node) -> Vec<&Node> {
 /// Two expressions that read the same.
 fn same(a: &Node, b: &Node) -> bool {
     y_text(a) == y_text(b)
+}
+
+/// A receiver's Rust code as the Y it was lowered from, near enough for a diagnostic: `game.misses` of `game.misses`.
+fn y_text_of(code: &str) -> String {
+    code.trim_start_matches('&').trim_start_matches("mut ").replace("()", "").to_string()
 }
 
 /// An expression as Y text, for comments.

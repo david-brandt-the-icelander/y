@@ -7,6 +7,8 @@ pub mod ty;
 pub mod ware;
 pub mod bare;
 pub mod facts;
+pub mod library;
+pub mod evaluate;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -36,6 +38,26 @@ fn package(dir: &Path) -> Result<(String, String), String> {
     Ok((field("name").ok_or("Cargo.toml has no name")?, field("version").ok_or("Cargo.toml has no version")?))
 }
 
+/// The `fails` roles of the functions each `compile` calls, by the site and the case's Rust name: what a failure while
+/// building is reported with (Y § 3.17).
+fn failure_roles(tree: &y_parse::Node, sites: &[evaluate::Site]) -> std::collections::BTreeMap<String, String> {
+    let mut out = std::collections::BTreeMap::new();
+    for s in sites {
+        let callee = s.call.split('(').next().unwrap_or("").trim();
+        for (_, d) in model::declarations(tree) {
+            if d.kind != "function" || d.str("name") != Some(callee) {
+                continue;
+            }
+            for en in d.node("doc").map(|doc| doc.nodes("entries")).unwrap_or_default() {
+                if let Some(case) = en.str("name").and_then(|n| n.strip_prefix("fails ")).and_then(|c| c.split_once('.')).map(|c| c.1) {
+                    out.insert(format!("{}#{}", s.id, ty::pascal(case)), en.str("text").unwrap_or("").to_string());
+                }
+            }
+        }
+    }
+    out
+}
+
 /// Compiles the example in `dir`.
 pub fn compile(dir: &Path, opts: &Options) -> Result<String, String> {
     let src = dir.join("y/src");
@@ -62,7 +84,40 @@ pub fn compile(dir: &Path, opts: &Options) -> Result<String, String> {
     let mm = model::Module::new(&main_tree);
     let (pkg, version) = package(dir)?;
     let lib_crate = pkg.replace('-', "_");
-    let e = emit::emit(&m, &test_tree, &tm, &mm, &lib_crate);
+    lower::ERRORS.with(|es| es.borrow_mut().clear());
+    lower::SITES.with(|s| s.borrow_mut().clear());
+    lower::COMPILED.with(|c| *c.borrow_mut() = None);
+    let mut e = emit::emit(&m, &test_tree, &tm, &mm, &lib_crate);
+    let errors = lower::ERRORS.with(|es| std::mem::take(&mut *es.borrow_mut()));
+    if !errors.is_empty() {
+        return Err(errors.join("\n"));
+    }
+    // each `compile`, evaluated by the build step, and the package lowered again with the values (Y § 3.17)
+    let sites = lower::SITES.with(|s| std::mem::take(&mut *s.borrow_mut()));
+    if !sites.is_empty() {
+        let module_sites: Vec<_> = sites.iter().filter(|s| s.id.starts_with(&format!("y/src/{name}.y:"))).cloned().collect();
+        let main_sites: Vec<_> = sites.iter().filter(|s| s.id.starts_with("y/src/main.y:")).cloned().collect();
+        let mut module_text = e.module.clone();
+        if !module_sites.is_empty() {
+            module_text = format!("{module_text}\n{}\n", evaluate::evaluator(&m, &module_sites));
+        }
+        let files = vec![
+            (PathBuf::from("src/lib.rs"), e.lib.clone()),
+            (PathBuf::from(format!("src/{name}.rs")), module_text),
+            (PathBuf::from(format!("src/{name}/tests.rs")), e.tests.clone()),
+            (PathBuf::from("src/main.rs"), e.main.clone()),
+        ];
+        let roles = failure_roles(&tree, &sites);
+        let values = evaluate::run(dir, &files, &evaluate::evaluator(&m, &main_sites), !module_sites.is_empty(), &lib_crate, &name, &sites, &roles)?;
+        lower::COMPILED.with(|c| *c.borrow_mut() = Some(values));
+        e = emit::emit(&m, &test_tree, &tm, &mm, &lib_crate);
+        lower::COMPILED.with(|c| *c.borrow_mut() = None);
+        lower::SITES.with(|s| s.borrow_mut().clear());
+        let errors = lower::ERRORS.with(|es| std::mem::take(&mut *es.borrow_mut()));
+        if !errors.is_empty() {
+            return Err(errors.join("\n"));
+        }
+    }
     let files = vec![
         (PathBuf::from("src/lib.rs"), e.lib.clone()),
         (PathBuf::from(format!("src/{name}.rs")), e.module.clone()),

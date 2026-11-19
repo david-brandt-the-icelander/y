@@ -1,0 +1,12 @@
+[package]
+name = "compile-time-program"
+version = "0.0.0"
+edition = "2021"
+description = "A Y test program: `compile f(…)`, evaluated while the program is built."
+
+[dependencies]
+y-runtime = { path = "../y-runtime" }
+y-string = { path = "../y-string" }
+y-collections = { path = "../y-collections" }
+
+[workspace]
