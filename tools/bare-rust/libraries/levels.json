@@ -19,6 +19,11 @@
     "y_runtime::Random": "effects",
     "y_runtime::Forever": "effects",
     "y_runtime::Deadline": "effects",
+    "y_runtime::command::Submit": "effects",
+    "y_runtime::faults": "shared",
+    "y_runtime::observe": "shared",
+    "y_runtime::observe::log": "calculations",
+    "y_runtime::observe::metric": "calculations",
     "y_window": "effects",
     "y_http": "effects",
     "std::cell": "shared",
@@ -48,6 +53,18 @@
         "y_runtime::Deadline::remaining"
       ],
       "why": "waits for a commit on the deadline its caller gave it: the caller pays for the deadline (`y_runtime::Deadline::after`, at `effects`) and for the wait (`// y: waits until \u2026`, at `effects`)"
+    },
+    "y_runtime::observe::log": {
+      "calls": [
+        "y_runtime::observe::emit"
+      ],
+      "why": "observability is Y's one ambient exception (Y \u00a7 3.7): a `log` needs no capability, and is write-only, so nothing in a program can read it back or change its results by it"
+    },
+    "y_runtime::observe::metric": {
+      "calls": [
+        "y_runtime::observe::emit"
+      ],
+      "why": "observability is Y's one ambient exception (Y \u00a7 3.7): a `metric` needs no capability, and is write-only, so nothing in a program can read it back or change its results by it"
     }
   },
   "macros_from_table": {

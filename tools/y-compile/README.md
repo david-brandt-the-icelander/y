@@ -126,6 +126,9 @@ as `&'static str`, as the hand lowering did: a constant cannot make a `YString`.
 - `Forever::wait_on`, which runs what a region that is `forever` holds and gives its waits the capability.
 - The stand-ins `y_runtime::command`, `faults`, `observe` and `claims`, and `y_runtime::assertion`, for the
   declarations no example uses (below). Atomic regions consult `faults` and buffer `observe`'s entries per run.
+- Their levels in `tools/bare-rust/libraries/levels.json`: `Submit` is at `effects` (it reads the clock and waits
+  between attempts), `faults` and the run buffering of `observe` at `shared`, and `log` and `metric` at
+  `calculations`, trusted to buffer through thread-local state, since observability needs no capability (Y § 3.7).
 - In the tools: the enumerators of paths (`tools/paths/yp.py`, `tools/bare-rust/tests/y_paths`) take every callable,
   `transition`, `handler`, `workflow`, a lambda and a nested function as well as a `function`, and an enumeration's
   members; `tools/paths/ytrace.rs` records no path for a call that faults; `trace.py` copies a package's `native/`; and
