@@ -239,13 +239,21 @@ pub fn owner_of(t: &crate::ty::Ty) -> Option<(&'static str, &'static str)> {
 /// A Y type for a type the constraint data gives a parameter or a result: `T` is the receiver's element, a reference
 /// is what it refers to, and the scalars and collections are theirs.
 pub fn y_type(t: &str, elem: &crate::ty::Ty) -> crate::ty::Ty {
+    y_type_of(t, elem, &[])
+}
+
+/// `y_type`, with the receiver's other type parameters by their Rust names: a map's `K` and `V`.
+pub fn y_type_of(t: &str, elem: &crate::ty::Ty, named: &[(&str, crate::ty::Ty)]) -> crate::ty::Ty {
     use crate::ty::Ty;
     let t = t.trim();
     if let Some(inner) = t.strip_suffix('?') {
-        return Ty::Opt(Box::new(y_type(inner, elem)));
+        return Ty::Opt(Box::new(y_type_of(inner, elem, named)));
     }
     if let Some(inner) = t.strip_prefix("ref<target_type=").and_then(|r| r.strip_suffix('>')) {
-        return y_type(inner, elem);
+        return y_type_of(inner, elem, named);
+    }
+    if let Some((_, ty)) = named.iter().find(|(n, _)| *n == t) {
+        return ty.clone();
     }
     let (base, host) = match t.split_once(" as '") {
         Some((b, h)) => (b, h.trim_end_matches('\'')),

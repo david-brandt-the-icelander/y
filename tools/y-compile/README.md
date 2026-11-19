@@ -158,8 +158,14 @@ The value is the one the call gives at run time, because it is the same Rust. Wh
 the operand is one call of a function with no `injected` parameter; each argument is a literal, a list of them, a
 constant, or a name another `compile` bound; a call that fails is a compile error that names the call, the failure's
 case and the case's `fails` role; and a call that faults is a compile error with the fault. The values written as data
-are numbers, truth values, strings, refined types over them, closed types without payloads, decimals, and lists of
-these; a `compile` of any other type is a compile error that names it. `y-facts.json` `compiled` says where each is.
+are numbers, truth values, strings, refined types over them, decimals, structures and closed types of these, and lists,
+sets and maps of these; a `compile` of any other type (a capability, a `shared`, a `native` type) is a compile error
+that names it. `y-facts.json` `compiled` says where each is.
+
+The data of a structure is the tuple of its fields' data, `(3, 3, "centre", )`, built as `Spot { column: s0_0, … }`.
+A closed type with payloads is the number of its case, then one `Option` per case holding that case's fields where it
+is that case: `(1, None, Some((1, 5, )), None)`. A set is the slice of its elements, a map the slice of its pairs, each
+in the order it iterates (the order elements were added, or, sorted, the keys' order), built by adding each in turn.
 
 ## Narrowing
 
@@ -272,6 +278,10 @@ absent is copied out, `items.front().cloned()`). One the type does not offer is 
 and lists what the type offers, and so is a method a structure or closed type of the module does not have. The runtime
 operations the lowering's own rules call are listed in `LOWERED`, and `tests/library.rs` checks each against the
 crates.
+
+A map's parameters `K` and `V` are its key and value types, so `named.set(1, "first")` on a
+`map<key_type=uint32, value_type=string>` gives a `YString`. An empty collection (`map.new()`, `set.new()`,
+`list.new()`) bound to a name the function returns as its result takes the result's type, written on its `let`.
 
 ## The declarations and statements no example uses
 
@@ -471,5 +481,3 @@ It handles the forms the seven examples and the test programs use. In particular
 - **Generic declarations** of the module's own: a trait's methods take no type parameters, and an implementation is for
   a named type.
 - **A lint for `allow` to suppress**: the claim is kept as a comment.
-- **A `compile` of a value y-compile cannot write as data**: a structure, a closed type with payloads, a set or a map.
-  It is a compile error.

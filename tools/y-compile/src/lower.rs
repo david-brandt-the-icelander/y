@@ -65,6 +65,9 @@ pub struct Ctx {
     pub ensure_tail: bool,
     /// The function's result's Y name.
     pub result_name: String,
+    /// The names the function returns as its result as they are (`return r = name`): an empty collection bound to one
+    /// takes the result's type.
+    pub returned: Vec<String>,
 }
 
 pub struct Lowerer<'a> {
@@ -1643,10 +1646,15 @@ impl<'a> Lowerer<'a> {
             self.error(format!("`{}.{name}(…)`: {owner}::{name} takes {} arguments, and the call gives {}", y_text_of(&recv.code), m.params.len(), args.len()));
         }
         let elem = ty.elem();
+        let named: Vec<(&str, Ty)> = match &ty {
+            Ty::SortedMap(k, v) => vec![("K", (**k).clone()), ("V", (**v).clone())],
+            Ty::Coll(_, a) if a.len() == 2 => vec![("K", a[0].clone()), ("V", a[1].clone())],
+            _ => vec![],
+        };
         let mut parts = vec![];
         for (k, (_, a)) in args.iter().enumerate() {
             let pt = m.params.get(k).map(|p| p.1.clone()).unwrap_or_default();
-            let want = crate::library::y_type(&pt, &elem);
+            let want = crate::library::y_type_of(&pt, &elem, &named);
             let x = self.expr_want(a, &want);
             parts.push(if pt.starts_with("ref<") { self.by_ref(x, &want) } else { self.owned(x, &want) });
         }
@@ -1655,9 +1663,9 @@ impl<'a> Lowerer<'a> {
         match m.result.as_deref() {
             None => ex(call, Ty::Unit, Form::Temp, ATOM),
             // a borrowed element, which may be absent: copied out, as a Y value is
-            Some(t) if t.starts_with("ref<") && t.ends_with('?') => ex(format!("{call}.cloned()"), Ty::Opt(Box::new(crate::library::y_type(&t[..t.len() - 1], &elem))), Form::Temp, ATOM),
-            Some(t) if t.starts_with("ref<") => ex(call, crate::library::y_type(t, &elem), Form::Ref, ATOM),
-            Some(t) => ex(call, crate::library::y_type(t, &elem), Form::Temp, ATOM),
+            Some(t) if t.starts_with("ref<") && t.ends_with('?') => ex(format!("{call}.cloned()"), Ty::Opt(Box::new(crate::library::y_type_of(&t[..t.len() - 1], &elem, &named))), Form::Temp, ATOM),
+            Some(t) if t.starts_with("ref<") => ex(call, crate::library::y_type_of(t, &elem, &named), Form::Ref, ATOM),
+            Some(t) => ex(call, crate::library::y_type_of(t, &elem, &named), Form::Temp, ATOM),
         }
     }
 
@@ -2034,7 +2042,20 @@ impl<'a> Lowerer<'a> {
                 if matches!(&x.ty, Ty::Named(n) if n.starts_with("batch:")) {
                     self.held = Some(name.to_string());
                 }
-                self.line(format!("let {name} = {code};{claim}{marker}"));
+                // `mutable named = map.new()`, returned as the result: its elements are the result's
+                let mut x = x;
+                let mut annotation = String::new();
+                if let (true, Some(rt)) = (self.ctx.returned.iter().any(|r| r == name), self.ctx.result.clone()) {
+                    let rt = self.module().resolve(&rt);
+                    let empty = matches!((&x.ty, &rt), (Ty::Coll(a, e), Ty::Coll(b, _)) if a == b && e.is_empty())
+                        || matches!((&x.ty, &rt), (Ty::Set(e), Ty::Set(_)) | (Ty::List(e), Ty::List(_)) if **e == Ty::Unknown)
+                        || matches!((&x.ty, &rt), (Ty::SortedMap(k, _), Ty::SortedMap(..)) if **k == Ty::Unknown);
+                    if empty {
+                        annotation = format!(": {}", self.rust_type(&rt));
+                        x.ty = rt;
+                    }
+                }
+                self.line(format!("let {name}{annotation} = {code};{claim}{marker}"));
                 if x.ty == Ty::HostStr && v.kind == "or_fail" {
                     self.line(format!("let {name} = YString::from({name});"));
                     self.bind(name, Ty::Str, Form::Place);

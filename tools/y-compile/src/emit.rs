@@ -339,6 +339,17 @@ impl<'a> Lowerer<'a> {
             let r = f.result.as_ref().map(|r| r.0.clone()).unwrap_or_else(|| "result".into());
             self.ctx.ensures = ensures.iter().map(|n| (*n).clone()).collect();
             self.ctx.result_name = r.clone();
+            let mut returned = vec![];
+            for s in &body {
+                s.walk(&mut |n| {
+                    if n.kind == "return" && n.str("name") == Some(r.as_str()) {
+                        if let Some(v) = n.node("value").filter(|v| v.kind == "name") {
+                            returned.push(v.str("name").unwrap_or("").to_string());
+                        }
+                    }
+                });
+            }
+            self.ctx.returned = returned;
             // a function without failures whose last statement gives its value: the value is bound to the result's
             // name, checked, then given; every other `return` checks it where it returns
             let tail_value = f.fails.is_none() && f.result.is_some() && body.last().is_some_and(|l| matches!(l.kind, "return" | "if" | "conditional" | "compare"));

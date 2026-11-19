@@ -62,3 +62,75 @@ test the_table_holds_five
         count = table_size()
     then:
         five = (count == 5)
+
+
+-- The middle of a board of five is its third column and row.
+test the_middle_of_five_is_three
+        covers centre:
+    when:
+        middle = centre(5)
+    then:
+        third = (middle == spot(column: 3, row: 3, name: "centre"))
+
+
+-- A board's marks hold its middle, a wall along it and a place with nothing.
+test a_board_has_three_marks
+        covers marks_of:
+    when:
+        marks = marks_of(3)
+    then:
+        three = (marks == [mark.piece(at: spot(column: 2, row: 2, name: "centre")), mark.wall(from: 1, to: 3), mark.nothing])
+
+
+-- A board's edges are its first and last numbers.
+test the_edges_are_the_first_and_last
+        covers edges_of:
+    when:
+        edges = edges_of(4)
+    then:
+        both = (edges == set.of([1, 4]))
+
+
+-- A board's edges are named first and last.
+test the_edges_are_named
+        covers names_of:
+    when:
+        names = names_of(4)
+    then:
+        two = (names.count() == 2)
+
+
+-- The table's middle is the one the build computed.
+test the_table_centre_is_built
+        covers table_centre:
+    when:
+        middle = table_centre()
+    then:
+        third = (middle.column == 3)
+
+
+-- The table's marks are the ones the build computed.
+test the_table_marks_are_built
+        covers table_marks:
+    when:
+        marks = table_marks()
+    then:
+        three = (marks.count() == 3)
+
+
+-- The table's edges are 1 and 5.
+test the_table_edges_are_built
+        covers is_table_edge:
+    when:
+        edge = is_table_edge(5)
+    then:
+        five = edge
+
+
+-- The table names both its edges.
+test the_table_names_are_built
+        covers table_names:
+    when:
+        named = table_names()
+    then:
+        two = (named == 2)
