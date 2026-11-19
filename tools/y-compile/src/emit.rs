@@ -192,6 +192,7 @@ pub fn imports_for(code: &str) -> std::collections::BTreeSet<String> {
         ("Supervision", "y_runtime::task::Supervision"),
         ("Restart", "y_runtime::task::Restart"),
         ("supervised", "y_runtime::task::supervised"),
+        ("supervised_in", "y_runtime::task::supervised_in"),
         ("Cancellation", "y_runtime::task::Cancellation"),
         ("detach", "y_runtime::task::detach"),
         ("Arena", "y_runtime::arena::Arena"),
@@ -317,6 +318,56 @@ impl<'a> Lowerer<'a> {
         format!("{vis}{asynchronous}fn {}{generics}({}){rt}", f.name, ps.join(", "))
     }
 
+    /// A workflow's body, run by the journal (Y § 3.10): under its identity, its name and arguments as data, and its
+    /// version, a hash of its body, so that a run after a crash resumes from the steps the journal recorded.
+    fn workflow_body(&mut self, f: &FnInfo, body: &[&Node]) {
+        let puts: Vec<String> = f
+            .params
+            .iter()
+            .filter(|p| !p.injected)
+            .map(|p| format!("y_runtime::journal::Durable::put({}{}, &mut identity);", if p.mode == Mode::Value { "&" } else { "" }, p.name))
+            .collect();
+        // its statements as the tree has them, without where they are: moving the workflow is no new version
+        fn placeless(v: &mut serde_json::Value) {
+            match v {
+                serde_json::Value::Object(o) => {
+                    for k in ["line", "end", "blank", "gap"] {
+                        o.remove(k);
+                    }
+                    o.values_mut().for_each(placeless);
+                }
+                serde_json::Value::Array(a) => a.iter_mut().for_each(placeless),
+                _ => {}
+            }
+        }
+        let text: String = body
+            .iter()
+            .map(|s| {
+                let mut v: serde_json::Value = serde_json::from_str(&s.to_json()).unwrap_or_default();
+                placeless(&mut v);
+                v.to_string()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        // FNV-1a, 64 bits: the version changes with any change to the body
+        let mut h: u64 = 0xcbf29ce484222325;
+        for b in text.bytes() {
+            h ^= u64::from(b);
+            h = h.wrapping_mul(0x100000001b3);
+        }
+        let r = f.result.as_ref().map(|r| r.1.clone()).unwrap_or(Ty::Unit);
+        let rt = match &f.fails {
+            Some(e) => format!("Result<{}, {}>", self.rust_type(&r), self.rust_type(e)),
+            None => self.rust_type(&r),
+        };
+        self.line(format!("let mut identity = Vec::new();{}", if puts.is_empty() { String::new() } else { format!(" {}", puts.join(" ")) }));
+        self.line(format!("y_runtime::journal::workflow(\"{}::{}\", \"{h:016x}\", identity, || -> {rt} {{", self.m.name, f.name));
+        self.ind += 1;
+        self.block(body, true);
+        self.ind -= 1;
+        self.line("})");
+    }
+
     pub fn function_item(&mut self, d: &Node, f: &FnInfo, vis: &str) {
         for l in doc_lines(d, Some(f)) {
             self.line(l);
@@ -381,7 +432,9 @@ impl<'a> Lowerer<'a> {
             // a function without failures whose last statement gives its value: the value is bound to the result's
             // name, checked, then given; every other `return` checks it where it returns
             let tail_value = f.fails.is_none() && f.result.is_some() && body.last().is_some_and(|l| matches!(l.kind, "return" | "if" | "conditional" | "compare"));
-            if ensures.is_empty() {
+            if ensures.is_empty() && f.kind == "workflow" {
+                self.workflow_body(f, &body);
+            } else if ensures.is_empty() {
                 self.block(&body, true);
             } else if f.fails.is_some() && body.last().is_some_and(|l| l.kind == "return") {
                 // a function that may fail: the value it gives is checked, then given as its result
@@ -775,7 +828,10 @@ impl<'a> Lowerer<'a> {
                 }
                 self.function_item(d, &f, if facet { "pub " } else { "" });
             }
-            "structure" | "type_decl" | "enumeration" | "state" | "command" | "unit" => self.type_item(d, facet),
+            "structure" | "type_decl" | "enumeration" | "state" | "command" | "unit" => {
+                self.type_item(d, facet);
+                self.durable_item(d.str("name").unwrap());
+            }
             "trait" => {
                 for l in doc_lines(d, None) {
                     self.line(l);
@@ -789,7 +845,8 @@ impl<'a> Lowerer<'a> {
             "schema" if self.m.schemas.get(d.str("name").unwrap()).is_some_and(|s| s.versions.iter().map(|v| v.0).max() == d.str("version").and_then(|v| v.trim_start_matches('v').parse().ok())) => self.type_item(d, facet),
             "constants" | "service" => {
                 if self.m.types.contains_key(d.str("name").unwrap()) {
-                    self.type_item(d, facet)
+                    self.type_item(d, facet);
+                    self.durable_item(d.str("name").unwrap());
                 } else {
                     self.const_item(d, facet)
                 }
@@ -957,25 +1014,39 @@ pub fn tests_file(m: &Module, test_tree: &Node, test_module: &Module, y_path: &s
         }
         l.reset_scopes();
         l.ctx = Ctx { module: m.name.clone(), name: name.to_string(), result: None, fails: None, branches: vec![], section: None, ..Default::default() };
+        // a test that crashes the program runs its `when` again after the crash, as a restarted program would
+        let crashes = t.nodes("sections").iter().filter(|s| s.str("name") == Some("faults")).flat_map(|s| s.nodes("body")).any(|f| f.str("fault") == Some("crash"));
         for s in t.nodes("sections") {
             let section = s.str("name").unwrap();
             l.ctx.section = Some(section.to_string());
+            if section == "when" && crashes {
+                let names: Vec<&str> = s.nodes("body").iter().filter(|st| st.kind == "let").filter_map(|st| st.str("name")).collect();
+                let tuple = if names.len() == 1 { names[0].to_string() } else { format!("({})", names.join(", ")) };
+                l.line(format!("{}y_runtime::faults::restarting(|| {{", if names.is_empty() { String::new() } else { format!("let {tuple} = ") }));
+                l.ind += 1;
+                for st in s.nodes("body") {
+                    l.stmt_in_test(st);
+                }
+                if !names.is_empty() {
+                    l.line(tuple);
+                }
+                l.ind -= 1;
+                l.line("});");
+                continue;
+            }
             if section == "faults" {
                 // what the test forces where the code under test runs (Y § 3.14), through the runtime's stand-in
                 for f in s.nodes("body") {
                     let at = f.str("at").unwrap_or("");
                     let times = f.node("times").and_then(|t| t.str("text")).unwrap_or("1");
-                    let kind = match f.str("fault") {
-                        Some("conflict") => "Conflict",
-                        Some("expire") => "Expire",
-                        Some(other) => {
-                            l.copy_line = f.line;
-                            l.error(format!("`{other} …`: y-compile's runtime stand-in forces `conflict at` and `expire at` an atomic region, and not `{other}` (y_runtime::faults)"));
-                            continue;
-                        }
-                        None => continue,
+                    let (kind, words) = match f.str("fault") {
+                        Some("conflict") => ("Conflict", "conflict at"),
+                        Some("expire") => ("Expire", "expire at"),
+                        Some("crash") => ("Crash", "crash after commit"),
+                        Some("cancel") => ("Cancel", "cancel at"),
+                        _ => continue,
                     };
-                    l.line(format!("y_runtime::faults::force(y_runtime::faults::Kind::{kind}, \"{}::{at}\", {times}); // y: faults {} at {at}", m.name, f.str("fault").unwrap_or("")));
+                    l.line(format!("y_runtime::faults::force(y_runtime::faults::Kind::{kind}, \"{}::{at}\", {times}); // y: faults {words} {at}", m.name));
                 }
                 continue;
             }

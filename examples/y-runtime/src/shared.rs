@@ -338,10 +338,15 @@ pub fn orelse_with<R, E>(
     if crate::faults::take(crate::faults::Kind::Expire, name) {
         return Err(Aborted::Expired(Expired::fake()));
     }
-    match engine_for_a_run() {
+    let r = match engine_for_a_run() {
         Engine::OneLock => one_lock(name, deadline, &mut alternatives),
         Engine::Optimistic => optimistic(name, deadline, isolation, &mut alternatives),
+    };
+    // a test that crashes the program once the region has committed (`faults: crash after commit f#region`)
+    if r.is_ok() && crate::faults::take(crate::faults::Kind::Crash, name) {
+        crate::journal::crash_after_commit(name);
     }
+    r
 }
 
 /// Whether a run that would commit is made to conflict instead, by a test's `faults: conflict at f#region`: it is

@@ -127,6 +127,15 @@ pub fn supervised<E: Send + Clone>(policy: Supervision, tasks: Vec<TaskBody<'_, 
     }
 }
 
+/// As [`supervised`], with the region's identity (`module::function#region`) and each task's name. A task that a test
+/// cancels (`faults: cancel at function#task`, Y § 3.14) is cancelled before it starts: it does not run, it is not
+/// restarted, and its siblings and the region go on.
+pub fn supervised_in<'a, E: Send + Clone>(region: &str, policy: Supervision, tasks: Vec<(&str, TaskBody<'a, E>)>) -> Result<u32, Failed<E>> {
+    let function = region.split('#').next().unwrap_or(region);
+    let kept = tasks.into_iter().filter(|(name, _)| !crate::faults::take(crate::faults::Kind::Cancel, &format!("{function}#{name}"))).map(|(_, t)| t).collect();
+    supervised(policy, kept)
+}
+
 /// Detached work: a region that is `detach because "…", within d`.
 pub struct Detached<R> {
     done: mpsc::Receiver<R>,
@@ -199,6 +208,20 @@ mod tests {
         c.cancel();
         assert_eq!(c.held("flush", Duration::from_secs(1), || c.check()), Ok(()));
         assert_eq!(c.check(), Err(Cancelled));
+    }
+
+    #[test]
+    fn a_task_a_test_cancels_does_not_run_and_its_siblings_do() {
+        let done = AtomicU32::new(0);
+        let add = || -> TaskBody<'_, ()> {
+            Box::new(|_| {
+                done.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            })
+        };
+        crate::faults::force(crate::faults::Kind::Cancel, "m::f#first", 1);
+        let r = supervised_in("m::f#both", Supervision { restart: Restart::EachFailed, at_most: 1 }, vec![("first", add()), ("second", add())]);
+        assert_eq!((r, done.load(Ordering::SeqCst), crate::faults::unmet()), (Ok(0), 1, 0));
     }
 
     #[test]

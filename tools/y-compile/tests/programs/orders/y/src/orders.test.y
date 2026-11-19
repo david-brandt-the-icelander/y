@@ -165,3 +165,50 @@ test an_undeliverable_charge_is_given_back
         unreachable = (fulfilled == result.err(fulfil_error.unreachable))
         given_back = (bank.snapshot().refunds == 1)
         compensated = (charges.compensated() == 1)
+
+
+-- A crash after the order is reserved restarts the program: the workflow resumes, and does not reserve it again.
+test a_workflow_resumes_after_a_crash
+        covers reserve_and_charge > charged.paid:
+    inject:
+        reserved = shared.new(tally(count: 0, read_at: 0))
+        bank = shared.new(bank(balance: 50, refunds: 0))
+        charges = submit.to(charge)
+    faults:
+        crash after commit reserve_and_charge#reserving
+    when:
+        receipt = reserve_and_charge(id: 7, total: 20) or fail
+    then:
+        paid = (receipt == 1007)
+        reserved_once = (reserved.snapshot().count == 1)
+        charged_once = (bank.snapshot().balance == 30)
+
+
+-- A charge the bank declines leaves the order unpaid.
+test a_declined_charge_leaves_the_order_unpaid
+        covers reserve_and_charge > charged.unpaid:
+    inject:
+        reserved = shared.new(tally(count: 0, read_at: 0))
+        bank = shared.new(bank(balance: 10, refunds: 0))
+        charges = submit.to(charge)
+    when:
+        fulfilled = reserve_and_charge(id: 7, total: 20)
+    then:
+        unpaid = (fulfilled == result.err(fulfil_error.unpaid))
+
+
+-- A crash after the bank's handler commits restarts the program before the outcome is recorded: the command is
+-- delivered again, as at-least-once delivery does, and a handler that is not idempotent in effect charges twice.
+test a_command_is_delivered_again_after_a_crash
+        covers fulfil > charged.paid:
+    inject:
+        bank = shared.new(bank(balance: 50, refunds: 0))
+        charges = submit.to(charge)
+    faults:
+        crash after commit charge#taken
+    when:
+        receipt = fulfil(id: 7, total: 20) or fail
+    then:
+        paid = (receipt == 1007)
+        charged_twice = (bank.snapshot().balance == 10)
+

@@ -11,6 +11,7 @@ pub mod arena;
 pub mod claims;
 pub mod command;
 pub mod faults;
+pub mod journal;
 pub mod observe;
 pub mod decimal;
 pub mod pattern;

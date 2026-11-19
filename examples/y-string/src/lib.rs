@@ -272,6 +272,16 @@ impl fmt::Display for AsciiString {
     }
 }
 
+/// A string kept by the journal (`y_runtime::journal`), as its text.
+impl y_runtime::journal::Durable for YString {
+    fn put(&self, out: &mut Vec<String>) {
+        out.push(self.as_str().to_string());
+    }
+    fn take(input: &mut y_runtime::journal::Tokens<'_>) -> Option<Self> {
+        input.next().map(YString::new)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

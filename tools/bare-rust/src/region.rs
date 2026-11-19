@@ -374,12 +374,14 @@ pub fn check_body_with(brs: &str, js: &Value, name: &str, facts: Option<&[crate:
         };
         let waits_inside = |what: &str| what.starts_with("a wait, `waits until");
         // what keeps the region's own constraints is not an effect of its body: the deadline a `within` starts, the
-        // `Forever` a `forever` gives its wait, and the hold an `uncancellable` puts on cancellation
+        // `Forever` a `forever` gives its wait, and the hold an `uncancellable` puts on cancellation; nor is the
+        // journal's record of a region a workflow opens, made once when it commits, outside its runs (Y § 3.10)
         let forevers: Vec<String> = params.iter().filter(|(_, ty, _)| ty == "Forever" || ty.ends_with("<target_type=Forever>")).map(|(n, ..)| format!("the capability `{n}`")).collect();
         let keeps_constraint = |what: &str| {
             (has("within") && what.contains("y_runtime::Deadline"))
                 || (has("forever because") && (what.contains("y_runtime::Forever") || what == "a region that waits forever or is detached" || forevers.iter().any(|c| c == what)))
                 || (has("uncancellable") && what.contains("y_runtime::task::Cancellation"))
+                || what.contains("y_runtime::journal::region")
         };
         if let Some(u) = effects.iter().find(|u| u.function == f && u.level == 4 && u.line >= rows.0 && u.line <= rows.1 && !waits_inside(&u.what) && !keeps_constraint(&u.what)) {
             return Err(format!("region `{name}` is atomic and may run again, so it holds no external effect, and it has {} at line {} (language 6.22: `effects`)", u.what.trim_end_matches(','), u.line));
@@ -416,12 +418,12 @@ pub fn check_body_with(brs: &str, js: &Value, name: &str, facts: Option<&[crate:
             return Err(format!("{} gives no `Forever` capability to its wait", says("forever because")));
         }
     }
-    let checks: [(&str, &str, &str); 2] = [
-        ("detach because", "y_runtime::task::detach", "does not call `y_runtime::task::detach`"),
-        ("supervise", "y_runtime::task::supervised", "does not run its tasks with `y_runtime::task::supervised`"),
+    let checks: [(&str, &[&str], &str); 2] = [
+        ("detach because", &["y_runtime::task::detach"], "does not call `y_runtime::task::detach`"),
+        ("supervise", &["y_runtime::task::supervised", "y_runtime::task::supervised_in"], "does not run its tasks with `y_runtime::task::supervised`"),
     ];
     for (c, call, missing) in checks {
-        if has(c) && calls_to(&[call]).is_empty() {
+        if has(c) && calls_to(call).is_empty() {
             return Err(format!("{} {missing}", says(c)));
         }
     }

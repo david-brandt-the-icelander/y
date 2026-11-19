@@ -11,10 +11,16 @@
 //!   that exhausts the policy is abandoned, `undelivered.abandoned(abandonment)`, and then compensated by the command
 //!   its `on_abandon` builds, or parked as a dead letter. Each outcome is recorded against the command's key.
 //!
-//! What it does not keep: commands and outcomes do not outlive the process, a workflow does not resume after a crash,
-//! and a submitted command is delivered at once rather than by a separate worker.
+//! Inside a workflow, `submit` is a durable step (`crate::journal`): the command is recorded before it is delivered,
+//! and its outcome once it is known, under the workflow's identity. A workflow that resumes gets the recorded outcome
+//! and does not deliver the command again; one that crashed while a handler ran delivers it again. A handler runs
+//! outside the workflow: its own atomic regions are no steps of it. A crash is not caught as a failed delivery.
+//!
+//! What it does not keep: a submitted command is delivered at once, in the workflow's thread, rather than by a separate
+//! worker; and an outbox's commands are kept in shared state, delivered by nothing.
+use crate::journal::{case, Durable, Tokens};
 use std::cell::RefCell;
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::time::{Duration, Instant};
 
 /// What happens to a command that exhausts its policy.
@@ -85,6 +91,15 @@ pub struct Abandonment {
     pub attempts: u32,
 }
 
+impl Durable for Abandonment {
+    fn put(&self, out: &mut Vec<String>) {
+        self.attempts.put(out);
+    }
+    fn take(input: &mut Tokens<'_>) -> Option<Self> {
+        Some(Abandonment { attempts: u32::take(input)? })
+    }
+}
+
 /// Y's `undelivered<failure_type=e>`: why a submitted command has no outcome to give.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Undelivered<E> {
@@ -92,6 +107,28 @@ pub enum Undelivered<E> {
     Failed { error: E },
     /// Delivery exhausted the command's policy.
     Abandoned { abandonment: Abandonment },
+}
+
+impl<E: Durable> Durable for Undelivered<E> {
+    fn put(&self, out: &mut Vec<String>) {
+        match self {
+            Undelivered::Failed { error } => {
+                case(out, 0);
+                error.put(out);
+            }
+            Undelivered::Abandoned { abandonment } => {
+                case(out, 1);
+                abandonment.put(out);
+            }
+        }
+    }
+    fn take(input: &mut Tokens<'_>) -> Option<Self> {
+        match input.case()? {
+            0 => Some(Undelivered::Failed { error: E::take(input)? }),
+            1 => Some(Undelivered::Abandoned { abandonment: Abandonment::take(input)? }),
+            _ => None,
+        }
+    }
 }
 
 /// What happened to a command, recorded against its key.
@@ -110,14 +147,21 @@ pub struct Submit<'a, C, R, E> {
     outcomes: RefCell<Vec<Outcome>>,
 }
 
-impl<'a, C: Command, R, E> Submit<'a, C, R, E> {
+impl<'a, C: Command + Durable, R: Durable, E: Durable> Submit<'a, C, R, E> {
     /// `submit.to(handler)`.
     pub fn to(handler: impl Fn(&C) -> Result<R, E> + 'a, compensation: Option<Box<dyn Fn(&C) + 'a>>) -> Self {
         Submit { handler: Box::new(handler), compensation, outcomes: RefCell::new(vec![]) }
     }
 
-    /// `submit c`: the handler's result, or why there is none.
+    /// `submit c`: the handler's result, or why there is none; in a workflow, a durable step.
     pub fn submit(&self, command: C) -> Result<R, Undelivered<E>> {
+        crate::journal::step("submit", || {
+            crate::journal::command(&command.key(), &command);
+            crate::journal::outside(|| self.deliver(command))
+        })
+    }
+
+    fn deliver(&self, command: C) -> Result<R, Undelivered<E>> {
         let policy = C::policy();
         let started = Instant::now();
         let mut wait = policy.first;
@@ -134,6 +178,8 @@ impl<'a, C: Command, R, E> Submit<'a, C, R, E> {
                     self.outcomes.borrow_mut().push(Outcome::Failed { key: command.key() });
                     return Err(Undelivered::Failed { error: e });
                 }
+                // a crash is the program's, not the delivery's
+                Err(p) if p.is::<crate::faults::Crashed>() => resume_unwind(p),
                 // the handler could not be delivered to: tried again after the backoff, within the deadline
                 Err(_) => {
                     if attempts == tries || started.elapsed() + wait > policy.deadline {
@@ -181,6 +227,15 @@ mod tests {
     #[derive(Clone)]
     struct Charge(u32);
 
+    impl Durable for Charge {
+        fn put(&self, out: &mut Vec<String>) {
+            self.0.put(out);
+        }
+        fn take(input: &mut Tokens<'_>) -> Option<Self> {
+            Some(Charge(u32::take(input)?))
+        }
+    }
+
     impl Command for Charge {
         fn policy() -> Policy {
             Policy { attempts: 3, first: Duration::from_millis(1), factor: 2, deadline: Duration::from_secs(1), idempotent: true, on_abandon: OnAbandon::Compensate }
@@ -217,9 +272,36 @@ mod tests {
 
     #[test]
     fn a_handler_that_fails_has_failed() {
-        let s: Submit<Charge, u32, &str> = Submit::to(|_| Err("declined"), None);
-        assert_eq!(s.submit(Charge(1)), Err(Undelivered::Failed { error: "declined" }));
-        let s: Submit<Charge, u32, &str> = Submit::to(|c| Ok(c.0 * 2), None);
+        let s: Submit<Charge, u32, String> = Submit::to(|_| Err("declined".into()), None);
+        assert_eq!(s.submit(Charge(1)), Err(Undelivered::Failed { error: "declined".to_string() }));
+        let s: Submit<Charge, u32, String> = Submit::to(|c| Ok(c.0 * 2), None);
         assert_eq!((s.submit(Charge(4)), s.completed()), (Ok(8), 1));
+    }
+
+    #[test]
+    fn a_resumed_workflow_does_not_deliver_a_command_again() {
+        crate::journal::clear();
+        let delivered = Cell::new(0);
+        let s: Submit<Charge, u32, String> = Submit::to(
+            |c| {
+                delivered.set(delivered.get() + 1);
+                Ok(c.0 + 1000)
+            },
+            None,
+        );
+        // the program crashes after the outcome is recorded, and the workflow runs again
+        let crashed = Cell::new(false);
+        let receipt = crate::faults::restarting(|| {
+            crate::journal::workflow("m::fulfil", "v1", vec!["7".into()], || {
+                let r = s.submit(Charge(7));
+                if !crashed.replace(true) {
+                    crate::faults::crash("m::fulfil");
+                }
+                r
+            })
+        });
+        assert_eq!((receipt, delivered.get()), (Ok(1007), 1));
+        let kinds: Vec<String> = crate::journal::records().into_iter().map(|r| r.kind).collect();
+        assert_eq!(kinds, ["command", "submit", "result"]);
     }
 }

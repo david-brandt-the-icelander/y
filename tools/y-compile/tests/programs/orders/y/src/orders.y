@@ -41,6 +41,7 @@ public facet ordering:
     constants fulfil_error:
         declined = "declined"
         unreachable = "unreachable"
+        unpaid = "unpaid"
 
 
     -- Charges an order's total.
@@ -211,3 +212,28 @@ public facet ordering:
             condition charged.abandoned = (charged == result.err(undelivered.abandoned)):
                 metric charges_abandoned = 1
                 fail fulfil_error.unreachable
+
+
+    ------------------------------------------------------------------------------------------------------------------------
+    Reserves an order's stock, once, and then takes its payment: a crash between the two resumes after the reserving.
+
+    id: The order, as uint32.
+    total: What it costs, as uint32.
+
+    receipt: The bank's receipt, as uint32.
+
+    reserved: How many orders are reserved, as shared<value_type=tally>.
+    charges: Where charges are submitted, as submit<command_type=charge>.
+
+    fails fulfil_error.unpaid: The charge was declined, or could not be delivered.
+    ------------------------------------------------------------------------------------------------------------------------
+    workflow reserve_and_charge(id, total, injected reserved, injected charges) returns receipt fails fulfil_error:
+        region reserving is atomic:
+            reserved.count := reserved.count + 1
+
+        conditional charged = submit charge(order: id, amount: total):
+            condition charged.paid = (charged == result.ok):
+                return receipt = charged.value
+            else charged.unpaid:
+                fail fulfil_error.unpaid
+

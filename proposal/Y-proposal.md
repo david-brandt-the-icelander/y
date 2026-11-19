@@ -1887,6 +1887,14 @@ Tests are part of the language, because the compiler must know what a test claim
 | `when` | The single action under test |
 | `then` | Named checks only, one per line: `charged_once = (charges.committed().count() == 1)` |
 
+The two faults that are not about a transaction's own run mean this:
+
+- `crash after commit f#txn`: the program crashes once the transaction has committed, and starts again. The test's
+  `when` runs again, as the restarted program would run it; what committed stays committed, and a workflow resumes
+  from the steps it recorded (§ 3.10).
+- `cancel at f#task`: the task is cancelled before it starts. It does not run and is not restarted, and its siblings and
+  its region go on: a cancellation is not a failure that the region's supervision answers.
+
 **Checks.** Each line of `then` is a named boolean expression, written as a named condition is: `name = expression`.
 No `assert` keyword is needed there, because the section holds nothing else.
 

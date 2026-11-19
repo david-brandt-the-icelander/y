@@ -676,6 +676,7 @@ impl<'a> Lowerer<'a> {
                 self.line(format!("let deadline = Deadline::after({b});"));
             }
             let call = format!("{open}orelse(\"{label}\", {deadline}, vec![{}]){close}", names.join(", "));
+            let call = if self.function(&self.ctx.name.clone()).is_some_and(|f| f.kind == "workflow") { format!("y_runtime::journal::region(|| {call})") } else { call };
             self.finish_atomic_with(&call, returns, tail, &result_name, &format!("{label}#{last}"), expiry.as_ref());
             return;
         }
@@ -687,6 +688,9 @@ impl<'a> Lowerer<'a> {
             self.line(format!("let deadline = Deadline::after({b});"));
         }
         let isolation = st.nodes("constraints").iter().find(|c| c.str("word") == Some("isolation")).and_then(|c| c.str("level")).map(pascal);
+        // in a workflow, a step of its journal: given again, and not run, when the workflow resumes (Y § 3.10)
+        let durable = self.function(&self.ctx.name.clone()).is_some_and(|f| f.kind == "workflow");
+        let (open, close) = if durable { (format!("y_runtime::journal::region(|| {open}"), format!("{close})")) } else { (open, close) };
         let head = match &isolation {
             Some(level) => format!("let {name} = {open}atomic_with(\"{label}#{name}\", {deadline}, Isolation::{level}, |tx| -> Result<Step<{rust}>, Infallible> {{"),
             None => format!("let {name} = {open}atomic(\"{label}#{name}\", {deadline}, |tx| -> Result<Step<{rust}>, Infallible> {{"),
@@ -763,7 +767,7 @@ impl<'a> Lowerer<'a> {
             self.line(format!("    {call};"));
             self.line("    Ok(())");
             self.line("});");
-            tasks.push(tn.to_string());
+            tasks.push(format!("(\"{tn}\", {tn})"));
         }
         let sup = st.nodes("constraints").into_iter().find(|c| c.str("word") == Some("supervise"));
         let (mut restart, mut at_most) = ("EachFailed".to_string(), "0".to_string());
@@ -779,7 +783,7 @@ impl<'a> Lowerer<'a> {
         self.line(format!("let policy = Supervision {{ restart: Restart::{restart}, at_most: {at_most} }};"));
         let w = self.wrapping(st);
         let (open, close) = self.wrap_call(&w, &format!("{}::{}#{name}", self.ctx.module, self.ctx.name));
-        self.line(format!("if let Err(failed) = {open}supervised(policy, vec![{}]){close} {{", tasks.join(", ")));
+        self.line(format!("if let Err(failed) = {open}supervised_in(\"{}::{}#{name}\", policy, vec![{}]){close} {{", self.ctx.module, self.ctx.name, tasks.join(", ")));
         self.line("    match failed.failure {}");
         self.line("}");
         if within.is_some() && !detached {

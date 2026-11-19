@@ -233,6 +233,75 @@ impl<'a> Lowerer<'a> {
         self.line("}");
     }
 
+    /// Whether the journal can keep a value of a type (Y § 3.10): numbers, truth values, strings, and lists, optionals,
+    /// structures, commands and closed types of these.
+    pub fn durable(&self, t: &Ty, depth: usize) -> bool {
+        if depth > 6 {
+            return false;
+        }
+        match self.m.resolve(t) {
+            Ty::U32 | Ty::I32 | Ty::U64 | Ty::U16 | Ty::Count | Ty::Int | Ty::Bool | Ty::Str | Ty::Unit => true,
+            Ty::List(e) | Ty::Opt(e) => self.durable(&e, depth + 1),
+            Ty::Named(n) => match self.m.types.get(&n).map(|t| &t.def) {
+                Some(TypeDef::Struct { fields, .. }) | Some(TypeDef::Command { fields, .. }) => fields.iter().all(|(_, f)| self.durable(f, depth + 1)),
+                Some(TypeDef::Enum { cases }) => cases.iter().all(|(_, fs)| fs.iter().all(|(_, f)| self.durable(f, depth + 1))),
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
+    /// `impl Durable`, for each command, structure and closed type of a module that has workflows or handlers, that the
+    /// journal can keep: what a workflow is called with, a command, an outcome and a failure are written to it.
+    pub fn durable_item(&mut self, name: &str) {
+        if !self.m.fns.values().any(|f| f.kind == "workflow" || f.kind == "handler") || !self.durable(&Ty::Named(name.to_string()), 0) {
+            return;
+        }
+        let en = pascal(name);
+        let put = |f: &str| format!("y_runtime::journal::Durable::put({f}, out);");
+        let take = "y_runtime::journal::Durable::take(input)?";
+        let (puts, takes): (Vec<String>, String) = match self.m.types.get(name).map(|t| t.def.clone()) {
+            Some(TypeDef::Struct { fields, .. }) | Some(TypeDef::Command { fields, .. }) => (
+                fields.iter().map(|(f, _)| put(&format!("&self.{f}"))).collect(),
+                format!("Some({en} {{ {} }})", fields.iter().map(|(f, _)| format!("{f}: {take}")).collect::<Vec<_>>().join(", ")),
+            ),
+            Some(TypeDef::Enum { cases }) => {
+                let arms: Vec<String> = cases
+                    .iter()
+                    .enumerate()
+                    .map(|(k, (c, fs))| {
+                        let pattern = if fs.is_empty() { String::new() } else { format!(" {{ {} }}", fs.iter().map(|(f, _)| f.as_str()).collect::<Vec<_>>().join(", ")) };
+                        let fields: Vec<String> = fs.iter().map(|(f, _)| put(f)).collect();
+                        format!("{en}::{}{pattern} => {{ y_runtime::journal::case(out, {k}); {} }}", pascal(c), fields.join(" "))
+                    })
+                    .collect();
+                let reads: Vec<String> = cases
+                    .iter()
+                    .enumerate()
+                    .map(|(k, (c, fs))| {
+                        let fields = if fs.is_empty() { String::new() } else { format!(" {{ {} }}", fs.iter().map(|(f, _)| format!("{f}: {take}")).collect::<Vec<_>>().join(", ")) };
+                        format!("{k} => Some({en}::{}{fields}),", pascal(c))
+                    })
+                    .collect();
+                (vec![format!("match self {{ {} }}", arms.join(" "))], format!("match input.case()? {{ {} _ => None }}", reads.join(" ")))
+            }
+            _ => return,
+        };
+        self.line("");
+        self.line(format!("/// `{name}`, as the journal keeps it (Y § 3.10): its fields in order, a closed type's case first."));
+        self.line(format!("impl y_runtime::journal::Durable for {en} {{"));
+        self.line("    fn put(&self, out: &mut Vec<String>) {");
+        for p in &puts {
+            self.line(format!("        {p}"));
+        }
+        self.line("    }");
+        self.line("");
+        self.line("    fn take(input: &mut y_runtime::journal::Tokens<'_>) -> Option<Self> {");
+        self.line(format!("        {takes}"));
+        self.line("    }");
+        self.line("}");
+    }
+
     /// `implementation trait for type:`: `impl Trait for Type`, each method lowered as a function whose `me` is `self`.
     pub fn implementation_item(&mut self, d: &Node) {
         let (tr, ty) = (d.str("trait").unwrap(), d.str("type").unwrap());
