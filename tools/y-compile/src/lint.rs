@@ -32,6 +32,79 @@ pub const LINTS: &[Lint] = &[
     Lint { code: "Y2005", name: "todo_comment", suppressible: true, what: "a `TODO` or `FIXME` comment, where a `gap:` belongs (Y § 3.16)" },
     Lint { code: "Y2006", name: "repeated_call", suppressible: true, what: "the same call in more than one condition of a `conditional` (Y § 3.5)" },
     Lint { code: "Y2007", name: "shadowing", suppressible: false, what: "a name bound again where it is already bound (Y § 3.15: an official lint)" },
+    Lint { code: "Y2008", name: "abbreviation", suppressible: false, what: "an abbreviation in a name the file declares, not in the project's glossary (Y § 3.1: an official lint)" },
+];
+
+/// The abbreviations the lint knows, each with the word it stands for. A name that is a word is not judged: the lint
+/// knows abbreviations, not the dictionary, so it finds the ones programmers reach for.
+pub const ABBREVIATIONS: &[(&str, &str)] = &[
+    ("abs", "absolute"), ("acc", "accumulator"), ("addr", "address"), ("alloc", "allocation"), ("amt", "amount"),
+    ("app", "application"), ("arg", "argument"), ("args", "arguments"), ("arr", "array"), ("attr", "attribute"),
+    ("auth", "authentication"), ("avg", "average"), ("bool", "boolean"), ("btn", "button"), ("buf", "buffer"),
+    ("calc", "calculate"), ("cb", "callback"), ("cfg", "configuration"), ("chk", "check"),
+    ("cmd", "command"), ("cnt", "count"), ("col", "column"), ("cols", "columns"), ("conf", "configuration"),
+    ("config", "configuration"), ("conn", "connection"), ("coord", "coordinate"), ("ctx", "context"), ("cur", "current"),
+    ("curr", "current"), ("db", "database"), ("decl", "declaration"), ("def", "definition"), ("del", "delete"),
+    ("desc", "description"), ("dest", "destination"), ("dict", "dictionary"), ("diff", "difference"), ("dir", "directory"),
+    ("dst", "destination"), ("elem", "element"), ("env", "environment"), ("eq", "equal"), ("err", "error"),
+    ("evt", "event"), ("expr", "expression"), ("ext", "extension"), ("fmt", "format"), ("fn", "function"),
+    ("func", "function"), ("gen", "generate"), ("hdr", "header"), ("idx", "index"), ("img", "image"),
+    ("impl", "implementation"), ("inc", "increment"), ("info", "information"), ("init", "initial"), ("int", "integer"),
+    ("iter", "iteration"), ("lbl", "label"), ("len", "length"), ("lhs", "left"), ("lib", "library"), ("ln", "line"),
+    ("loc", "location"), ("max", "maximum"), ("mem", "memory"), ("misc", "miscellaneous"), ("mod", "module"),
+    ("msg", "message"), ("mut", "mutable"), ("nav", "navigation"), ("num", "number"), ("obj", "object"),
+    ("param", "parameter"), ("params", "parameters"), ("pct", "percent"), ("pkg", "package"),
+    ("pos", "position"), ("prev", "previous"), ("proc", "process"), ("ptr", "pointer"), ("pwd", "password"),
+    ("qty", "quantity"), ("ref", "reference"), ("req", "request"), ("res", "result"), ("resp", "response"),
+    ("ret", "return"), ("rhs", "right"), ("sel", "selection"), ("seq", "sequence"), ("sig", "signature"),
+    ("src", "source"), ("srv", "server"), ("std", "standard"), ("str", "string"), ("svc", "service"),
+    ("sys", "system"), ("tbl", "table"), ("tmp", "temporary"), ("tx", "transaction"),
+    ("txn", "transaction"), ("usr", "user"), ("util", "utility"), ("val", "value"), ("var", "variable"),
+    ("vec", "vector"), ("ver", "version"), ];
+
+/// The few abbreviations every Y programmer learns once (Y § 3.1), beside the project's glossary: the standard unit
+/// symbols and currency codes. The sized numeric types are names of their own (`int64`, `float64`), not split.
+const UNIT_SYMBOLS: &[&str] = &["s", "ms", "us", "ns", "min", "h", "d", "m", "km", "cm", "mm", "kg", "g", "b", "kb", "mb", "gb", "tb"];
+const CURRENCIES: &[&str] = &["isk", "eur", "usd", "gbp", "jpy", "chf", "sek", "nok", "dkk", "cad", "aud", "cny"];
+const SIZED: &[&str] = &["int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64", "float32", "float64"];
+
+/// What a package allows beyond the lint's own lists: its glossary (`y/glossary`, one `term: what it stands for` a
+/// line) and the unit symbols it declares.
+#[derive(Default, Clone)]
+pub struct Words {
+    pub glossary: Vec<String>,
+    pub units: Vec<String>,
+}
+
+impl Words {
+    /// The glossary's terms, from its text: each line `term: what it stands for`; blank lines and `--` comments aside.
+    pub fn read_glossary(text: &str) -> Result<Vec<String>, String> {
+        let mut out = vec![];
+        for (k, l) in text.lines().enumerate() {
+            let l = l.trim();
+            if l.is_empty() || l.starts_with("--") {
+                continue;
+            }
+            match l.split_once(':') {
+                Some((t, what)) if !t.trim().is_empty() && !what.trim().is_empty() => out.push(t.trim().to_string()),
+                _ => return Err(format!("y/glossary:{}: a term is written `term: what it stands for`", k + 1)),
+            }
+        }
+        Ok(out)
+    }
+
+    fn allows(&self, part: &str) -> bool {
+        self.glossary.iter().any(|g| g == part) || self.units.iter().any(|u| u == part) || UNIT_SYMBOLS.contains(&part) || CURRENCIES.contains(&part) || SIZED.contains(&part)
+    }
+}
+
+/// The node kinds whose `name` the file declares: a name used is judged where it is declared, and a name the runtime
+/// gives (a method, a type argument) is the standard library's.
+const DECLARING: &[&str] = &[
+    "module", "facet", "function", "rule", "transition", "handler", "workflow", "test", "param", "field", "derived",
+    "invariant", "case", "structure", "type_decl", "enumeration", "state", "trait", "command", "schema", "constants",
+    "constant", "unit", "service", "let", "for", "while", "if", "else", "condition", "conditional", "compare", "region",
+    "task", "assert", "assume", "where", "ensures", "binding", "arena", "metric",
 ];
 
 fn lint_named(code_or_name: &str) -> Option<&'static Lint> {
@@ -57,9 +130,27 @@ fn last_line(n: &Node) -> usize {
 
 /// The lints of one Y file: (errors, warnings), each `file:line: name (code): …`. Paths are counted in the module's
 /// own file (`module`): a test file or `main` reads the units and types the module declares.
-pub fn lint(file: &str, source: &str, tree: &Node, module: bool) -> (Vec<String>, Vec<String>) {
+pub fn lint(file: &str, source: &str, tree: &Node, module: bool, words: &Words) -> (Vec<String>, Vec<String>) {
     let mut found: Vec<Finding> = vec![];
     let find = |name: &str| lint_named(name).unwrap();
+
+    // abbreviations, in each name the file declares and each function's result
+    tree.walk(&mut |n: &Node| {
+        let mut names: Vec<&str> = vec![];
+        if DECLARING.contains(&n.kind) {
+            names.extend(n.str("name"));
+        }
+        if matches!(n.kind, "function" | "rule" | "transition" | "handler" | "workflow") {
+            names.extend(n.str("returns"));
+        }
+        for name in names {
+            for part in name.split(['_', '.']).filter(|p| !p.is_empty() && !p.bytes().all(|b| b.is_ascii_digit())) {
+                if let Some((_, word)) = ABBREVIATIONS.iter().find(|(a, _)| *a == part).filter(|_| !words.allows(part)) {
+                    found.push(Finding { line: n.line, lint: find("abbreviation"), message: format!("`{name}`: `{part}` abbreviates `{word}`; write the word, or put `{part}` in the project's glossary (`y/glossary`)"), warning: false });
+                }
+            }
+        }
+    });
 
     // type_argument_name, by the lint the examples' checks run; it reads its own `-- lint: allow` comments
     for e in y_lint::type_argument_names_in(file, tree) {

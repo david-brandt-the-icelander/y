@@ -663,6 +663,23 @@ impl<'a> Lowerer<'a> {
             "list" => self.expr_want(e, &Ty::List(Box::new(Ty::Unknown))),
             "or_fail" => {
                 let x = self.expr(e.node("value").unwrap());
+                // a submit's `undelivered<failure_type=e>`: the function's failure must have a case to carry it
+                if let (Ty::Res(_, u), None) = (&x.ty, &self.ctx.section) {
+                    if let Ty::Undelivered(inner) = &**u {
+                        let fails = self.ctx.fails.clone();
+                        let converts = match &fails {
+                            Some(Ty::Named(n)) => match self.type_def(n) {
+                                Some(TypeDef::Enum { cases }) => crate::kinds::undelivered_conversions(self.module(), cases).iter().any(|(t, _)| t == &**inner),
+                                _ => false,
+                            },
+                            _ => false,
+                        };
+                        if !converts {
+                            let what = match &**inner { Ty::Named(t) => t.clone(), _ => "e".into() };
+                            self.error(format!("`{}`: `or fail` on a submit needs a case of the function's failure that carries `undelivered<failure_type={what}>`, or one that carries `{what}` and one that carries `abandonment` (Y § 3.4)", y_text(e)));
+                        }
+                    }
+                }
                 let ok = match &x.ty {
                     Ty::Res(a, _) => (**a).clone(),
                     t => t.clone(),

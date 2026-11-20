@@ -79,3 +79,15 @@ pub fn take(kind: Kind, at: &str) -> bool {
 pub fn unmet() -> u32 {
     FORCED.with(|f| f.borrow().iter().map(|e| e.2).sum())
 }
+
+/// Every fault still forced on this thread, taken off it: what a worker that runs part of the test's code on a thread of
+/// its own is handed, and hands back with [`take_over`].
+pub fn hand_over() -> Vec<(Kind, String, u32)> {
+    FORCED.with(|f| std::mem::take(&mut *f.borrow_mut()))
+}
+
+/// Takes faults handed over by [`hand_over`], forced on this thread from now on.
+pub fn take_over(faults: Vec<(Kind, String, u32)>) {
+    FORCED.with(|f| f.borrow_mut().extend(faults));
+}
+

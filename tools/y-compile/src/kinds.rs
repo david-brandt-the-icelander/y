@@ -241,7 +241,9 @@ impl<'a> Lowerer<'a> {
         }
         match self.m.resolve(t) {
             Ty::U32 | Ty::I32 | Ty::U64 | Ty::U16 | Ty::Count | Ty::Int | Ty::Bool | Ty::Str | Ty::Unit => true,
-            Ty::List(e) | Ty::Opt(e) => self.durable(&e, depth + 1),
+            Ty::List(e) | Ty::Opt(e) | Ty::Undelivered(e) => self.durable(&e, depth + 1),
+            // what the runtime keeps in the journal itself
+            Ty::Named(n) if n == "abandonment" => true,
             Ty::Named(n) => match self.m.types.get(&n).map(|t| &t.def) {
                 Some(TypeDef::Struct { fields, .. }) | Some(TypeDef::Command { fields, .. }) => fields.iter().all(|(_, f)| self.durable(f, depth + 1)),
                 Some(TypeDef::Enum { cases }) => cases.iter().all(|(_, fs)| fs.iter().all(|(_, f)| self.durable(f, depth + 1))),
@@ -768,3 +770,31 @@ impl<'a> Lowerer<'a> {
         self.line("}");
     }
 }
+
+/// How `or fail` converts an `undelivered<failure_type=e>` into a closed type with these cases (Y § 3.4): for each `e`,
+/// the case that carries the whole `undelivered` (case, field), or the case that carries `e` and the one that carries
+/// the `abandonment` (`failed|abandoned`, `field|field`).
+pub fn undelivered_conversions(m: &crate::model::Module, cases: &[(String, Vec<(String, Ty)>)]) -> Vec<(Ty, (String, String))> {
+    let mut out: Vec<(Ty, (String, String))> = vec![];
+    for (c, fs) in cases {
+        if let [(f, Ty::Undelivered(e))] = &fs[..] {
+            if !out.iter().any(|(t, _)| t == &**e) {
+                out.push(((**e).clone(), (c.clone(), f.clone())));
+            }
+        }
+    }
+    let abandoned = cases.iter().find(|(_, fs)| matches!(&fs[..], [(_, Ty::Named(t))] if t == "abandonment"));
+    if let Some((ac, afs)) = abandoned {
+        // the failures of the module's handlers: what a submit's command may fail with
+        let handled: Vec<Ty> = m.fns.values().filter(|f| f.kind == "handler").filter_map(|f| f.fails.clone()).collect();
+        for (c, fs) in cases {
+            if let [(f, t)] = &fs[..] {
+                if handled.contains(t) && !out.iter().any(|(x, _)| x == t) {
+                    out.push((t.clone(), (format!("{c}|{ac}"), format!("{f}|{}", afs[0].0))));
+                }
+            }
+        }
+    }
+    out
+}
+

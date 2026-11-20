@@ -37,6 +37,12 @@ public facet ordering:
         declined = "declined"
 
 
+    -- Why a payment was not taken, with what the bank or the delivery said.
+    type payment_error:
+        case declined(reason is charge_error)
+        case unreachable(why is abandonment)
+
+
     -- Why an order could not be paid for.
     constants fulfil_error:
         declined = "declined"
@@ -236,4 +242,21 @@ public facet ordering:
                 return receipt = charged.value
             else charged.unpaid:
                 fail fulfil_error.unpaid
+
+
+    ------------------------------------------------------------------------------------------------------------------------
+    Takes an order's payment, and fails as the charge does: `or fail` converts a declined charge and an abandoned one.
+
+    id: The order, as uint32.
+    total: What it costs, as uint32.
+
+    receipt: The bank's receipt, as uint32.
+
+    charges: Where charges are submitted, as submit<command_type=charge>.
+
+    fails payment_error.declined: The bank declined the charge.
+    fails payment_error.unreachable: The charge could not be delivered, and was given back.
+    ------------------------------------------------------------------------------------------------------------------------
+    workflow charge_order(id, total, injected charges) returns receipt fails payment_error:
+        return receipt = submit charge(order: id, amount: total) or fail
 

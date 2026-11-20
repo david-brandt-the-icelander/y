@@ -212,3 +212,42 @@ test a_command_is_delivered_again_after_a_crash
         paid = (receipt == 1007)
         charged_twice = (bank.snapshot().balance == 10)
 
+
+-- A charge the bank covers is the order's receipt.
+test a_charged_order_has_its_receipt
+        covers charge_order:
+    inject:
+        bank = shared.new(bank(balance: 50, refunds: 0))
+        charges = submit.to(charge)
+    when:
+        receipt = charge_order(id: 7, total: 20) or fail
+    then:
+        paid = (receipt == 1007)
+
+
+-- A charge the bank declines fails the order with the bank's reason.
+test a_declined_charge_fails_with_its_reason
+        covers charge_order > receipt'fails:
+    inject:
+        bank = shared.new(bank(balance: 10, refunds: 0))
+        charges = submit.to(charge)
+    when:
+        charged = charge_order(id: 7, total: 20)
+    then:
+        declined = (charged == result.err(payment_error.declined(reason: charge_error.declined)))
+
+
+-- A worker delivers the charge a placed order enqueued, once its transaction commits: the bank takes it, and the
+-- outbox is empty.
+test an_enqueued_charge_is_delivered_by_a_worker
+        covers place:
+    inject:
+        placed = shared.new(tally(count: 0, read_at: 0))
+        bank = shared.new(bank(balance: 50, refunds: 0))
+        outbox = enqueue.to(charge)
+    when:
+        place(id: 1, total: 30)
+    then:
+        delivered = (outbox.committed().count() == 0)
+        charged = (bank.snapshot().balance == 20)
+

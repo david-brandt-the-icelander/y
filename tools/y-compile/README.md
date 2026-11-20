@@ -330,16 +330,18 @@ it said nothing (the pull request lists each edit).
   `submit<command_type=c>` and not how one is made.
 - **A command's handler is the handler of the command's name**, as `handler charge_card(command, …)` in the proposal is
   `charge_card`'s.
-- **Workflows and handlers run in the caller's thread** in this runtime: delivery is immediate, and a workflow is made
-  durable by a journal (below, "Durability").
+- **A handler runs on a worker**, a thread of its own: a submit waits while one delivers its command, and an outbox's
+  commands are delivered by a worker a test starts with **`outbox = enqueue.to(handler)`**, as `submit.to(handler)`
+  makes a submit (below, "Durability").
 - **`allow` takes a lint's code or its name**, `allow(Y2006)` or `allow(repeated_call)`, and covers the block it stands
   in and what opens it (below, "Lints"). The proposal's example code, `Y2031`, is no lint's.
 
 **What the runtime stand-ins keep and do not keep.** Each is in `examples/y-runtime` and documented there as a stand-in:
 
-- `command`: `Command`, `Policy`, `Outbox`, `Submit`, `Undelivered`. A submitted command is delivered at once, in the
-  process; a handler that faults (panics) is retried with the policy's backoff while it is idempotent and within its
-  deadline, then abandoned and compensated or parked. In a workflow, a submit is a durable step of the journal.
+- `command`: `Command`, `Policy`, `Outbox`, `Submit`, `Undelivered`, `Worker`. A submitted command is delivered on a
+  worker's thread while the workflow waits; a handler that faults (panics) is retried with the policy's backoff while it
+  is idempotent and within its deadline, then abandoned and compensated or parked. In a workflow, a submit is a durable
+  step of the journal. A `Worker` delivers what an outbox holds.
 - `journal`: the durable command log and workflow store (below, "Durability").
 - `faults`: `conflict at` and `expire at` an atomic region, `crash after commit` one, and `cancel at` a task.
 - `observe`: `log` and `metric` write one line each to standard error, buffered inside an atomic run and written only if
@@ -487,14 +489,19 @@ stops the build as a compile error does, unless it says it is a warning; warning
 | Y2005 | `todo_comment` | A `TODO` or `FIXME` comment (Y § 3.16) |
 | Y2006 | `repeated_call` | The same call in more than one condition of a `conditional` without a subject (Y § 3.5) |
 | Y2007 | `shadowing` | A name bound again where a parameter, or this block or one around it, already binds it. It cannot be suppressed (Y § 3.15) |
+| Y2008 | `abbreviation` | A part of a name the file declares (split at `_` and `.`) that is a known abbreviation (`idx`, `cnt`, `msg`, … in `ABBREVIATIONS`, each with its word), unless the project's glossary, a unit symbol or a currency code allows it. It cannot be suppressed (Y § 3.1, § 3.15) |
 
 - `allow(Y2006) because "…"` or `allow(repeated_call) because "…"` applies to the block it stands in and to what opens
   that block: in a function's body, to the whole function, so it also covers its length and its paths.
 - `-- lint: allow name because "…"` applies to its line, or, alone on a line, to the line after it.
 - An `allow` of a lint that cannot be suppressed, or of a code or name no lint has, is an error; an `allow` that
   suppresses nothing is a warning.
-- Abbreviations and unnamed decisions, the other official lints, are not here: an unnamed decision is already a
-  compile error (the parser's), and abbreviations need the project's glossary, which no example has.
+- **The project's glossary** is `y/glossary` in the package: one term a line, `term: what it stands for`, with `--`
+  comments; a line without its meaning is an error. The proposal names the glossary and not its form. The lint knows
+  abbreviations, not the dictionary: a part that is an English word (`win`) is not judged, so it finds the
+  abbreviations programmers reach for, not every one. Names the runtime gives (a method, a type argument) are the
+  standard library's, and not judged where they are used.
+- Unnamed decisions, the other official lint, are a compile error already (the parser's).
 - The seven examples and every test program are clean. The claims program suppresses `redundant_parentheses` with a
   statement and `repeated_call` with a comment; `tests/errors.rs` checks each lint and each rule above.
 
@@ -532,9 +539,16 @@ method that takes a weighed thing of any kind, and `holds` over a list of any eq
   each record is made, so it outlives the process. Without it, it is kept per thread in memory, which outlives a crash
   a test forces and not the test.
 - **A workflow** lowers to `y_runtime::journal::workflow("orders::fulfil", version, identity, || -> … { body })`. Its
-  identity is its name and its arguments written as data; its version is a hash of its body's tree (FNV-1a over the
-  statements without their lines, so moving it is no new version). A workflow that finished gives its recorded result
-  without running; one recorded under another version is a fault naming both.
+  identity is its name and its arguments written as data. Its version is `body@signature`: a hash of its body's tree
+  (FNV-1a over the statements without their lines, so moving it is no new version), and a hash of its compatibility
+  signature (Y § 4.4). A workflow that finished gives its recorded result without running.
+- **A workflow resumes under a version whose compatibility signature matches** (Y § 3.10): a body changed under the same
+  signature takes the recorded steps by their numbers. The signature is, a line each, its parameter and result types
+  and which parameters are `mutable`, by position, as a rename changes none of it; its authority (the capabilities it
+  holds); its failure type with its cases; its `where` and `ensures`; the shared state its atomic regions write; the
+  commands it submits and enqueues; the schemas of its stores; and its regions' wait bounds. One recorded under another
+  signature cannot resume: a fault naming both versions. A workflow holds no clock (y-compile refuses one), so no time
+  is read in it, and "the recorded time of its last durable step" has nothing to give.
 - **Each `submit` and each atomic region a workflow opens is a step**, numbered in order. A region's value is recorded
   when it commits (`y_runtime::journal::region(|| atomic(…))`), a submit's outcome when it is known, and the command
   itself before it is delivered. A workflow that runs again resumes: a recorded step gives its value and is not made
@@ -554,19 +568,29 @@ method that takes a weighed thing of any kind, and `holds` over a list of any eq
   after the reserving resumes the workflow, which neither reserves nor charges twice. A crash after the bank's handler
   commits, before its outcome is recorded, delivers the charge again, and the handler, which is not idempotent in
   effect, charges twice. The regions program cancels one of two tasks, and the count is one.
+- **Workers.** A handler runs on a worker, a thread of its own that shares nothing of the caller's but the faults its
+  test forced (handed over and back): a submit waits while a worker delivers, and what a handler commits is no part of
+  the workflow. `y_runtime::command::Worker` delivers an outbox's commands: started in a thread scope, it takes the
+  oldest command in an atomic region of its own (so a command leaves the outbox once), delivers it as its policy says,
+  and records the outcome against the command's key (`completed`, `failed`, `compensated` or `parked`). A test whose
+  `inject` has `outbox = enqueue.to(charge)` runs inside `std::thread::scope`, and its `then` reads after
+  `outbox_worker.settle()`, which waits for a round of the worker that finds the outbox empty and ends after it was
+  called. The orders program places an order whose enqueued charge a worker delivers to the bank.
+- **`submit c(…) or fail`** converts through the workflow's failure type (Y § 3.4): through a case that carries
+  `undelivered<failure_type=e>`, or, as the proposal's `fulfil` has it, a case that carries the handler's `e` (the
+  command declined) and one that carries the `abandonment` (it could not be delivered). y-compile writes the
+  `From<Undelivered<E>>` for it; with neither, `or fail` on a submit is a compile error that says what to declare. The
+  orders program's `charge_order` fails with `payment_error.declined(reason: …)` this way.
 - bare-rust's region check takes `supervised_in` as `supervised`, and the journal's record of a region as no effect of
-  the region's body; `levels.json` puts `y_runtime::journal` at `effects` and its `Durable` encoding at `calculations`.
+  the region's body; `levels.json` puts `y_runtime::journal` and `y_runtime::command::Worker` at `effects`, and the
+  journal's `Durable` encoding at `calculations`.
 
 ## What it does not handle yet
 
-It handles the forms the seven examples and the test programs use. In particular, it does not handle:
+It handles the forms the seven examples and the test programs use. What remains is past a stand-in runtime:
 
-- **Separate workers.** A submitted command is delivered at once, in the workflow's thread, and an outbox's commands
-  (`enqueue`) are kept in shared state and delivered by nothing: a test reads them. A worker that takes commands from
-  the journal, and timers, are a runtime this stand-in does not have.
-- **Compatible versions.** A workflow resumes only under the version it was recorded under; the proposal's
-  compatibility signatures (§ 4.4), which let a compatible version resume, are not kept, and a workflow's time is not
-  the recorded time of its last step.
-- **`or fail` on a submit**, whose `undelivered<failure_type=e>` has no conversion into a function's failure here: a
-  workflow matches its cases with a `conditional`, as the proposal's own example does.
-- **Abbreviations**, the one official lint not run: it needs the project's glossary (above, "Lints").
+- **Shared state does not outlive the process.** The journal does, in its file, and a store does; an outbox, which is
+  held in shared state, does not, so a command enqueued and not yet delivered when the process ends is lost with it.
+- **Faults in a worker that delivers from an outbox.** A test's forced faults are handed to the worker a submit
+  delivers on, and not to the long-lived worker of an outbox: a test cannot crash an enqueued command's handler.
+- **Abbreviations the lint does not list.** It finds the abbreviations in its list, and a word the list lacks passes.

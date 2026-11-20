@@ -6,19 +6,24 @@
 //!   is kept per thread, in memory, which is what a test wants: it outlives a crash that a test forces
 //!   ([`crate::faults::restarting`]), and not the test.
 //! - **A workflow's identity** is its name and its arguments, written as data (`orders::fulfil(7,20)`); its **version**
-//!   is a hash of its body, which the compiler gives it. The journal keeps the identity and the version, never an
-//!   address.
+//!   is `body@signature`, which the compiler gives it: a hash of its body, and a hash of its compatibility signature
+//!   (Y § 4.4: its parameter, result and failure types, its authority, contracts, transactional writes, command
+//!   classes, schemas and wait bounds). The journal keeps the identity and the version, never an address.
 //! - **Each durable step** of a running workflow is numbered in order: each `submit` and each atomic region it opens.
 //!   A step's value is recorded when it is made (a region's when it commits, a submit's when its outcome is known), and a
 //!   workflow that runs again with the same identity resumes: a step already recorded gives its recorded value and is
 //!   not made again. A submitted command is recorded before it is delivered; one delivered and not yet answered when the
 //!   process crashed is delivered again (at-least-once delivery, exactly-once intent).
 //! - **A workflow that finished** gives its recorded result, and does not run again.
-//! - **A workflow recorded under another version** cannot resume: that is a fault naming both versions. The proposal's
-//!   compatibility signatures (§ 4.4), which would let a compatible version resume, are not kept.
+//! - **A workflow recorded under another version resumes when the two signatures match** (Y § 3.10: "It resumes under a
+//!   version whose compatibility signature matches"): a body changed under the same signature takes the steps the
+//!   journal holds by their numbers. One whose signature differs cannot resume: that is a fault naming both versions.
 //!
-//! What it does not keep: separate workers (a command is delivered in the workflow's own thread), timers, and the time
-//! of a workflow's last durable step.
+//! - **An outbox's outcomes**: a [`crate::command::Worker`] records each command it delivers against its key
+//!   ([`outcome`]).
+//!
+//! What it does not keep: timers, and the time of a workflow's last durable step (a workflow holds no clock, so it
+//! reads none).
 use std::cell::{Cell, RefCell};
 use std::io::Write;
 use std::path::PathBuf;
@@ -282,8 +287,18 @@ pub fn in_workflow() -> bool {
     OUTSIDE.with(Cell::get) == 0 && ACTIVE.with(|a| !a.borrow().is_empty())
 }
 
+/// A version's compatibility signature: what follows its `@`, or the whole version when it has none.
+fn signature(version: &str) -> &str {
+    version.rsplit_once('@').map_or(version, |(_, s)| s)
+}
+
+/// Whether a workflow recorded under one version may resume under another: their signatures match.
+pub fn compatible(recorded: &str, running: &str) -> bool {
+    signature(recorded) == signature(running)
+}
+
 fn recorded(id: &str, version: &str, step: u32, kind: &str) -> Option<Vec<String>> {
-    records().into_iter().find(|r| r.workflow == id && r.version == version && r.step == step && r.kind == kind).map(|r| r.data)
+    records().into_iter().find(|r| r.workflow == id && compatible(&r.version, version) && r.step == step && r.kind == kind).map(|r| r.data)
 }
 
 /// Pops the workflow when its run ends, by returning or by a crash.
@@ -306,8 +321,8 @@ pub fn workflow<R: Durable>(name: &str, version: &str, identity: Vec<String>, bo
             None => crate::fault(name, &format!("the journal's result of {id} does not read as the workflow's result")),
         }
     }
-    if let Some(r) = mine.iter().find(|r| r.version != version) {
-        crate::fault(name, &format!("{id} was recorded under version {} and cannot resume under version {version}", r.version));
+    if let Some(r) = mine.iter().find(|r| !compatible(&r.version, version)) {
+        crate::fault(name, &format!("{id} was recorded under version {} and cannot resume under version {version}, whose compatibility signature differs", r.version));
     }
     ACTIVE.with(|a| a.borrow_mut().push((id.clone(), version.to_string(), 0)));
     let running = Running;
@@ -352,6 +367,19 @@ pub fn command<C: Durable>(key: &str, command: &C) {
         command.put(&mut data);
         append(Record { workflow: id, version, step: n, kind: "command".into(), data });
     }
+}
+
+/// Records the outcome of a command a worker delivered from an outbox, against the command's key: `completed`,
+/// `failed`, `compensated` or `parked`. In memory, it is kept on the worker's thread; in a file, with every other record.
+pub fn outcome(key: &str, outcome: &crate::command::Outcome) {
+    use crate::command::Outcome;
+    let what = match outcome {
+        Outcome::Completed { .. } => "completed",
+        Outcome::Failed { .. } => "failed",
+        Outcome::Abandoned { compensated: true, .. } => "compensated",
+        Outcome::Abandoned { .. } => "parked",
+    };
+    append(Record { workflow: "outbox".into(), version: String::new(), step: 0, kind: "outcome".into(), data: vec![key.to_string(), what.to_string()] });
 }
 
 /// Runs a handler, which is no step of the workflow that submitted its command.
@@ -421,10 +449,21 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "cannot resume under version v2")]
-    fn a_workflow_does_not_resume_under_another_version() {
+    #[should_panic(expected = "cannot resume under version b2@s2, whose compatibility signature differs")]
+    fn a_workflow_does_not_resume_under_another_signature() {
         clear();
-        append(Record { workflow: "m::w(7)".into(), version: "v1".into(), step: 1, kind: "submit".into(), data: tokens(&40u32) });
-        workflow("m::w", "v2", vec!["7".into()], || step("submit", || 1u32));
+        append(Record { workflow: "m::w(7)".into(), version: "b1@s1".into(), step: 1, kind: "submit".into(), data: tokens(&40u32) });
+        workflow("m::w", "b2@s2", vec!["7".into()], || step("submit", || 1u32));
+    }
+
+    #[test]
+    fn a_workflow_resumes_under_a_new_body_with_its_signature() {
+        clear();
+        append(Record { workflow: "m::w(7)".into(), version: "b1@s1".into(), step: 1, kind: "submit".into(), data: tokens(&40u32) });
+        // the recorded step is given, not made again, though the body changed
+        let v = workflow("m::w", "b2@s1", vec!["7".into()], || step("submit", || 1u32) + 2);
+        assert_eq!(v, 42);
+        let versions: Vec<String> = records().into_iter().map(|r| r.version).collect();
+        assert_eq!(versions, ["b1@s1", "b2@s1"]);
     }
 }

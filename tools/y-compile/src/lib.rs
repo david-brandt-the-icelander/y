@@ -74,8 +74,20 @@ pub fn compile(dir: &Path, opts: &Options) -> Result<String, String> {
     // the lints (Y § 3.15): an error stops the build, a warning is reported with it
     let mut lint_errors = vec![];
     let mut warnings = vec![];
+    // the words a package allows beyond Y's own: its glossary, and the unit symbols it declares
+    let glossary = match std::fs::read_to_string(dir.join("y/glossary")) {
+        Ok(text) => lint::Words::read_glossary(&text)?,
+        Err(_) => vec![],
+    };
+    let mut units = vec![];
+    for t in [&tree, &test_tree, &main_tree] {
+        for u in t.find("unit") {
+            units.extend(u.str("symbol").map(str::to_string));
+        }
+    }
+    let words = lint::Words { glossary, units };
     for (f, t) in [(&module_y, &tree), (&format!("{name}.test.y"), &test_tree), (&"main.y".to_string(), &main_tree)] {
-        let (e, w) = lint::lint(&format!("y/src/{f}"), &read(&src.join(f))?, t, f == &module_y);
+        let (e, w) = lint::lint(&format!("y/src/{f}"), &read(&src.join(f))?, t, f == &module_y, &words);
         lint_errors.extend(e);
         warnings.extend(w);
     }

@@ -176,6 +176,8 @@ pub fn imports_for(code: &str) -> std::collections::BTreeSet<String> {
         ("Isolation", "y_runtime::shared::Isolation"),
         ("Aborted", "y_runtime::shared::Aborted"),
         ("Undelivered", "y_runtime::command::Undelivered"),
+        ("Abandonment", "y_runtime::command::Abandonment"),
+        ("Worker", "y_runtime::command::Worker"),
         ("Submit", "y_runtime::command::Submit"),
         ("Outbox", "y_runtime::command::Outbox"),
         ("Command", "y_runtime::command::Command"),
@@ -320,7 +322,7 @@ impl<'a> Lowerer<'a> {
 
     /// A workflow's body, run by the journal (Y § 3.10): under its identity, its name and arguments as data, and its
     /// version, a hash of its body, so that a run after a crash resumes from the steps the journal recorded.
-    fn workflow_body(&mut self, f: &FnInfo, body: &[&Node]) {
+    fn workflow_body(&mut self, d: &Node, f: &FnInfo, body: &[&Node]) {
         let puts: Vec<String> = f
             .params
             .iter()
@@ -350,22 +352,98 @@ impl<'a> Lowerer<'a> {
             .collect::<Vec<_>>()
             .join("\n");
         // FNV-1a, 64 bits: the version changes with any change to the body
-        let mut h: u64 = 0xcbf29ce484222325;
-        for b in text.bytes() {
-            h ^= u64::from(b);
-            h = h.wrapping_mul(0x100000001b3);
-        }
+        let fnv = |text: &str| {
+            let mut h: u64 = 0xcbf29ce484222325;
+            for b in text.bytes() {
+                h ^= u64::from(b);
+                h = h.wrapping_mul(0x100000001b3);
+            }
+            h
+        };
+        let h = fnv(&text);
+        let signature = fnv(&self.compatibility_signature(d, f).join("\n"));
         let r = f.result.as_ref().map(|r| r.1.clone()).unwrap_or(Ty::Unit);
         let rt = match &f.fails {
             Some(e) => format!("Result<{}, {}>", self.rust_type(&r), self.rust_type(e)),
             None => self.rust_type(&r),
         };
         self.line(format!("let mut identity = Vec::new();{}", if puts.is_empty() { String::new() } else { format!(" {}", puts.join(" ")) }));
-        self.line(format!("y_runtime::journal::workflow(\"{}::{}\", \"{h:016x}\", identity, || -> {rt} {{", self.m.name, f.name));
+        self.line(format!("y_runtime::journal::workflow(\"{}::{}\", \"{h:016x}@{signature:016x}\", identity, || -> {rt} {{", self.m.name, f.name));
         self.ind += 1;
         self.block(body, true);
         self.ind -= 1;
         self.line("})");
+    }
+
+    /// A function's compatibility signature (Y § 4.4), one line each: its parameter and result types and which
+    /// parameters are `mutable`; its authority (the capabilities it holds); its failure set; its contracts; its
+    /// transactional writes; the command classes it submits and enqueues; the schemas it touches; and its wait bounds.
+    /// Names do not count, as a rename does not change a signature: a parameter is its position.
+    pub fn compatibility_signature(&mut self, d: &Node, f: &FnInfo) -> Vec<String> {
+        let mut sig = vec![];
+        for (k, p) in f.params.iter().enumerate() {
+            let what = if p.injected { "authority" } else if p.mutable { "mutable parameter" } else { "parameter" };
+            sig.push(format!("{what} {k}: {}", self.rust_type(&p.ty)));
+            if let Ty::Store(schema) = &p.ty {
+                sig.push(format!("schema {}", self.rust_type(schema)));
+            }
+        }
+        if let Some((_, t)) = &f.result {
+            sig.push(format!("result: {}", self.rust_type(t)));
+        }
+        if let Some(e) = &f.fails {
+            let cases = match e {
+                Ty::Named(n) => match self.module().types.get(n).map(|t| &t.def) {
+                    Some(TypeDef::Enum { cases }) => cases.iter().map(|(c, fs)| format!("{c}({})", fs.iter().map(|(_, t)| self.module().rust_type(t)).collect::<Vec<_>>().join(", "))).collect::<Vec<_>>().join(" "),
+                    _ => String::new(),
+                },
+                _ => String::new(),
+            };
+            sig.push(format!("fails: {} {cases}", self.rust_type(e)));
+        }
+        for kind in ["where", "ensures"] {
+            for c in d.nodes(kind) {
+                sig.push(format!("{kind}: {}", c.node("condition").map(crate::lower::y_text).unwrap_or_default()));
+            }
+        }
+        let (mut writes, mut commands, mut waits) = (std::collections::BTreeSet::new(), std::collections::BTreeSet::new(), vec![]);
+        for st in d.nodes("body") {
+            st.walk(&mut |n: &Node| {
+                if n.kind == "region" {
+                    let constraints = n.nodes("constraints");
+                    if constraints.iter().any(|c| c.str("word") == Some("atomic")) {
+                        n.walk(&mut |a: &Node| {
+                            if a.kind == "assign" {
+                                let mut t = a.node("target");
+                                while let Some(x) = t.filter(|x| matches!(x.kind, "member" | "index")) {
+                                    t = x.node("object");
+                                }
+                                if let Some(root) = t.and_then(|x| x.str("name")) {
+                                    writes.insert(root.to_string());
+                                }
+                            }
+                        });
+                    }
+                    for c in constraints.iter().filter(|c| matches!(c.str("word"), Some("within" | "forever" | "waits"))) {
+                        waits.push(c.str("text").unwrap_or("").to_string());
+                    }
+                }
+                if matches!(n.kind, "submit" | "enqueue") {
+                    if let Some(c) = n.node("value").and_then(|v| v.node("callee")).and_then(|c| c.str("name")) {
+                        commands.insert(format!("{} {c}", n.kind));
+                    }
+                }
+            });
+        }
+        // a transactional write is of the shared state a parameter names: by its position, as a parameter is
+        for w in writes {
+            if let Some(k) = f.params.iter().position(|p| p.name == w) {
+                sig.push(format!("writes {k}"));
+            }
+        }
+        sig.extend(commands);
+        sig.extend(waits.into_iter().map(|w| format!("waits {w}")));
+        sig
     }
 
     pub fn function_item(&mut self, d: &Node, f: &FnInfo, vis: &str) {
@@ -433,7 +511,7 @@ impl<'a> Lowerer<'a> {
             // name, checked, then given; every other `return` checks it where it returns
             let tail_value = f.fails.is_none() && f.result.is_some() && body.last().is_some_and(|l| matches!(l.kind, "return" | "if" | "conditional" | "compare"));
             if ensures.is_empty() && f.kind == "workflow" {
-                self.workflow_body(f, &body);
+                self.workflow_body(d, f, &body);
             } else if ensures.is_empty() {
                 self.block(&body, true);
             } else if f.fails.is_some() && body.last().is_some_and(|l| l.kind == "return") {
@@ -700,6 +778,34 @@ impl<'a> Lowerer<'a> {
                     self.line(format!("            Within::Expired({ef}) => {en}::{} {{ {ef} }},", pascal(expired)));
                     self.line("        }");
                     self.line("    }");
+                    self.line("}");
+                }
+                // `submit c(…) or fail`: an `undelivered<failure_type=e>` converts through the case that carries one, or,
+                // as the proposal's `fulfil` has it, through the case that carries the handler's `e` and the one that
+                // carries the `abandonment`
+                for (e, (c, f)) in crate::kinds::undelivered_conversions(self.m, cases) {
+                    let (et, en) = (self.rust_type(&e), pascal(name));
+                    self.line("");
+                    match c.split_once('|') {
+                        None => {
+                            self.line(format!("/// Y's `or fail` on a submit whose command is not delivered converts through `{en}`'s `{}` case (Y § 3.4).", pascal(&c)));
+                            self.line(format!("impl From<Undelivered<{et}>> for {en} {{"));
+                            self.line(format!("    fn from({f}: Undelivered<{et}>) -> {en} {{"));
+                            self.line(format!("        {en}::{} {{ {f} }}", pascal(&c)));
+                            self.line("    }");
+                        }
+                        Some((failed, abandoned)) => {
+                            let (ff, af) = f.split_once('|').unwrap();
+                            self.line(format!("/// Y's `or fail` on a submit converts a declined command through `{en}`'s `{}` case, and an abandoned one through `{}` (Y § 3.4).", pascal(failed), pascal(abandoned)));
+                            self.line(format!("impl From<Undelivered<{et}>> for {en} {{"));
+                            self.line(format!("    fn from(undelivered: Undelivered<{et}>) -> {en} {{"));
+                            self.line("        match undelivered {");
+                            self.line(format!("            Undelivered::Failed {{ error }} => {en}::{} {{ {ff}: error }},", pascal(failed)));
+                            self.line(format!("            Undelivered::Abandoned {{ abandonment }} => {en}::{} {{ {af}: abandonment }},", pascal(abandoned)));
+                            self.line("        }");
+                            self.line("    }");
+                        }
+                    }
                     self.line("}");
                 }
                 let failures: std::collections::BTreeSet<String> = self.m.fns.values().chain(self.lib.map(|l| l.fns.values()).into_iter().flatten()).filter_map(|f| match &f.fails { Some(Ty::Named(t)) => Some(t.clone()), _ => None }).collect();
@@ -1016,9 +1122,17 @@ pub fn tests_file(m: &Module, test_tree: &Node, test_module: &Module, y_path: &s
         l.ctx = Ctx { module: m.name.clone(), name: name.to_string(), result: None, fails: None, branches: vec![], section: None, ..Default::default() };
         // a test that crashes the program runs its `when` again after the crash, as a restarted program would
         let crashes = t.nodes("sections").iter().filter(|s| s.str("name") == Some("faults")).flat_map(|s| s.nodes("body")).any(|f| f.str("fault") == Some("crash"));
+        // the outboxes a worker delivers from (`enqueue.to(handler)`): each opens a thread scope its worker runs in
+        let mut workers: Vec<String> = vec![];
         for s in t.nodes("sections") {
             let section = s.str("name").unwrap();
             l.ctx.section = Some(section.to_string());
+            if section == "then" {
+                // what the `then` reads is what the workers delivered of what the `when` committed
+                for w in &workers {
+                    l.line(format!("{w}_worker.settle();"));
+                }
+            }
             if section == "when" && crashes {
                 let names: Vec<&str> = s.nodes("body").iter().filter(|st| st.kind == "let").filter_map(|st| st.str("name")).collect();
                 let tuple = if names.len() == 1 { names[0].to_string() } else { format!("({})", names.join(", ")) };
@@ -1059,11 +1173,28 @@ pub fn tests_file(m: &Module, test_tree: &Node, test_module: &Module, y_path: &s
                         None => label.to_string(),
                     };
                     l.line(format!("assert!({}, \"{msg}\");", c.code));
+                } else if let Some(handler) = (section == "inject").then(|| outbox_worker(st)).flatten() {
+                    // `outbox = enqueue.to(charge)`: an outbox, and a worker that delivers what it holds to the handler
+                    let name = st.str("name").unwrap().to_string();
+                    l.use_("y_runtime::command::Outbox");
+                    l.use_("y_runtime::command::Worker");
+                    l.use_("y_runtime::shared::Shared");
+                    l.line(format!("let {name} = Shared::new(Outbox::new());"));
+                    let delivery = l.submit_to(&handler);
+                    l.line("std::thread::scope(|workers| {");
+                    l.ind += 1;
+                    l.line(format!("let {name}_worker = Worker::start(workers, &{name}, {});", delivery.code));
+                    l.bind(&name, Ty::Shared(Box::new(Ty::Outbox(Box::new(Ty::Named(handler))))), Form::Place);
+                    workers.push(name);
                 } else {
                     // a statement of `given`, `inject` or `when`, in the test's one scope
                     l.stmt_in_test(st);
                 }
             }
+        }
+        for _ in &workers {
+            l.ind -= 1;
+            l.line("});");
         }
         l.ind -= 1;
         l.line("}");
@@ -1235,3 +1366,15 @@ pub fn emit(m: &Module, test_tree: &Node, test_module: &Module, main: &Module, l
         main_regions,
     }
 }
+
+/// The handler of `outbox = enqueue.to(handler)`, a binding a test injects.
+fn outbox_worker(st: &Node) -> Option<String> {
+    let v = st.node("value").filter(|_| st.kind == "let")?;
+    let callee = v.node("callee").filter(|_| v.kind == "call")?;
+    let is_to = callee.kind == "member" && callee.str("name") == Some("to") && callee.node("object").and_then(|o| o.str("name")) == Some("enqueue");
+    if !is_to {
+        return None;
+    }
+    v.nodes("args").first().and_then(|a| a.node("value")).and_then(|a| a.str("name")).map(str::to_string)
+}
+

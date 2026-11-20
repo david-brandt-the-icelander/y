@@ -237,3 +237,62 @@ fn an_open_type_bounded_by_no_trait() {
         &["`item_type` is bounded by `sortable`, which is neither a trait of the module nor one of any, equatable, ordered, hashable, shown"],
     );
 }
+
+#[test]
+fn or_fail_on_a_submit_with_no_case_to_carry_it() {
+    let module = "-- Why a charge failed.\nconstants charge_error:\n    declined = \"declined\"\n\n\n\
+-- Why an order failed.\nconstants order_error:\n    lost = \"lost\"\n\n\n\
+-- A charge.\ncommand charge:\n    amount is uint32\n\n    policy:\n        deduplicate_by: amount\n        idempotent: true\n        retry: backoff(first: 1ms, factor: 1, attempts: 1)\n        deadline: 1s\n        on_abandon: park\n\n\n\
+-------\nCharges.\n\ncommand: The charge, as charge.\n\nreceipt: A receipt, as uint32.\n\nfails charge_error.declined: Declined.\n-------\nhandler charge(command) returns receipt fails charge_error:\n    return receipt = command.amount\n\n\n\
+-------\nPays.\n\namount: How much, as uint32.\n\nreceipt: A receipt, as uint32.\n\ncharges: Where charges go, as submit<command_type=charge>.\n\nfails order_error.lost: Lost.\n-------\nworkflow pay(amount, injected charges) returns receipt fails order_error:\n    return receipt = submit charge(amount: amount) or fail\n";
+    refused("submit_or_fail", module, &["`or fail` on a submit needs a case of the function's failure that carries `undelivered<failure_type=charge_error>`"]);
+}
+
+#[test]
+fn an_abbreviation_is_refused_unless_the_glossary_has_it() {
+    let module = function_of("idx = n + 1\nreturn m = idx");
+    refused("lint_abbreviation", &module, &["abbreviation (Y2008): `idx`: `idx` abbreviates `index`"]);
+    refused("lint_abbreviation_allowed", &function_of("allow(abbreviation) because \"tried\"\nidx = n + 1\nreturn m = idx"), &["`abbreviation` (Y2008) cannot be suppressed"]);
+    // the project's glossary: one term a line, with what it stands for
+    let dir = package("lint_glossary", &module);
+    std::fs::write(dir.join("y/glossary"), "-- The project's abbreviations.\nidx: index, a position in a list\n").unwrap();
+    let opts = y_compile::Options { out: None, rust: Some(std::env::temp_dir().join("y-compile-errors").join("lint_glossary-rust")) };
+    y_compile::compile(&dir, &opts).unwrap_or_else(|e| panic!("a glossary term is refused: {e}"));
+    std::fs::write(dir.join("y/glossary"), "idx\n").unwrap();
+    let e = y_compile::compile(&dir, &opts).expect_err("a glossary line without its meaning");
+    assert!(e.contains("y/glossary:1: a term is written `term: what it stands for`"), "{e}");
+}
+
+/// The version y-compile gives a module's one workflow: `body@signature`.
+fn workflow_version(name: &str, module: &str) -> (String, String) {
+    let dir = package(name, module);
+    let out = std::env::temp_dir().join("y-compile-errors").join(format!("{name}-rust"));
+    y_compile::compile(&dir, &y_compile::Options { out: None, rust: Some(out.clone()) }).unwrap_or_else(|e| panic!("{name}: {e}"));
+    let rust = std::fs::read_to_string(out.join("src/m.rs")).unwrap();
+    let at = rust.find("journal::workflow(").expect("a workflow");
+    let version = rust[at..].split('"').nth(3).unwrap().to_string();
+    let (body, signature) = version.split_once('@').unwrap();
+    (body.to_string(), signature.to_string())
+}
+
+#[test]
+fn a_workflow_keeps_its_signature_when_only_its_body_changes() {
+    let module = |cases: &str, body: &str, capability: &str| {
+        format!(
+            "-- Why an order failed.\nconstants order_error:\n{cases}\n\n\n\
+-- A count.\nstructure tally:\n    count is uint32\n\n\n\
+-------\nPays.\n\namount: How much, as uint32.\n\nreceipt: A receipt, as uint32.\n\n{capability}\nfails order_error.lost: Lost.\n-------\n\
+workflow pay(amount{}) returns receipt fails order_error:\n{body}\n",
+            if capability.is_empty() { "" } else { ", injected kept" }
+        )
+    };
+    let (lost, kept) = ("    lost = \"lost\"", "kept: The count, as shared<value_type=tally>.\n");
+    let first = workflow_version("signature_first", &module(lost, "    return receipt = amount", ""));
+    let edited = workflow_version("signature_edited", &module(lost, "    doubled = amount + amount\n    return receipt = doubled - amount", ""));
+    assert_ne!(first.0, edited.0, "a body changed is a new body");
+    assert_eq!(first.1, edited.1, "a body changed under the same signature keeps it, so the workflow resumes");
+    let failing = workflow_version("signature_failing", &module(&format!("{lost}\n    late = \"late\""), "    return receipt = amount", ""));
+    assert_ne!(first.1, failing.1, "a new failure case is a new signature");
+    let holding = workflow_version("signature_holding", &module(lost, "    return receipt = amount", kept));
+    assert_ne!(first.1, holding.1, "a new capability is new authority");
+}

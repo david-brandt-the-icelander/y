@@ -20,6 +20,7 @@
     "y_runtime::Forever": "effects",
     "y_runtime::Deadline": "effects",
     "y_runtime::command::Submit": "effects",
+    "y_runtime::command::Worker": "effects",
     "y_runtime::journal": "effects",
     "y_runtime::journal::Durable": "calculations",
     "y_runtime::journal::Tokens": "calculations",
