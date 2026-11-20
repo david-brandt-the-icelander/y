@@ -73,6 +73,12 @@
         "y_runtime::observe::emit"
       ],
       "why": "observability is Y's one ambient exception (Y \u00a7 3.7): a `metric` needs no capability, and is write-only, so nothing in a program can read it back or change its results by it"
+    },
+    "y_runtime::command::Outbox::enqueue": {
+      "calls": [
+        "y_runtime::journal::enqueued"
+      ],
+      "why": "records the command in the journal through `Tx::on_commit`, once, when the transaction commits, and never in a run that is discarded or runs again: `enqueue` is durable if and only if its transaction commits (Y \u00a7 3.10), so the record is the commit's, not the region's"
     }
   },
   "macros_from_table": {
