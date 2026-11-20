@@ -489,7 +489,7 @@ stops the build as a compile error does, unless it says it is a warning; warning
 | Y2005 | `todo_comment` | A `TODO` or `FIXME` comment (Y § 3.16) |
 | Y2006 | `repeated_call` | The same call in more than one condition of a `conditional` without a subject (Y § 3.5) |
 | Y2007 | `shadowing` | A name bound again where a parameter, or this block or one around it, already binds it. It cannot be suppressed (Y § 3.15) |
-| Y2008 | `abbreviation` | A part of a name the file declares (split at `_` and `.`) that is a known abbreviation (`ABBREVIATIONS`, each with its word: `msg`, `num`, `str`, …), or, of 2 to 6 letters, no English word (`src/words.txt`: `cnt`, `idx`, `nbr`, …), unless the project's glossary, a unit symbol or a currency code allows it. It cannot be suppressed (Y § 3.1, § 3.15) |
+| Y2008 | `abbreviation` | A part of a name the file declares (split at `_` and `.`) that is a known abbreviation (`ABBREVIATIONS`, each with its word: `msg`, `num`, `str`, …), or, of 2 to 6 letters, no English word (`src/words.txt`: `cnt`, `idx`, `nbr`, …), or a rare word that begins a common one at least two letters longer (`src/common.txt`: `sec` for second, `approx`), or, longer than 6 letters, neither a common word nor made of them (`numitems`), unless the project's glossary, a unit symbol or name, or a currency code allows it. It cannot be suppressed (Y § 3.1, § 3.15) |
 
 - `allow(Y2006) because "…"` or `allow(repeated_call) because "…"` applies to the block it stands in and to what opens
   that block: in a function's body, to the whole function, so it also covers its length and its paths.
@@ -497,12 +497,21 @@ stops the build as a compile error does, unless it says it is a warning; warning
 - An `allow` of a lint that cannot be suppressed, or of a code or name no lint has, is an error; an `allow` that
   suppresses nothing is a warning.
 - **The project's glossary** is `y/glossary` in the package: one term a line, `term: what it stands for`, with `--`
-  comments; a line without its meaning is an error. The proposal names the glossary and not its form. Tic-tac-toe's
-  glossary has `tac`, and warehouse's has `sku`, the two words of the examples that are no English words.
+  comments; a line without its meaning is an error. The proposal names the glossary and not its form. The examples'
+  and programs' glossaries hold their own terms, which are all the lint finds in them: tic-tac-toe's `tac`, nim's
+  `nim`, memory's `openmoji` (a site's name), warehouse's `sku` (stock-keeping unit) and the orders program's `id`,
+  the proposal's own example of a glossary term.
 - **The dictionary** is the words of 2 to 6 letters of a public-domain list (dwyl's `words_alpha.txt`, The Unlicense),
-  55,538 of them, 350 KB, read once. A part of 2 to 6 letters that is no word in it is taken for an abbreviation;
-  a longer part is taken for a word, as abbreviations are short. The list has some abbreviations too (`msg`, `num`,
-  `str`), so the lint's own list is judged first. Names the runtime gives (a method, a type argument) are the standard
+  55,538 of them, 350 KB, read once: a part of 2 to 6 letters that is no word in it is taken for an abbreviation. The
+  list has some abbreviations too (`msg`, `num`, `str`), so the lint's own list is judged first.
+- **Common words** judge meaning where a word list cannot: `src/common.txt` is 34,023 common English words with their
+  irregular forms, most common first, from 12dicts' `2+2+3frq` (Alan Beale, public domain) and AGID (Kevin Atkinson),
+  whose notice `src/common.NOTICE` carries. A part counts as common when it, or the stem a regular ending leaves
+  (`lives`, `stepped`, `easiest`), is in it. A short part that is a word but not a common one, and begins a common
+  word at least two letters longer, is taken for an abbreviation of the most common such word (`sec`, `second`). A part
+  longer than 6 letters is a word when it is common, or a common word with a prefix (`un`, `re`, `back`, …) or a
+  suffix (`able`, `ness`, …), or two common words run together (`checksum`, `workflow`); any other (`numitems`) is
+  taken for an abbreviation or words run together. Names the runtime gives (a method, a type argument) are the standard
   library's, and not judged where they are used.
 - Unnamed decisions, the other official lint, are a compile error already (the parser's).
 - The seven examples and every test program are clean. The claims program suppresses `redundant_parentheses` with a
@@ -571,6 +580,14 @@ method that takes a weighed thing of any kind, and `holds` over a list of any eq
   after the reserving resumes the workflow, which neither reserves nor charges twice. A crash after the bank's handler
   commits, before its outcome is recorded, delivers the charge again, and the handler, which is not idempotent in
   effect, charges twice. The regions program cancels one of two tasks, and the count is one.
+- **A store's writes inside `atomic` join the transaction** (Y § 3.12). `sales.put(record)` in an atomic region lowers
+  to `sales.put_in(tx, &record)`, which writes the record, and saves a store kept in a file, with `Tx::on_commit`: when
+  the transaction commits, once, and not in a run that is discarded or runs again. A region whose only write is to a
+  store commits too. bare-rust's region check takes a store whose every use in the region is `put_in` as no effect of
+  the region's runs, and `levels.json` trusts `Store::put_in` for that one call. The orders program files a sale in a
+  transaction made to conflict twice, and the store holds it once.
+- **`shared` is the program's state, in memory**, as Y § 3.9 has it: what outlives the process is a store (§ 3.12,
+  "the capability for persistent data") and the journal.
 - **Workers.** A handler runs on a worker, a thread of its own that shares nothing of the caller's but the faults its
   test forced (handed over and back): a submit waits while a worker delivers, and what a handler commits is no part of
   the workflow. `y_runtime::command::Worker` delivers an outbox's commands: started in a thread scope, it takes the
@@ -600,10 +617,11 @@ method that takes a weighed thing of any kind, and `holds` over a list of any eq
 
 ## What it does not handle yet
 
-It handles the forms the seven examples and the test programs use, and every item this list has held. What a stand-in
-runtime and a word list cannot give:
+It handles the forms the seven examples and the test programs use, and every item this list has held. What remains:
 
-- **The abbreviation lint judges words, not meanings.** A part that the list of abbreviations lacks and the dictionary
-  has passes (`sec` for second, as the dictionary has `sec`, dry), and so does any part longer than 6 letters.
-- **Shared state is the program's, in memory.** What outlives the process is the journal (with `Y_JOURNAL`) and a
-  store: a command enqueued is in the journal, but the rest of a `shared` value is not.
+- **A store's reads inside `atomic`.** Its writes join the transaction; a read in a region is still refused by the
+  region check, as reading a store a transaction has written would need the store's records versioned with the
+  transaction's, as shared state's are. A function reads a store outside its regions.
+- **The abbreviation lint judges by lists.** It is a rule over three lists and a glossary, not an understanding of
+  names: a common word used as an abbreviation (`temp` for temporary) passes unless its list names it, and a rare
+  domain word that begins a common one is reported until the glossary has it.

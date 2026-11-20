@@ -13,6 +13,7 @@
     "y_runtime::arena": "shared",
     "y_runtime::task": "effects",
     "y_runtime::store": "effects",
+    "y_runtime::store::Store::put_in": "shared",
     "y_runtime::System": "effects",
     "y_runtime::Console": "effects",
     "y_runtime::Clock": "effects",
@@ -79,6 +80,12 @@
         "y_runtime::journal::enqueued"
       ],
       "why": "records the command in the journal through `Tx::on_commit`, once, when the transaction commits, and never in a run that is discarded or runs again: `enqueue` is durable if and only if its transaction commits (Y \u00a7 3.10), so the record is the commit's, not the region's"
+    },
+    "y_runtime::store::Store::put_in": {
+      "calls": [
+        "y_runtime::store::write_committed"
+      ],
+      "why": "writes the record, and saves the store, through `Tx::on_commit`: once, when the transaction it joined commits, and never in a run that is discarded or runs again, as a store's writes inside `atomic` join the transaction (Y \u00a7 3.12)"
     }
   },
   "macros_from_table": {

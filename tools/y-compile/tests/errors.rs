@@ -137,14 +137,14 @@ fn quantities_of_different_units_added() {
 
 #[test]
 fn an_enqueue_outside_an_atomic_region() {
-    let cmd = "-- Pings.\ncommand ping:\n    id is uint32\n\n    policy:\n        deduplicate_by: id\n        idempotent: true\n        retry: backoff(first: 1ms, factor: 1, attempts: 1)\n        deadline: 1s\n        on_abandon: park\n\n\n";
-    let f = function("Sends.\n\nid: The id, as uint32.\n\noutbox: Where pings wait, as enqueue<command_type=ping>.", "function f(id, injected outbox):\n    enqueue ping(id: id)\n");
+    let cmd = "-- Pings.\ncommand ping:\n    number is uint32\n\n    policy:\n        deduplicate_by: number\n        idempotent: true\n        retry: backoff(first: 1ms, factor: 1, attempts: 1)\n        deadline: 1s\n        on_abandon: park\n\n\n";
+    let f = function("Sends.\n\nnumber: The number, as uint32.\n\noutbox: Where pings wait, as enqueue<command_type=ping>.", "function f(number, injected outbox):\n    enqueue ping(number: number)\n");
     refused("enqueue", &format!("{cmd}{f}"), &["is outside an atomic region"]);
 }
 
 #[test]
 fn a_policy_without_a_deadline() {
-    let cmd = "-- Pings.\ncommand ping:\n    id is uint32\n\n    policy:\n        deduplicate_by: id\n        idempotent: true\n        retry: backoff(first: 1ms, factor: 1, attempts: 1)\n        on_abandon: park\n";
+    let cmd = "-- Pings.\ncommand ping:\n    number is uint32\n\n    policy:\n        deduplicate_by: number\n        idempotent: true\n        retry: backoff(first: 1ms, factor: 1, attempts: 1)\n        on_abandon: park\n";
     refused("policy", cmd, &["policy has no `deadline`"]);
 }
 
@@ -168,7 +168,7 @@ fn an_implementation_missing_a_method() {
 
 #[test]
 fn a_becomes_no_transition_declares() {
-    let st = "-- A door.\nstate door:\n    id is uint32\n\n    case open\n    case shut\n\n\n";
+    let st = "-- A door.\nstate door:\n    number is uint32\n\n    case open\n    case shut\n\n\n";
     let f = function("Shuts.\n\nd: The door, as door.open.\n\ns: It, shut, as door.shut.", "function f(d) returns s:\n    return s = d.becomes(door.shut())\n");
     refused("becomes", &format!("{st}{f}"), &["is in no transition that returns"]);
 }
@@ -254,6 +254,11 @@ fn an_abbreviation_is_refused_unless_the_glossary_has_it() {
     refused("lint_abbreviation", &module, &["abbreviation (Y2008): `idx`: `idx` abbreviates `index`"]);
     // one the lint's list lacks: no English word of six letters or fewer
     refused("lint_abbreviation_unlisted", &function_of("nbr = n + 1\nreturn m = nbr"), &["`nbr` is no English word, so it is taken for an abbreviation"]);
+    // a rarer word that begins a common one is taken for an abbreviation of it; a long part run together from words
+    refused("lint_abbreviation_truncated", &function_of("sec = n + 1\nreturn m = sec"), &["`sec` is a rare word that begins the common `second`"]);
+    refused("lint_abbreviation_run_together", &function_of("numitems = n + 1\nreturn m = numitems"), &["`numitems` is no common English word, nor made of them"]);
+    // a long part made of words, with their prefixes and suffixes, is words
+    compiled("lint_abbreviation_derived", &function_of("unreachable = n + 1\nchecksum = unreachable\nreturn m = checksum"));
     refused("lint_abbreviation_allowed", &function_of("allow(abbreviation) because \"tried\"\nidx = n + 1\nreturn m = idx"), &["`abbreviation` (Y2008) cannot be suppressed"]);
     // the project's glossary: one term a line, with what it stands for
     let dir = package("lint_glossary", &module);

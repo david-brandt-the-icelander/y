@@ -636,6 +636,13 @@ impl<'a> Lowerer<'a> {
             t => t.clone(),
         };
         match &ty {
+            // `sales.put(record)` inside an atomic region: the write joins the transaction, made when it commits (Y § 3.12)
+            Ty::Store(_) if name == "put" && args.len() == 1 && self.atomic_result.is_some() => {
+                let x = self.expr(args[0].1);
+                let t = x.ty.clone();
+                let record = self.by_ref(x, &t);
+                return Some(ex(format!("{r}.put_in(tx, {record})"), Ty::Unit));
+            }
             // `charges.committed()`: the commands an outbox holds, which its atomic regions committed (Y § 2)
             Ty::Shared(o) if name == "committed" && args.is_empty() && matches!(&**o, Ty::Outbox(_)) => {
                 let Ty::Outbox(c) = &**o else { unreachable!() };

@@ -79,13 +79,14 @@ pub fn compile(dir: &Path, opts: &Options) -> Result<String, String> {
         Ok(text) => lint::Words::read_glossary(&text)?,
         Err(_) => vec![],
     };
-    let mut units = vec![];
+    let (mut units, mut unit_names) = (vec![], vec![]);
     for t in [&tree, &test_tree, &main_tree] {
         for u in t.find("unit") {
             units.extend(u.str("symbol").map(str::to_string));
+            unit_names.extend(u.str("name").map(str::to_string));
         }
     }
-    let words = lint::Words { glossary, units };
+    let words = lint::Words { glossary, units, unit_names };
     for (f, t) in [(&module_y, &tree), (&format!("{name}.test.y"), &test_tree), (&"main.y".to_string(), &main_tree)] {
         let (e, w) = lint::lint(&format!("y/src/{f}"), &read(&src.join(f))?, t, f == &module_y, &words);
         lint_errors.extend(e);

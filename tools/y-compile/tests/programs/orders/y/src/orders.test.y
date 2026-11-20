@@ -267,3 +267,19 @@ test a_crashed_worker_delivers_an_enqueued_charge_again
     then:
         charged_twice = (bank.snapshot().balance == 40)
 
+
+-- A sale's transaction conflicts twice and runs three times: the store's write joins it, and is made once, when it
+-- commits.
+test a_sale_is_filed_once_though_it_conflicts
+        covers record_sale:
+    inject:
+        placed = shared.new(tally(count: 0, read_at: 0))
+        sales = fake store(lines: [])
+    faults:
+        conflict at record_sale#recording, times: 2
+    when:
+        record_sale(id: 7, total: 20)
+    then:
+        counted_once = (placed.snapshot().count == 1)
+        filed_once = (sales.lines().count() == 1)
+

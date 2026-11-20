@@ -37,6 +37,12 @@ public facet ordering:
         declined = "declined"
 
 
+    -- A sale as stored: the order, and what it came to.
+    schema sale v1:
+        key order is uint32
+        amount is uint32
+
+
     -- Why a payment was not taken, with what the bank or the delivery said.
     type payment_error:
         case declined(reason is charge_error)
@@ -259,4 +265,19 @@ public facet ordering:
     ------------------------------------------------------------------------------------------------------------------------
     workflow charge_order(id, total, injected charges) returns receipt fails payment_error:
         return receipt = submit charge(order: id, amount: total) or fail
+
+
+    ------------------------------------------------------------------------------------------------------------------------
+    Records a sale: counts it in shared state and files it in the store, in one transaction, so that the two agree.
+
+    id: The order, as uint32.
+    total: What it came to, as uint32.
+
+    placed: The orders placed, as shared<value_type=tally>.
+    sales: The sales filed, as store<schema_type=sale>.
+    ------------------------------------------------------------------------------------------------------------------------
+    function record_sale(id, total, injected placed, injected sales):
+        region recording is atomic:
+            placed.count := placed.count + 1
+            sales.put(sale(order: id, amount: total))
 

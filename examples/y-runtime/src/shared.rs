@@ -382,7 +382,7 @@ fn one_lock<R, E>(name: &str, deadline: Option<&Deadline>, alternatives: &mut [A
                 // a conflicting commit makes the region run again, at once
                 Ok(Step::Done(_)) if forced_conflict(name) => continue 'run,
                 Ok(Step::Done(r)) => {
-                    if !tx.apply.is_empty() {
+                    if !tx.apply.is_empty() || !tx.after.is_empty() {
                         *held += 1;
                         tx.commit(*held);
                         CHANGED.notify_all();
@@ -421,7 +421,7 @@ fn optimistic<R, E>(name: &str, deadline: Option<&Deadline>, isolation: Isolatio
             }
             match decided {
                 Ok(Step::Done(r)) => {
-                    if !tx.apply.is_empty() {
+                    if !tx.apply.is_empty() || !tx.after.is_empty() {
                         *held += 1;
                         tx.commit(*held);
                         CHANGED.notify_all();

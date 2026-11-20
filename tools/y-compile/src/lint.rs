@@ -40,6 +40,64 @@ pub const LINTS: &[Lint] = &[
 static WORDS: std::sync::LazyLock<std::collections::BTreeSet<&'static str>> =
     std::sync::LazyLock::new(|| include_str!("words.txt").lines().filter(|l| !l.starts_with('#')).collect());
 
+/// Common English words with their irregular forms, most common first (`src/common.txt`, from 12dicts and AGID): the
+/// lint takes a short part that is a rarer word and begins one of these for an abbreviation of it (`sec`, `second`).
+static COMMON: std::sync::LazyLock<(Vec<&'static str>, std::collections::BTreeSet<&'static str>)> = std::sync::LazyLock::new(|| {
+    let ordered: Vec<&'static str> = include_str!("common.txt").lines().filter(|l| !l.starts_with('#')).collect();
+    let set = ordered.iter().copied().collect();
+    (ordered, set)
+});
+
+/// The stems a part may be a regular form of: `lives` of `live`, `stepped` of `step`, `easiest` of `easy`.
+fn stems(part: &str) -> Vec<String> {
+    let mut out = vec![part.to_string()];
+    let rules: [(&str, &str); 18] = [
+        ("ies", "y"), ("ied", "y"), ("ier", "y"), ("iest", "y"), ("es", ""), ("s", ""), ("ed", ""), ("ed", "e"), ("d", ""),
+        ("ing", ""), ("ing", "e"), ("er", ""), ("er", "e"), ("est", ""), ("est", "e"), ("ly", ""), ("ily", "y"), ("ers", ""),
+    ];
+    for (suffix, with) in rules {
+        if let Some(stem) = part.strip_suffix(suffix).filter(|s| s.len() >= 2) {
+            out.push(format!("{stem}{with}"));
+            // a doubled consonant: `stepped`, `stepping`
+            let b = stem.as_bytes();
+            if b.len() >= 3 && b[b.len() - 1] == b[b.len() - 2] && !b"aeiou".contains(&b[b.len() - 1]) {
+                out.push(stem[..stem.len() - 1].to_string());
+            }
+        }
+    }
+    out
+}
+
+/// Whether a part is a common word, or a regular form of one.
+fn common(part: &str) -> bool {
+    stems(part).iter().any(|s| COMMON.1.contains(s.as_str()))
+}
+
+/// Whether a long part is made of words: common, or a common word with a prefix or a suffix, or two common words
+/// (`unreachable`, `choosable`, `checksum`, `workflow`).
+fn made_of_words(part: &str) -> bool {
+    if common(part) {
+        return true;
+    }
+    const PREFIXES: [&str; 12] = ["un", "re", "in", "dis", "non", "pre", "over", "under", "out", "back", "en", "sub"];
+    const SUFFIXES: [&str; 8] = ["able", "ible", "ness", "ment", "ful", "less", "ward", "wards"];
+    if PREFIXES.iter().any(|p| part.strip_prefix(p).is_some_and(|rest| rest.len() >= 3 && made_of_words(rest))) {
+        return true;
+    }
+    if SUFFIXES.iter().any(|x| part.strip_suffix(x).is_some_and(|base| base.len() >= 3 && (common(base) || common(&format!("{base}e"))))) {
+        return true;
+    }
+    (3..part.len().saturating_sub(2)).any(|k| common(&part[..k]) && common(&part[k..]))
+}
+
+/// The common word a short, rarer part begins, when there is one at least two letters longer: what it abbreviates.
+fn truncates(part: &str) -> Option<&'static str> {
+    if common(part) {
+        return None;
+    }
+    COMMON.0.iter().copied().find(|w| w.len() >= part.len() + 2 && w.starts_with(part))
+}
+
 /// The abbreviations the lint knows, each with the word it stands for: judged first, as the dictionary has some of them
 /// too (`msg`, `num`, `str`). Any other part of 2 to 6 letters that is no word in [`WORDS`] is an abbreviation as well.
 pub const ABBREVIATIONS: &[(&str, &str)] = &[
@@ -79,6 +137,8 @@ const SIZED: &[&str] = &["int8", "int16", "int32", "int64", "uint8", "uint16", "
 pub struct Words {
     pub glossary: Vec<String>,
     pub units: Vec<String>,
+    /// The units the package declares, by name: `kilometre`, whose spelling is the package's to choose.
+    pub unit_names: Vec<String>,
 }
 
 impl Words {
@@ -99,7 +159,7 @@ impl Words {
     }
 
     fn allows(&self, part: &str) -> bool {
-        self.glossary.iter().any(|g| g == part) || self.units.iter().any(|u| u == part) || UNIT_SYMBOLS.contains(&part) || CURRENCIES.contains(&part) || SIZED.contains(&part)
+        self.glossary.iter().any(|g| g == part) || self.units.iter().any(|u| u == part) || self.unit_names.iter().any(|u| u == part) || UNIT_SYMBOLS.contains(&part) || CURRENCIES.contains(&part) || SIZED.contains(&part)
     }
 }
 
@@ -155,8 +215,14 @@ pub fn lint(file: &str, source: &str, tree: &Node, module: bool, words: &Words) 
                 }
                 if let Some((_, word)) = ABBREVIATIONS.iter().find(|(a, _)| *a == part) {
                     found.push(Finding { line: n.line, lint: find("abbreviation"), message: format!("`{name}`: `{part}` abbreviates `{word}`; write the word, or put `{part}` in the project's glossary (`y/glossary`)"), warning: false });
-                } else if (2..=6).contains(&part.len()) && part.bytes().all(|b| b.is_ascii_lowercase()) && !WORDS.contains(part) {
+                } else if !part.bytes().all(|b| b.is_ascii_lowercase()) {
+                    continue;
+                } else if (2..=6).contains(&part.len()) && !WORDS.contains(part) {
                     found.push(Finding { line: n.line, lint: find("abbreviation"), message: format!("`{name}`: `{part}` is no English word, so it is taken for an abbreviation; write the word, or put `{part}` in the project's glossary (`y/glossary`)"), warning: false });
+                } else if let Some(word) = (2..=6).contains(&part.len()).then(|| truncates(part)).flatten() {
+                    found.push(Finding { line: n.line, lint: find("abbreviation"), message: format!("`{name}`: `{part}` is a rare word that begins the common `{word}`, so it is taken for an abbreviation of it; write the word, or put `{part}` in the project's glossary (`y/glossary`)"), warning: false });
+                } else if part.len() > 6 && !made_of_words(part) {
+                    found.push(Finding { line: n.line, lint: find("abbreviation"), message: format!("`{name}`: `{part}` is no common English word, nor made of them, so it is taken for an abbreviation or a word run together; write the words apart, or put `{part}` in the project's glossary (`y/glossary`)"), warning: false });
                 }
             }
         }
