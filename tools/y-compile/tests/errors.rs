@@ -252,6 +252,8 @@ fn or_fail_on_a_submit_with_no_case_to_carry_it() {
 fn an_abbreviation_is_refused_unless_the_glossary_has_it() {
     let module = function_of("idx = n + 1\nreturn m = idx");
     refused("lint_abbreviation", &module, &["abbreviation (Y2008): `idx`: `idx` abbreviates `index`"]);
+    // one the lint's list lacks: no English word of six letters or fewer
+    refused("lint_abbreviation_unlisted", &function_of("nbr = n + 1\nreturn m = nbr"), &["`nbr` is no English word, so it is taken for an abbreviation"]);
     refused("lint_abbreviation_allowed", &function_of("allow(abbreviation) because \"tried\"\nidx = n + 1\nreturn m = idx"), &["`abbreviation` (Y2008) cannot be suppressed"]);
     // the project's glossary: one term a line, with what it stands for
     let dir = package("lint_glossary", &module);

@@ -19,13 +19,15 @@
 //! A handler runs on a worker, a thread of its own: a submit waits while one delivers (`Submit`), and a [`Worker`]
 //! delivers what an outbox's committed transactions enqueued, taking each in a transaction of its own.
 //!
-//! What it does not keep: an outbox is shared state, which does not outlive the process.
+//! A command enqueued is recorded in the journal when its transaction commits ([`Outbox::enqueue`]), and a worker that
+//! starts first takes back each one recorded with no outcome: an enqueued command outlives the process, and one whose
+//! delivery crashed is delivered again. A worker shares the faults and the journal of the thread that started it.
 use crate::journal::{case, Durable, Tokens};
 use crate::shared::{atomic, Shared, Step};
 use crate::Deadline;
 use std::convert::Infallible;
-use std::sync::{Arc, Condvar, Mutex};
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 /// What happens to a command that exhausts its policy.
@@ -77,6 +79,20 @@ impl<C: Command> Outbox<C> {
         if !self.pending.iter().any(|p| p.key() == command.key()) {
             self.pending.push(command);
         }
+    }
+
+    /// `enqueue c` in the transaction `tx`: the command, unless one with its key is already there, and its record in the
+    /// journal once the transaction commits (`crate::journal::enqueued`), so that it outlives the process.
+    pub fn enqueue(&mut self, tx: &mut crate::shared::Tx, command: C)
+    where
+        C: Durable,
+    {
+        if self.pending.iter().any(|p| p.key() == command.key()) {
+            return;
+        }
+        let (key, data) = (command.key(), crate::journal::tokens(&command));
+        tx.on_commit(move || crate::journal::enqueued(&key, data));
+        self.pending.push(command);
     }
 
     /// The oldest command waiting, taken out: what a worker delivers next.
@@ -159,7 +175,10 @@ pub struct Submit<'a, C, R, E> {
 
 impl<'a, C: Command + Durable + Send + Sync, R: Durable + Send, E: Durable + Send> Submit<'a, C, R, E> {
     /// `submit.to(handler)`.
-    pub fn to(handler: impl Fn(&C) -> Result<R, E> + Send + Sync + 'a, compensation: Option<Box<dyn Fn(&C) + Send + Sync + 'a>>) -> Self {
+    pub fn to(
+        handler: impl Fn(&C) -> Result<R, E> + Send + Sync + 'a,
+        compensation: Option<Box<dyn Fn(&C) + Send + Sync + 'a>>,
+    ) -> Self {
         Submit { handler: Box::new(handler), compensation, outcomes: Mutex::new(vec![]) }
     }
 
@@ -173,20 +192,20 @@ impl<'a, C: Command + Durable + Send + Sync, R: Durable + Send, E: Durable + Sen
     }
 
     /// Runs `run` on a worker: a thread of its own, which shares nothing of the caller's thread but the faults its test
-    /// forced, handed over and back (`crate::faults::hand_over`). A panic there, a crash among them, goes on here.
+    /// forced and its journal (`crate::faults::home`, `crate::journal::home`). A panic there, a crash among them, goes on
+    /// here.
     fn on_worker<T: Send>(run: impl FnOnce() -> T + Send) -> T {
-        let forced = crate::faults::hand_over();
-        let (r, back) = std::thread::scope(|workers| {
+        let (forced, journal) = (crate::faults::home(), crate::journal::home());
+        let r = std::thread::scope(|workers| {
             workers
                 .spawn(move || {
-                    crate::faults::take_over(forced);
-                    let r = catch_unwind(AssertUnwindSafe(run));
-                    (r, crate::faults::hand_over())
+                    crate::faults::adopt(forced);
+                    crate::journal::adopt(journal);
+                    catch_unwind(AssertUnwindSafe(run))
                 })
                 .join()
                 .unwrap_or_else(|p| resume_unwind(p))
         });
-        crate::faults::take_over(back);
         r.unwrap_or_else(|p| resume_unwind(p))
     }
 
@@ -229,7 +248,11 @@ impl<'a, C: Command + Durable + Send + Sync, R: Durable + Send, E: Durable + Sen
         if let (OnAbandon::Compensate, Some(c)) = (policy.on_abandon, &self.compensation) {
             Self::on_worker(|| c(&command));
         }
-        self.record(Outcome::Abandoned { key: command.key(), compensated, parked: policy.on_abandon == OnAbandon::Park });
+        self.record(Outcome::Abandoned {
+            key: command.key(),
+            compensated,
+            parked: policy.on_abandon == OnAbandon::Park,
+        });
         Err(Undelivered::Abandoned { abandonment: Abandonment { attempts } })
     }
 
@@ -270,45 +293,84 @@ pub struct Worker<'env, C: Command + 'static, R, E> {
     busy: Arc<(Mutex<Busy>, Condvar)>,
 }
 
-impl<'env, C: Command + Durable + Send + Sync + 'static, R: Durable + Send + 'env, E: Durable + Send + 'env> Worker<'env, C, R, E> {
+impl<'env, C: Command + Durable + Send + Sync + 'static, R: Durable + Send + 'env, E: Durable + Send + 'env>
+    Worker<'env, C, R, E>
+{
     /// Starts a worker on the outbox, in a thread scope, delivering through `delivery`.
-    pub fn start<'scope>(workers: &'scope std::thread::Scope<'scope, 'env>, outbox: &'env Shared<Outbox<C>>, delivery: Submit<'env, C, R, E>) -> Self {
+    pub fn start<'scope>(
+        workers: &'scope std::thread::Scope<'scope, 'env>,
+        outbox: &'env Shared<Outbox<C>>,
+        delivery: Submit<'env, C, R, E>,
+    ) -> Self {
         let delivery = Arc::new(delivery);
         let busy: Arc<(Mutex<Busy>, Condvar)> = Arc::default();
         let (d, b) = (Arc::clone(&delivery), Arc::clone(&busy));
-        workers.spawn(move || loop {
-            if b.0.lock().unwrap_or_else(|p| p.into_inner()).closed {
-                break;
-            }
-            // the oldest command waiting, taken in a transaction; none within a moment, and the worker looks again
-            let wait = Deadline::after(Duration::from_millis(20));
-            let taken = atomic("y_runtime::command::Worker#take", Some(&wait), |tx| {
-                let mut held = tx.get(outbox);
-                match held.take_first() {
-                    Some(c) => {
-                        tx.set(outbox, held);
-                        Ok::<_, Infallible>(Step::Done(c))
-                    }
-                    None => Ok(Step::Retry),
+        let (forced, journal) = (crate::faults::home(), crate::journal::home());
+        workers.spawn(move || {
+            crate::faults::adopt(forced);
+            crate::journal::adopt(journal);
+            // a worker that starts, as one does when its program starts again, first takes back what the journal
+            // holds as enqueued and not delivered
+            Self::recover(outbox);
+            loop {
+                if b.0.lock().unwrap_or_else(|p| p.into_inner()).closed {
+                    break;
                 }
-            });
-            match taken {
-                Ok(command) => {
-                    let key = command.key();
-                    let _ = d.deliver(command);
-                    // the outcome, recorded against the command's identity (Y § 3.10)
-                    if let Some(o) = d.outcomes().last() {
-                        crate::journal::outcome(&key, o);
+                // the oldest command waiting, taken in a transaction; none within a moment, and the worker looks again
+                let wait = Deadline::after(Duration::from_millis(20));
+                let taken = atomic("y_runtime::command::Worker#take", Some(&wait), |tx| {
+                    let mut held = tx.get(outbox);
+                    match held.take_first() {
+                        Some(c) => {
+                            tx.set(outbox, held);
+                            Ok::<_, Infallible>(Step::Done(c))
+                        }
+                        None => Ok(Step::Retry),
                     }
-                }
-                // a round that found nothing: what `settle` waits for
-                Err(_) => {
-                    b.0.lock().unwrap_or_else(|p| p.into_inner()).idle_rounds += 1;
-                    b.1.notify_all();
+                });
+                match taken {
+                    Ok(command) => {
+                        let key = command.key();
+                        match catch_unwind(AssertUnwindSafe(|| d.deliver(command))) {
+                            // the outcome, recorded against the command's identity (Y § 3.10)
+                            Ok(_) => {
+                                if let Some(o) = d.outcomes().last() {
+                                    crate::journal::outcome(&key, o);
+                                }
+                            }
+                            // the program crashed while the command was delivered: it starts again, and its worker takes
+                            // back what the journal holds as not delivered, this command among them
+                            Err(p) if p.is::<crate::faults::Crashed>() => Self::recover(outbox),
+                            Err(p) => resume_unwind(p),
+                        }
+                    }
+                    // a round that found nothing: what `settle` waits for
+                    Err(_) => {
+                        b.0.lock().unwrap_or_else(|p| p.into_inner()).idle_rounds += 1;
+                        b.1.notify_all();
+                    }
                 }
             }
         });
         Worker { delivery, busy }
+    }
+
+    /// Puts back in the outbox each command the journal holds as enqueued and not delivered, in one transaction; one
+    /// with the key of a command still waiting there is that command.
+    fn recover(outbox: &Shared<Outbox<C>>) {
+        let lost: Vec<C> =
+            crate::journal::undelivered().iter().filter_map(|data| crate::journal::value(data)).collect();
+        if lost.is_empty() {
+            return;
+        }
+        let _ = atomic("y_runtime::command::Worker#recover", None, |tx| {
+            let mut held = tx.get(outbox);
+            for c in &lost {
+                held.add(c.clone());
+            }
+            tx.set(outbox, held);
+            Ok::<_, Infallible>(Step::Done(()))
+        });
     }
 
     /// Waits until every command committed so far has been delivered: until the worker ends a round that found the
@@ -368,7 +430,14 @@ mod tests {
 
     impl Command for Charge {
         fn policy() -> Policy {
-            Policy { attempts: 3, first: Duration::from_millis(1), factor: 2, deadline: Duration::from_secs(1), idempotent: true, on_abandon: OnAbandon::Compensate }
+            Policy {
+                attempts: 3,
+                first: Duration::from_millis(1),
+                factor: 2,
+                deadline: Duration::from_secs(1),
+                idempotent: true,
+                on_abandon: OnAbandon::Compensate,
+            }
         }
         fn key(&self) -> String {
             self.0.to_string()
@@ -440,10 +509,17 @@ mod tests {
         let outbox = Shared::new(Outbox::new());
         let charged = Count::default();
         std::thread::scope(|workers| {
-            let worker = Worker::start(workers, &outbox, Submit::to(|c: &Charge| -> Result<u32, String> {
-                charged.set(charged.get() + c.0);
-                Ok(c.0)
-            }, None));
+            let worker = Worker::start(
+                workers,
+                &outbox,
+                Submit::to(
+                    |c: &Charge| -> Result<u32, String> {
+                        charged.set(charged.get() + c.0);
+                        Ok(c.0)
+                    },
+                    None,
+                ),
+            );
             // a transaction enqueues two, one of them twice: the duplicate collapses
             let r = atomic("m::f#place", None, |tx| {
                 let mut o = tx.get(&outbox);
@@ -457,5 +533,72 @@ mod tests {
             worker.settle();
             assert_eq!((charged.get(), outbox.snapshot().count(), worker.outcomes().len()), (7, 0, 2));
         });
+    }
+
+    /// Enqueues commands in one transaction, as `enqueue` lowers.
+    fn place(outbox: &Shared<Outbox<Charge>>, charges: &[u32]) {
+        let r = atomic("m::place#placing", None, |tx| {
+            let mut o = tx.get(outbox);
+            for c in charges {
+                o.enqueue(tx, Charge(*c));
+            }
+            tx.set(outbox, o);
+            Ok::<_, Infallible>(Step::Done(()))
+        });
+        assert!(r.is_ok());
+    }
+
+    #[test]
+    fn an_enqueued_command_outlives_its_outbox() {
+        crate::journal::clear();
+        // a program enqueues a charge and ends before any worker delivers it
+        place(&Shared::new(Outbox::new()), &[5]);
+        // the program starts again, with an empty outbox: its worker takes the charge back from the journal
+        let outbox = Shared::new(Outbox::new());
+        let charged = Count::default();
+        std::thread::scope(|workers| {
+            let worker = Worker::start(
+                workers,
+                &outbox,
+                Submit::to(
+                    |c: &Charge| -> Result<u32, String> {
+                        charged.set(charged.get() + c.0);
+                        Ok(c.0)
+                    },
+                    None,
+                ),
+            );
+            worker.settle();
+        });
+        assert_eq!(charged.get(), 5);
+        assert!(crate::journal::undelivered().is_empty());
+    }
+
+    #[test]
+    fn a_worker_that_crashes_delivers_again_when_it_starts_again() {
+        crate::journal::clear();
+        let outbox = Shared::new(Outbox::new());
+        let (tries, charged) = (Count::default(), Count::default());
+        std::thread::scope(|workers| {
+            let worker = Worker::start(
+                workers,
+                &outbox,
+                Submit::to(
+                    |c: &Charge| -> Result<u32, String> {
+                        charged.set(charged.get() + c.0);
+                        // the program crashes after the first charge took effect, before its outcome is recorded
+                        tries.set(tries.get() + 1);
+                        if tries.get() == 1 {
+                            crate::faults::crash("m::charge#taken");
+                        }
+                        Ok(c.0)
+                    },
+                    None,
+                ),
+            );
+            place(&outbox, &[5]);
+            worker.settle();
+        });
+        assert_eq!((tries.get(), charged.get()), (2, 10), "delivered again: at least once");
     }
 }

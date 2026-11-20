@@ -251,3 +251,19 @@ test an_enqueued_charge_is_delivered_by_a_worker
         delivered = (outbox.committed().count() == 0)
         charged = (bank.snapshot().balance == 20)
 
+
+-- A crash after the bank's handler commits, on the worker that delivers an enqueued charge, starts the worker again:
+-- it takes the charge back from the journal, which holds it as not delivered, and delivers it again.
+test a_crashed_worker_delivers_an_enqueued_charge_again
+        covers place:
+    inject:
+        placed = shared.new(tally(count: 0, read_at: 0))
+        bank = shared.new(bank(balance: 100, refunds: 0))
+        outbox = enqueue.to(charge)
+    faults:
+        crash after commit charge#taken
+    when:
+        place(id: 1, total: 30)
+    then:
+        charged_twice = (bank.snapshot().balance == 40)
+

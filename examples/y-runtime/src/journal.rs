@@ -19,8 +19,10 @@
 //!   version whose compatibility signature matches"): a body changed under the same signature takes the steps the
 //!   journal holds by their numbers. One whose signature differs cannot resume: that is a fault naming both versions.
 //!
-//! - **An outbox's outcomes**: a [`crate::command::Worker`] records each command it delivers against its key
-//!   ([`outcome`]).
+//! - **An outbox's commands**: each is recorded when the transaction that enqueued it commits ([`enqueued`]), and its
+//!   outcome when a [`crate::command::Worker`] has delivered it ([`outcome`]); a worker that starts delivers what has
+//!   no outcome ([`undelivered`]).
+//! - **Kept in memory**, the journal is the thread's, shared with the workers it starts ([`home`], [`adopt`]).
 //!
 //! What it does not keep: timers, and the time of a workflow's last durable step (a workflow holds no clock, so it
 //! reads none).
@@ -218,12 +220,26 @@ impl Record {
 }
 
 thread_local! {
-    static MEMORY: RefCell<Vec<Record>> = const { RefCell::new(Vec::new()) };
+    static MEMORY: RefCell<Home> = RefCell::new(Home::default());
     /// The workflows running on this thread, innermost last: identity, version, and the steps made so far.
     static ACTIVE: RefCell<Vec<(String, String, u32)>> = const { RefCell::new(Vec::new()) };
     /// A crash a test forced after a region committed, made once the region's step is recorded.
     static CRASH: RefCell<Option<String>> = const { RefCell::new(None) };
     static OUTSIDE: Cell<u32> = const { Cell::new(0) };
+}
+
+/// A journal kept in memory: per thread, and shared with the workers that run part of a thread's work ([`home`],
+/// [`adopt`]).
+pub type Home = std::sync::Arc<Mutex<Vec<Record>>>;
+
+/// This thread's journal in memory, to hand to a worker.
+pub fn home() -> Home {
+    MEMORY.with(|m| std::sync::Arc::clone(&m.borrow()))
+}
+
+/// Makes this thread, a worker's, keep its records in the journal of the thread that started it.
+pub fn adopt(journal: Home) {
+    MEMORY.with(|m| *m.borrow_mut() = journal);
 }
 
 /// The file journal, when `Y_JOURNAL` names one: its path and what it holds.
@@ -244,7 +260,7 @@ pub fn records() -> Vec<Record> {
             }
             f.as_ref().map(|(_, r)| r.clone()).unwrap_or_default()
         }
-        None => MEMORY.with(|m| m.borrow().clone()),
+        None => MEMORY.with(|m| m.borrow().lock().unwrap_or_else(|p| p.into_inner()).clone()),
     }
 }
 
@@ -260,13 +276,13 @@ fn append(r: Record) {
                 rs.push(r);
             }
         }
-        None => MEMORY.with(|m| m.borrow_mut().push(r)),
+        None => MEMORY.with(|m| m.borrow().lock().unwrap_or_else(|p| p.into_inner()).push(r)),
     }
 }
 
 /// Forgets every record kept in memory on this thread: a test that wants a journal of its own starts with this.
 pub fn clear() {
-    MEMORY.with(|m| m.borrow_mut().clear());
+    MEMORY.with(|m| m.borrow().lock().unwrap_or_else(|p| p.into_inner()).clear());
 }
 
 /// The identity of a running workflow, and its next step; none outside a workflow, and none while a handler runs.
@@ -367,6 +383,25 @@ pub fn command<C: Durable>(key: &str, command: &C) {
         command.put(&mut data);
         append(Record { workflow: id, version, step: n, kind: "command".into(), data });
     }
+}
+
+/// Records a command an outbox's transaction enqueued, once it commits: its key and its fields. A worker that starts
+/// delivers each one recorded with no outcome after it ([`undelivered`]), so a command outlives the process that
+/// enqueued it.
+pub fn enqueued(key: &str, command: Vec<String>) {
+    let mut data = vec![key.to_string()];
+    data.extend(command);
+    append(Record { workflow: "outbox".into(), version: String::new(), step: 0, kind: "enqueued".into(), data });
+}
+
+/// The commands recorded as enqueued and not since delivered, in the order they were enqueued, each as its tokens.
+pub fn undelivered() -> Vec<Vec<String>> {
+    let rs: Vec<Record> = records().into_iter().filter(|r| r.workflow == "outbox").collect();
+    rs.iter()
+        .enumerate()
+        .filter(|(k, r)| r.kind == "enqueued" && !rs[k + 1..].iter().any(|o| o.kind == "outcome" && o.data.first() == r.data.first()))
+        .map(|(_, r)| r.data[1..].to_vec())
+        .collect()
 }
 
 /// Records the outcome of a command a worker delivered from an outbox, against the command's key: `completed`,

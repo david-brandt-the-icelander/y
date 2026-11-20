@@ -35,11 +35,16 @@ pub const LINTS: &[Lint] = &[
     Lint { code: "Y2008", name: "abbreviation", suppressible: false, what: "an abbreviation in a name the file declares, not in the project's glossary (Y § 3.1: an official lint)" },
 ];
 
-/// The abbreviations the lint knows, each with the word it stands for. A name that is a word is not judged: the lint
-/// knows abbreviations, not the dictionary, so it finds the ones programmers reach for.
+/// English words of 2 to 6 letters (`src/words.txt`, from a public-domain list): a part of a name that short and no
+/// word is an abbreviation. Longer parts are taken as words.
+static WORDS: std::sync::LazyLock<std::collections::BTreeSet<&'static str>> =
+    std::sync::LazyLock::new(|| include_str!("words.txt").lines().filter(|l| !l.starts_with('#')).collect());
+
+/// The abbreviations the lint knows, each with the word it stands for: judged first, as the dictionary has some of them
+/// too (`msg`, `num`, `str`). Any other part of 2 to 6 letters that is no word in [`WORDS`] is an abbreviation as well.
 pub const ABBREVIATIONS: &[(&str, &str)] = &[
     ("abs", "absolute"), ("acc", "accumulator"), ("addr", "address"), ("alloc", "allocation"), ("amt", "amount"),
-    ("app", "application"), ("arg", "argument"), ("args", "arguments"), ("arr", "array"), ("attr", "attribute"),
+    ("app", "application"), ("approx", "approximate"), ("arg", "argument"), ("args", "arguments"), ("arr", "array"), ("attr", "attribute"),
     ("auth", "authentication"), ("avg", "average"), ("bool", "boolean"), ("btn", "button"), ("buf", "buffer"),
     ("calc", "calculate"), ("cb", "callback"), ("cfg", "configuration"), ("chk", "check"),
     ("cmd", "command"), ("cnt", "count"), ("col", "column"), ("cols", "columns"), ("conf", "configuration"),
@@ -54,9 +59,9 @@ pub const ABBREVIATIONS: &[(&str, &str)] = &[
     ("loc", "location"), ("max", "maximum"), ("mem", "memory"), ("misc", "miscellaneous"), ("mod", "module"),
     ("msg", "message"), ("mut", "mutable"), ("nav", "navigation"), ("num", "number"), ("obj", "object"),
     ("param", "parameter"), ("params", "parameters"), ("pct", "percent"), ("pkg", "package"),
-    ("pos", "position"), ("prev", "previous"), ("proc", "process"), ("ptr", "pointer"), ("pwd", "password"),
+    ("pos", "position"), ("prob", "probability"), ("prev", "previous"), ("proc", "process"), ("ptr", "pointer"), ("pwd", "password"),
     ("qty", "quantity"), ("ref", "reference"), ("req", "request"), ("res", "result"), ("resp", "response"),
-    ("ret", "return"), ("rhs", "right"), ("sel", "selection"), ("seq", "sequence"), ("sig", "signature"),
+    ("ret", "return"), ("rhs", "right"), ("sel", "selection"), ("seq", "sequence"), ("sig", "signature"), ("spec", "specification"), ("stat", "statistic"),
     ("src", "source"), ("srv", "server"), ("std", "standard"), ("str", "string"), ("svc", "service"),
     ("sys", "system"), ("tbl", "table"), ("tmp", "temporary"), ("tx", "transaction"),
     ("txn", "transaction"), ("usr", "user"), ("util", "utility"), ("val", "value"), ("var", "variable"),
@@ -145,8 +150,13 @@ pub fn lint(file: &str, source: &str, tree: &Node, module: bool, words: &Words) 
         }
         for name in names {
             for part in name.split(['_', '.']).filter(|p| !p.is_empty() && !p.bytes().all(|b| b.is_ascii_digit())) {
-                if let Some((_, word)) = ABBREVIATIONS.iter().find(|(a, _)| *a == part).filter(|_| !words.allows(part)) {
+                if words.allows(part) {
+                    continue;
+                }
+                if let Some((_, word)) = ABBREVIATIONS.iter().find(|(a, _)| *a == part) {
                     found.push(Finding { line: n.line, lint: find("abbreviation"), message: format!("`{name}`: `{part}` abbreviates `{word}`; write the word, or put `{part}` in the project's glossary (`y/glossary`)"), warning: false });
+                } else if (2..=6).contains(&part.len()) && part.bytes().all(|b| b.is_ascii_lowercase()) && !WORDS.contains(part) {
+                    found.push(Finding { line: n.line, lint: find("abbreviation"), message: format!("`{name}`: `{part}` is no English word, so it is taken for an abbreviation; write the word, or put `{part}` in the project's glossary (`y/glossary`)"), warning: false });
                 }
             }
         }

@@ -12,6 +12,7 @@
 //! - `cancel at f#task`: the task is cancelled before it starts. It does not run and is not restarted, and its siblings
 //!   and its region go on: a cancellation is not a failure that the region's supervision answers.
 use std::cell::{Cell, RefCell};
+use std::sync::{Arc, Mutex};
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 
 /// What a test forces.
@@ -52,19 +53,36 @@ pub fn restarts() -> u32 {
 
 thread_local! {
     /// What is still to be forced: each fault, where, and how many times more.
-    static FORCED: RefCell<Vec<(Kind, String, u32)>> = const { RefCell::new(Vec::new()) };
+    static FORCED: RefCell<Forced> = RefCell::new(Forced::default());
     static RESTARTS: Cell<u32> = const { Cell::new(0) };
 }
 
-/// Forces a fault at a region `times` times, for the test running on this thread.
+/// What a test forces, each fault with where and how many times more: kept per thread, and shared with the workers
+/// that run part of the test's code on threads of their own ([`home`], [`adopt`]).
+pub type Forced = Arc<Mutex<Vec<(Kind, String, u32)>>>;
+
+fn forced<T>(f: impl FnOnce(&mut Vec<(Kind, String, u32)>) -> T) -> T {
+    FORCED.with(|table| f(&mut table.borrow().lock().unwrap_or_else(|p| p.into_inner())))
+}
+
+/// This thread's table of forced faults, to hand to a worker.
+pub fn home() -> Forced {
+    FORCED.with(|f| Arc::clone(&f.borrow()))
+}
+
+/// Makes this thread, a worker's, force what the table of the thread that started it forces.
+pub fn adopt(table: Forced) {
+    FORCED.with(|f| *f.borrow_mut() = table);
+}
+
+/// Forces a fault at a region `times` times, for the test running on this thread and its workers.
 pub fn force(kind: Kind, at: &str, times: u32) {
-    FORCED.with(|f| f.borrow_mut().push((kind, at.to_string(), times)));
+    forced(|f| f.push((kind, at.to_string(), times)));
 }
 
 /// Whether a fault is forced at a region now: once taken, it is forced one time fewer.
 pub fn take(kind: Kind, at: &str) -> bool {
-    FORCED.with(|f| {
-        let mut f = f.borrow_mut();
+    forced(|f| {
         match f.iter_mut().find(|(k, a, n)| *k == kind && a == at && *n > 0) {
             Some(entry) => {
                 entry.2 -= 1;
@@ -77,17 +95,5 @@ pub fn take(kind: Kind, at: &str) -> bool {
 
 /// How many forced faults the code under test has not yet met: what a test may check after its `when`.
 pub fn unmet() -> u32 {
-    FORCED.with(|f| f.borrow().iter().map(|e| e.2).sum())
+    forced(|f| f.iter().map(|e| e.2).sum())
 }
-
-/// Every fault still forced on this thread, taken off it: what a worker that runs part of the test's code on a thread of
-/// its own is handed, and hands back with [`take_over`].
-pub fn hand_over() -> Vec<(Kind, String, u32)> {
-    FORCED.with(|f| std::mem::take(&mut *f.borrow_mut()))
-}
-
-/// Takes faults handed over by [`hand_over`], forced on this thread from now on.
-pub fn take_over(faults: Vec<(Kind, String, u32)>) {
-    FORCED.with(|f| f.borrow_mut().extend(faults));
-}
-

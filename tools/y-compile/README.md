@@ -489,7 +489,7 @@ stops the build as a compile error does, unless it says it is a warning; warning
 | Y2005 | `todo_comment` | A `TODO` or `FIXME` comment (Y § 3.16) |
 | Y2006 | `repeated_call` | The same call in more than one condition of a `conditional` without a subject (Y § 3.5) |
 | Y2007 | `shadowing` | A name bound again where a parameter, or this block or one around it, already binds it. It cannot be suppressed (Y § 3.15) |
-| Y2008 | `abbreviation` | A part of a name the file declares (split at `_` and `.`) that is a known abbreviation (`idx`, `cnt`, `msg`, … in `ABBREVIATIONS`, each with its word), unless the project's glossary, a unit symbol or a currency code allows it. It cannot be suppressed (Y § 3.1, § 3.15) |
+| Y2008 | `abbreviation` | A part of a name the file declares (split at `_` and `.`) that is a known abbreviation (`ABBREVIATIONS`, each with its word: `msg`, `num`, `str`, …), or, of 2 to 6 letters, no English word (`src/words.txt`: `cnt`, `idx`, `nbr`, …), unless the project's glossary, a unit symbol or a currency code allows it. It cannot be suppressed (Y § 3.1, § 3.15) |
 
 - `allow(Y2006) because "…"` or `allow(repeated_call) because "…"` applies to the block it stands in and to what opens
   that block: in a function's body, to the whole function, so it also covers its length and its paths.
@@ -497,10 +497,13 @@ stops the build as a compile error does, unless it says it is a warning; warning
 - An `allow` of a lint that cannot be suppressed, or of a code or name no lint has, is an error; an `allow` that
   suppresses nothing is a warning.
 - **The project's glossary** is `y/glossary` in the package: one term a line, `term: what it stands for`, with `--`
-  comments; a line without its meaning is an error. The proposal names the glossary and not its form. The lint knows
-  abbreviations, not the dictionary: a part that is an English word (`win`) is not judged, so it finds the
-  abbreviations programmers reach for, not every one. Names the runtime gives (a method, a type argument) are the
-  standard library's, and not judged where they are used.
+  comments; a line without its meaning is an error. The proposal names the glossary and not its form. Tic-tac-toe's
+  glossary has `tac`, and warehouse's has `sku`, the two words of the examples that are no English words.
+- **The dictionary** is the words of 2 to 6 letters of a public-domain list (dwyl's `words_alpha.txt`, The Unlicense),
+  55,538 of them, 350 KB, read once. A part of 2 to 6 letters that is no word in it is taken for an abbreviation;
+  a longer part is taken for a word, as abbreviations are short. The list has some abbreviations too (`msg`, `num`,
+  `str`), so the lint's own list is judged first. Names the runtime gives (a method, a type argument) are the standard
+  library's, and not judged where they are used.
 - Unnamed decisions, the other official lint, are a compile error already (the parser's).
 - The seven examples and every test program are clean. The claims program suppresses `redundant_parentheses` with a
   statement and `repeated_call` with a comment; `tests/errors.rs` checks each lint and each rule above.
@@ -576,6 +579,16 @@ method that takes a weighed thing of any kind, and `holds` over a list of any eq
   `inject` has `outbox = enqueue.to(charge)` runs inside `std::thread::scope`, and its `then` reads after
   `outbox_worker.settle()`, which waits for a round of the worker that finds the outbox empty and ends after it was
   called. The orders program places an order whose enqueued charge a worker delivers to the bank.
+- **An enqueued command outlives the process.** `enqueue c(…)` lowers to `outbox.enqueue(tx, c)`, which adds the
+  command and, with `Tx::on_commit`, records it in the journal when the transaction commits, and only then: a run that
+  is discarded or runs again records nothing. A worker that starts, as one does when its program starts again, first
+  puts back in the outbox each command the journal holds as enqueued with no outcome after it. With `Y_JOURNAL`, that
+  is what the last process enqueued and did not deliver.
+- **A worker shares its test's faults and journal.** A worker, and the thread a submit delivers on, take the forced
+  faults and the in-memory journal of the thread that started them (`faults::home`/`adopt`, `journal::home`/`adopt`),
+  so a test can crash a handler on an outbox's worker: the worker starts again and takes the command back from the
+  journal, which holds no outcome for it, and delivers it again. The orders program crashes the bank's handler after it
+  commits, and the charge is taken twice: at-least-once delivery.
 - **`submit c(…) or fail`** converts through the workflow's failure type (Y § 3.4): through a case that carries
   `undelivered<failure_type=e>`, or, as the proposal's `fulfil` has it, a case that carries the handler's `e` (the
   command declined) and one that carries the `abandonment` (it could not be delivered). y-compile writes the
@@ -587,10 +600,10 @@ method that takes a weighed thing of any kind, and `holds` over a list of any eq
 
 ## What it does not handle yet
 
-It handles the forms the seven examples and the test programs use. What remains is past a stand-in runtime:
+It handles the forms the seven examples and the test programs use, and every item this list has held. What a stand-in
+runtime and a word list cannot give:
 
-- **Shared state does not outlive the process.** The journal does, in its file, and a store does; an outbox, which is
-  held in shared state, does not, so a command enqueued and not yet delivered when the process ends is lost with it.
-- **Faults in a worker that delivers from an outbox.** A test's forced faults are handed to the worker a submit
-  delivers on, and not to the long-lived worker of an outbox: a test cannot crash an enqueued command's handler.
-- **Abbreviations the lint does not list.** It finds the abbreviations in its list, and a word the list lacks passes.
+- **The abbreviation lint judges words, not meanings.** A part that the list of abbreviations lacks and the dictionary
+  has passes (`sec` for second, as the dictionary has `sec`, dry), and so does any part longer than 6 letters.
+- **Shared state is the program's, in memory.** What outlives the process is the journal (with `Y_JOURNAL`) and a
+  store: a command enqueued is in the journal, but the rest of a `shared` value is not.

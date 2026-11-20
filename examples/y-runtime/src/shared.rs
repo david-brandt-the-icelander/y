@@ -201,11 +201,13 @@ pub struct Tx {
     read: RefCell<HashMap<usize, VersionOf>>,
     written: HashMap<usize, VersionOf>,
     stale: Cell<bool>,
+    /// What the transaction does once it has committed, and only then: a command's record in the journal.
+    after: Vec<Box<dyn FnOnce() + Send>>,
 }
 
 impl Tx {
     fn new(stamp: Option<u64>) -> Tx {
-        Tx { pending: HashMap::new(), apply: Vec::new(), stamp, read: RefCell::new(HashMap::new()), written: HashMap::new(), stale: Cell::new(false) }
+        Tx { pending: HashMap::new(), apply: Vec::new(), stamp, read: RefCell::new(HashMap::new()), written: HashMap::new(), stale: Cell::new(false), after: Vec::new() }
     }
 
     /// The value of a shared state, as this run sees it: Y reads a `shared` inside `atomic` as a `mutable` value.
@@ -262,6 +264,15 @@ impl Tx {
         for apply in self.apply.drain(..) {
             apply(&mut self.pending, version);
         }
+        for after in self.after.drain(..) {
+            after();
+        }
+    }
+
+    /// Does `then` once the transaction commits, and not if it is discarded or runs again: what is made durable with
+    /// the commit, as a command `enqueue` adds is (Y § 3.10).
+    pub fn on_commit(&mut self, then: impl FnOnce() + Send + 'static) {
+        self.after.push(Box::new(then));
     }
 }
 

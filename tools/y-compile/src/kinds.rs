@@ -450,7 +450,8 @@ impl<'a> Lowerer<'a> {
             return;
         };
         let c = self.command_value(v);
-        self.line(format!("{outbox}.add({c});"));
+        // added in the transaction, and recorded in the journal when it commits, so that it outlives the process
+        self.line(format!("{outbox}.enqueue(tx, {c});"));
     }
 
     /// A command's value, `charge(order: o, amount: a)`: its structure.
