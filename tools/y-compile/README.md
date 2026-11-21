@@ -511,7 +511,13 @@ stops the build as a compile error does, unless it says it is a warning; warning
   word at least two letters longer, is taken for an abbreviation of the most common such word (`sec`, `second`). A part
   longer than 6 letters is a word when it is common, or a common word with a prefix (`un`, `re`, `back`, …) or a
   suffix (`able`, `ness`, …), or two common words run together (`checksum`, `workflow`); any other (`numitems`) is
-  taken for an abbreviation or words run together. Names the runtime gives (a method, a type argument) are the standard
+  taken for an abbreviation or words run together.
+- **A name's documentation says what it means**, and the lint reads it: a part of a documented name (a parameter, a
+  result, a role) that is no word of its entry, but begins one that is not made from it, is taken for an abbreviation
+  of that word, however common the part is: `temp: The temperature, in kelvin` shortens `temperature`. A word is made
+  from the part when it is the part with an ending (`counted`, `stepping`, with a doubled consonant only before the
+  endings that double one) or the part and another word, both among the 10,000 commonest (`leftmost`; `cur` and
+  `rent` make no compound). Names the runtime gives (a method, a type argument) are the standard
   library's, and not judged where they are used.
 - Unnamed decisions, the other official lint, are a compile error already (the parser's).
 - The seven examples and every test program are clean. The claims program suppresses `redundant_parentheses` with a
@@ -580,12 +586,16 @@ method that takes a weighed thing of any kind, and `holds` over a list of any eq
   after the reserving resumes the workflow, which neither reserves nor charges twice. A crash after the bank's handler
   commits, before its outcome is recorded, delivers the charge again, and the handler, which is not idempotent in
   effect, charges twice. The regions program cancels one of two tasks, and the count is one.
-- **A store's writes inside `atomic` join the transaction** (Y § 3.12). `sales.put(record)` in an atomic region lowers
+- **A store's reads and writes inside `atomic` join the transaction** (Y § 3.12). `sales.put(record)` in an atomic region lowers
   to `sales.put_in(tx, &record)`, which writes the record, and saves a store kept in a file, with `Tx::on_commit`: when
   the transaction commits, once, and not in a run that is discarded or runs again. A region whose only write is to a
-  store commits too. bare-rust's region check takes a store whose every use in the region is `put_in` as no effect of
-  the region's runs, and `levels.json` trusts `Store::put_in` for that one call. The orders program files a sale in a
-  transaction made to conflict twice, and the store holds it once.
+  store commits too. `sales.read_all()` in an atomic region lowers to `sales.read_all_in(tx)`, which sees the records
+  committed before the run and the run's own writes. A store's records carry the version of the commit that last wrote
+  them, as shared state does, so an optimistic run that read a store a later commit wrote runs again. bare-rust's
+  region check takes a store whose every use in the region is `put_in` or `read_all_in` as no effect of the region's
+  runs, and `levels.json` trusts `Store::put_in` for its one call at commit. The orders program files a sale in a
+  transaction made to conflict twice, and the store holds it once; and files a sale and counts the store in one
+  transaction, which counts the sale it files, once, though it runs again.
 - **`shared` is the program's state, in memory**, as Y § 3.9 has it: what outlives the process is a store (§ 3.12,
   "the capability for persistent data") and the journal.
 - **Workers.** A handler runs on a worker, a thread of its own that shares nothing of the caller's but the faults its
@@ -617,11 +627,9 @@ method that takes a weighed thing of any kind, and `holds` over a list of any eq
 
 ## What it does not handle yet
 
-It handles the forms the seven examples and the test programs use, and every item this list has held. What remains:
+It handles the forms the seven examples and the test programs use, and every item this list has held. What is left is
+judgment, not a missing construct:
 
-- **A store's reads inside `atomic`.** Its writes join the transaction; a read in a region is still refused by the
-  region check, as reading a store a transaction has written would need the store's records versioned with the
-  transaction's, as shared state's are. A function reads a store outside its regions.
-- **The abbreviation lint judges by lists.** It is a rule over three lists and a glossary, not an understanding of
-  names: a common word used as an abbreviation (`temp` for temporary) passes unless its list names it, and a rare
-  domain word that begins a common one is reported until the glossary has it.
+- **The abbreviation lint judges by lists, documentation and a glossary.** An undocumented name (a local) that is a
+  common word used as an abbreviation passes, as nothing says what it shortens; the official lint's full judgment is a
+  reviewer's.

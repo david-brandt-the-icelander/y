@@ -283,3 +283,17 @@ test a_sale_is_filed_once_though_it_conflicts
         counted_once = (placed.snapshot().count == 1)
         filed_once = (sales.lines().count() == 1)
 
+
+-- A transaction that files a sale and reads the store sees its own sale, once, though it conflicts and runs again.
+test a_transaction_reads_the_sale_it_files
+        covers file_and_count:
+    inject:
+        sales = fake store(lines: ["sale v1 3|3;10"])
+    faults:
+        conflict at file_and_count#filing
+    when:
+        filed = file_and_count(id: 7, total: 20)
+    then:
+        two = (filed == 2)
+        both_kept = (sales.lines().count() == 2)
+

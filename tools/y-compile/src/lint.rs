@@ -98,6 +98,38 @@ fn truncates(part: &str) -> Option<&'static str> {
     COMMON.0.iter().copied().find(|w| w.len() >= part.len() + 2 && w.starts_with(part))
 }
 
+/// The endings a word takes and still is the same word, or one made from it: `counted`, `stepping`, `wins`.
+const ENDINGS: [&str; 41] = [
+    "s", "es", "ed", "d", "ing", "er", "ers", "est", "ly", "ness", "ment", "ments", "able", "ible", "ful", "less", "most",
+    "ward", "wards", "ish", "y", "ies", "ier", "iest", "ily", "ion", "ions", "al", "ally", "ity", "ive", "ous", "ance",
+    "ence", "ant", "ent", "ism", "ist", "ship", "hood", "wise",
+];
+
+/// Whether a word of a name's documentation is the part itself with an ending (`counted` of `count`, `stepping` of
+/// `step`), or the part and another common word (`leftmost`): made from the word, not abbreviated by it.
+fn made_from(word: &str, part: &str) -> bool {
+    let rest = &word[part.len()..];
+    // a consonant doubles before the few endings that double it: `stepped`, `stepping`, `bigger`
+    let doubled = rest.len() >= 2 && rest.as_bytes()[0] == *part.as_bytes().last().unwrap() && ["ed", "ing", "er", "ers", "est", "y"].contains(&&rest[1..]);
+    ENDINGS.contains(&rest) || doubled || (rest.len() >= 2 && among_the_commonest(part) && among_the_commonest(rest))
+}
+
+/// Whether a part, or the stem a regular ending leaves, is among the 10,000 commonest words: a compound is made of two
+/// of them (`left` and `most`), where `cur` and `rent` make none.
+fn among_the_commonest(part: &str) -> bool {
+    stems(part).iter().any(|s| COMMON.0.iter().take(10_000).any(|w| w == s))
+}
+
+/// What a part of a name abbreviates, by its documentation: a word of `text` that the part begins and is not made from
+/// it (`temp` documented as "The temperature"), when the part is no word of the text itself.
+fn abbreviated_in(part: &str, text: &str) -> Option<String> {
+    let words: Vec<String> = text.split(|c: char| !c.is_ascii_alphabetic()).filter(|w| !w.is_empty()).map(str::to_lowercase).collect();
+    if part.len() < 2 || words.iter().any(|w| w == part) {
+        return None;
+    }
+    words.into_iter().find(|w| w.len() >= part.len() + 2 && w.starts_with(part) && !made_from(w, part))
+}
+
 /// The abbreviations the lint knows, each with the word it stands for: judged first, as the dictionary has some of them
 /// too (`msg`, `num`, `str`). Any other part of 2 to 6 letters that is no word in [`WORDS`] is an abbreviation as well.
 pub const ABBREVIATIONS: &[(&str, &str)] = &[
@@ -198,6 +230,22 @@ fn last_line(n: &Node) -> usize {
 pub fn lint(file: &str, source: &str, tree: &Node, module: bool, words: &Words) -> (Vec<String>, Vec<String>) {
     let mut found: Vec<Finding> = vec![];
     let find = |name: &str| lint_named(name).unwrap();
+
+    // a name documented by the word it shortens: the entry says what the part means (`temp: The temperature, …`)
+    tree.walk(&mut |n: &Node| {
+        if n.kind != "doc_entry" {
+            return;
+        }
+        let (Some(name), Some(text)) = (n.str("name"), n.str("text")) else { return };
+        if !name.bytes().all(|b| b.is_ascii_lowercase() || b == b'_') {
+            return;
+        }
+        for part in name.split('_').filter(|p| !words.allows(p)) {
+            if let Some(word) = abbreviated_in(part, text) {
+                found.push(Finding { line: n.line, lint: find("abbreviation"), message: format!("`{name}`: `{part}` shortens `{word}`, as its documentation says; write the word, or put `{part}` in the project's glossary (`y/glossary`)"), warning: false });
+            }
+        }
+    });
 
     // abbreviations, in each name the file declares and each function's result
     tree.walk(&mut |n: &Node| {

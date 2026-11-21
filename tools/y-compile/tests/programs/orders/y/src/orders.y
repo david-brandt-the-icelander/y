@@ -281,3 +281,19 @@ public facet ordering:
             placed.count := placed.count + 1
             sales.put(sale(order: id, amount: total))
 
+
+    ------------------------------------------------------------------------------------------------------------------------
+    Files a sale, and counts the sales filed, in one transaction: the count sees the sale it files.
+
+    id: The order, as uint32.
+    total: What it came to, as uint32.
+
+    filed: How many sales are filed, with this one, as count<unit_type=sale>.
+
+    sales: The sales filed, as store<schema_type=sale>.
+    ------------------------------------------------------------------------------------------------------------------------
+    function file_and_count(id, total, injected sales) returns filed:
+        region filing is atomic:
+            sales.put(sale(order: id, amount: total))
+            return filed = sales.read_all().count()
+

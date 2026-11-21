@@ -303,3 +303,14 @@ workflow pay(amount{}) returns receipt fails order_error:\n{body}\n",
     let holding = workflow_version("signature_holding", &module(lost, "    return receipt = amount", kept));
     assert_ne!(first.1, holding.1, "a new capability is new authority");
 }
+
+#[test]
+fn a_name_documented_by_the_word_it_shortens() {
+    // the documentation says what the part means: a common word used as an abbreviation of a longer one
+    let module = |name: &str, says: &str| format!("-------\nDoes it.\n\n{name}: {says}, as uint32.\n\nm: Another, as uint32.\n-------\nfunction f({name}) returns m:\n    return m = {name}\n");
+    refused("lint_documented_temp", &module("temp", "The temperature, in kelvin"), &["`temp` shortens `temperature`, as its documentation says"]);
+    refused("lint_documented_cur", &module("cur", "The current reading"), &["`cur` shortens `current`"]);
+    // a word made from the part, by an ending or another word, is no abbreviation of it
+    compiled("lint_documented_left", &module("left", "The leftmost column"));
+    compiled("lint_documented_count", &module("count", "How many are counted"));
+}

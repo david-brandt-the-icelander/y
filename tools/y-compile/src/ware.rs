@@ -346,6 +346,8 @@ impl<'a> Lowerer<'a> {
                 let key = self.by_ref(key, &k);
                 ex(format!("{r}.get({key}).cloned().unwrap_or_else(|| y_runtime::fault(\"{}::{}\", \"no such key\"))", self.ctx.module, self.ctx.name), (**v).clone(), Form::Temp, ATOM)
             }
+            // inside an atomic region, the read joins the transaction, and sees its writes (Y § 3.12)
+            (Ty::Store(e), "read_all") if self.atomic_result.is_some() => ex(format!("{r}.read_all_in(tx)"), Ty::Iter(Box::new(Ty::Res(e.clone(), Box::new(Ty::Named("record_failure".into()))))), Form::Temp, ATOM),
             (Ty::Store(e), "read_all") => ex(format!("{r}.read_all()"), Ty::Iter(Box::new(Ty::Res(e.clone(), Box::new(Ty::Named("record_failure".into()))))), Form::Temp, ATOM),
             (Ty::Store(_), "lines") => ex(format!("{r}.lines()"), Ty::List(Box::new(Ty::HostStr)), Form::Temp, ATOM),
             (Ty::Store(e), "batch") => ex(format!("Held::new({r}.batch())"), Ty::Named(format!("batch:{}", match &**e { Ty::Named(n) => n.clone(), _ => String::new() })), Form::Temp, ATOM),

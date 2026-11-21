@@ -14,6 +14,7 @@
     "y_runtime::task": "effects",
     "y_runtime::store": "effects",
     "y_runtime::store::Store::put_in": "shared",
+    "y_runtime::store::Store::read_all_in": "shared",
     "y_runtime::System": "effects",
     "y_runtime::Console": "effects",
     "y_runtime::Clock": "effects",

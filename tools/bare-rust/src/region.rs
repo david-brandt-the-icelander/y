@@ -345,11 +345,11 @@ pub fn check_body_with(brs: &str, js: &Value, name: &str, facts: Option<&[crate:
             let used = all.iter().any(|x| x.kind() == "identifier" && text(*x, brs) == n);
             // the right to wait without bound is no effect: an atomic region that is `forever` waits, by `waits until`
             let forever = ty == "Forever" || ty.ends_with("<target_type=Forever>");
-            // a store whose every use is a write that joins the transaction, `store.put_in(tx, …)`, made when it
-            // commits (Y § 3.12)
+            // a store whose every use joins the transaction (Y § 3.12): a write, `store.put_in(tx, …)`, made when it
+            // commits, or a read, `store.read_all_in(tx)`, which the transaction checks as it does shared state's
             let joins = (ty.contains("Store<") || ty.ends_with("<target_type=Store>"))
                 && all.iter().filter(|x| x.kind() == "identifier" && text(**x, brs) == n).all(|x| {
-                    x.parent().is_some_and(|f| f.kind() == "field_expression" && f.child_by_field_name("field").is_some_and(|m| text(m, brs) == "put_in"))
+                    x.parent().is_some_and(|f| f.kind() == "field_expression" && f.child_by_field_name("field").is_some_and(|m| matches!(text(m, brs), "put_in" | "read_all_in")))
                 });
             if *injected && !ty.contains("Shared<") && used && !(forever && has("forever because")) && !joins {
                 return Err(format!("region `{name}` is atomic and may run again, so it holds no external effect, and it uses the capability `{n}`"));

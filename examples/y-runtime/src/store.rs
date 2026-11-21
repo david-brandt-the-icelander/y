@@ -5,8 +5,10 @@
 //! examples write them by hand, as an implementation of [`Schema`]. A record the codec or a migration cannot read fails
 //! alone, against its key, and the others are read.
 //!
-//! A write inside an atomic region joins its transaction ([`Store::put_in`]): it is made, and a store kept in a file
-//! saved, when the transaction commits, and not by a run that is discarded or runs again.
+//! Reads and writes inside an atomic region join its transaction: a write ([`Store::put_in`]) is made, and a store kept
+//! in a file saved, when the transaction commits, and not by a run that is discarded or runs again; a read
+//! ([`Store::read_all_in`]) sees the run's own writes, and the records carry the version of the commit that last wrote
+//! them, so an optimistic run that a later commit overtook runs again, as one that read shared state does.
 use std::collections::BTreeMap;
 use std::fmt;
 use std::path::PathBuf;
@@ -49,6 +51,8 @@ pub trait Schema: Sized {
 struct Kept {
     file: Option<PathBuf>,
     records: BTreeMap<String, (u32, String)>,
+    /// The version of the commit that last wrote a record, as shared state has one: what a transaction's read checks.
+    version: u64,
 }
 
 impl Kept {
@@ -66,9 +70,10 @@ impl Kept {
 
 /// A write a transaction made, now that it has committed: the record, and the store saved. A save that fails then is
 /// a fault, as the transaction it joined can no longer fail.
-fn write_committed(kept: &Mutex<Kept>, name: &'static str, key: String, version: u32, text: String) {
+fn write_committed(kept: &Mutex<Kept>, name: &'static str, key: String, version: u32, text: String, commit: u64) {
     let mut kept = kept.lock().unwrap_or_else(|p| p.into_inner());
     kept.records.insert(key, (version, text));
+    kept.version = commit;
     if let Err(e) = kept.save(name) {
         super::fault("y_runtime::store::put_in", &e.reason);
     }
@@ -98,7 +103,7 @@ impl<S: Schema> Store<S> {
 
     /// A store in memory, with these lines already in it: what a test injects.
     pub fn fake(lines: &[&str]) -> Self {
-        let store = Store { kept: Arc::new(Mutex::new(Kept { file: None, records: BTreeMap::new() })), _schema: std::marker::PhantomData };
+        let store = Store { kept: Arc::new(Mutex::new(Kept { file: None, records: BTreeMap::new(), version: 0 })), _schema: std::marker::PhantomData };
         for line in lines {
             store.load_line(line).unwrap_or_else(|e| super::fault("y_runtime::store::fake", &e.reason));
         }
@@ -139,7 +144,38 @@ impl<S: Schema> Store<S> {
     /// kept in a file saved, when the transaction commits, and not by a run that is discarded or runs again.
     pub fn put_in(&self, tx: &mut Tx, record: &S) {
         let (kept, key, text) = (Arc::clone(&self.kept), record.key(), record.encode());
-        tx.on_commit(move || write_committed(&kept, S::NAME, key, S::VERSION, text));
+        let written = (key.clone(), S::VERSION, text.clone());
+        tx.write_record(self.address(), self.version_of(), written, move |commit| write_committed(&kept, S::NAME, key, S::VERSION, text, commit));
+    }
+
+    /// `read_all` inside an atomic region: the read joins the transaction (Y § 3.12). It sees the records committed
+    /// before the run and the run's own writes, and an optimistic run that a commit to the store overtook runs again,
+    /// as one that read shared state does.
+    pub fn read_all_in(&self, tx: &Tx) -> std::vec::IntoIter<Result<S, RecordFailure>> {
+        let mut records = {
+            let kept = self.kept();
+            tx.read_versioned(self.address(), kept.version, self.version_of());
+            kept.records.clone()
+        };
+        for (key, version, text) in tx.records_written(self.address()) {
+            records.insert(key.clone(), (*version, text.clone()));
+        }
+        records
+            .iter()
+            .map(|(key, (version, text))| S::decode(key, *version, text).map_err(|reason| RecordFailure { key: key.clone(), version: *version, reason }))
+            .collect::<Vec<_>>()
+            .into_iter()
+    }
+
+    /// What a transaction knows the store by.
+    fn address(&self) -> usize {
+        Arc::as_ptr(&self.kept) as usize
+    }
+
+    /// The version of the store's last commit, now.
+    fn version_of(&self) -> crate::shared::VersionOf {
+        let kept = Arc::clone(&self.kept);
+        Arc::new(move || kept.lock().unwrap_or_else(|p| p.into_inner()).version)
     }
 
     /// The stored lines, as the file holds them.
