@@ -99,10 +99,10 @@ fn truncates(part: &str) -> Option<&'static str> {
 }
 
 /// The endings a word takes and still is the same word, or one made from it: `counted`, `stepping`, `wins`.
-const ENDINGS: [&str; 41] = [
+const ENDINGS: [&str; 42] = [
     "s", "es", "ed", "d", "ing", "er", "ers", "est", "ly", "ness", "ment", "ments", "able", "ible", "ful", "less", "most",
     "ward", "wards", "ish", "y", "ies", "ier", "iest", "ily", "ion", "ions", "al", "ally", "ity", "ive", "ous", "ance",
-    "ence", "ant", "ent", "ism", "ist", "ship", "hood", "wise",
+    "ence", "ant", "ent", "ism", "ist", "ship", "hood", "wise", "th",
 ];
 
 /// Whether a word of a name's documentation is the part itself with an ending (`counted` of `count`, `stepping` of
@@ -124,7 +124,8 @@ fn among_the_commonest(part: &str) -> bool {
 /// it (`temp` documented as "The temperature"), when the part is no word of the text itself.
 fn abbreviated_in(part: &str, text: &str) -> Option<String> {
     let words: Vec<String> = text.split(|c: char| !c.is_ascii_alphabetic()).filter(|w| !w.is_empty()).map(str::to_lowercase).collect();
-    if part.len() < 2 || words.iter().any(|w| w == part) {
+    // the commonest words (`no`, `to`, `not`) are words wherever they stand, and abbreviate nothing
+    if part.len() < 2 || words.iter().any(|w| w == part) || stems(part).iter().any(|s| COMMON.0.iter().take(1_000).any(|w| w == s)) {
         return None;
     }
     words.into_iter().find(|w| w.len() >= part.len() + 2 && w.starts_with(part) && !made_from(w, part))
@@ -246,6 +247,40 @@ pub fn lint(file: &str, source: &str, tree: &Node, module: bool, words: &Words) 
             }
         }
     });
+
+    // a local, which no entry documents: what it means is in what it is bound to (`temp = sensor.temperature`) and in
+    // the documentation of the function or test it is in
+    let callables: Vec<&Node> = ["function", "rule", "transition", "handler", "workflow", "test"].iter().flat_map(|k| tree.find(k)).collect();
+    for f in callables {
+        let mut around = f.node("doc").and_then(|d| d.str("text")).unwrap_or("").to_string();
+        around.push(' ');
+        around.push_str(f.str("comment").unwrap_or(""));
+        f.walk(&mut |n: &Node| {
+            if !matches!(n.kind, "let" | "for") {
+                return;
+            }
+            let Some(name) = n.str("name").filter(|x| x.bytes().all(|b| b.is_ascii_lowercase() || b == b'_')) else { return };
+            let mut context = around.clone();
+            if let Some(v) = n.node("value").or_else(|| n.node("iterable")) {
+                v.walk(&mut |e: &Node| {
+                    let said = match e.kind {
+                        "name" | "member" | "arg" | "type" => e.str("name"),
+                        "literal" => e.str("text"),
+                        _ => None,
+                    };
+                    if let Some(said) = said {
+                        context.push(' ');
+                        context.push_str(&said.replace(['_', '.'], " "));
+                    }
+                });
+            }
+            for part in name.split('_').filter(|p| !words.allows(p)) {
+                if let Some(word) = abbreviated_in(part, &context) {
+                    found.push(Finding { line: n.line, lint: find("abbreviation"), message: format!("`{name}`: `{part}` shortens `{word}`, as what it is bound to, or the documentation around it, says; write the word, or put `{part}` in the project's glossary (`y/glossary`)"), warning: false });
+                }
+            }
+        });
+    }
 
     // abbreviations, in each name the file declares and each function's result
     tree.walk(&mut |n: &Node| {

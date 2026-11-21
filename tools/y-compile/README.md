@@ -516,8 +516,12 @@ stops the build as a compile error does, unless it says it is a warning; warning
   result, a role) that is no word of its entry, but begins one that is not made from it, is taken for an abbreviation
   of that word, however common the part is: `temp: The temperature, in kelvin` shortens `temperature`. A word is made
   from the part when it is the part with an ending (`counted`, `stepping`, with a doubled consonant only before the
-  endings that double one) or the part and another word, both among the 10,000 commonest (`leftmost`; `cur` and
-  `rent` make no compound). Names the runtime gives (a method, a type argument) are the standard
+  endings that double one, or `th`) or the part and another word, both among the 10,000 commonest (`leftmost`; `cur`
+  and `rent` make no compound). The 1,000 commonest words (`no`, `to`, `not`) abbreviate nothing.
+- **A local's context says what it means**, as it has no entry: a `let` or a loop's name is judged by the same rule
+  against the names and literals of what it is bound to and the documentation of the function or test it is in.
+  `temp = temperature + 1` shortens `temperature`, and so does `cap = …` in a function documented as "The room's
+  capacity". Run over every local of the examples and programs before the rule was written, it found none. Names the runtime gives (a method, a type argument) are the standard
   library's, and not judged where they are used.
 - Unnamed decisions, the other official lint, are a compile error already (the parser's).
 - The seven examples and every test program are clean. The claims program suppresses `redundant_parentheses` with a
@@ -627,9 +631,6 @@ method that takes a weighed thing of any kind, and `holds` over a list of any eq
 
 ## What it does not handle yet
 
-It handles the forms the seven examples and the test programs use, and every item this list has held. What is left is
-judgment, not a missing construct:
-
-- **The abbreviation lint judges by lists, documentation and a glossary.** An undocumented name (a local) that is a
-  common word used as an abbreviation passes, as nothing says what it shortens; the official lint's full judgment is a
-  reviewer's.
+It handles the forms the seven examples and the test programs use, and every item this list has held. Its rules are
+rules: a name whose meaning neither its documentation, what it is bound to, nor the documentation around it says (a
+common word as an abbreviation of a word that appears nowhere near it) passes, and a reviewer judges it.

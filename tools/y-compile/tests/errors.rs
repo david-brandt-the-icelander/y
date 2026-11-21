@@ -314,3 +314,14 @@ fn a_name_documented_by_the_word_it_shortens() {
     compiled("lint_documented_left", &module("left", "The leftmost column"));
     compiled("lint_documented_count", &module("count", "How many are counted"));
 }
+
+#[test]
+fn a_local_named_by_the_word_it_shortens() {
+    // a local has no entry: what it is bound to says what it means, and so does the documentation around it
+    let module = |doc: &str, body: &str| format!("-------\n{doc}\n\ntemperature: A reading, as uint32.\n\nm: Another, as uint32.\n-------\nfunction f(temperature) returns m:\n{body}\n");
+    refused("lint_local_bound", &module("Warms it.", "    temp = temperature + 1\n    return m = temp"), &["`temp` shortens `temperature`, as what it is bound to"]);
+    refused("lint_local_documented", &module("The room's capacity, warmed.", "    cap = temperature + 1\n    return m = cap"), &["`cap` shortens `capacity`"]);
+    // a word made from the part, and the commonest words, abbreviate nothing
+    compiled("lint_local_tenth", &module("The tenth reading, warmed.", "    ten = temperature + 1\n    return m = ten"));
+    compiled("lint_local_to", &module("Warms it: told to add one.", "    to_add = temperature + 1\n    return m = to_add"));
+}
