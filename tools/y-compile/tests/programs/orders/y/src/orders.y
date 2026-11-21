@@ -37,10 +37,23 @@ public facet ordering:
         declined = "declined"
 
 
+    -- A sale as stored: the order, and what it came to.
+    schema sale v1:
+        key order is uint32
+        amount is uint32
+
+
+    -- Why a payment was not taken, with what the bank or the delivery said.
+    type payment_error:
+        case declined(reason is charge_error)
+        case unreachable(why is abandonment)
+
+
     -- Why an order could not be paid for.
     constants fulfil_error:
         declined = "declined"
         unreachable = "unreachable"
+        unpaid = "unpaid"
 
 
     -- Charges an order's total.
@@ -211,3 +224,76 @@ public facet ordering:
             condition charged.abandoned = (charged == result.err(undelivered.abandoned)):
                 metric charges_abandoned = 1
                 fail fulfil_error.unreachable
+
+
+    ------------------------------------------------------------------------------------------------------------------------
+    Reserves an order's stock, once, and then takes its payment: a crash between the two resumes after the reserving.
+
+    id: The order, as uint32.
+    total: What it costs, as uint32.
+
+    receipt: The bank's receipt, as uint32.
+
+    reserved: How many orders are reserved, as shared<value_type=tally>.
+    charges: Where charges are submitted, as submit<command_type=charge>.
+
+    fails fulfil_error.unpaid: The charge was declined, or could not be delivered.
+    ------------------------------------------------------------------------------------------------------------------------
+    workflow reserve_and_charge(id, total, injected reserved, injected charges) returns receipt fails fulfil_error:
+        region reserving is atomic:
+            reserved.count := reserved.count + 1
+
+        conditional charged = submit charge(order: id, amount: total):
+            condition charged.paid = (charged == result.ok):
+                return receipt = charged.value
+            else charged.unpaid:
+                fail fulfil_error.unpaid
+
+
+    ------------------------------------------------------------------------------------------------------------------------
+    Takes an order's payment, and fails as the charge does: `or fail` converts a declined charge and an abandoned one.
+
+    id: The order, as uint32.
+    total: What it costs, as uint32.
+
+    receipt: The bank's receipt, as uint32.
+
+    charges: Where charges are submitted, as submit<command_type=charge>.
+
+    fails payment_error.declined: The bank declined the charge.
+    fails payment_error.unreachable: The charge could not be delivered, and was given back.
+    ------------------------------------------------------------------------------------------------------------------------
+    workflow charge_order(id, total, injected charges) returns receipt fails payment_error:
+        return receipt = submit charge(order: id, amount: total) or fail
+
+
+    ------------------------------------------------------------------------------------------------------------------------
+    Records a sale: counts it in shared state and files it in the store, in one transaction, so that the two agree.
+
+    id: The order, as uint32.
+    total: What it came to, as uint32.
+
+    placed: The orders placed, as shared<value_type=tally>.
+    sales: The sales filed, as store<schema_type=sale>.
+    ------------------------------------------------------------------------------------------------------------------------
+    function record_sale(id, total, injected placed, injected sales):
+        region recording is atomic:
+            placed.count := placed.count + 1
+            sales.put(sale(order: id, amount: total))
+
+
+    ------------------------------------------------------------------------------------------------------------------------
+    Files a sale, and counts the sales filed, in one transaction: the count sees the sale it files.
+
+    id: The order, as uint32.
+    total: What it came to, as uint32.
+
+    filed: How many sales are filed, with this one, as count<unit_type=sale>.
+
+    sales: The sales filed, as store<schema_type=sale>.
+    ------------------------------------------------------------------------------------------------------------------------
+    function file_and_count(id, total, injected sales) returns filed:
+        region filing is atomic:
+            sales.put(sale(order: id, amount: total))
+            return filed = sales.read_all().count()
+

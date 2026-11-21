@@ -13,6 +13,8 @@
     "y_runtime::arena": "shared",
     "y_runtime::task": "effects",
     "y_runtime::store": "effects",
+    "y_runtime::store::Store::put_in": "shared",
+    "y_runtime::store::Store::read_all_in": "shared",
     "y_runtime::System": "effects",
     "y_runtime::Console": "effects",
     "y_runtime::Clock": "effects",
@@ -20,6 +22,14 @@
     "y_runtime::Forever": "effects",
     "y_runtime::Deadline": "effects",
     "y_runtime::command::Submit": "effects",
+    "y_runtime::command::Worker": "effects",
+    "y_runtime::command::Outbox::enqueue": "shared",
+    "y_runtime::journal": "effects",
+    "y_runtime::journal::Durable": "calculations",
+    "y_runtime::journal::Tokens": "calculations",
+    "y_runtime::journal::case": "calculations",
+    "y_runtime::journal::tokens": "calculations",
+    "y_runtime::journal::value": "calculations",
     "y_runtime::faults": "shared",
     "y_runtime::observe": "shared",
     "y_runtime::observe::log": "calculations",
@@ -65,6 +75,18 @@
         "y_runtime::observe::emit"
       ],
       "why": "observability is Y's one ambient exception (Y \u00a7 3.7): a `metric` needs no capability, and is write-only, so nothing in a program can read it back or change its results by it"
+    },
+    "y_runtime::command::Outbox::enqueue": {
+      "calls": [
+        "y_runtime::journal::enqueued"
+      ],
+      "why": "records the command in the journal through `Tx::on_commit`, once, when the transaction commits, and never in a run that is discarded or runs again: `enqueue` is durable if and only if its transaction commits (Y \u00a7 3.10), so the record is the commit's, not the region's"
+    },
+    "y_runtime::store::Store::put_in": {
+      "calls": [
+        "y_runtime::store::write_committed"
+      ],
+      "why": "writes the record, and saves the store, through `Tx::on_commit`: once, when the transaction it joined commits, and never in a run that is discarded or runs again, as a store's writes inside `atomic` join the transaction (Y \u00a7 3.12)"
     }
   },
   "macros_from_table": {

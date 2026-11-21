@@ -10,6 +10,7 @@ pub mod facts;
 pub mod library;
 pub mod evaluate;
 pub mod kinds;
+pub mod lint;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -70,6 +71,31 @@ pub fn compile(dir: &Path, opts: &Options) -> Result<String, String> {
     let tree = parse(&module_y)?;
     let test_tree = parse(&format!("{name}.test.y"))?;
     let main_tree = parse("main.y")?;
+    // the lints (Y § 3.15): an error stops the build, a warning is reported with it
+    let mut lint_errors = vec![];
+    let mut warnings = vec![];
+    // the words a package allows beyond Y's own: its glossary, and the unit symbols it declares
+    let glossary = match std::fs::read_to_string(dir.join("y/glossary")) {
+        Ok(text) => lint::Words::read_glossary(&text)?,
+        Err(_) => vec![],
+    };
+    let (mut units, mut unit_names) = (vec![], vec![]);
+    for t in [&tree, &test_tree, &main_tree] {
+        for u in t.find("unit") {
+            units.extend(u.str("symbol").map(str::to_string));
+            unit_names.extend(u.str("name").map(str::to_string));
+        }
+    }
+    let words = lint::Words { glossary, units, unit_names };
+    for (f, t) in [(&module_y, &tree), (&format!("{name}.test.y"), &test_tree), (&"main.y".to_string(), &main_tree)] {
+        let (e, w) = lint::lint(&format!("y/src/{f}"), &read(&src.join(f))?, t, f == &module_y, &words);
+        lint_errors.extend(e);
+        warnings.extend(w);
+    }
+    if !lint_errors.is_empty() {
+        return Err(lint_errors.join("\n"));
+    }
+    let warned = |report: String| if warnings.is_empty() { report } else { format!("{}\n{report}", warnings.iter().map(|w| format!("warning: {w}")).collect::<Vec<_>>().join("\n")) };
     let mut m = model::Module::new(&tree);
     // the names `main` imports: `from warehouse import pricing.line, …`
     for d in main_tree.nodes("decls").into_iter().filter(|d| d.kind == "import") {
@@ -130,7 +156,7 @@ pub fn compile(dir: &Path, opts: &Options) -> Result<String, String> {
             write(&r.join(p), s)?;
         }
     }
-    let Some(out) = &opts.out else { return Ok(format!("y-compile: wrote the typed Rust of {name}")) };
+    let Some(out) = &opts.out else { return Ok(warned(format!("y-compile: wrote the typed Rust of {name}"))) };
     let stripped = bare::strip(&format!("{pkg} {version}"), &files)?;
     let lowered = bare::lower(&m, &tree, &read(&src.join(&module_y))?, &stripped, &name, &e.invariant_sites, &e.regions, &e.main_regions)?;
     for (p, (brs, js)) in &lowered {
@@ -139,5 +165,5 @@ pub fn compile(dir: &Path, opts: &Options) -> Result<String, String> {
     }
     let facts = facts::facts(dir, &m, &tree, &test_tree, &main_tree, &lowered, &lib_crate, &name, &e.copies)?;
     write(&out.join("y-facts.json"), &(serde_json::to_string_pretty(&facts).unwrap() + "\n"))?;
-    Ok(format!("y-compile: {name}: {} files lowered", lowered.len()))
+    Ok(warned(format!("y-compile: {name}: {} files lowered", lowered.len())))
 }

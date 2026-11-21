@@ -32,9 +32,31 @@ pub struct Data {
     pub plain: bool,
 }
 
+/// The data of a structure's fields, or of a case's: a tuple of each field's data, and the Rust that builds the fields
+/// from it, `field: value, …`, given the tuple's elements by the names `{prefix}_0`, `{prefix}_1`, ….
+fn fields_data(m: &Module, fields: &[(String, Ty)], prefix: &str, depth: usize) -> Option<(String, String)> {
+    let mut tys = vec![];
+    let mut builds = vec![];
+    for (k, (f, t)) in fields.iter().enumerate() {
+        let d = data(m, t, depth + 1)?;
+        tys.push(format!("{},", d.ty));
+        builds.push(format!("{f}: {}", d.build.replace("$D", &format!("{prefix}_{k}"))));
+    }
+    Some((format!("({})", tys.join(" ")), builds.join(", ")))
+}
+
+/// The names that take a tuple of `n` elements apart: `(p_0, p_1,)`.
+fn tuple_names(prefix: &str, n: usize) -> String {
+    format!("({})", (0..n).map(|k| format!("{prefix}_{k},")).collect::<Vec<_>>().join(" "))
+}
+
 /// How a value of a type is written as data and built again, where y-compile can write it: numbers, truth values,
-/// strings, a refined type over one, a closed type without payloads, a decimal, and lists of these.
+/// strings, a refined type over one, a decimal, a structure of these, a closed type (its payloads of these), and a
+/// list, a set or a map of these.
 pub fn data(m: &Module, t: &Ty, depth: usize) -> Option<Data> {
+    if depth > 8 {
+        return None;
+    }
     let plain = |ty: &str| Some(Data { ty: ty.to_string(), build: "$D".into(), plain: true });
     match m.resolve(t) {
         Ty::U32 => plain("u32"),
@@ -52,16 +74,63 @@ pub fn data(m: &Module, t: &Ty, depth: usize) -> Option<Data> {
                 Some(Data { ty: inner.ty, build: format!("{}::new({}).expect(\"y: a compiled value meets its constraints\")", pascal(&n), inner.build), plain: false })
             }
             Some(TypeDef::Enum { cases }) if cases.iter().all(|c| c.1.is_empty()) => Some(Data { ty: pascal(&n), build: "$D".into(), plain: true }),
+            // a structure: the tuple of its fields' data, `(f0, f1,)`
+            Some(TypeDef::Struct { fields, .. }) => {
+                let p = format!("s{depth}");
+                let (ty, build) = fields_data(m, fields, &p, depth)?;
+                Some(Data { ty, build: format!("{{ let {} = $D; {} {{ {build} }} }}", tuple_names(&p, fields.len()), pascal(&n)), plain: false })
+            }
+            // a closed type with payloads: the case's number, then, for each case, its fields' data where it is that
+            // case: `(1, None, Some((f0,)))`
+            Some(TypeDef::Enum { cases }) => {
+                let p = format!("c{depth}");
+                let mut tys = vec!["u8,".to_string()];
+                let mut arms = vec![];
+                for (k, (c, fs)) in cases.iter().enumerate() {
+                    let q = format!("{p}_{k}");
+                    let (ty, build) = fields_data(m, fs, &q, depth)?;
+                    tys.push(format!("Option<{ty}>,"));
+                    arms.push(if fs.is_empty() {
+                        format!("{k} => {}::{},", pascal(&n), pascal(c))
+                    } else {
+                        format!("{k} => {{ let {} = {p}_{}.unwrap(); {}::{} {{ {build} }} }}", tuple_names(&q, fs.len()), k + 1, pascal(&n), pascal(c))
+                    });
+                }
+                let names = tuple_names(&p, cases.len() + 1);
+                let build = format!("{{ let {names} = $D; match {p}_0 {{ {} _ => unreachable!(\"y: a compiled case\") }} }}", arms.join(" "));
+                Some(Data { ty: format!("({})", tys.join(" ")), build, plain: false })
+            }
             _ => None,
         },
-        Ty::List(e) if depth < 4 => {
+        Ty::List(e) => {
             let inner = data(m, &e, depth + 1)?;
             let var = format!("d{depth}");
             let each = inner.build.replace("$D", &var);
             Some(Data { ty: format!("&'static [{}]", inner.ty), build: format!("$D.iter().map(|&{var}| {each}).collect::<List<_>>()"), plain: false })
         }
+        // a set: its elements, in the order they were added
+        Ty::Set(e) => {
+            let inner = data(m, &e, depth + 1)?;
+            let var = format!("d{depth}");
+            let each = inner.build.replace("$D", &var);
+            Some(Data { ty: format!("&'static [{}]", inner.ty), build: format!("$D.iter().map(|&{var}| {each}).collect::<y_collections::Set<_>>()"), plain: false })
+        }
+        // a map: its pairs, in the order their keys were added, or, sorted, in the keys' order
+        Ty::Coll(kind @ ("Map" | "SortedMap"), a) if a.len() == 2 => map_data(m, kind, &a[0], &a[1], depth),
+        Ty::SortedMap(k, v) => map_data(m, "SortedMap", &k, &v, depth),
         _ => None,
     }
+}
+
+fn map_data(m: &Module, kind: &str, k: &Ty, v: &Ty, depth: usize) -> Option<Data> {
+    let (key, value) = (data(m, k, depth + 1)?, data(m, v, depth + 1)?);
+    let (kv, vv) = (format!("k{depth}"), format!("v{depth}"));
+    let build = format!(
+        "{{ let mut built = y_collections::{kind}::new(); for &({kv}, {vv}) in $D {{ built.set({}, {}); }} built }}",
+        key.build.replace("$D", &kv),
+        value.build.replace("$D", &vv)
+    );
+    Some(Data { ty: format!("&'static [({}, {})]", key.ty, value.ty), build, plain: false })
 }
 
 /// The Rust, in the evaluating crate, that prints a value named `v` of a type as its data.
@@ -71,14 +140,45 @@ pub fn printer(m: &Module, t: &Ty, v: &str, depth: usize) -> String {
         Ty::Decimal(..) => format!("format!(\"{{:?}}\", {v}.to_string())"),
         Ty::Named(n) => match m.types.get(&n).map(|t| &t.def) {
             Some(TypeDef::Newtype { base, .. }) => printer(m, base, &format!("{v}.as_text()"), depth),
+            Some(TypeDef::Struct { fields, .. }) => {
+                let parts: Vec<String> = fields.iter().map(|(f, t)| printer(m, t, &format!("{v}.{f}"), depth + 1)).collect();
+                format!("format!(\"({})\", {})", "{}, ".repeat(parts.len()), parts.join(", "))
+            }
+            Some(TypeDef::Enum { cases }) if cases.iter().any(|c| !c.1.is_empty()) => {
+                let arms: Vec<String> = cases
+                    .iter()
+                    .enumerate()
+                    .map(|(k, (c, fs))| {
+                        let slots: Vec<&str> = (0..cases.len()).map(|j| if j == k { "Some({})" } else { "None" }).collect();
+                        let names: Vec<String> = (0..fs.len()).map(|j| format!("p{depth}_{j}")).collect();
+                        let pattern = if fs.is_empty() { String::new() } else { format!(" {{ {} }}", fs.iter().zip(&names).map(|((f, _), p)| format!("{f}: {p}")).collect::<Vec<_>>().join(", ")) };
+                        let inner: Vec<String> = fs.iter().zip(&names).map(|((_, t), p)| printer(m, t, p, depth + 1)).collect();
+                        let payload = format!("format!(\"({})\", {})", "{}, ".repeat(inner.len()), if inner.is_empty() { "\"\"".to_string() } else { inner.join(", ") });
+                        let payload = if inner.is_empty() { "String::from(\"()\")".to_string() } else { payload };
+                        format!("{}::{}{pattern} => format!(\"({k}, {})\", {payload}),", pascal(&n), pascal(c), slots.join(", "))
+                    })
+                    .collect();
+                format!("match &{v} {{ {} }}", arms.join(" "))
+            }
             _ => format!("format!(\"{}::{{:?}}\", {v})", pascal(&n)),
         },
-        Ty::List(e) => {
+        Ty::List(e) | Ty::Set(e) => {
             let x = format!("x{depth}");
             format!("format!(\"&[{{}}]\", {v}.iter().map(|{x}| {}).collect::<Vec<String>>().join(\", \"))", printer(m, &e, x.as_str(), depth + 1))
         }
+        Ty::Coll("Map" | "SortedMap", a) if a.len() == 2 => map_printer(m, &a[0], &a[1], v, depth),
+        Ty::SortedMap(k, x) => map_printer(m, &k, &x, v, depth),
         _ => format!("format!(\"{{}}\", {v})"),
     }
+}
+
+fn map_printer(m: &Module, k: &Ty, x: &Ty, v: &str, depth: usize) -> String {
+    let (kv, xv) = (format!("k{depth}"), format!("x{depth}"));
+    format!(
+        "format!(\"&[{{}}]\", {v}.iter().map(|({kv}, {xv})| format!(\"({{}}, {{}})\", {}, {})).collect::<Vec<String>>().join(\", \"))",
+        printer(m, k, &kv, depth + 1),
+        printer(m, x, &xv, depth + 1)
+    )
 }
 
 /// Whether an argument of a `compile` is known while the program is built: a literal, a list of them, a constant, or a

@@ -131,6 +131,7 @@ fn a_line_that_is_not_a_move_is_refused() {
 
 #[test]
 fn a_move_the_game_does_not_allow_is_refused() {
+    // y: covers read_move > chosen'fails
     let game = new_game();
     let refused = read_move(&game, &YString::new("4 1"));
     assert!(refused == Err(MoveError::NoSuchHeap), "refused_as_no_heap");

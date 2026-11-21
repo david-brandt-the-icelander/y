@@ -65,5 +65,23 @@ public facet claimed:
     function smallest(numbers) returns least
             where some = (not numbers.is_empty()):
         assume sorted = (numbers.at_number(1) <= numbers.at_number(numbers.count())) because "every caller passes them sorted"
-        allow(Y2031) because "kept to show where a suppressed lint is claimed"
-        return least = numbers.at_number(1)
+        allow(redundant_parentheses) because "kept to show where a suppressed lint is claimed"
+        return least = (numbers.at_number(1))
+
+
+    ------------------------------------------------------------------------------------------------------------------------
+    Whether a list of numbers is short, long or neither.
+
+    numbers: The numbers, as list<element_type=uint32>.
+
+    size: How it is sized, as string.
+    ------------------------------------------------------------------------------------------------------------------------
+    function sized(numbers) returns size:
+        conditional measured:
+            condition measured.short = (numbers.count() < 2):
+                return size = "short"
+            -- lint: allow repeated_call because "counting a list is cheap, and reads plainly here"
+            condition measured.long = (numbers.count() > 5):
+                return size = "long"
+            else measured.middling:
+                return size = "middling"

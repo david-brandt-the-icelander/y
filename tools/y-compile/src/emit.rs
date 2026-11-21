@@ -176,6 +176,8 @@ pub fn imports_for(code: &str) -> std::collections::BTreeSet<String> {
         ("Isolation", "y_runtime::shared::Isolation"),
         ("Aborted", "y_runtime::shared::Aborted"),
         ("Undelivered", "y_runtime::command::Undelivered"),
+        ("Abandonment", "y_runtime::command::Abandonment"),
+        ("Worker", "y_runtime::command::Worker"),
         ("Submit", "y_runtime::command::Submit"),
         ("Outbox", "y_runtime::command::Outbox"),
         ("Command", "y_runtime::command::Command"),
@@ -192,6 +194,7 @@ pub fn imports_for(code: &str) -> std::collections::BTreeSet<String> {
         ("Supervision", "y_runtime::task::Supervision"),
         ("Restart", "y_runtime::task::Restart"),
         ("supervised", "y_runtime::task::supervised"),
+        ("supervised_in", "y_runtime::task::supervised_in"),
         ("Cancellation", "y_runtime::task::Cancellation"),
         ("detach", "y_runtime::task::detach"),
         ("Arena", "y_runtime::arena::Arena"),
@@ -262,6 +265,32 @@ impl<'a> Lowerer<'a> {
         self.fn_signature(f, vis)
     }
 
+    /// `<ItemType: Clone + PartialEq + std::fmt::Debug + Ord>`: the Rust type parameters of open types, each with the
+    /// traits its bounds are. With `base`, each is also one a Y value may be: copied, compared and shown in a test.
+    pub fn generic_params(&mut self, gens: &[(String, Vec<String>)], base: bool) -> String {
+        if gens.is_empty() {
+            return String::new();
+        }
+        let mut parts = vec![];
+        for (g, bounds) in gens {
+            let mut rs: Vec<String> = if base { vec!["Clone".into(), "PartialEq".into(), "std::fmt::Debug".into()] } else { vec![] };
+            for b in bounds {
+                match crate::model::BOUNDS.iter().find(|(n, _)| n == b) {
+                    Some((_, r)) => rs.extend(r.iter().map(|x| x.to_string())),
+                    None if self.module().traits.contains_key(b) => rs.push(pascal(b)),
+                    None => {
+                        let known: Vec<&str> = crate::model::BOUNDS.iter().map(|(n, _)| *n).collect();
+                        self.error(format!("`{g}` is bounded by `{b}`, which is neither a trait of the module nor one of {}", known.join(", ")));
+                    }
+                }
+            }
+            let mut seen = std::collections::BTreeSet::new();
+            rs.retain(|r| seen.insert(r.clone()));
+            parts.push(if rs.is_empty() { pascal(g) } else { format!("{}: {}", pascal(g), rs.join(" + ")) });
+        }
+        format!("<{}>", parts.join(", "))
+    }
+
     fn fn_signature(&mut self, f: &FnInfo, vis: &str) -> String {
         let mut ps = vec![];
         // a method's `me`: `&self`, or `&mut self` for a `mutable function` (Y § 3.6)
@@ -287,7 +316,134 @@ impl<'a> Lowerer<'a> {
             (None, None) => String::new(),
         };
         let asynchronous = if self.m.suspending.contains(&f.name) { "async " } else { "" };
-        format!("{vis}{asynchronous}fn {}({}){rt}", f.name, ps.join(", "))
+        let generics = self.generic_params(&f.generics, true);
+        format!("{vis}{asynchronous}fn {}{generics}({}){rt}", f.name, ps.join(", "))
+    }
+
+    /// A workflow's body, run by the journal (Y § 3.10): under its identity, its name and arguments as data, and its
+    /// version, a hash of its body, so that a run after a crash resumes from the steps the journal recorded.
+    fn workflow_body(&mut self, d: &Node, f: &FnInfo, body: &[&Node]) {
+        let puts: Vec<String> = f
+            .params
+            .iter()
+            .filter(|p| !p.injected)
+            .map(|p| format!("y_runtime::journal::Durable::put({}{}, &mut identity);", if p.mode == Mode::Value { "&" } else { "" }, p.name))
+            .collect();
+        // its statements as the tree has them, without where they are: moving the workflow is no new version
+        fn placeless(v: &mut serde_json::Value) {
+            match v {
+                serde_json::Value::Object(o) => {
+                    for k in ["line", "end", "blank", "gap"] {
+                        o.remove(k);
+                    }
+                    o.values_mut().for_each(placeless);
+                }
+                serde_json::Value::Array(a) => a.iter_mut().for_each(placeless),
+                _ => {}
+            }
+        }
+        let text: String = body
+            .iter()
+            .map(|s| {
+                let mut v: serde_json::Value = serde_json::from_str(&s.to_json()).unwrap_or_default();
+                placeless(&mut v);
+                v.to_string()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        // FNV-1a, 64 bits: the version changes with any change to the body
+        let fnv = |text: &str| {
+            let mut h: u64 = 0xcbf29ce484222325;
+            for b in text.bytes() {
+                h ^= u64::from(b);
+                h = h.wrapping_mul(0x100000001b3);
+            }
+            h
+        };
+        let h = fnv(&text);
+        let signature = fnv(&self.compatibility_signature(d, f).join("\n"));
+        let r = f.result.as_ref().map(|r| r.1.clone()).unwrap_or(Ty::Unit);
+        let rt = match &f.fails {
+            Some(e) => format!("Result<{}, {}>", self.rust_type(&r), self.rust_type(e)),
+            None => self.rust_type(&r),
+        };
+        self.line(format!("let mut identity = Vec::new();{}", if puts.is_empty() { String::new() } else { format!(" {}", puts.join(" ")) }));
+        self.line(format!("y_runtime::journal::workflow(\"{}::{}\", \"{h:016x}@{signature:016x}\", identity, || -> {rt} {{", self.m.name, f.name));
+        self.ind += 1;
+        self.block(body, true);
+        self.ind -= 1;
+        self.line("})");
+    }
+
+    /// A function's compatibility signature (Y § 4.4), one line each: its parameter and result types and which
+    /// parameters are `mutable`; its authority (the capabilities it holds); its failure set; its contracts; its
+    /// transactional writes; the command classes it submits and enqueues; the schemas it touches; and its wait bounds.
+    /// Names do not count, as a rename does not change a signature: a parameter is its position.
+    pub fn compatibility_signature(&mut self, d: &Node, f: &FnInfo) -> Vec<String> {
+        let mut sig = vec![];
+        for (k, p) in f.params.iter().enumerate() {
+            let what = if p.injected { "authority" } else if p.mutable { "mutable parameter" } else { "parameter" };
+            sig.push(format!("{what} {k}: {}", self.rust_type(&p.ty)));
+            if let Ty::Store(schema) = &p.ty {
+                sig.push(format!("schema {}", self.rust_type(schema)));
+            }
+        }
+        if let Some((_, t)) = &f.result {
+            sig.push(format!("result: {}", self.rust_type(t)));
+        }
+        if let Some(e) = &f.fails {
+            let cases = match e {
+                Ty::Named(n) => match self.module().types.get(n).map(|t| &t.def) {
+                    Some(TypeDef::Enum { cases }) => cases.iter().map(|(c, fs)| format!("{c}({})", fs.iter().map(|(_, t)| self.module().rust_type(t)).collect::<Vec<_>>().join(", "))).collect::<Vec<_>>().join(" "),
+                    _ => String::new(),
+                },
+                _ => String::new(),
+            };
+            sig.push(format!("fails: {} {cases}", self.rust_type(e)));
+        }
+        for kind in ["where", "ensures"] {
+            for c in d.nodes(kind) {
+                sig.push(format!("{kind}: {}", c.node("condition").map(crate::lower::y_text).unwrap_or_default()));
+            }
+        }
+        let (mut writes, mut commands, mut waits) = (std::collections::BTreeSet::new(), std::collections::BTreeSet::new(), vec![]);
+        for st in d.nodes("body") {
+            st.walk(&mut |n: &Node| {
+                if n.kind == "region" {
+                    let constraints = n.nodes("constraints");
+                    if constraints.iter().any(|c| c.str("word") == Some("atomic")) {
+                        n.walk(&mut |a: &Node| {
+                            if a.kind == "assign" {
+                                let mut t = a.node("target");
+                                while let Some(x) = t.filter(|x| matches!(x.kind, "member" | "index")) {
+                                    t = x.node("object");
+                                }
+                                if let Some(root) = t.and_then(|x| x.str("name")) {
+                                    writes.insert(root.to_string());
+                                }
+                            }
+                        });
+                    }
+                    for c in constraints.iter().filter(|c| matches!(c.str("word"), Some("within" | "forever" | "waits"))) {
+                        waits.push(c.str("text").unwrap_or("").to_string());
+                    }
+                }
+                if matches!(n.kind, "submit" | "enqueue") {
+                    if let Some(c) = n.node("value").and_then(|v| v.node("callee")).and_then(|c| c.str("name")) {
+                        commands.insert(format!("{} {c}", n.kind));
+                    }
+                }
+            });
+        }
+        // a transactional write is of the shared state a parameter names: by its position, as a parameter is
+        for w in writes {
+            if let Some(k) = f.params.iter().position(|p| p.name == w) {
+                sig.push(format!("writes {k}"));
+            }
+        }
+        sig.extend(commands);
+        sig.extend(waits.into_iter().map(|w| format!("waits {w}")));
+        sig
     }
 
     pub fn function_item(&mut self, d: &Node, f: &FnInfo, vis: &str) {
@@ -306,6 +462,7 @@ impl<'a> Lowerer<'a> {
             branches: vec![],
             section: None, ..Default::default()
         };
+        self.ctx.generics = f.generics.iter().chain(self.impl_generics.iter()).cloned().collect();
         for p in &f.params {
             let form = match p.mode {
                 Mode::Ref => Form::Ref,
@@ -339,10 +496,23 @@ impl<'a> Lowerer<'a> {
             let r = f.result.as_ref().map(|r| r.0.clone()).unwrap_or_else(|| "result".into());
             self.ctx.ensures = ensures.iter().map(|n| (*n).clone()).collect();
             self.ctx.result_name = r.clone();
+            let mut returned = vec![];
+            for s in &body {
+                s.walk(&mut |n| {
+                    if n.kind == "return" && n.str("name") == Some(r.as_str()) {
+                        if let Some(v) = n.node("value").filter(|v| v.kind == "name") {
+                            returned.push(v.str("name").unwrap_or("").to_string());
+                        }
+                    }
+                });
+            }
+            self.ctx.returned = returned;
             // a function without failures whose last statement gives its value: the value is bound to the result's
             // name, checked, then given; every other `return` checks it where it returns
             let tail_value = f.fails.is_none() && f.result.is_some() && body.last().is_some_and(|l| matches!(l.kind, "return" | "if" | "conditional" | "compare"));
-            if ensures.is_empty() {
+            if ensures.is_empty() && f.kind == "workflow" {
+                self.workflow_body(d, f, &body);
+            } else if ensures.is_empty() {
                 self.block(&body, true);
             } else if f.fails.is_some() && body.last().is_some_and(|l| l.kind == "return") {
                 // a function that may fail: the value it gives is checked, then given as its result
@@ -466,7 +636,9 @@ impl<'a> Lowerer<'a> {
         let vis = if facet { "pub " } else { "" };
         match &info.def {
             TypeDef::Struct { fields, derived, derived_values, .. } => {
-                self.line(format!("{vis}struct {} {{", pascal(name)));
+                // a structure that leaves types open has them as type parameters; their bounds are its implementations'
+                let params = m.open.get(name).map(|o| format!("<{}>", o.iter().map(|(g, _)| pascal(g)).collect::<Vec<_>>().join(", "))).unwrap_or_default();
+                self.line(format!("{vis}struct {}{params} {{", pascal(name)));
                 self.ind += 1;
                 let fvis = if m.exported.contains(name) { "pub " } else if facet { "pub(super) " } else { "" };
                 for (f, t) in fields {
@@ -608,6 +780,34 @@ impl<'a> Lowerer<'a> {
                     self.line("    }");
                     self.line("}");
                 }
+                // `submit c(…) or fail`: an `undelivered<failure_type=e>` converts through the case that carries one, or,
+                // as the proposal's `fulfil` has it, through the case that carries the handler's `e` and the one that
+                // carries the `abandonment`
+                for (e, (c, f)) in crate::kinds::undelivered_conversions(self.m, cases) {
+                    let (et, en) = (self.rust_type(&e), pascal(name));
+                    self.line("");
+                    match c.split_once('|') {
+                        None => {
+                            self.line(format!("/// Y's `or fail` on a submit whose command is not delivered converts through `{en}`'s `{}` case (Y § 3.4).", pascal(&c)));
+                            self.line(format!("impl From<Undelivered<{et}>> for {en} {{"));
+                            self.line(format!("    fn from({f}: Undelivered<{et}>) -> {en} {{"));
+                            self.line(format!("        {en}::{} {{ {f} }}", pascal(&c)));
+                            self.line("    }");
+                        }
+                        Some((failed, abandoned)) => {
+                            let (ff, af) = f.split_once('|').unwrap();
+                            self.line(format!("/// Y's `or fail` on a submit converts a declined command through `{en}`'s `{}` case, and an abandoned one through `{}` (Y § 3.4).", pascal(failed), pascal(abandoned)));
+                            self.line(format!("impl From<Undelivered<{et}>> for {en} {{"));
+                            self.line(format!("    fn from(undelivered: Undelivered<{et}>) -> {en} {{"));
+                            self.line("        match undelivered {");
+                            self.line(format!("            Undelivered::Failed {{ error }} => {en}::{} {{ {ff}: error }},", pascal(failed)));
+                            self.line(format!("            Undelivered::Abandoned {{ abandonment }} => {en}::{} {{ {af}: abandonment }},", pascal(abandoned)));
+                            self.line("        }");
+                            self.line("    }");
+                        }
+                    }
+                    self.line("}");
+                }
                 let failures: std::collections::BTreeSet<String> = self.m.fns.values().chain(self.lib.map(|l| l.fns.values()).into_iter().flatten()).filter_map(|f| match &f.fails { Some(Ty::Named(t)) => Some(t.clone()), _ => None }).collect();
                 for (c, fs) in cases {
                     if let [(f, Ty::Named(t))] = &fs[..] {
@@ -734,7 +934,10 @@ impl<'a> Lowerer<'a> {
                 }
                 self.function_item(d, &f, if facet { "pub " } else { "" });
             }
-            "structure" | "type_decl" | "enumeration" | "state" | "command" | "unit" => self.type_item(d, facet),
+            "structure" | "type_decl" | "enumeration" | "state" | "command" | "unit" => {
+                self.type_item(d, facet);
+                self.durable_item(d.str("name").unwrap());
+            }
             "trait" => {
                 for l in doc_lines(d, None) {
                     self.line(l);
@@ -748,7 +951,8 @@ impl<'a> Lowerer<'a> {
             "schema" if self.m.schemas.get(d.str("name").unwrap()).is_some_and(|s| s.versions.iter().map(|v| v.0).max() == d.str("version").and_then(|v| v.trim_start_matches('v').parse().ok())) => self.type_item(d, facet),
             "constants" | "service" => {
                 if self.m.types.contains_key(d.str("name").unwrap()) {
-                    self.type_item(d, facet)
+                    self.type_item(d, facet);
+                    self.durable_item(d.str("name").unwrap());
                 } else {
                     self.const_item(d, facet)
                 }
@@ -916,25 +1120,47 @@ pub fn tests_file(m: &Module, test_tree: &Node, test_module: &Module, y_path: &s
         }
         l.reset_scopes();
         l.ctx = Ctx { module: m.name.clone(), name: name.to_string(), result: None, fails: None, branches: vec![], section: None, ..Default::default() };
+        // a test that crashes the program runs its `when` again after the crash, as a restarted program would
+        let crashes = t.nodes("sections").iter().filter(|s| s.str("name") == Some("faults")).flat_map(|s| s.nodes("body")).any(|f| f.str("fault") == Some("crash"));
+        // the outboxes a worker delivers from (`enqueue.to(handler)`): each opens a thread scope its worker runs in
+        let mut workers: Vec<String> = vec![];
         for s in t.nodes("sections") {
             let section = s.str("name").unwrap();
             l.ctx.section = Some(section.to_string());
+            if section == "then" {
+                // what the `then` reads is what the workers delivered of what the `when` committed
+                for w in &workers {
+                    l.line(format!("{w}_worker.settle();"));
+                }
+            }
+            if section == "when" && crashes {
+                let names: Vec<&str> = s.nodes("body").iter().filter(|st| st.kind == "let").filter_map(|st| st.str("name")).collect();
+                let tuple = if names.len() == 1 { names[0].to_string() } else { format!("({})", names.join(", ")) };
+                l.line(format!("{}y_runtime::faults::restarting(|| {{", if names.is_empty() { String::new() } else { format!("let {tuple} = ") }));
+                l.ind += 1;
+                for st in s.nodes("body") {
+                    l.stmt_in_test(st);
+                }
+                if !names.is_empty() {
+                    l.line(tuple);
+                }
+                l.ind -= 1;
+                l.line("});");
+                continue;
+            }
             if section == "faults" {
                 // what the test forces where the code under test runs (Y § 3.14), through the runtime's stand-in
                 for f in s.nodes("body") {
                     let at = f.str("at").unwrap_or("");
                     let times = f.node("times").and_then(|t| t.str("text")).unwrap_or("1");
-                    let kind = match f.str("fault") {
-                        Some("conflict") => "Conflict",
-                        Some("expire") => "Expire",
-                        Some(other) => {
-                            l.copy_line = f.line;
-                            l.error(format!("`{other} …`: y-compile's runtime stand-in forces `conflict at` and `expire at` an atomic region, and not `{other}` (y_runtime::faults)"));
-                            continue;
-                        }
-                        None => continue,
+                    let (kind, words) = match f.str("fault") {
+                        Some("conflict") => ("Conflict", "conflict at"),
+                        Some("expire") => ("Expire", "expire at"),
+                        Some("crash") => ("Crash", "crash after commit"),
+                        Some("cancel") => ("Cancel", "cancel at"),
+                        _ => continue,
                     };
-                    l.line(format!("y_runtime::faults::force(y_runtime::faults::Kind::{kind}, \"{}::{at}\", {times}); // y: faults {} at {at}", m.name, f.str("fault").unwrap_or("")));
+                    l.line(format!("y_runtime::faults::force(y_runtime::faults::Kind::{kind}, \"{}::{at}\", {times}); // y: faults {words} {at}", m.name));
                 }
                 continue;
             }
@@ -947,11 +1173,28 @@ pub fn tests_file(m: &Module, test_tree: &Node, test_module: &Module, y_path: &s
                         None => label.to_string(),
                     };
                     l.line(format!("assert!({}, \"{msg}\");", c.code));
+                } else if let Some(handler) = (section == "inject").then(|| outbox_worker(st)).flatten() {
+                    // `outbox = enqueue.to(charge)`: an outbox, and a worker that delivers what it holds to the handler
+                    let name = st.str("name").unwrap().to_string();
+                    l.use_("y_runtime::command::Outbox");
+                    l.use_("y_runtime::command::Worker");
+                    l.use_("y_runtime::shared::Shared");
+                    l.line(format!("let {name} = Shared::new(Outbox::new());"));
+                    let delivery = l.submit_to(&handler);
+                    l.line("std::thread::scope(|workers| {");
+                    l.ind += 1;
+                    l.line(format!("let {name}_worker = Worker::start(workers, &{name}, {});", delivery.code));
+                    l.bind(&name, Ty::Shared(Box::new(Ty::Outbox(Box::new(Ty::Named(handler))))), Form::Place);
+                    workers.push(name);
                 } else {
                     // a statement of `given`, `inject` or `when`, in the test's one scope
                     l.stmt_in_test(st);
                 }
             }
+        }
+        for _ in &workers {
+            l.ind -= 1;
+            l.line("});");
         }
         l.ind -= 1;
         l.line("}");
@@ -1123,3 +1366,15 @@ pub fn emit(m: &Module, test_tree: &Node, test_module: &Module, main: &Module, l
         main_regions,
     }
 }
+
+/// The handler of `outbox = enqueue.to(handler)`, a binding a test injects.
+fn outbox_worker(st: &Node) -> Option<String> {
+    let v = st.node("value").filter(|_| st.kind == "let")?;
+    let callee = v.node("callee").filter(|_| v.kind == "call")?;
+    let is_to = callee.kind == "member" && callee.str("name") == Some("to") && callee.node("object").and_then(|o| o.str("name")) == Some("enqueue");
+    if !is_to {
+        return None;
+    }
+    v.nodes("args").first().and_then(|a| a.node("value")).and_then(|a| a.str("name")).map(str::to_string)
+}
+

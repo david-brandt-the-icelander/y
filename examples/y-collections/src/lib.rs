@@ -950,6 +950,20 @@ impl<K: Hash + Eq + Clone, V> MultiMap<K, V> {
     }
 }
 
+/// A list kept by the journal (`y_runtime::journal`), as its count and its elements.
+impl<T: y_runtime::journal::Durable> y_runtime::journal::Durable for List<T> {
+    fn put(&self, out: &mut Vec<String>) {
+        out.push(self.count().to_string());
+        for v in self.iter() {
+            v.put(out);
+        }
+    }
+    fn take(input: &mut y_runtime::journal::Tokens<'_>) -> Option<Self> {
+        let n: usize = input.next()?.parse().ok()?;
+        (0..n).map(|_| T::take(input)).collect::<Option<Vec<T>>>().map(List::from)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

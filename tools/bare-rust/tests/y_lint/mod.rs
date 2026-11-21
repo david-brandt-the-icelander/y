@@ -59,11 +59,17 @@ fn kind(value: &Node, types: &[String], values: &[String]) -> Kind {
 
 /// Every `type_argument_name` error in a Y source, as `file:line: …`, in the order of their lines; a source that does
 /// not parse gives its parse error.
+#[allow(dead_code)]
 pub fn type_argument_names(file: &str, source: &str) -> Vec<String> {
-    let tree = match y_parse::parse(source) {
-        Ok(t) => t,
-        Err(e) => return vec![format!("{file}:{}: {}", e.line, e.message)],
-    };
+    match y_parse::parse(source) {
+        Ok(tree) => type_argument_names_in(file, &tree),
+        Err(e) => vec![format!("{file}:{}: {}", e.line, e.message)],
+    }
+}
+
+/// `type_argument_names`, of a source already parsed: a test file, say, which reads the units its module declares.
+#[allow(dead_code)]
+pub fn type_argument_names_in(file: &str, tree: &Node) -> Vec<String> {
     let (types, values) = (declared(&tree, &TYPE_DECLARATIONS), declared(&tree, &VALUE_DECLARATIONS));
     let allows: Vec<(usize, bool)> = tree.nodes("comments").iter().filter(|c| c.str("text").unwrap().starts_with(ALLOW)).map(|c| (c.line, c.flag("alone"))).collect();
     let allowed = |line: usize| allows.iter().any(|&(l, alone)| l == line || (alone && l + 1 == line));

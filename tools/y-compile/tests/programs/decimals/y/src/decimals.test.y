@@ -47,7 +47,8 @@ test an_even_bill_shares_exactly
 
 
 -- A bill that does not divide to the cent does not share exactly.
-test an_uneven_bill_does_not_share_exactly:
+test an_uneven_bill_does_not_share_exactly
+        covers exact_share > each'fails:
     when:
         each = exact_share(bill: 10.00, payers: 3)
     then:
@@ -64,7 +65,8 @@ test a_third_is_exact
 
 
 -- A third of a cent is not.
-test a_third_of_a_cent_is_not_exact:
+test a_third_of_a_cent_is_not_exact
+        covers third_of > third'fails:
     when:
         third = third_of(0.01)
     then:
@@ -82,7 +84,7 @@ test a_lower_price_is_below
 
 -- A price at the limit is not below it.
 test a_price_at_the_limit_is_not_below
-        covers is_below > dearer:
+        covers is_below > dearer'eq:
     when:
         below = is_below(price: 2.00, limit: 2.000)
     then:
@@ -91,7 +93,7 @@ test a_price_at_the_limit_is_not_below
 
 -- A price over the limit is not below it.
 test a_higher_price_is_not_below
-        covers is_below > dearer:
+        covers is_below > dearer'gt:
     when:
         below = is_below(price: 2.01, limit: 2.005)
     then:

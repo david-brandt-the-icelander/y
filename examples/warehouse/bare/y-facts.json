@@ -59,7 +59,7 @@
       "facet": "stock",
       "path": "warehouse.stock",
       "visible": "public",
-      "y": "y/src/warehouse.y:147",
+      "y": "y/src/warehouse.y:148",
       "rust": "warehouse_example::warehouse::stock",
       "members": [
         "holdings",
@@ -73,7 +73,7 @@
       "facet": "packing",
       "path": "warehouse.packing",
       "visible": "public",
-      "y": "y/src/warehouse.y:193",
+      "y": "y/src/warehouse.y:194",
       "rust": "warehouse_example::warehouse::packing",
       "members": [
         "packing_error",
@@ -87,7 +87,7 @@
       "facet": "receipts",
       "path": "warehouse.receipts",
       "visible": "public",
-      "y": "y/src/warehouse.y:252",
+      "y": "y/src/warehouse.y:253",
       "rust": "warehouse_example::warehouse::receipts",
       "members": [
         "receipt",
@@ -113,7 +113,7 @@
         "holdings as holdings"
       ],
       "lowered": "as the last parameter",
-      "y": "y/src/warehouse.y:170"
+      "y": "y/src/warehouse.y:171"
     },
     {
       "subject": "warehouse_example::warehouse::stock::units_on_shelf",
@@ -121,7 +121,7 @@
         "holdings as holdings"
       ],
       "lowered": "as the last parameter",
-      "y": "y/src/warehouse.y:187"
+      "y": "y/src/warehouse.y:188"
     },
     {
       "subject": "warehouse_example::warehouse::packing::pack_orders",
@@ -130,7 +130,7 @@
         "sold as sold"
       ],
       "lowered": "as the last two parameters, in order",
-      "y": "y/src/warehouse.y:218"
+      "y": "y/src/warehouse.y:219"
     },
     {
       "subject": "warehouse_example::warehouse::packing::pack_day",
@@ -139,7 +139,7 @@
         "sold as sold"
       ],
       "lowered": "as the last two parameters, in order",
-      "y": "y/src/warehouse.y:243"
+      "y": "y/src/warehouse.y:244"
     },
     {
       "subject": "warehouse_example::warehouse::receipts::file_receipts",
@@ -147,7 +147,7 @@
         "filed as filed"
       ],
       "lowered": "as the last parameter",
-      "y": "y/src/warehouse.y:294"
+      "y": "y/src/warehouse.y:295"
     },
     {
       "subject": "warehouse_example::main",
@@ -165,14 +165,14 @@
     {
       "what": "wanted",
       "why": "the backorder keeps the line, and the caller still reads it",
-      "y": "y/src/warehouse.y:175",
-      "bare": "bare/src/warehouse.brs:243"
+      "y": "y/src/warehouse.y:176",
+      "bare": "bare/src/warehouse.brs:244"
     },
     {
       "what": "order.lines",
       "why": "the order still holds its lines",
-      "y": "y/src/warehouse.y:207",
-      "bare": "bare/src/warehouse.brs:293"
+      "y": "y/src/warehouse.y:208",
+      "bare": "bare/src/warehouse.brs:294"
     }
   ],
   "decisions": {
@@ -216,13 +216,13 @@
         "branches": [
           {
             "name": "even",
-            "y": "y/src/warehouse.y:139",
-            "bare": "bare/src/warehouse.brs:191"
+            "y": "y/src/warehouse.y:140",
+            "bare": "bare/src/warehouse.brs:192"
           },
           {
             "name": "uneven",
-            "y": "y/src/warehouse.y:141",
-            "bare": "bare/src/warehouse.brs:193"
+            "y": "y/src/warehouse.y:142",
+            "bare": "bare/src/warehouse.brs:194"
           }
         ]
       }
@@ -233,13 +233,13 @@
         "branches": [
           {
             "name": "take_from_shelf",
-            "y": "y/src/warehouse.y:171",
-            "bare": "bare/src/warehouse.brs:231"
+            "y": "y/src/warehouse.y:172",
+            "bare": "bare/src/warehouse.brs:232"
           },
           {
             "name": "put_on_backorder",
-            "y": "y/src/warehouse.y:174",
-            "bare": "bare/src/warehouse.brs:241"
+            "y": "y/src/warehouse.y:175",
+            "bare": "bare/src/warehouse.brs:242"
           }
         ]
       }
@@ -250,13 +250,13 @@
         "branches": [
           {
             "name": "wanted",
-            "y": "y/src/warehouse.y:221",
-            "bare": "bare/src/warehouse.brs:302"
+            "y": "y/src/warehouse.y:222",
+            "bare": "bare/src/warehouse.brs:303"
           },
           {
             "name": "no_lines",
-            "y": "y/src/warehouse.y:229",
-            "bare": "bare/src/warehouse.brs:302"
+            "y": "y/src/warehouse.y:230",
+            "bare": "bare/src/warehouse.brs:303"
           }
         ]
       },
@@ -265,13 +265,13 @@
         "branches": [
           {
             "name": "shelved",
-            "y": "y/src/warehouse.y:224",
-            "bare": "bare/src/warehouse.brs:304"
+            "y": "y/src/warehouse.y:225",
+            "bare": "bare/src/warehouse.brs:305"
           },
           {
             "name": "backordered",
-            "y": "y/src/warehouse.y:227",
-            "bare": "bare/src/warehouse.brs:315"
+            "y": "y/src/warehouse.y:228",
+            "bare": "bare/src/warehouse.brs:316"
           }
         ]
       }
@@ -282,13 +282,13 @@
         "branches": [
           {
             "name": "wanted",
-            "y": "y/src/warehouse.y:278",
-            "bare": "bare/src/warehouse.brs:412"
+            "y": "y/src/warehouse.y:279",
+            "bare": "bare/src/warehouse.brs:413"
           },
           {
             "name": "no_lines",
-            "y": "y/src/warehouse.y:280",
-            "bare": "bare/src/warehouse.brs:412"
+            "y": "y/src/warehouse.y:281",
+            "bare": "bare/src/warehouse.brs:413"
           }
         ]
       }
@@ -299,13 +299,13 @@
         "branches": [
           {
             "name": "order",
-            "y": "y/src/warehouse.y:298",
-            "bare": "bare/src/warehouse.brs:429"
+            "y": "y/src/warehouse.y:299",
+            "bare": "bare/src/warehouse.brs:430"
           },
           {
             "name": "no_orders",
-            "y": "y/src/warehouse.y:300",
-            "bare": "bare/src/warehouse.brs:429"
+            "y": "y/src/warehouse.y:301",
+            "bare": "bare/src/warehouse.brs:430"
           }
         ]
       }

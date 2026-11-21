@@ -65,6 +65,11 @@ pub struct Ctx {
     pub ensure_tail: bool,
     /// The function's result's Y name.
     pub result_name: String,
+    /// The names the function returns as its result as they are (`return r = name`): an empty collection bound to one
+    /// takes the result's type.
+    pub returned: Vec<String>,
+    /// The open types the function names, and an implementation's for its type, each with its bounds.
+    pub generics: Vec<(String, Vec<String>)>,
 }
 
 pub struct Lowerer<'a> {
@@ -133,6 +138,8 @@ pub struct Lowerer<'a> {
     pub locals_fns: BTreeMap<String, (FnInfo, Vec<(String, bool)>)>,
     /// What `old(e)` reads in the function's `ensures`: by `e`'s text, the local the value was kept in.
     pub olds: Vec<(String, String, Ty)>,
+    /// In an implementation for a structure that leaves types open: those types, with the structure's bounds.
+    pub impl_generics: Vec<(String, Vec<String>)>,
 }
 
 thread_local! {
@@ -270,6 +277,7 @@ impl<'a> Lowerer<'a> {
             compile_bound: vec![],
             after_fn: vec![],
             locals_fns: BTreeMap::new(),
+            impl_generics: vec![],
             olds: vec![],
         }
     }
@@ -655,6 +663,23 @@ impl<'a> Lowerer<'a> {
             "list" => self.expr_want(e, &Ty::List(Box::new(Ty::Unknown))),
             "or_fail" => {
                 let x = self.expr(e.node("value").unwrap());
+                // a submit's `undelivered<failure_type=e>`: the function's failure must have a case to carry it
+                if let (Ty::Res(_, u), None) = (&x.ty, &self.ctx.section) {
+                    if let Ty::Undelivered(inner) = &**u {
+                        let fails = self.ctx.fails.clone();
+                        let converts = match &fails {
+                            Some(Ty::Named(n)) => match self.type_def(n) {
+                                Some(TypeDef::Enum { cases }) => crate::kinds::undelivered_conversions(self.module(), cases).iter().any(|(t, _)| t == &**inner),
+                                _ => false,
+                            },
+                            _ => false,
+                        };
+                        if !converts {
+                            let what = match &**inner { Ty::Named(t) => t.clone(), _ => "e".into() };
+                            self.error(format!("`{}`: `or fail` on a submit needs a case of the function's failure that carries `undelivered<failure_type={what}>`, or one that carries `{what}` and one that carries `abandonment` (Y § 3.4)", y_text(e)));
+                        }
+                    }
+                }
                 let ok = match &x.ty {
                     Ty::Res(a, _) => (**a).clone(),
                     t => t.clone(),
@@ -741,7 +766,7 @@ impl<'a> Lowerer<'a> {
             return ex("()", Ty::Unknown, Form::Temp, ATOM);
         };
         let Some(data) = crate::evaluate::data(self.module(), &ok, 0) else {
-            self.error(format!("`compile {what}`: its value, a `{}`, is not one y-compile writes as data (numbers, truth values, strings, refined types over them, closed types without payloads, decimals, and lists of these)", self.module().rust_type(&ok)));
+            self.error(format!("`compile {what}`: its value, a `{}`, is not one y-compile writes as data (numbers, truth values, strings, refined types over them, decimals, structures and closed types of these, and lists, sets and maps of these)", self.module().rust_type(&ok)));
             return ex("()", Ty::Unknown, Form::Temp, ATOM);
         };
         let base = self.binding.clone().unwrap_or_else(|| format!("value_{}", e.line));
@@ -1643,10 +1668,15 @@ impl<'a> Lowerer<'a> {
             self.error(format!("`{}.{name}(…)`: {owner}::{name} takes {} arguments, and the call gives {}", y_text_of(&recv.code), m.params.len(), args.len()));
         }
         let elem = ty.elem();
+        let named: Vec<(&str, Ty)> = match &ty {
+            Ty::SortedMap(k, v) => vec![("K", (**k).clone()), ("V", (**v).clone())],
+            Ty::Coll(_, a) if a.len() == 2 => vec![("K", a[0].clone()), ("V", a[1].clone())],
+            _ => vec![],
+        };
         let mut parts = vec![];
         for (k, (_, a)) in args.iter().enumerate() {
             let pt = m.params.get(k).map(|p| p.1.clone()).unwrap_or_default();
-            let want = crate::library::y_type(&pt, &elem);
+            let want = crate::library::y_type_of(&pt, &elem, &named);
             let x = self.expr_want(a, &want);
             parts.push(if pt.starts_with("ref<") { self.by_ref(x, &want) } else { self.owned(x, &want) });
         }
@@ -1655,9 +1685,9 @@ impl<'a> Lowerer<'a> {
         match m.result.as_deref() {
             None => ex(call, Ty::Unit, Form::Temp, ATOM),
             // a borrowed element, which may be absent: copied out, as a Y value is
-            Some(t) if t.starts_with("ref<") && t.ends_with('?') => ex(format!("{call}.cloned()"), Ty::Opt(Box::new(crate::library::y_type(&t[..t.len() - 1], &elem))), Form::Temp, ATOM),
-            Some(t) if t.starts_with("ref<") => ex(call, crate::library::y_type(t, &elem), Form::Ref, ATOM),
-            Some(t) => ex(call, crate::library::y_type(t, &elem), Form::Temp, ATOM),
+            Some(t) if t.starts_with("ref<") && t.ends_with('?') => ex(format!("{call}.cloned()"), Ty::Opt(Box::new(crate::library::y_type_of(&t[..t.len() - 1], &elem, &named))), Form::Temp, ATOM),
+            Some(t) if t.starts_with("ref<") => ex(call, crate::library::y_type_of(t, &elem, &named), Form::Ref, ATOM),
+            Some(t) => ex(call, crate::library::y_type_of(t, &elem, &named), Form::Temp, ATOM),
         }
     }
 
@@ -2034,7 +2064,20 @@ impl<'a> Lowerer<'a> {
                 if matches!(&x.ty, Ty::Named(n) if n.starts_with("batch:")) {
                     self.held = Some(name.to_string());
                 }
-                self.line(format!("let {name} = {code};{claim}{marker}"));
+                // `mutable named = map.new()`, returned as the result: its elements are the result's
+                let mut x = x;
+                let mut annotation = String::new();
+                if let (true, Some(rt)) = (self.ctx.returned.iter().any(|r| r == name), self.ctx.result.clone()) {
+                    let rt = self.module().resolve(&rt);
+                    let empty = matches!((&x.ty, &rt), (Ty::Coll(a, e), Ty::Coll(b, _)) if a == b && e.is_empty())
+                        || matches!((&x.ty, &rt), (Ty::Set(e), Ty::Set(_)) | (Ty::List(e), Ty::List(_)) if **e == Ty::Unknown)
+                        || matches!((&x.ty, &rt), (Ty::SortedMap(k, _), Ty::SortedMap(..)) if **k == Ty::Unknown);
+                    if empty {
+                        annotation = format!(": {}", self.rust_type(&rt));
+                        x.ty = rt;
+                    }
+                }
+                self.line(format!("let {name}{annotation} = {code};{claim}{marker}"));
                 if x.ty == Ty::HostStr && v.kind == "or_fail" {
                     self.line(format!("let {name} = YString::from({name});"));
                     self.bind(name, Ty::Str, Form::Place);
@@ -2097,6 +2140,21 @@ impl<'a> Lowerer<'a> {
                     }
                     return;
                 };
+                // `return r = f(…) or fail`: a way out of its own, so the call is bound as `r`, with its `?` where a path
+                // trace sees it
+                if let (true, Some(name), Some(_)) = (v.kind == "or_fail", st.str("name"), &self.ctx.fails) {
+                    let want = self.ctx.result.clone().unwrap_or(Ty::Unknown);
+                    let saved = self.want_decimal;
+                    if let Ty::Decimal(p, s) = self.module().resolve(&want) {
+                        self.want_decimal = Some((p, s));
+                    }
+                    let x = self.expr_want(v, &want);
+                    self.want_decimal = saved;
+                    let val = self.owned(x, &want);
+                    self.line(format!("let {name} = {val};"));
+                    self.ret(format!("Ok({name})"), tail);
+                    return;
+                }
                 let code = self.result_value(v);
                 self.ret(code, tail);
             }

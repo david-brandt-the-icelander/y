@@ -188,7 +188,7 @@ type Pending = HashMap<usize, Box<dyn Any + Send>>;
 /// Applies one buffered write when the region commits, with the commit's version.
 type Apply = Box<dyn FnOnce(&mut Pending, u64) + Send>;
 /// The version of one shared state now.
-type VersionOf = Arc<dyn Fn() -> u64 + Send + Sync>;
+pub(crate) type VersionOf = Arc<dyn Fn() -> u64 + Send + Sync>;
 /// One alternative of an `orelse`: a run of an atomic region's body.
 pub type Alternative<'a, R, E> = &'a mut dyn FnMut(&mut Tx) -> Result<Step<R>, E>;
 
@@ -201,11 +201,16 @@ pub struct Tx {
     read: RefCell<HashMap<usize, VersionOf>>,
     written: HashMap<usize, VersionOf>,
     stale: Cell<bool>,
+    /// What the transaction does once it has committed, and only then, with the commit's version: a command's record in
+    /// the journal, a store's write.
+    after: Vec<Box<dyn FnOnce(u64) + Send>>,
+    /// The records the run wrote to stores (Y § 3.12), by the store's address: its own reads of the store see them.
+    records: HashMap<usize, Vec<(String, u32, String)>>,
 }
 
 impl Tx {
     fn new(stamp: Option<u64>) -> Tx {
-        Tx { pending: HashMap::new(), apply: Vec::new(), stamp, read: RefCell::new(HashMap::new()), written: HashMap::new(), stale: Cell::new(false) }
+        Tx { pending: HashMap::new(), apply: Vec::new(), stamp, read: RefCell::new(HashMap::new()), written: HashMap::new(), stale: Cell::new(false), after: Vec::new(), records: HashMap::new() }
     }
 
     /// The value of a shared state, as this run sees it: Y reads a `shared` inside `atomic` as a `mutable` value.
@@ -262,6 +267,42 @@ impl Tx {
         for apply in self.apply.drain(..) {
             apply(&mut self.pending, version);
         }
+        for after in self.after.drain(..) {
+            after(version);
+        }
+    }
+
+    /// Does `then` once the transaction commits, and not if it is discarded or runs again: what is made durable with
+    /// the commit, as a command `enqueue` adds is (Y § 3.10).
+    pub fn on_commit(&mut self, then: impl FnOnce() + Send + 'static) {
+        self.after.push(Box::new(move |_| then()));
+    }
+
+    /// A read of state kept outside `Shared` that commits by version (a store's records, Y § 3.12): `now` is the version
+    /// it was last written at, and `version_of` gives it later. An optimistic run that read it at a version later than its
+    /// own runs again, and so does one it changed under, as for shared state.
+    pub(crate) fn read_versioned(&self, key: usize, now: u64, version_of: VersionOf) {
+        if let Some(stamp) = self.stamp {
+            if now > stamp {
+                self.stale.set(true);
+            }
+            self.read.borrow_mut().entry(key).or_insert(version_of);
+        }
+    }
+
+    /// A record the run writes to a store (Y § 3.12): seen by the run's own reads of that store, and written when the
+    /// transaction commits, by `at_commit` with the commit's version.
+    pub(crate) fn write_record(&mut self, key: usize, version_of: VersionOf, record: (String, u32, String), at_commit: impl FnOnce(u64) + Send + 'static) {
+        if self.stamp.is_some() {
+            self.written.entry(key).or_insert(version_of);
+        }
+        self.records.entry(key).or_default().push(record);
+        self.after.push(Box::new(at_commit));
+    }
+
+    /// The records the run has written to the store at `key`, in order.
+    pub(crate) fn records_written(&self, key: usize) -> &[(String, u32, String)] {
+        self.records.get(&key).map_or(&[], Vec::as_slice)
     }
 }
 
@@ -338,10 +379,15 @@ pub fn orelse_with<R, E>(
     if crate::faults::take(crate::faults::Kind::Expire, name) {
         return Err(Aborted::Expired(Expired::fake()));
     }
-    match engine_for_a_run() {
+    let r = match engine_for_a_run() {
         Engine::OneLock => one_lock(name, deadline, &mut alternatives),
         Engine::Optimistic => optimistic(name, deadline, isolation, &mut alternatives),
+    };
+    // a test that crashes the program once the region has committed (`faults: crash after commit f#region`)
+    if r.is_ok() && crate::faults::take(crate::faults::Kind::Crash, name) {
+        crate::journal::crash_after_commit(name);
     }
+    r
 }
 
 /// Whether a run that would commit is made to conflict instead, by a test's `faults: conflict at f#region`: it is
@@ -366,7 +412,7 @@ fn one_lock<R, E>(name: &str, deadline: Option<&Deadline>, alternatives: &mut [A
                 // a conflicting commit makes the region run again, at once
                 Ok(Step::Done(_)) if forced_conflict(name) => continue 'run,
                 Ok(Step::Done(r)) => {
-                    if !tx.apply.is_empty() {
+                    if !tx.apply.is_empty() || !tx.after.is_empty() {
                         *held += 1;
                         tx.commit(*held);
                         CHANGED.notify_all();
@@ -405,7 +451,7 @@ fn optimistic<R, E>(name: &str, deadline: Option<&Deadline>, isolation: Isolatio
             }
             match decided {
                 Ok(Step::Done(r)) => {
-                    if !tx.apply.is_empty() {
+                    if !tx.apply.is_empty() || !tx.after.is_empty() {
                         *held += 1;
                         tx.commit(*held);
                         CHANGED.notify_all();
@@ -610,6 +656,59 @@ mod tests {
         });
         assert_eq!(r, Ok(()));
         runs.get()
+    }
+
+    /// A record of one word, for the tests of a store's reads and writes in a transaction.
+    #[derive(Debug, PartialEq)]
+    struct Note(String);
+
+    impl crate::store::Schema for Note {
+        const NAME: &'static str = "note";
+        const VERSION: u32 = 1;
+        fn key(&self) -> String {
+            self.0.clone()
+        }
+        fn encode(&self) -> String {
+            self.0.clone()
+        }
+        fn decode(_: &str, _: u32, text: &str) -> Result<Self, String> {
+            Ok(Note(text.to_string()))
+        }
+    }
+
+    #[test]
+    fn a_store_read_in_a_transaction_sees_its_writes_and_no_other_runs() {
+        let notes: crate::store::Store<Note> = crate::store::Store::fake(&["note v1 a|a"]);
+        // a run made to conflict sees only its own write, not the discarded run's
+        crate::faults::force(crate::faults::Kind::Conflict, "m::f#note", 1);
+        let seen = Cell::new(0);
+        let r: Result<(), Aborted<()>> = atomic("m::f#note", None, |tx| {
+            notes.put_in(tx, &Note("b".into()));
+            seen.set(notes.read_all_in(tx).count());
+            Ok(Step::Done(()))
+        });
+        assert_eq!((r, seen.get(), notes.lines().len()), (Ok(()), 2, 2));
+    }
+
+    #[test]
+    fn an_optimistic_run_that_read_a_store_runs_again_when_a_commit_writes_it() {
+        optimistically(|| {
+            let notes: crate::store::Store<Note> = crate::store::Store::fake(&[]);
+            let runs = Cell::new(0u32);
+            let r: Result<usize, Aborted<()>> = atomic("count", None, |tx| {
+                runs.set(runs.get() + 1);
+                let n = notes.read_all_in(tx).count();
+                if runs.get() == 1 {
+                    // another task files a note in the middle of the first run
+                    let _: Result<(), Aborted<()>> = atomic("file", None, |tx2| {
+                        notes.put_in(tx2, &Note("c".into()));
+                        Ok(Step::Done(()))
+                    });
+                }
+                Ok(Step::Done(n))
+            });
+            assert_eq!((r, runs.get()), (Ok(1), 2), "the second run counts the note the first did not see");
+        });
     }
 
     #[test]

@@ -165,7 +165,8 @@ test a_line_that_is_not_a_move_is_refused
 
 
 -- Two numbers the game does not allow are refused with the reason the check gives.
-test a_move_the_game_does_not_allow_is_refused:
+test a_move_the_game_does_not_allow_is_refused
+        covers read_move > chosen'fails:
     given:
         game = new_game()
     when:

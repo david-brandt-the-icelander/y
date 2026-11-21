@@ -77,3 +77,17 @@ test detached_work_adds_one
         add_one_later()
     then:
         one = (tally.snapshot().count == 1)
+
+
+-- A task cancelled before it starts adds nothing; its sibling adds one, and the region ends.
+test a_cancelled_task_does_not_run
+        covers add_two:
+    inject:
+        tally = shared.new(counter(count: 0))
+    faults:
+        cancel at add_two#first
+    when:
+        add_two() or fail
+    then:
+        one = (tally.snapshot().count == 1)
+

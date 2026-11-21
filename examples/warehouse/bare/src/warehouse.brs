@@ -186,6 +186,7 @@ mod pricing {
         let exact = fraction / Rational::new(payers.to_i128(), 1);
         let each = exact.to_decimal_rounded(Rounding::TowardNegative);
         let left = total - each.times(payers.to_i128());
+        // y: assume settled because "each share is rounded down, so the shares never add up to more than the bill"
         let to_i128_u32 = payers.to_i128();
         let owed = List::from(list::repeated(each, to_i128_u32));
         if left == Price::zero() { // y: #even

@@ -1887,6 +1887,14 @@ Tests are part of the language, because the compiler must know what a test claim
 | `when` | The single action under test |
 | `then` | Named checks only, one per line: `charged_once = (charges.committed().count() == 1)` |
 
+The two faults that are not about a transaction's own run mean this:
+
+- `crash after commit f#txn`: the program crashes once the transaction has committed, and starts again. The test's
+  `when` runs again, as the restarted program would run it; what committed stays committed, and a workflow resumes
+  from the steps it recorded (§ 3.10).
+- `cancel at f#task`: the task is cancelled before it starts. It does not run and is not restarted, and its siblings and
+  its region go on: a cancellation is not a failure that the region's supervision answers.
+
 **Checks.** Each line of `then` is a named boolean expression, written as a named condition is: `name = expression`.
 No `assert` keyword is needed there, because the section holds nothing else.
 
@@ -1983,6 +1991,11 @@ Some things the compiler cannot check. Y does not pretend otherwise; it makes ea
 - The review packet always shows claims that are new or changed. Claims are never sampled.
 - Compiler errors cannot be suppressed at all. A small set of lints cannot be suppressed either (YAPL's "official lint
   rules, which cannot be suppressed"), including shadowing, abbreviations and unnamed decisions.
+- `allow(…)` names a lint by its code or by its name: `allow(Y2006)` and `allow(repeated_call)` are the same claim.
+  It applies to the block it stands in and to the statement or declaration that opens that block, so an `allow` in a
+  function's body also covers what is judged at the function, such as its length. The inline form, `-- lint: allow
+  name because "…"`, applies to its own line, or, alone on a line, to the next. An `allow` that suppresses nothing is
+  a warning.
 - Accepted oracle disagreements are claims too, recorded in the project with their construct and reason (§ 4.6).
 
 The number of claims in a module is a number worth watching. It should be small and should not drift upward unnoticed.

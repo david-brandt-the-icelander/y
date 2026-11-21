@@ -158,8 +158,14 @@ The value is the one the call gives at run time, because it is the same Rust. Wh
 the operand is one call of a function with no `injected` parameter; each argument is a literal, a list of them, a
 constant, or a name another `compile` bound; a call that fails is a compile error that names the call, the failure's
 case and the case's `fails` role; and a call that faults is a compile error with the fault. The values written as data
-are numbers, truth values, strings, refined types over them, closed types without payloads, decimals, and lists of
-these; a `compile` of any other type is a compile error that names it. `y-facts.json` `compiled` says where each is.
+are numbers, truth values, strings, refined types over them, decimals, structures and closed types of these, and lists,
+sets and maps of these; a `compile` of any other type (a capability, a `shared`, a `native` type) is a compile error
+that names it. `y-facts.json` `compiled` says where each is.
+
+The data of a structure is the tuple of its fields' data, `(3, 3, "centre", )`, built as `Spot { column: s0_0, … }`.
+A closed type with payloads is the number of its case, then one `Option` per case holding that case's fields where it
+is that case: `(1, None, Some((1, 5, )), None)`. A set is the slice of its elements, a map the slice of its pairs, each
+in the order it iterates (the order elements were added, or, sorted, the keys' order), built by adding each in turn.
 
 ## Narrowing
 
@@ -273,6 +279,10 @@ and lists what the type offers, and so is a method a structure or closed type of
 operations the lowering's own rules call are listed in `LOWERED`, and `tests/library.rs` checks each against the
 crates.
 
+A map's parameters `K` and `V` are its key and value types, so `named.set(1, "first")` on a
+`map<key_type=uint32, value_type=string>` gives a `YString`. An empty collection (`map.new()`, `set.new()`,
+`list.new()`) bound to a name the function returns as its result takes the result's type, written on its `let`.
+
 ## The declarations and statements no example uses
 
 The test programs `orders`, `shapes` and `claims` prove each of these through the whole chain. Where the proposal
@@ -291,7 +301,7 @@ it said nothing (the pull request lists each edit).
 | `structure` with a `transient` field | A written-out `PartialEq` that compares every other field, and no `Hash`, which would disagree with it |
 | `old(e)` in an `ensures` | `let old_1 = e;` where the function starts, read by the check. Anywhere else, a compile error |
 | `assert name = (p)` | `y_runtime::assertion(p, "m::f#name")`: when `p` does not hold, a fault, as `fail not_reachable` is |
-| `assume name = p because "…"`, `allow(code) because "…"` | A comment that keeps the claim, `// y: assume name because "…"`. Neither has a run-time meaning: the first is for a prover, the second for a lint |
+| `assume name = p because "…"`, `allow(code) because "…"` | A comment that keeps the claim, `// y: assume name because "…"`. Neither has a run-time meaning: the first feeds the enumerator of paths (below), the second suppresses a lint (below) |
 | `log level "text {x}"` | `y_runtime::observe::log`, with the construct's stable identity. The levels are `debug`, `info`, `warning` and `error` |
 | `metric name = value` | `y_runtime::observe::metric`, with the identity |
 | `name = lambda name(…) returns r captures c:` and `nested function name(…)` | A private function written after the one it is in, its parameters its own and then what it captures, in the order listed; and, where it captures something or is bound as a value, a closure of the same name that passes the captures. A capture not listed, and a listed name not in scope, are compile errors. Its paths are named by its own name (`covers is_larger > bigger`) |
@@ -320,17 +330,20 @@ it said nothing (the pull request lists each edit).
   `submit<command_type=c>` and not how one is made.
 - **A command's handler is the handler of the command's name**, as `handler charge_card(command, …)` in the proposal is
   `charge_card`'s.
-- **Workflows and handlers run as ordinary functions** in this runtime: delivery is immediate and in process (below).
-- **`allow` takes a lint's code**, `allow(Y2031)`; y-compile has no lints, so it keeps the claim and checks nothing.
+- **A handler runs on a worker**, a thread of its own: a submit waits while one delivers its command, and an outbox's
+  commands are delivered by a worker a test starts with **`outbox = enqueue.to(handler)`**, as `submit.to(handler)`
+  makes a submit (below, "Durability").
+- **`allow` takes a lint's code or its name**, `allow(Y2006)` or `allow(repeated_call)`, and covers the block it stands
+  in and what opens it (below, "Lints"). The proposal's example code, `Y2031`, is no lint's.
 
 **What the runtime stand-ins keep and do not keep.** Each is in `examples/y-runtime` and documented there as a stand-in:
 
-- `command`: `Command`, `Policy`, `Outbox`, `Submit`, `Undelivered`. A submitted command is delivered at once, in the
-  process; a handler that faults (panics) is retried with the policy's backoff while it is idempotent and within its
-  deadline, then abandoned and compensated or parked. Nothing is durable: commands and outcomes do not outlive the
-  process, and a workflow does not resume after a crash.
-- `faults`: `conflict at` and `expire at` an atomic region. `crash after commit` and `cancel at` are not kept; a test
-  that forces them is a compile error naming the fault.
+- `command`: `Command`, `Policy`, `Outbox`, `Submit`, `Undelivered`, `Worker`. A submitted command is delivered on a
+  worker's thread while the workflow waits; a handler that faults (panics) is retried with the policy's backoff while it
+  is idempotent and within its deadline, then abandoned and compensated or parked. In a workflow, a submit is a durable
+  step of the journal. A `Worker` delivers what an outbox holds.
+- `journal`: the durable command log and workflow store (below, "Durability").
+- `faults`: `conflict at` and `expire at` an atomic region, `crash after commit` one, and `cancel at` a task.
 - `observe`: `log` and `metric` write one line each to standard error, buffered inside an atomic run and written only if
   it commits.
 - `claims`: `Sensitive` and `Reveal`.
@@ -356,6 +369,8 @@ Each kind of difference below keeps the woven Rust building and its tests passin
   first (`let written = console.written();`). A check that a string is empty compares it with `""`.
 - **A value chosen by a `conditional` and checked by `ensures`** is bound to the result's name before the check, as
   the hand lowering did, but the check is the Y condition as written (`value >= -10 && value <= 10`), not a range.
+- **A region's tasks** run with `supervised_in("warehouse::pack_day#packing", policy, vec![("first_half", …), …])`,
+  which knows them by name so that a test can cancel one; the hand lowering calls `supervised(policy, vec![…])`.
 - **A count compared with a number** is the list's `count()` (`open.count() == 0`) where the hand lowering sometimes
   used `list::count`, which gives a `u32`.
 - **`mutates only`** names each member of a `mutable` parameter that changes, or the parameter itself when every
@@ -444,19 +459,178 @@ Warehouse's are its type aliases (`Price` and the others), its `rendered` (here 
 functions its hand-written tests and `main` used to build lines (`sku`, `line`, `order`, `shelf`), which the compiler
 writes out in place.
 
+## Paths: decimals, assumptions and a returned failure
+
+The enumerators of paths (`tools/bare-rust/tests/y_paths`, `tools/paths/yp.py`, which give the same paths) know three
+more things:
+
+- **Decimals are ordered.** A comparison of a `decimal<…>` has the sub-outcomes an integer's has: `not (price < limit)`
+  is `'eq` or `'gt`. A decimal has values between any two whole numbers, so what a comparison shows of it is kept with
+  its ends included (`x < 3` shows `x <= 3`), and a decimal literal is a known value only when it is whole (`0.00`).
+  `integer<minimum=a, maximum=b>` is ordered too, and bounded by its range.
+- **`assume name = p because "…"` holds from where it is**, without proof (Y § 3.15): the prover takes `p` as a fact.
+  An assumption that cannot hold where it is is a problem, as a loop that may never run is. Warehouse's `split` assumes
+  `left >= 0.00`, since every share is rounded down, and so `else uneven` is one path, not `'lt` and `'gt`.
+- **`return x = f() or fail` is a way out**, `x'fails`, as `x = f() or fail` is. y-compile lowers it
+  `let x = f(…)?;` and `Ok(x)`, where a trace sees the `?`. Nim's `read_move` gains `read_move > chosen'fails`, which
+  its test of a move the game refuses now covers; its hand lowering is written the same way.
+
+## Lints
+
+[`src/lint.rs`](src/lint.rs) runs these on the module, its tests and `main` before lowering. A lint is an error, which
+stops the build as a compile error does, unless it says it is a warning; warnings are printed with the report.
+
+| Code | Name | What it finds |
+| --- | --- | --- |
+| Y2001 | `type_argument_name` | A type argument not named `…_type`, or a value argument that is (Y § 3.1); the same lint as `tools/bare-rust/tests/y_lint` and `tools/paths/ylint.py`, whose code it includes |
+| Y2002 | `redundant_parentheses` | Parentheses around a single element (Y § 3.1) |
+| Y2003 | `function_length` | A body of more than 60 lines, a warning; of more than 120, an error (Y § 3.2) |
+| Y2004 | `too_many_paths` | A function of the module with 100 paths or more (Y § 3.14), counted by `y_paths` |
+| Y2005 | `todo_comment` | A `TODO` or `FIXME` comment (Y § 3.16) |
+| Y2006 | `repeated_call` | The same call in more than one condition of a `conditional` without a subject (Y § 3.5) |
+| Y2007 | `shadowing` | A name bound again where a parameter, or this block or one around it, already binds it. It cannot be suppressed (Y § 3.15) |
+| Y2008 | `abbreviation` | A part of a name the file declares (split at `_` and `.`) that is a known abbreviation (`ABBREVIATIONS`, each with its word: `msg`, `num`, `str`, …), or, of 2 to 6 letters, no English word (`src/words.txt`: `cnt`, `idx`, `nbr`, …), or a rare word that begins a common one at least two letters longer (`src/common.txt`: `sec` for second, `approx`), or, longer than 6 letters, neither a common word nor made of them (`numitems`), unless the project's glossary, a unit symbol or name, or a currency code allows it. It cannot be suppressed (Y § 3.1, § 3.15) |
+
+- `allow(Y2006) because "…"` or `allow(repeated_call) because "…"` applies to the block it stands in and to what opens
+  that block: in a function's body, to the whole function, so it also covers its length and its paths.
+- `-- lint: allow name because "…"` applies to its line, or, alone on a line, to the line after it.
+- An `allow` of a lint that cannot be suppressed, or of a code or name no lint has, is an error; an `allow` that
+  suppresses nothing is a warning.
+- **The project's glossary** is `y/glossary` in the package: one term a line, `term: what it stands for`, with `--`
+  comments; a line without its meaning is an error. The proposal names the glossary and not its form. The examples'
+  and programs' glossaries hold their own terms, which are all the lint finds in them: tic-tac-toe's `tac`, nim's
+  `nim`, memory's `openmoji` (a site's name), warehouse's `sku` (stock-keeping unit) and the orders program's `id`,
+  the proposal's own example of a glossary term.
+- **The dictionary** is the words of 2 to 6 letters of a public-domain list (dwyl's `words_alpha.txt`, The Unlicense),
+  55,538 of them, 350 KB, read once: a part of 2 to 6 letters that is no word in it is taken for an abbreviation. The
+  list has some abbreviations too (`msg`, `num`, `str`), so the lint's own list is judged first.
+- **Common words** judge meaning where a word list cannot: `src/common.txt` is 34,023 common English words with their
+  irregular forms, most common first, from 12dicts' `2+2+3frq` (Alan Beale, public domain) and AGID (Kevin Atkinson),
+  whose notice `src/common.NOTICE` carries. A part counts as common when it, or the stem a regular ending leaves
+  (`lives`, `stepped`, `easiest`), is in it. A short part that is a word but not a common one, and begins a common
+  word at least two letters longer, is taken for an abbreviation of the most common such word (`sec`, `second`). A part
+  longer than 6 letters is a word when it is common, or a common word with a prefix (`un`, `re`, `back`, …) or a
+  suffix (`able`, `ness`, …), or two common words run together (`checksum`, `workflow`); any other (`numitems`) is
+  taken for an abbreviation or words run together.
+- **A name's documentation says what it means**, and the lint reads it: a part of a documented name (a parameter, a
+  result, a role) that is no word of its entry, but begins one that is not made from it, is taken for an abbreviation
+  of that word, however common the part is: `temp: The temperature, in kelvin` shortens `temperature`. A word is made
+  from the part when it is the part with an ending (`counted`, `stepping`, with a doubled consonant only before the
+  endings that double one, or `th`) or the part and another word, both among the 10,000 commonest (`leftmost`; `cur`
+  and `rent` make no compound). The 1,000 commonest words (`no`, `to`, `not`) abbreviate nothing.
+- **A local's context says what it means**, as it has no entry: a `let` or a loop's name is judged by the same rule
+  against the names and literals of what it is bound to and the documentation of the function or test it is in.
+  `temp = temperature + 1` shortens `temperature`, and so does `cap = …` in a function documented as "The room's
+  capacity". Run over every local of the examples and programs before the rule was written, it found none. Names the runtime gives (a method, a type argument) are the standard
+  library's, and not judged where they are used.
+- Unnamed decisions, the other official lint, are a compile error already (the parser's).
+- The seven examples and every test program are clean. The claims program suppresses `redundant_parentheses` with a
+  statement and `repeated_call` with a comment; `tests/errors.rs` checks each lint and each rule above.
+
+## Open types: generic declarations
+
+Y § 3.1 says a declaration lists no type parameters: it leaves a constraint open, and a use fills it. The proposal
+leaves generics open to its owners (§ 8, question 2, which leans to "invariant generics with trait bounds"). y-compile
+takes that lean and the § 3.1 spelling, and does not settle the question in the proposal:
+
+- **An open type is a name of the `…_type` convention that the module does not declare**, used as a type: `left: One
+  value, as item_type.` It lowers to a Rust type parameter, `ItemType`.
+- **A function's or a method's open types are bounded by its documentation**, an entry like a parameter's: `item_type:
+  What the values are, as ordered.` A bound is a trait of the module or one of `any`, `equatable` (`PartialEq`),
+  `ordered` (`Ord`), `hashable` (`Hash + Eq`) and `shown` (`Display`); any other is a compile error. Every open type
+  is also `Clone + PartialEq + Debug`, which a Y value is, so a test can copy, compare and show it.
+- **A structure leaves a type open with a member `item_type is bound`**, then uses it as a field's type. `pair<item_type=
+  parcel>` fills it, and lowers to `Pair<Parcel>`. Its bounds are the bounds of its implementations, not of the Rust
+  structure, as Rust's style is.
+- **An implementation for such a structure is one for every type it may hold**: `impl<ItemType: … + Weighed> Weighed
+  for Pair<ItemType>`.
+- **A trait's method may have open types of its own**: `function balances(other) returns same`, with `other_type:
+  What the other is, as weighed.` An implementation's method takes the trait's open types and bounds, which is what
+  Rust allows.
+- A call fills the open types by its arguments' types, as Rust infers them. A value of an open type has the methods of
+  the traits that bound it.
+
+The `generics` program has all of these: `larger` over numbers and texts, `heavier` over parcels and pairs, a trait
+method that takes a weighed thing of any kind, and `holds` over a list of any equatable type.
+
+## Durability
+
+`examples/y-runtime/src/journal.rs` is the durable command log and workflow store (Y § 3.10), as a stand-in:
+
+- **Where it is.** With `Y_JOURNAL` naming a file, the journal is that file, read when first used and appended to as
+  each record is made, so it outlives the process. Without it, it is kept per thread in memory, which outlives a crash
+  a test forces and not the test.
+- **A workflow** lowers to `y_runtime::journal::workflow("orders::fulfil", version, identity, || -> … { body })`. Its
+  identity is its name and its arguments written as data. Its version is `body@signature`: a hash of its body's tree
+  (FNV-1a over the statements without their lines, so moving it is no new version), and a hash of its compatibility
+  signature (Y § 4.4). A workflow that finished gives its recorded result without running.
+- **A workflow resumes under a version whose compatibility signature matches** (Y § 3.10): a body changed under the same
+  signature takes the recorded steps by their numbers. The signature is, a line each, its parameter and result types
+  and which parameters are `mutable`, by position, as a rename changes none of it; its authority (the capabilities it
+  holds); its failure type with its cases; its `where` and `ensures`; the shared state its atomic regions write; the
+  commands it submits and enqueues; the schemas of its stores; and its regions' wait bounds. One recorded under another
+  signature cannot resume: a fault naming both versions. A workflow holds no clock (y-compile refuses one), so no time
+  is read in it, and "the recorded time of its last durable step" has nothing to give.
+- **Each `submit` and each atomic region a workflow opens is a step**, numbered in order. A region's value is recorded
+  when it commits (`y_runtime::journal::region(|| atomic(…))`), a submit's outcome when it is known, and the command
+  itself before it is delivered. A workflow that runs again resumes: a recorded step gives its value and is not made
+  again. A command delivered and not answered when the program crashed is delivered again: at-least-once delivery,
+  exactly-once intent. A handler runs outside the workflow, so its own regions are no steps of it.
+- **What it can write** is `y_runtime::journal::Durable`: numbers, truth values, `String`, `YString` (in y-string),
+  `List` (in y-collections), `Option`, `Result`, `Undelivered`, and, generated by y-compile, each command, structure
+  and closed type of a module with workflows or handlers whose fields are of these.
+- **`crash after commit f#txn`** panics with `y_runtime::faults::Crashed` once the region has committed, inside a
+  workflow once its step is recorded, as a runtime that records the step in the region's own commit would. A test that
+  forces it runs its `when` inside `y_runtime::faults::restarting`, which runs it again after each crash, as a restarted
+  program would. `Submit` does not catch a crash as a failed delivery.
+- **`cancel at f#task`** cancels the task before it starts: `y_runtime::task::supervised_in`, which y-compile now calls
+  with the region's identity and its tasks' names, does not run it, does not restart it, and lets its siblings and the
+  region go on. The proposal named the fault without its meaning; § 3.14 now says it.
+- The orders program has a workflow that reserves an order in an atomic region and then submits its charge: a crash
+  after the reserving resumes the workflow, which neither reserves nor charges twice. A crash after the bank's handler
+  commits, before its outcome is recorded, delivers the charge again, and the handler, which is not idempotent in
+  effect, charges twice. The regions program cancels one of two tasks, and the count is one.
+- **A store's reads and writes inside `atomic` join the transaction** (Y § 3.12). `sales.put(record)` in an atomic region lowers
+  to `sales.put_in(tx, &record)`, which writes the record, and saves a store kept in a file, with `Tx::on_commit`: when
+  the transaction commits, once, and not in a run that is discarded or runs again. A region whose only write is to a
+  store commits too. `sales.read_all()` in an atomic region lowers to `sales.read_all_in(tx)`, which sees the records
+  committed before the run and the run's own writes. A store's records carry the version of the commit that last wrote
+  them, as shared state does, so an optimistic run that read a store a later commit wrote runs again. bare-rust's
+  region check takes a store whose every use in the region is `put_in` or `read_all_in` as no effect of the region's
+  runs, and `levels.json` trusts `Store::put_in` for its one call at commit. The orders program files a sale in a
+  transaction made to conflict twice, and the store holds it once; and files a sale and counts the store in one
+  transaction, which counts the sale it files, once, though it runs again.
+- **`shared` is the program's state, in memory**, as Y § 3.9 has it: what outlives the process is a store (§ 3.12,
+  "the capability for persistent data") and the journal.
+- **Workers.** A handler runs on a worker, a thread of its own that shares nothing of the caller's but the faults its
+  test forced (handed over and back): a submit waits while a worker delivers, and what a handler commits is no part of
+  the workflow. `y_runtime::command::Worker` delivers an outbox's commands: started in a thread scope, it takes the
+  oldest command in an atomic region of its own (so a command leaves the outbox once), delivers it as its policy says,
+  and records the outcome against the command's key (`completed`, `failed`, `compensated` or `parked`). A test whose
+  `inject` has `outbox = enqueue.to(charge)` runs inside `std::thread::scope`, and its `then` reads after
+  `outbox_worker.settle()`, which waits for a round of the worker that finds the outbox empty and ends after it was
+  called. The orders program places an order whose enqueued charge a worker delivers to the bank.
+- **An enqueued command outlives the process.** `enqueue c(…)` lowers to `outbox.enqueue(tx, c)`, which adds the
+  command and, with `Tx::on_commit`, records it in the journal when the transaction commits, and only then: a run that
+  is discarded or runs again records nothing. A worker that starts, as one does when its program starts again, first
+  puts back in the outbox each command the journal holds as enqueued with no outcome after it. With `Y_JOURNAL`, that
+  is what the last process enqueued and did not deliver.
+- **A worker shares its test's faults and journal.** A worker, and the thread a submit delivers on, take the forced
+  faults and the in-memory journal of the thread that started them (`faults::home`/`adopt`, `journal::home`/`adopt`),
+  so a test can crash a handler on an outbox's worker: the worker starts again and takes the command back from the
+  journal, which holds no outcome for it, and delivers it again. The orders program crashes the bank's handler after it
+  commits, and the charge is taken twice: at-least-once delivery.
+- **`submit c(…) or fail`** converts through the workflow's failure type (Y § 3.4): through a case that carries
+  `undelivered<failure_type=e>`, or, as the proposal's `fulfil` has it, a case that carries the handler's `e` (the
+  command declined) and one that carries the `abandonment` (it could not be delivered). y-compile writes the
+  `From<Undelivered<E>>` for it; with neither, `or fail` on a submit is a compile error that says what to declare. The
+  orders program's `charge_order` fails with `payment_error.declined(reason: …)` this way.
+- bare-rust's region check takes `supervised_in` as `supervised`, and the journal's record of a region as no effect of
+  the region's body; `levels.json` puts `y_runtime::journal` and `y_runtime::command::Worker` at `effects`, and the
+  journal's `Durable` encoding at `calculations`.
+
 ## What it does not handle yet
 
-It handles the forms the seven examples and the test programs use. In particular, it does not handle:
-
-- **Durability**: commands, outcomes and workflows live only as long as the process (above). Y's durable command log,
-  its workers and a workflow's resumption are a runtime, not a lowering, and this one is a stand-in.
-- **The faults `crash after commit` and `cancel at`**, which need a runtime that can crash and resume, or cancel a task
-  at a named point. A test that forces them is a compile error.
-- **Generic declarations** of the module's own: a trait's methods take no type parameters, and an implementation is for
-  a named type.
-- **A lint for `allow` to suppress**, and a prover for `assume` to feed: both claims are kept as comments.
-- **A `compile` of a value y-compile cannot write as data**: a structure, a closed type with payloads, a set or a map.
-  It is a compile error.
-- **Narrowing that the enumerator of paths does not see**: the paths of a decision come from `tools/bare-rust/tests/
-  y_paths` and `tools/paths/yp.py`, which do not know that decimals are ordered or that `return x = f() or fail` is a
-  way out of the function. A test that would claim those paths cannot.
+It handles the forms the seven examples and the test programs use, and every item this list has held. Its rules are
+rules: a name whose meaning neither its documentation, what it is bound to, nor the documentation around it says (a
+common word as an abbreviation of a word that appears nowhere near it) passes, and a reviewer judges it.
