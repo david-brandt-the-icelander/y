@@ -1,0 +1,12 @@
+diff -ruN a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs	2026-10-09 08:06:03.624547897 +0000
++++ b/src/lib.rs	2026-10-09 08:13:05.936814372 +0000
+@@ -103,7 +103,7 @@
+     }
+ 
+     let mut search_range = max(a_len, b_len) / 2;
+-    search_range = search_range.saturating_sub(1);
++    search_range -= 1;
+ 
+     // combine memory allocations to reduce runtime
+     let mut flags_memory = vec![false; a_len + b_len];

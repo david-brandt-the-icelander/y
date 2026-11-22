@@ -1,0 +1,177 @@
+{
+  "format": "y-constraints/0",
+  "host": "rust",
+  "crate": "sources 0.0.0",
+  "module": "src/lib.rs",
+  "status": "lifted",
+  "subjects": [
+    {
+      "kind": "function",
+      "name": "sources::unfold",
+      "visible": "public",
+      "generics": [
+        { "name": "A", "bounds": [] },
+        { "name": "St", "bounds": [] },
+        { "name": "F", "bounds": [], "where": ["FnMut(&mut St) -> Option<A>"] }
+      ],
+      "params": [{ "name": "initial_state", "type": "St" }, { "name": "f", "type": "F" }],
+      "result": { "type": "Unfold<St, F>" }
+    },
+    {
+      "kind": "impl",
+      "name": "sources::Unfold as fmt::Debug",
+      "generics": [{ "name": "St", "bounds": [], "where": ["fmt::Debug"] }, { "name": "F", "bounds": [] }],
+      "self": "Unfold<St, F>"
+    },
+    {
+      "kind": "function",
+      "name": "sources::Unfold as fmt::Debug::fmt",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<target_type=Unfold<St, F>>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        {
+          "name": "f",
+          "type": "ref<target_type=fmt::Formatter<'_>>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "result": { "type": "fmt::Result" }
+    },
+    {
+      "kind": "type",
+      "name": "sources::Unfold",
+      "visible": "public",
+      "generics": [{ "name": "St", "bounds": [] }, { "name": "F", "bounds": [] }],
+      "fields": [
+        { "name": "f", "type": "F", "hold": { "kind": "owns" } },
+        { "name": "state", "visible": "public", "type": "St", "hold": { "kind": "owns" } }
+      ],
+      "implements": [
+        { "trait": "fmt::Debug", "impl": "sources::Unfold as fmt::Debug" },
+        { "trait": "Iterator", "assoc": { "Item": "A" }, "impl": "sources::Unfold as Iterator" }
+      ],
+      "clauses": [
+        {
+          "kind": "result must be used",
+          "text": "must be used",
+          "source": "attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]"
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "sources::Unfold as Iterator",
+      "generics": [
+        { "name": "A", "bounds": [] },
+        { "name": "St", "bounds": [] },
+        { "name": "F", "bounds": [], "where": ["FnMut(&mut St) -> Option<A>"] }
+      ],
+      "self": "Unfold<St, F>"
+    },
+    { "kind": "alias", "name": "sources::Unfold as Iterator::Item", "type": "A" },
+    {
+      "kind": "function",
+      "name": "sources::Unfold as Iterator::next",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<target_type=Unfold<St, F>>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "result": { "type": "Self::Item?" }
+    },
+    {
+      "kind": "type",
+      "name": "sources::Iterate",
+      "visible": "public",
+      "generics": [{ "name": "St", "bounds": [] }, { "name": "F", "bounds": [] }],
+      "fields": [
+        { "name": "state", "type": "St", "hold": { "kind": "owns" } },
+        { "name": "f", "type": "F", "hold": { "kind": "owns" } }
+      ],
+      "implements": [
+        { "trait": "fmt::Debug", "impl": "sources::Iterate as fmt::Debug" },
+        { "trait": "Iterator", "assoc": { "Item": "St" }, "impl": "sources::Iterate as Iterator" }
+      ],
+      "clauses": [
+        {
+          "kind": "result must be used",
+          "text": "must be used",
+          "source": "attribute #[must_use = \"iterators are lazy and do nothing unless consumed\"]"
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "sources::Iterate as fmt::Debug",
+      "generics": [{ "name": "St", "bounds": [], "where": ["fmt::Debug"] }, { "name": "F", "bounds": [] }],
+      "self": "Iterate<St, F>"
+    },
+    {
+      "kind": "function",
+      "name": "sources::Iterate as fmt::Debug::fmt",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<target_type=Iterate<St, F>>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        {
+          "name": "f",
+          "type": "ref<target_type=fmt::Formatter<'_>>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "result": { "type": "fmt::Result" }
+    },
+    {
+      "kind": "impl",
+      "name": "sources::Iterate as Iterator",
+      "generics": [
+        { "name": "St", "bounds": [] },
+        { "name": "F", "bounds": [], "where": ["FnMut(&St) -> St"] }
+      ],
+      "self": "Iterate<St, F>"
+    },
+    { "kind": "alias", "name": "sources::Iterate as Iterator::Item", "type": "St" },
+    {
+      "kind": "function",
+      "name": "sources::Iterate as Iterator::next",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<target_type=Iterate<St, F>>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "result": { "type": "Self::Item?" }
+    },
+    {
+      "kind": "function",
+      "name": "sources::Iterate as Iterator::size_hint",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<target_type=Iterate<St, F>>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "(u64 as 'usize', u64 as 'usize'?)" }
+    },
+    {
+      "kind": "function",
+      "name": "sources::iterate",
+      "visible": "public",
+      "generics": [
+        { "name": "St", "bounds": [] },
+        { "name": "F", "bounds": [], "where": ["FnMut(&St) -> St"] }
+      ],
+      "params": [{ "name": "initial_value", "type": "St" }, { "name": "f", "type": "F" }],
+      "result": { "type": "Iterate<St, F>" }
+    }
+  ]
+}

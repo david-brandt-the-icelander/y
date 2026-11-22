@@ -1,0 +1,20 @@
+diff -ruN a/lib.rs b/lib.rs
+--- a/lib.rs	2026-10-09 08:06:03.625050443 +0000
++++ b/lib.rs	2026-10-09 08:13:06.084276417 +0000
+@@ -142,16 +142,3 @@
+ #[cfg(feature = "std")]
+ pub type FnvHashSet<T> = HashSet<T, FnvBuildHasher>;
+ 
+-/// Const version of FNV hash.
+-#[inline]
+-#[must_use]
+-pub const fn fnv_hash(bytes: &[u8]) -> u64 {
+-    let mut hash = INITIAL_STATE;
+-    let mut i = 0;
+-    while i < bytes.len() {
+-        hash ^= bytes[i] as u64;
+-        hash = hash.wrapping_mul(PRIME);
+-        i += 1;
+-    }
+-    hash
+-}

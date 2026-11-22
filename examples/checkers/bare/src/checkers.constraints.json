@@ -1,0 +1,1486 @@
+{
+  "format": "y-constraints/0",
+  "host": "rust",
+  "crate": "checkers-example 0.0.0",
+  "module": "src/checkers.rs",
+  "status": {
+    "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
+  },
+  "subjects": [
+    {
+      "kind": "module",
+      "name": "checkers_example::checkers::setup",
+      "visible": "public",
+      "level": "structured"
+    },
+    {
+      "kind": "module",
+      "name": "checkers_example::checkers::setup::board",
+      "visible": "public",
+      "level": "data"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::setup::board::SIZE",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::setup::board::MEN_ROWS",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "module",
+      "name": "checkers_example::checkers::setup::game_rules",
+      "visible": "public",
+      "level": "data"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::setup::game_rules::QUIET_LIMIT",
+      "visible": "public",
+      "type": "u32"
+    },
+    {
+      "kind": "module",
+      "name": "checkers_example::checkers::setup::scoring",
+      "visible": "public",
+      "level": "data"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::setup::scoring::WIN_POINTS",
+      "visible": "public",
+      "type": "u32"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::setup::scoring::POINTS_PER_MOVE",
+      "visible": "public",
+      "type": "u32"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::setup::scoring::LEAST_WIN",
+      "visible": "public",
+      "type": "u32"
+    },
+    {
+      "kind": "type",
+      "name": "checkers_example::checkers::setup::Side",
+      "visible": "public",
+      "variants": [{ "name": "Red" }, { "name": "White" }]
+    },
+    {
+      "kind": "type",
+      "name": "checkers_example::checkers::setup::Piece",
+      "visible": "public",
+      "fields": [
+        {
+          "name": "owner",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "Side",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "king",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "bool",
+          "hold": { "kind": "owns" }
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "checkers_example::checkers::setup::Square",
+      "visible": "public",
+      "fields": [
+        {
+          "name": "row",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "i32",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "column",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "i32",
+          "hold": { "kind": "owns" }
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "checkers_example::checkers::setup::Placed",
+      "visible": "public",
+      "fields": [
+        {
+          "name": "square",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "Square",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "piece",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "Piece",
+          "hold": { "kind": "owns" }
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "checkers_example::checkers::setup::Direction",
+      "visible": "public",
+      "fields": [
+        {
+          "name": "rows",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "i32",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "columns",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "i32",
+          "hold": { "kind": "owns" }
+        }
+      ]
+    },
+    {
+      "kind": "module",
+      "name": "checkers_example::checkers::setup::directions",
+      "visible": "public",
+      "level": "data"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::setup::directions::UP",
+      "visible": "public",
+      "type": "list<element_type=Direction> where count(value) == 2 as 'std::primitive::array'"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::setup::directions::DOWN",
+      "visible": "public",
+      "type": "list<element_type=Direction> where count(value) == 2 as 'std::primitive::array'"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::setup::directions::ALL",
+      "visible": "public",
+      "type": "list<element_type=Direction> where count(value) == 4 as 'std::primitive::array'"
+    },
+    {
+      "kind": "type",
+      "name": "checkers_example::checkers::setup::Move",
+      "visible": "public",
+      "fields": [
+        {
+          "name": "piece",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "Piece",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "from",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "Square",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "path",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "list<element_type=Square> as 'List'",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "captures",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "list<element_type=Square> as 'List'",
+          "hold": { "kind": "owns" }
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "checkers_example::checkers::setup::Level",
+      "visible": "public",
+      "fields": [
+        {
+          "name": "name",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "ref<target_type=string>",
+          "access": { "rights": "read", "guarantee": "readers" },
+          "hold": { "kind": "borrows", "lifetime": "'static" }
+        },
+        {
+          "name": "checks",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "u32",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "weight",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "u32",
+          "hold": { "kind": "owns" }
+        }
+      ]
+    },
+    {
+      "kind": "module",
+      "name": "checkers_example::checkers::setup::levels",
+      "visible": "public",
+      "level": "data"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::setup::levels::ALL",
+      "visible": "public",
+      "type": "list<element_type=Level> where count(value) == 5 as 'std::primitive::array'"
+    },
+    {
+      "kind": "type",
+      "name": "checkers_example::checkers::setup::Outcome",
+      "visible": "public",
+      "variants": [{ "name": "Playing" }, { "name": "Won" }, { "name": "Lost" }, { "name": "Drawn" }]
+    },
+    {
+      "kind": "type",
+      "name": "checkers_example::checkers::setup::Game",
+      "visible": "public",
+      "fields": [
+        {
+          "name": "squares",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "list<element_type=Piece?> as 'List'",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "to_move",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "Side",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "level",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "Level",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "turns",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "u32",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "quiet",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "u32",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "last",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "Move?",
+          "hold": { "kind": "owns" }
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::setup::new_game",
+      "visible": "public",
+      "params": [{ "name": "level", "type": "Level" }],
+      "result": { "type": "Game" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:163" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::starting_piece",
+      "params": [{ "name": "square", "type": "Square" }],
+      "result": { "type": "Piece?" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:179" }]
+    },
+    {
+      "kind": "module",
+      "name": "checkers_example::checkers::rules",
+      "visible": "public",
+      "level": "structured"
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::rules::legal_moves",
+      "visible": "public",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "list<element_type=Move> as 'List'" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:200" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::rules::apply",
+      "visible": "public",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        { "name": "chosen", "type": "Move" }
+      ],
+      "clauses": [
+        {
+          "kind": "require",
+          "text": "require own_piece : chosen.piece.owner == game.to_move",
+          "source": "y/src/checkers.y:217",
+          "status": { "lifted": "src/checkers.rs: y_runtime::require" }
+        },
+        { "kind": "effects", "text": "no io", "source": "y/src/checkers.y:216" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:216" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/checkers.y:216" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:216" },
+        { "kind": "access", "text": "mutates only game", "source": "y/src/checkers.y:216" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::rules::standing",
+      "visible": "public",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "Outcome" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:241" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::rules::score",
+      "visible": "public",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "u32" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:263" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::rules::player_moves",
+      "visible": "public",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "u32" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:278" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::rules::other",
+      "visible": "public",
+      "params": [{ "name": "player", "type": "Side" }],
+      "result": { "type": "Side" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:289" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::all_steps",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "list<element_type=Move> as 'List'" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:304" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::all_jumps",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "list<element_type=Move> as 'List'" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:326" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::chains",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "piece", "type": "Piece" },
+        { "name": "start", "type": "Square" },
+        { "name": "at", "type": "Square" },
+        {
+          "name": "path",
+          "type": "ref<target_type=list<element_type=Square> as 'List'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        {
+          "name": "captured",
+          "type": "ref<target_type=list<element_type=Square> as 'List'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "list<element_type=Move> as 'List'" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:349" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::chains_after",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "piece", "type": "Piece" },
+        { "name": "start", "type": "Square" },
+        { "name": "land", "type": "Square" },
+        {
+          "name": "path",
+          "type": "ref<target_type=list<element_type=Square> as 'List'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        {
+          "name": "captured",
+          "type": "ref<target_type=list<element_type=Square> as 'List'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "list<element_type=Move> as 'List'" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:384" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::jumpable",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "piece", "type": "Piece" },
+        { "name": "start", "type": "Square" },
+        { "name": "over", "type": "Square" },
+        { "name": "land", "type": "Square" }
+      ],
+      "result": { "type": "bool" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:403" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::belongs_to",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "square", "type": "Square" },
+        { "name": "owner", "type": "Side" }
+      ],
+      "result": { "type": "bool" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:420" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::placed_pieces",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "list<element_type=Placed> as 'List'" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:435" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::own_pieces",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "list<element_type=Placed> as 'List'" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:457" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::directions_of",
+      "params": [{ "name": "piece", "type": "Piece" }],
+      "result": { "type": "list<element_type=Direction> as 'List'" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure several : count(result) >= 2",
+          "source": "y/src/checkers.y:477",
+          "status": { "lifted": "src/checkers.rs: y_runtime::ensure" }
+        },
+        { "kind": "effects", "text": "pure", "source": "y/src/checkers.y:476" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::far_row",
+      "params": [{ "name": "owner", "type": "Side" }],
+      "result": { "type": "i32" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:494" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::piece_at",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "square", "type": "Square" }
+      ],
+      "result": { "type": "Piece?" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:509" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::number_of",
+      "params": [{ "name": "square", "type": "Square" }],
+      "result": { "type": "u32" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:520" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::on_board",
+      "params": [{ "name": "square", "type": "Square" }],
+      "result": { "type": "bool" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:531" }]
+    },
+    {
+      "kind": "module",
+      "name": "checkers_example::checkers::computer",
+      "visible": "public",
+      "level": "effects"
+    },
+    {
+      "kind": "module",
+      "name": "checkers_example::checkers::computer::search",
+      "visible": "public",
+      "level": "data"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::computer::search::DEEPEST",
+      "visible": "public",
+      "type": "u32"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::computer::search::PLAYOUT_TURNS",
+      "visible": "public",
+      "type": "u32"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::computer::search::WIN_VALUE",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::computer::search::MAN_VALUE",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::computer::search::KING_VALUE",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "type",
+      "name": "checkers_example::checkers::computer::PlayedOut",
+      "visible": "path",
+      "visible_path": "super",
+      "fields": [
+        {
+          "name": "value",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "i32",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "spent",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "u32",
+          "hold": { "kind": "owns" }
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::computer::computer_move",
+      "visible": "public",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        {
+          "name": "random",
+          "type": "ref<target_type=Random>",
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
+        }
+      ],
+      "result": { "type": "Move" },
+      "clauses": [
+        {
+          "kind": "require",
+          "text": "require has_moves : count(legal_moves(game)) > 0",
+          "source": "y/src/checkers.y:581",
+          "status": { "lifted": "src/checkers.rs: y_runtime::require" }
+        },
+        { "kind": "effects", "text": "effects only random", "source": "y/src/checkers.y:580" },
+        { "kind": "effects", "text": "no io", "source": "y/src/checkers.y:580" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:580" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:580" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::searched",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "owner", "type": "Side" },
+        { "name": "depth", "type": "u32" },
+        {
+          "name": "left",
+          "type": "ref<target_type=u32>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "result": { "type": "i32" },
+      "clauses": [
+        { "kind": "effects", "text": "no io", "source": "y/src/checkers.y:617" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:617" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/checkers.y:617" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:617" },
+        { "kind": "access", "text": "mutates only left", "source": "y/src/checkers.y:617" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::best_sampled",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        {
+          "name": "options",
+          "type": "ref<target_type=list<element_type=Move> as 'List'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        {
+          "name": "values",
+          "type": "ref<target_type=list<element_type=i32> as 'List'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "checks", "type": "u32" },
+        {
+          "name": "random",
+          "type": "ref<target_type=Random>",
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
+        }
+      ],
+      "result": { "type": "Move" },
+      "clauses": [
+        {
+          "kind": "require",
+          "text": "require has_options : count(options) > 0",
+          "source": "y/src/checkers.y:655",
+          "status": { "lifted": "src/checkers.rs: y_runtime::require" }
+        },
+        { "kind": "effects", "text": "effects only random", "source": "y/src/checkers.y:654" },
+        { "kind": "effects", "text": "no io", "source": "y/src/checkers.y:654" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:654" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:654" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::sampled_value",
+      "params": [
+        {
+          "name": "position",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "owner", "type": "Side" },
+        { "name": "share", "type": "u32" },
+        {
+          "name": "random",
+          "type": "ref<target_type=Random>",
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
+        }
+      ],
+      "result": { "type": "i32" },
+      "clauses": [
+        { "kind": "effects", "text": "effects only random", "source": "y/src/checkers.y:696" },
+        { "kind": "effects", "text": "no io", "source": "y/src/checkers.y:696" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:696" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:696" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::playout",
+      "params": [
+        {
+          "name": "start",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "owner", "type": "Side" },
+        { "name": "length", "type": "u32" },
+        {
+          "name": "random",
+          "type": "ref<target_type=Random>",
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
+        }
+      ],
+      "result": { "type": "PlayedOut" },
+      "clauses": [
+        { "kind": "effects", "text": "effects only random", "source": "y/src/checkers.y:724" },
+        { "kind": "effects", "text": "no io", "source": "y/src/checkers.y:724" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:724" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:724" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::value_for",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "owner", "type": "Side" }
+      ],
+      "result": { "type": "i32" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:746" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::material",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "owner", "type": "Side" }
+      ],
+      "result": { "type": "i32" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:768" }]
+    },
+    {
+      "kind": "module",
+      "name": "checkers_example::checkers::drawing",
+      "visible": "public",
+      "level": "effects"
+    },
+    {
+      "kind": "module",
+      "name": "checkers_example::checkers::drawing::layout",
+      "visible": "public",
+      "level": "data"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::layout::SQUARE_SIZE",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::layout::GAP",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::layout::BOARD_SIZE",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::layout::PIECE_RADIUS",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::layout::RING_RADIUS",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::layout::CENTRE_RADIUS",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::layout::MARK_RADIUS",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::layout::BAR_HEIGHT",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::layout::TEXT_SIZE",
+      "visible": "public",
+      "type": "u32"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::layout::TITLE_SIZE",
+      "visible": "public",
+      "type": "u32"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::layout::BUTTON_TOP",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::layout::BUTTON_HEIGHT",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::layout::BUTTON_STEP",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::layout::WIDTH",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::layout::HEIGHT",
+      "visible": "public",
+      "type": "i32"
+    },
+    {
+      "kind": "module",
+      "name": "checkers_example::checkers::drawing::palette",
+      "visible": "public",
+      "level": "data"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::palette::BACKGROUND",
+      "visible": "public",
+      "type": "Colour"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::palette::LIGHT",
+      "visible": "public",
+      "type": "Colour"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::palette::DARK",
+      "visible": "public",
+      "type": "Colour"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::palette::SELECTED",
+      "visible": "public",
+      "type": "Colour"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::palette::LAST",
+      "visible": "public",
+      "type": "Colour"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::palette::MARK",
+      "visible": "public",
+      "type": "Colour"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::palette::RED",
+      "visible": "public",
+      "type": "Colour"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::palette::RED_RING",
+      "visible": "public",
+      "type": "Colour"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::palette::WHITE",
+      "visible": "public",
+      "type": "Colour"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::palette::WHITE_RING",
+      "visible": "public",
+      "type": "Colour"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::palette::CROWN",
+      "visible": "public",
+      "type": "Colour"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::palette::BUTTON",
+      "visible": "public",
+      "type": "Colour"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::palette::TEXT",
+      "visible": "public",
+      "type": "Colour"
+    },
+    {
+      "kind": "const",
+      "name": "checkers_example::checkers::drawing::palette::MUTED",
+      "visible": "public",
+      "type": "Colour"
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::drawing::banner",
+      "visible": "public",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "highest", "type": "u32" }
+      ],
+      "result": { "type": "list<element_type=string as 'YString'> as 'List'" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:843" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::drawing::draw",
+      "visible": "public",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "selected", "type": "Square?" },
+        { "name": "highest", "type": "u32" },
+        {
+          "name": "window",
+          "type": "ref<target_type=Window>",
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
+        }
+      ],
+      "clauses": [
+        { "kind": "effects", "text": "effects only window", "source": "y/src/checkers.y:884" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:884" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/checkers.y:884" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:884" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::drawing::draw_levels",
+      "visible": "public",
+      "params": [
+        { "name": "highest", "type": "u32" },
+        {
+          "name": "window",
+          "type": "ref<target_type=Window>",
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
+        }
+      ],
+      "clauses": [
+        { "kind": "effects", "text": "effects only window", "source": "y/src/checkers.y:902" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:902" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/checkers.y:902" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:902" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::drawing::square_at",
+      "visible": "public",
+      "params": [{ "name": "place", "type": "Point" }],
+      "result": { "type": "Square?" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:925" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::drawing::level_at",
+      "visible": "public",
+      "params": [{ "name": "place", "type": "Point" }],
+      "result": { "type": "Level?" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:944" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::corner_of",
+      "params": [{ "name": "square", "type": "Square" }],
+      "result": { "type": "Point" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:965" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::centre_of",
+      "params": [{ "name": "square", "type": "Square" }],
+      "result": { "type": "Point" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:976" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::shade_of",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "square", "type": "Square" },
+        { "name": "selected", "type": "Square?" }
+      ],
+      "result": { "type": "Colour" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:990" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::in_last_move",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "square", "type": "Square" }
+      ],
+      "result": { "type": "bool" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:1010" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::landings",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "selected", "type": "Square?" }
+      ],
+      "result": { "type": "list<element_type=Square> as 'List'" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:1026" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::draw_board",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "selected", "type": "Square?" },
+        {
+          "name": "window",
+          "type": "ref<target_type=Window>",
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
+        }
+      ],
+      "clauses": [
+        { "kind": "effects", "text": "effects only window", "source": "y/src/checkers.y:1046" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:1046" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/checkers.y:1046" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:1046" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::draw_pieces",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        {
+          "name": "window",
+          "type": "ref<target_type=Window>",
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
+        }
+      ],
+      "clauses": [
+        { "kind": "effects", "text": "effects only window", "source": "y/src/checkers.y:1062" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:1062" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/checkers.y:1062" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:1062" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::draw_marks",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "selected", "type": "Square?" },
+        {
+          "name": "window",
+          "type": "ref<target_type=Window>",
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
+        }
+      ],
+      "clauses": [
+        { "kind": "effects", "text": "effects only window", "source": "y/src/checkers.y:1076" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:1076" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/checkers.y:1076" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:1076" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::draw_piece",
+      "params": [
+        { "name": "placed", "type": "Placed" },
+        {
+          "name": "window",
+          "type": "ref<target_type=Window>",
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
+        }
+      ],
+      "clauses": [
+        { "kind": "effects", "text": "effects only window", "source": "y/src/checkers.y:1090" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:1090" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/checkers.y:1090" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:1090" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::colours_of",
+      "params": [{ "name": "piece", "type": "Piece" }],
+      "result": { "type": "list<element_type=Colour> as 'List'" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:1105" }]
+    },
+    {
+      "kind": "module",
+      "name": "checkers_example::checkers::window_play",
+      "visible": "public",
+      "level": "effects"
+    },
+    {
+      "kind": "type",
+      "name": "checkers_example::checkers::window_play::Ending",
+      "visible": "public",
+      "fields": [
+        {
+          "name": "points",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "u32",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "quitting",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "bool",
+          "hold": { "kind": "owns" }
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::window_play::play",
+      "visible": "public",
+      "params": [
+        {
+          "name": "window",
+          "type": "ref<target_type=Window>",
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
+        },
+        {
+          "name": "random",
+          "type": "ref<target_type=Random>",
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
+        },
+        {
+          "name": "forever",
+          "type": "ref<target_type=Forever>",
+          "access": { "rights": "read", "guarantee": "readers" },
+          "injected": true
+        }
+      ],
+      "result": { "type": "u32" },
+      "clauses": [
+        { "kind": "effects", "text": "effects only window, random", "source": "y/src/checkers.y:1138" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::window_play::choose_level",
+      "visible": "public",
+      "params": [
+        { "name": "highest", "type": "u32" },
+        {
+          "name": "window",
+          "type": "ref<target_type=Window>",
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
+        },
+        {
+          "name": "forever",
+          "type": "ref<target_type=Forever>",
+          "access": { "rights": "read", "guarantee": "readers" },
+          "injected": true
+        }
+      ],
+      "result": { "type": "Level?" },
+      "clauses": [
+        { "kind": "effects", "text": "effects only window", "source": "y/src/checkers.y:1163" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:1163" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/checkers.y:1163" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::window_play::play_game",
+      "visible": "public",
+      "params": [
+        { "name": "started", "type": "Game" },
+        { "name": "highest", "type": "u32" },
+        {
+          "name": "window",
+          "type": "ref<target_type=Window>",
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
+        },
+        {
+          "name": "random",
+          "type": "ref<target_type=Random>",
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
+        },
+        {
+          "name": "forever",
+          "type": "ref<target_type=Forever>",
+          "access": { "rights": "read", "guarantee": "readers" },
+          "injected": true
+        }
+      ],
+      "result": { "type": "Ending" },
+      "clauses": [
+        { "kind": "effects", "text": "effects only window, random", "source": "y/src/checkers.y:1188" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::window_play::clicked",
+      "visible": "public",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        {
+          "name": "selected",
+          "type": "ref<target_type=Square?>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        { "name": "place", "type": "Point" }
+      ],
+      "clauses": [
+        { "kind": "effects", "text": "no io", "source": "y/src/checkers.y:1220" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:1220" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/checkers.y:1220" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:1220" },
+        { "kind": "access", "text": "mutates only game, selected", "source": "y/src/checkers.y:1220" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::level_clicked",
+      "params": [
+        {
+          "name": "clicks",
+          "type": "ref<target_type=list<element_type=Point> as 'List'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "Level?" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:1241" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::act_on_clicks",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        {
+          "name": "selected",
+          "type": "ref<target_type=Square?>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        {
+          "name": "clicks",
+          "type": "ref<target_type=list<element_type=Point> as 'List'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "clauses": [
+        { "kind": "effects", "text": "no io", "source": "y/src/checkers.y:1260" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/checkers.y:1260" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/checkers.y:1260" },
+        { "kind": "effects", "text": "no suspension", "source": "y/src/checkers.y:1260" },
+        { "kind": "access", "text": "mutates only game, selected", "source": "y/src/checkers.y:1260" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::move_to",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "from", "type": "Square?" },
+        { "name": "to", "type": "Square?" }
+      ],
+      "result": { "type": "Move?" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:1275" }]
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::may_move_from",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "square", "type": "Square?" }
+      ],
+      "result": { "type": "bool" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/checkers.y:1293" }]
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+ "run_id": "e4-sorensen-whitespace-rust-t2",
+ "experiment": "e4",
+ "task": "sorensen-whitespace",
+ "arm": "rust",
+ "trial": 2,
+ "kind": "body",
+ "e5": true,
+ "workspace": "/tmp/claude-0/-home-user-y/9673def1-2027-5ffe-9d6e-8413dc645c64/scratchpad/runs/e4-sorensen-whitespace-rust-t2",
+ "weaves": null,
+ "rs_files_in_bare": null,
+ "compiles": true,
+ "hidden_compiled": true,
+ "existing_tests_ok": true,
+ "tests_passed": 4,
+ "tests_failed": 0,
+ "tests_total": 4,
+ "pass": true,
+ "json_entries_changed": null,
+ "json_leaf_edits": null,
+ "json_files_changed": null,
+ "lines_changed": 6,
+ "agent": {
+  "done": true,
+  "attempts": 1,
+  "json_edits": 0,
+  "library_promises_relied_on": [],
+  "notes": "sorensen_dice now strips all char::is_whitespace chars before comparing; added doctests."
+ },
+ "tokens": {
+  "input": 183105,
+  "output": 60,
+  "total": 183165
+ },
+ "duration_s": null,
+ "model": "sonnet"
+}

@@ -1,0 +1,11 @@
+diff -ruN a/lib.rs b/lib.rs
+--- a/lib.rs	2026-10-09 08:06:03.625050443 +0000
++++ b/lib.rs	2026-10-09 08:13:06.075607133 +0000
+@@ -92,7 +92,6 @@
+ ///
+ /// See the [crate documentation](index.html) for more details.
+ #[allow(missing_copy_implementations)]
+-#[derive(Clone)]
+ pub struct FnvHasher(u64);
+ 
+ impl Default for FnvHasher {

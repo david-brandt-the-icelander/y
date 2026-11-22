@@ -1,0 +1,11 @@
+[package]
+name = "y-runtime"
+version = "0.0.0"
+edition = "2021"
+description = "A small stand-in for the Y runtime: the capabilities, text helpers and fault reports the Y examples lower to."
+
+[features]
+# The optimistic engine for atomic regions, when the program chooses none (`System::root`, `System::use_engine`).
+optimistic = []
+
+[workspace]

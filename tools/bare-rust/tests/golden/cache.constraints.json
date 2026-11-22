@@ -1,0 +1,25 @@
+{
+  "format": "y-constraints/0",
+  "host": "rust",
+  "crate": "eve_cache 0.1.0",
+  "module": "src/lib.rs",
+  "status": "lifted",
+  "subjects": [
+    { "kind": "type", "name": "eve_cache::Cache", "visible": "crate",
+      "fields": [
+        { "name": "entries", "type": "map<key_type=Key, value_type=Entry> as 'std::collections::HashMap'", "hold": { "kind": "owns" } }
+      ] },
+    { "kind": "function", "name": "eve_cache::Cache::get", "visible": "public",
+      "params": [
+        { "name": "self", "type": "ref<target_type=Cache>", "access": { "rights": "read", "guarantee": "readers" } },
+        { "name": "key", "type": "ref<target_type=Key>", "access": { "rights": "read", "guarantee": "readers" } }
+      ],
+      "result": { "type": "ref<target_type=Entry>?", "hold": { "kind": "borrows", "from": "self" } } },
+    { "kind": "function", "name": "eve_cache::Cache::insert", "visible": "public",
+      "params": [
+        { "name": "self", "type": "ref<target_type=Cache>", "access": { "rights": "write", "guarantee": "exclusive" } },
+        { "name": "key", "type": "Key" },
+        { "name": "entry", "type": "Entry" }
+      ] }
+  ]
+}

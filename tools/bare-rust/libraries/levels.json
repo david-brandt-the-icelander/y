@@ -1,0 +1,95 @@
+{
+  "about": "The level (constraint language 6.22, Y \u00a7 3.19) a call into each library needs, by module path: a call of a function under a path listed here, or of a method of a type under it, needs that level, and the longest path that matches wins. Every library a body calls into is listed, at least by its crate: a call into a library with no entry needs `effects`, since nothing says it has none. `bare-rust` takes the function a call resolves to from rustc where the woven crate builds (`crate::facts`), and else resolves it through the file's `use` declarations, and a method through its receiver's type when the constraint data gives it. A method of a trait needs the level of its type's module and of its trait's. A macro is listed by its path (`std::println`), and an invocation of it needs that level; a macro named alone is the prelude's (`std::\u2026`) unless the file imports it. A macro whose source is at hand (a dependency's `#[macro_export]` macro, or the standard library's with the toolchain's `rust-src`) is read from its body instead, its calls at this table's levels, unless `macros_from_table` names it, with why. A procedural macro's expansion is read from the calls rustc resolved at its invocation. `bare-rust levels --libraries <crate>...` checks the table against what a library crate's code calls; `trusted` names the functions of a library that call more than their module's level for the library's own sake: each with the calls it vouches for (a path, or a module or type the call is under) and why. Only those calls are not counted; anything else the function calls is, and an entry whose calls the function no longer makes is reported.",
+  "modules": {
+    "std": "calculations",
+    "core": "calculations",
+    "alloc": "calculations",
+    "y_runtime": "calculations",
+    "y_collections": "calculations",
+    "y_string": "calculations",
+    "unicode_normalization": "calculations",
+    "unicode_segmentation": "calculations",
+    "y_runtime::shared": "shared",
+    "y_runtime::arena": "shared",
+    "y_runtime::task": "effects",
+    "y_runtime::store": "effects",
+    "y_runtime::store::Store::put_in": "shared",
+    "y_runtime::store::Store::read_all_in": "shared",
+    "y_runtime::System": "effects",
+    "y_runtime::Console": "effects",
+    "y_runtime::Clock": "effects",
+    "y_runtime::Random": "effects",
+    "y_runtime::Forever": "effects",
+    "y_runtime::Deadline": "effects",
+    "y_runtime::command::Submit": "effects",
+    "y_runtime::command::Worker": "effects",
+    "y_runtime::command::Outbox::enqueue": "shared",
+    "y_runtime::journal": "effects",
+    "y_runtime::journal::Durable": "calculations",
+    "y_runtime::journal::Tokens": "calculations",
+    "y_runtime::journal::case": "calculations",
+    "y_runtime::journal::tokens": "calculations",
+    "y_runtime::journal::value": "calculations",
+    "y_runtime::faults": "shared",
+    "y_runtime::observe": "shared",
+    "y_runtime::observe::log": "calculations",
+    "y_runtime::observe::metric": "calculations",
+    "y_window": "effects",
+    "y_http": "effects",
+    "std::cell": "shared",
+    "std::rc": "shared",
+    "std::sync": "shared",
+    "std::thread": "effects",
+    "std::thread::LocalKey": "shared",
+    "std::fs": "effects",
+    "std::io": "effects",
+    "std::io::Error": "calculations",
+    "std::io::ErrorKind": "calculations",
+    "std::net": "effects",
+    "std::env": "effects",
+    "std::process": "effects",
+    "std::time::Instant": "effects",
+    "std::time::SystemTime": "effects",
+    "std::println": "effects",
+    "std::print": "effects",
+    "std::eprintln": "effects",
+    "std::eprint": "effects",
+    "std::dbg": "effects",
+    "std::thread_local": "shared"
+  },
+  "trusted": {
+    "y_runtime::shared::wait": {
+      "calls": [
+        "y_runtime::Deadline::remaining"
+      ],
+      "why": "waits for a commit on the deadline its caller gave it: the caller pays for the deadline (`y_runtime::Deadline::after`, at `effects`) and for the wait (`// y: waits until \u2026`, at `effects`)"
+    },
+    "y_runtime::observe::log": {
+      "calls": [
+        "y_runtime::observe::emit"
+      ],
+      "why": "observability is Y's one ambient exception (Y \u00a7 3.7): a `log` needs no capability, and is write-only, so nothing in a program can read it back or change its results by it"
+    },
+    "y_runtime::observe::metric": {
+      "calls": [
+        "y_runtime::observe::emit"
+      ],
+      "why": "observability is Y's one ambient exception (Y \u00a7 3.7): a `metric` needs no capability, and is write-only, so nothing in a program can read it back or change its results by it"
+    },
+    "y_runtime::command::Outbox::enqueue": {
+      "calls": [
+        "y_runtime::journal::enqueued"
+      ],
+      "why": "records the command in the journal through `Tx::on_commit`, once, when the transaction commits, and never in a run that is discarded or runs again: `enqueue` is durable if and only if its transaction commits (Y \u00a7 3.10), so the record is the commit's, not the region's"
+    },
+    "y_runtime::store::Store::put_in": {
+      "calls": [
+        "y_runtime::store::write_committed"
+      ],
+      "why": "writes the record, and saves the store, through `Tx::on_commit`: once, when the transaction it joined commits, and never in a run that is discarded or runs again, as a store's writes inside `atomic` join the transaction (Y \u00a7 3.12)"
+    }
+  },
+  "macros_from_table": {
+    "std::thread_local": "declares thread-local state, which is `shared`; its body expands into `std::thread::local_impl`, the standard library's own machinery"
+  }
+}

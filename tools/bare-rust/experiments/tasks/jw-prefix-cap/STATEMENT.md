@@ -1,0 +1,1 @@
+`jaro_winkler` can return values above what it should for strings that share a long prefix: the prefix bonus is supposed to look at no more than the first four characters (the standard Winkler scaling), but `jaro_winkler("abcdefghij", "abcdefghik")` is about 0.99 where the standard answer is 0.96. Same for `generic_jaro_winkler`.

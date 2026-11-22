@@ -1,0 +1,6 @@
+{
+ "id": "jw-low-similarity",
+ "crate": "strsim",
+ "kind": "body",
+ "e5": false
+}

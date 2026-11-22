@@ -1,0 +1,12 @@
+[package]
+name = "orders-program"
+version = "0.0.0"
+edition = "2021"
+description = "A Y test program: an order from creation to payment, with commands, handlers, a workflow and a state machine."
+
+[dependencies]
+y-runtime = { path = "../y-runtime" }
+y-string = { path = "../y-string" }
+y-collections = { path = "../y-collections" }
+
+[workspace]

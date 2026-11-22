@@ -1,0 +1,207 @@
+{
+  "format": "y-constraints/0",
+  "host": "rust",
+  "crate": "intersperse 0.0.0",
+  "module": "src/lib.rs",
+  "status": "lifted",
+  "subjects": [
+    {
+      "kind": "trait",
+      "name": "intersperse::IntersperseElement",
+      "visible": "public",
+      "generics": [{ "name": "Item", "bounds": [] }]
+    },
+    {
+      "kind": "function",
+      "name": "intersperse::IntersperseElement::generate",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<target_type=Self>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "result": { "type": "Item" }
+    },
+    {
+      "kind": "type",
+      "name": "intersperse::IntersperseElementSimple",
+      "visible": "public",
+      "generics": [{ "name": "Item", "bounds": [] }],
+      "fields": [{ "type": "Item", "hold": { "kind": "owns" } }],
+      "implements": [
+        {
+          "trait": "IntersperseElement<Item>",
+          "impl": "intersperse::IntersperseElementSimple as IntersperseElement"
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "intersperse::IntersperseElementSimple as IntersperseElement",
+      "generics": [{ "name": "Item", "bounds": ["Clone"] }],
+      "trait": "IntersperseElement<Item>",
+      "self": "IntersperseElementSimple<Item>"
+    },
+    {
+      "kind": "function",
+      "name": "intersperse::IntersperseElementSimple as IntersperseElement::generate",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<target_type=IntersperseElementSimple<Item>>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "result": { "type": "Item" }
+    },
+    {
+      "kind": "alias",
+      "name": "intersperse::Intersperse",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": [] }],
+      "type": {
+        "host": "IntersperseWith<I, IntersperseElementSimple<<I as Iterator>::Item>>",
+        "form": "assoc"
+      }
+    },
+    {
+      "kind": "function",
+      "name": "intersperse::intersperse",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": [], "where": ["Iterator"] }],
+      "params": [{ "name": "iter", "type": "I" }, { "name": "elt", "type": "I::Item" }],
+      "result": { "type": "Intersperse<I>" }
+    },
+    {
+      "kind": "impl",
+      "name": "intersperse::F as IntersperseElement",
+      "generics": [{ "name": "Item", "bounds": [] }, { "name": "F", "bounds": ["FnMut() -> Item"] }],
+      "trait": "IntersperseElement<Item>"
+    },
+    {
+      "kind": "function",
+      "name": "intersperse::F as IntersperseElement::generate",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<target_type=F>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "result": { "type": "Item" }
+    },
+    {
+      "kind": "type",
+      "name": "intersperse::IntersperseWith",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": [], "where": ["Iterator"] }, { "name": "ElemF", "bounds": [] }],
+      "fields": [
+        { "name": "element", "type": "ElemF", "hold": { "kind": "owns" } },
+        { "name": "iter", "type": "Fuse<I>", "hold": { "kind": "owns" } },
+        { "name": "peek", "type": "I::Item??", "hold": { "kind": "owns" } }
+      ],
+      "implements": [
+        {
+          "trait": "Iterator",
+          "assoc": { "Item": "I::Item" },
+          "impl": "intersperse::IntersperseWith as Iterator"
+        },
+        { "trait": "FusedIterator", "impl": "intersperse::IntersperseWith as FusedIterator" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "intersperse::intersperse_with",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": [], "where": ["Iterator"] }, { "name": "ElemF", "bounds": [] }],
+      "params": [{ "name": "iter", "type": "I" }, { "name": "elt", "type": "ElemF" }],
+      "result": { "type": "IntersperseWith<I, ElemF>" }
+    },
+    {
+      "kind": "impl",
+      "name": "intersperse::IntersperseWith as Iterator",
+      "generics": [
+        { "name": "I", "bounds": [], "where": ["Iterator"] },
+        { "name": "ElemF", "bounds": [], "where": ["IntersperseElement<I::Item>"] }
+      ],
+      "self": "IntersperseWith<I, ElemF>"
+    },
+    { "kind": "alias", "name": "intersperse::IntersperseWith as Iterator::Item", "type": "I::Item" },
+    {
+      "kind": "function",
+      "name": "intersperse::IntersperseWith as Iterator::next",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<target_type=IntersperseWith<I, ElemF>>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "result": { "type": "Self::Item?" }
+    },
+    {
+      "kind": "function",
+      "name": "intersperse::IntersperseWith as Iterator::size_hint",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<target_type=IntersperseWith<I, ElemF>>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "(u64 as 'usize', u64 as 'usize'?)" }
+    },
+    {
+      "kind": "function",
+      "name": "intersperse::IntersperseWith as Iterator::fold",
+      "generics": [{ "name": "B", "bounds": [] }, { "name": "F", "bounds": [] }],
+      "where": [
+        { "for": "Self", "bounds": ["Sized"] },
+        { "for": "F", "bounds": ["FnMut(B, Self::Item) -> B"] }
+      ],
+      "params": [
+        { "name": "self", "type": "IntersperseWith<I, ElemF>" },
+        { "name": "init", "type": "B" },
+        { "name": "f", "type": "F" }
+      ],
+      "result": { "type": "B" }
+    },
+    {
+      "kind": "impl",
+      "name": "intersperse::IntersperseWith as FusedIterator",
+      "generics": [
+        { "name": "I", "bounds": [], "where": ["Iterator"] },
+        { "name": "ElemF", "bounds": [], "where": ["IntersperseElement<I::Item>"] }
+      ],
+      "self": "IntersperseWith<I, ElemF>"
+    },
+    {
+      "kind": "alias",
+      "name": "intersperse::size_hint::SizeHint",
+      "visible": "public",
+      "type": "(u64 as 'usize', u64 as 'usize'?)"
+    },
+    {
+      "kind": "function",
+      "name": "intersperse::size_hint::add",
+      "visible": "public",
+      "params": [{ "name": "a", "type": "SizeHint" }, { "name": "b", "type": "SizeHint" }],
+      "result": { "type": "SizeHint" }
+    },
+    {
+      "kind": "function",
+      "name": "intersperse::size_hint::add_scalar",
+      "visible": "public",
+      "params": [{ "name": "sh", "type": "SizeHint" }, { "name": "x", "type": "u64 as 'usize'" }],
+      "result": { "type": "SizeHint" }
+    },
+    {
+      "kind": "function",
+      "name": "intersperse::size_hint::sub_scalar",
+      "visible": "public",
+      "params": [{ "name": "sh", "type": "SizeHint" }, { "name": "x", "type": "u64 as 'usize'" }],
+      "result": { "type": "SizeHint" }
+    }
+  ]
+}

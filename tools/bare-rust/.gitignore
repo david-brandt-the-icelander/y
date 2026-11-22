@@ -1,0 +1,8 @@
+target/
+grammar/src/parser.c
+grammar/src/grammar.json
+grammar/src/node-types.json
+grammar/src/tree_sitter/
+grammar/node_modules/
+corpora/src/
+target-*/

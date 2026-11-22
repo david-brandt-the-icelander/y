@@ -1,0 +1,1 @@
+We need to compute FNV hashes of byte strings at compile time, for example `const KEY: u64 = fnv_hash(b"name");`. Add a free function `fnv_hash(bytes: &[u8]) -> u64` usable in `const` contexts that returns the same value as writing `bytes` into a default `FnvHasher`.

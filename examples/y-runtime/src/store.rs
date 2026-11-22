@@ -1,0 +1,298 @@
+//! Y's persistent data (Y § 3.12): `store<schema_type=s>`, the capability that reads and writes the records of a
+//! schema, each stored with its version, and migrated on read.
+//!
+//! A schema's codec and migrations are what the Y compiler generates from its `schema` and `migrate` declarations; the
+//! examples write them by hand, as an implementation of [`Schema`]. A record the codec or a migration cannot read fails
+//! alone, against its key, and the others are read.
+//!
+//! Reads and writes inside an atomic region join its transaction: a write ([`Store::put_in`]) is made, and a store kept
+//! in a file saved, when the transaction commits, and not by a run that is discarded or runs again; a read
+//! ([`Store::read_all_in`]) sees the run's own writes, and the records carry the version of the commit that last wrote
+//! them, so an optimistic run that a later commit overtook runs again, as one that read shared state does.
+use std::collections::BTreeMap;
+use std::fmt;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use crate::shared::Tx;
+
+/// Why one stored record could not be read: its key, the version it was stored at, and what went wrong.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecordFailure {
+    pub key: String,
+    pub version: u32,
+    pub reason: String,
+}
+
+/// Why a store could not be read or written at all.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StoreError {
+    pub reason: String,
+}
+
+impl fmt::Display for StoreError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.reason)
+    }
+}
+
+/// A schema's codec: its name and current version, its key, and how a record is written and read. `decode` reads every
+/// version the schema still has, and migrates an older one to the current version.
+pub trait Schema: Sized {
+    const NAME: &'static str;
+    const VERSION: u32;
+    fn key(&self) -> String;
+    fn encode(&self) -> String;
+    /// The record stored under `key` as `text` at `version`, migrated to the current version, or why it cannot be.
+    fn decode(key: &str, version: u32, text: &str) -> Result<Self, String>;
+}
+
+/// What a store keeps: its file, if it has one, and each record's key, to its version and text. Shared with the commit
+/// of a transaction a write joined ([`Store::put_in`]).
+struct Kept {
+    file: Option<PathBuf>,
+    records: BTreeMap<String, (u32, String)>,
+    /// The version of the commit that last wrote a record, as shared state has one: what a transaction's read checks.
+    version: u64,
+}
+
+impl Kept {
+    fn lines(&self, name: &str) -> Vec<String> {
+        self.records.iter().map(|(k, (v, t))| format!("{name} v{v} {k}|{t}")).collect()
+    }
+
+    fn save(&self, name: &str) -> Result<(), StoreError> {
+        match &self.file {
+            Some(f) => std::fs::write(f, self.lines(name).join("\n") + "\n").map_err(|e| StoreError { reason: e.to_string() }),
+            None => Ok(()),
+        }
+    }
+}
+
+/// A write a transaction made, now that it has committed: the record, and the store saved. A save that fails then is
+/// a fault, as the transaction it joined can no longer fail.
+fn write_committed(kept: &Mutex<Kept>, name: &'static str, key: String, version: u32, text: String, commit: u64) {
+    let mut kept = kept.lock().unwrap_or_else(|p| p.into_inner());
+    kept.records.insert(key, (version, text));
+    kept.version = commit;
+    if let Err(e) = kept.save(name) {
+        super::fault("y_runtime::store::put_in", &e.reason);
+    }
+}
+
+/// Y's `store<schema_type=s>`: the stored records of one schema, kept in a file, or in memory for a fake.
+pub struct Store<S: Schema> {
+    kept: Arc<Mutex<Kept>>,
+    _schema: std::marker::PhantomData<S>,
+}
+
+impl<S: Schema> Store<S> {
+    /// A store kept in a file, whose lines are `name v<version> <key>|<text>`. A file that does not exist is empty.
+    pub fn open(file: PathBuf) -> Result<Self, StoreError> {
+        let text = match std::fs::read_to_string(&file) {
+            Ok(t) => t,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+            Err(e) => return Err(StoreError { reason: e.to_string() }),
+        };
+        let store = Store::fake(&[]);
+        store.kept().file = Some(file);
+        for line in text.lines().filter(|l| !l.is_empty()) {
+            store.load_line(line)?;
+        }
+        Ok(store)
+    }
+
+    /// A store in memory, with these lines already in it: what a test injects.
+    pub fn fake(lines: &[&str]) -> Self {
+        let store = Store { kept: Arc::new(Mutex::new(Kept { file: None, records: BTreeMap::new(), version: 0 })), _schema: std::marker::PhantomData };
+        for line in lines {
+            store.load_line(line).unwrap_or_else(|e| super::fault("y_runtime::store::fake", &e.reason));
+        }
+        store
+    }
+
+    fn load_line(&self, line: &str) -> Result<(), StoreError> {
+        let bad = || StoreError { reason: format!("not a record of {}: `{line}`", S::NAME) };
+        let rest = line.strip_prefix(S::NAME).and_then(|r| r.strip_prefix(" v")).ok_or_else(bad)?;
+        let (version, rest) = rest.split_once(' ').ok_or_else(bad)?;
+        let (key, text) = rest.split_once('|').ok_or_else(bad)?;
+        let version = version.parse().map_err(|_| bad())?;
+        self.kept().records.insert(key.to_string(), (version, text.to_string()));
+        Ok(())
+    }
+
+    fn kept(&self) -> std::sync::MutexGuard<'_, Kept> {
+        self.kept.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    /// Every record, in key order, each read and migrated alone: a record that fails is reported against its key.
+    pub fn read_all(&self) -> Vec<Result<S, RecordFailure>> {
+        self.kept()
+            .records
+            .iter()
+            .map(|(key, (version, text))| {
+                S::decode(key, *version, text).map_err(|reason| RecordFailure { key: key.clone(), version: *version, reason })
+            })
+            .collect()
+    }
+
+    /// Writes a record at the current version, replacing the one with its key.
+    pub fn put(&mut self, record: &S) {
+        self.kept().records.insert(record.key(), (S::VERSION, record.encode()));
+    }
+
+    /// `put` inside an atomic region: the write joins the transaction (Y § 3.12). The record is written, and a store
+    /// kept in a file saved, when the transaction commits, and not by a run that is discarded or runs again.
+    pub fn put_in(&self, tx: &mut Tx, record: &S) {
+        let (kept, key, text) = (Arc::clone(&self.kept), record.key(), record.encode());
+        let written = (key.clone(), S::VERSION, text.clone());
+        tx.write_record(self.address(), self.version_of(), written, move |commit| write_committed(&kept, S::NAME, key, S::VERSION, text, commit));
+    }
+
+    /// `read_all` inside an atomic region: the read joins the transaction (Y § 3.12). It sees the records committed
+    /// before the run and the run's own writes, and an optimistic run that a commit to the store overtook runs again,
+    /// as one that read shared state does.
+    pub fn read_all_in(&self, tx: &Tx) -> std::vec::IntoIter<Result<S, RecordFailure>> {
+        let mut records = {
+            let kept = self.kept();
+            tx.read_versioned(self.address(), kept.version, self.version_of());
+            kept.records.clone()
+        };
+        for (key, version, text) in tx.records_written(self.address()) {
+            records.insert(key.clone(), (*version, text.clone()));
+        }
+        records
+            .iter()
+            .map(|(key, (version, text))| S::decode(key, *version, text).map_err(|reason| RecordFailure { key: key.clone(), version: *version, reason }))
+            .collect::<Vec<_>>()
+            .into_iter()
+    }
+
+    /// What a transaction knows the store by.
+    fn address(&self) -> usize {
+        Arc::as_ptr(&self.kept) as usize
+    }
+
+    /// The version of the store's last commit, now.
+    fn version_of(&self) -> crate::shared::VersionOf {
+        let kept = Arc::clone(&self.kept);
+        Arc::new(move || kept.lock().unwrap_or_else(|p| p.into_inner()).version)
+    }
+
+    /// The stored lines, as the file holds them.
+    pub fn lines(&self) -> Vec<String> {
+        self.kept().lines(S::NAME)
+    }
+
+    /// A batch of writes to this store, held as a resource: its records are written, and the store saved, when it is
+    /// released (Y § 3.6, § 3.12).
+    pub fn batch(&mut self) -> Batch<'_, S> {
+        Batch { store: self, records: Vec::new() }
+    }
+
+    /// Writes the records to the file; a fake has none to write to.
+    pub fn save(&self) -> Result<(), StoreError> {
+        self.kept().save(S::NAME)
+    }
+}
+
+/// A batch of writes to a store: a resource, whose release writes them and saves the store, and fails as saving does.
+pub struct Batch<'a, S: Schema> {
+    store: &'a mut Store<S>,
+    records: Vec<S>,
+}
+
+impl<S: Schema> Batch<'_, S> {
+    /// Adds a record to the batch; it is written when the batch is released.
+    pub fn put(&mut self, record: S) {
+        self.records.push(record);
+    }
+}
+
+impl<S: Schema> super::arena::Resource for Batch<'_, S> {
+    type ReleaseFailure = StoreError;
+    fn release(&mut self) -> Result<(), StoreError> {
+        for record in self.records.drain(..) {
+            self.store.put(&record);
+        }
+        self.store.save()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Debug, PartialEq)]
+    struct Item {
+        sku: String,
+        stock: u32,
+        shelf: String,
+    }
+
+    /// Version 1 has no shelf; the migration to version 2 puts every item on the shelf `unsorted`.
+    impl Schema for Item {
+        const NAME: &'static str = "item";
+        const VERSION: u32 = 2;
+        fn key(&self) -> String {
+            self.sku.clone()
+        }
+        fn encode(&self) -> String {
+            format!("{};{}", self.stock, self.shelf)
+        }
+        fn decode(key: &str, version: u32, text: &str) -> Result<Self, String> {
+            let parts: Vec<&str> = text.split(';').collect();
+            let stock = parts[0].parse().map_err(|_| format!("stock `{}` is not a count", parts[0]))?;
+            match (version, parts.as_slice()) {
+                (1, [_]) => Ok(Item { sku: key.into(), stock, shelf: "unsorted".into() }),
+                (2, [_, shelf]) => Ok(Item { sku: key.into(), stock, shelf: shelf.to_string() }),
+                _ => Err(format!("no version {version} of item")),
+            }
+        }
+    }
+
+    #[test]
+    fn records_are_migrated_on_read_and_fail_alone() {
+        let mut store: Store<Item> = Store::fake(&["item v1 a-1|3", "item v2 b-2|5;north", "item v1 c-3|lots"]);
+        let read = store.read_all();
+        assert_eq!(read[0].as_ref().map(|i| i.shelf.as_str()), Ok("unsorted"));
+        assert_eq!(read[1].as_ref().map(|i| i.stock), Ok(5));
+        assert_eq!(read[2].as_ref().map_err(|f| (f.key.as_str(), f.version)), Err(("c-3", 1)));
+        store.put(&Item { sku: "a-1".into(), stock: 2, shelf: "south".into() });
+        assert_eq!(store.lines()[0], "item v2 a-1|2;south");
+    }
+
+    #[test]
+    fn a_store_survives_in_its_file() {
+        let file = std::env::temp_dir().join(format!("y-store-{}.txt", std::process::id()));
+        let _ = std::fs::remove_file(&file);
+        let mut store: Store<Item> = Store::open(file.clone()).unwrap();
+        store.put(&Item { sku: "z-9".into(), stock: 1, shelf: "east".into() });
+        store.save().unwrap();
+        let again: Store<Item> = Store::open(file.clone()).unwrap();
+        assert_eq!(again.lines(), ["item v2 z-9|1;east"]);
+        let _ = std::fs::remove_file(&file);
+    }
+
+    #[test]
+    fn a_write_in_an_atomic_region_joins_its_transaction() {
+        use crate::shared::{atomic, Aborted, Step};
+        let store: Store<Item> = Store::fake(&[]);
+        let item = |sku: &str| Item { sku: sku.into(), stock: 1, shelf: "a1".into() };
+        // a run made to conflict runs again: the record is written once, when the run that commits does
+        crate::faults::force(crate::faults::Kind::Conflict, "m::f#stock", 1);
+        let runs = std::cell::Cell::new(0);
+        let r = atomic("m::f#stock", None, |tx| {
+            runs.set(runs.get() + 1);
+            store.put_in(tx, &item("x-1"));
+            Ok::<_, ()>(Step::Done(()))
+        });
+        assert_eq!((r, runs.get(), store.lines().len()), (Ok(()), 2, 1));
+        // a region that fails writes nothing
+        let r = atomic("m::f#stock", None, |tx| {
+            store.put_in(tx, &item("x-2"));
+            Err::<Step<()>, _>("refused")
+        });
+        assert_eq!((r, store.lines().len()), (Err(Aborted::Failed("refused")), 1));
+    }
+}
+

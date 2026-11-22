@@ -1,0 +1,11 @@
+diff -ruN a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs	2026-10-09 08:06:03.624547897 +0000
++++ b/src/lib.rs	2026-10-09 08:13:05.911759280 +0000
+@@ -147,7 +147,6 @@
+             }
+         }
+     }
+-    transpositions /= 2;
+ 
+     if matches == 0 {
+         0.0

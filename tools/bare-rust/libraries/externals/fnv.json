@@ -1,0 +1,527 @@
+{
+  "format": "y-externals/0",
+  "crate": "fnv 1.0.7",
+  "rustc": "1.97.0",
+  "all_targets": true,
+  "targets": [
+    "lib fnv (with unit tests)"
+  ],
+  "counts": {
+    "function": 12,
+    "type": 11,
+    "trait": 7,
+    "const": 0,
+    "macro": 2,
+    "total": 32
+  },
+  "skipped": {},
+  "items": [
+    {
+      "kind": "function",
+      "path": "std::convert::From::from",
+      "trait": "std::convert::From",
+      "impls": [
+        "impl std::convert::From<u8> for u64"
+      ],
+      "uses": 1,
+      "files": {
+        "lib.rs": 1
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::default::Default::default",
+      "trait": "std::default::Default",
+      "impls": [
+        "impl std::default::Default for FnvHasher"
+      ],
+      "uses": 2,
+      "files": {
+        "lib.rs": 2
+      },
+      "roles": [
+        "call",
+        "implement"
+      ],
+      "via": [
+        "mir",
+        "syntax"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::hash::Hasher::finish",
+      "trait": "std::hash::Hasher",
+      "impls": [
+        "impl std::hash::Hasher for FnvHasher"
+      ],
+      "uses": 2,
+      "files": {
+        "lib.rs": 2
+      },
+      "roles": [
+        "call",
+        "implement"
+      ],
+      "via": [
+        "mir",
+        "syntax"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::hash::Hasher::write",
+      "trait": "std::hash::Hasher",
+      "impls": [
+        "impl std::hash::Hasher for FnvHasher"
+      ],
+      "uses": 2,
+      "files": {
+        "lib.rs": 2
+      },
+      "roles": [
+        "call",
+        "implement"
+      ],
+      "via": [
+        "mir",
+        "syntax"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::iter::IntoIterator::into_iter",
+      "trait": "std::iter::IntoIterator",
+      "impls": [
+        "impl std::iter::IntoIterator for &[u8]"
+      ],
+      "uses": 1,
+      "files": {
+        "lib.rs": 1
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::iter::Iterator::collect",
+      "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for std::iter::FlatMap"
+      ],
+      "uses": 2,
+      "files": {
+        "lib.rs": 2
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::iter::Iterator::copied",
+      "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for std::slice::Iter"
+      ],
+      "uses": 2,
+      "files": {
+        "lib.rs": 2
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::iter::Iterator::flat_map",
+      "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for std::ops::Range"
+      ],
+      "uses": 2,
+      "files": {
+        "lib.rs": 2
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::iter::Iterator::next",
+      "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for std::slice::Iter"
+      ],
+      "uses": 1,
+      "files": {
+        "lib.rs": 1
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::primitive::slice::iter",
+      "impls": [
+        "impl [u8]"
+      ],
+      "uses": 2,
+      "files": {
+        "lib.rs": 2
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::primitive::slice::len",
+      "impls": [
+        "impl [u8]"
+      ],
+      "uses": 1,
+      "files": {
+        "lib.rs": 1
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::primitive::u64::wrapping_mul",
+      "impls": [
+        "impl u64"
+      ],
+      "uses": 2,
+      "files": {
+        "lib.rs": 2
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::collections::HashMap",
+      "uses": 1,
+      "files": {
+        "lib.rs": 1
+      },
+      "roles": [
+        "named"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::collections::HashSet",
+      "uses": 1,
+      "files": {
+        "lib.rs": 1
+      },
+      "roles": [
+        "named"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::hash::BuildHasherDefault",
+      "uses": 1,
+      "files": {
+        "lib.rs": 1
+      },
+      "roles": [
+        "named"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::iter::Copied",
+      "uses": 4,
+      "files": {
+        "lib.rs": 4
+      },
+      "roles": [
+        "inferred"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::iter::FlatMap",
+      "uses": 2,
+      "files": {
+        "lib.rs": 2
+      },
+      "roles": [
+        "inferred"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::ops::Range",
+      "uses": 2,
+      "files": {
+        "lib.rs": 2
+      },
+      "roles": [
+        "inferred"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::option::Option",
+      "uses": 3,
+      "files": {
+        "lib.rs": 3
+      },
+      "roles": [
+        "inferred"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::result::Result",
+      "uses": 2,
+      "files": {
+        "lib.rs": 2
+      },
+      "roles": [
+        "inferred"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::slice::Iter",
+      "uses": 7,
+      "files": {
+        "lib.rs": 7
+      },
+      "roles": [
+        "inferred"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::string::String",
+      "uses": 2,
+      "files": {
+        "lib.rs": 2
+      },
+      "roles": [
+        "inferred"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::vec::Vec",
+      "uses": 2,
+      "files": {
+        "lib.rs": 2
+      },
+      "roles": [
+        "named"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::clone::Clone",
+      "uses": 1,
+      "files": {
+        "lib.rs": 1
+      },
+      "roles": [
+        "derive"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::convert::From",
+      "uses": 1,
+      "files": {
+        "lib.rs": 1
+      },
+      "roles": [
+        "method"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::default::Default",
+      "uses": 2,
+      "files": {
+        "lib.rs": 2
+      },
+      "roles": [
+        "bound",
+        "implement",
+        "method"
+      ],
+      "via": [
+        "mir",
+        "syntax"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::hash::Hasher",
+      "uses": 3,
+      "files": {
+        "lib.rs": 3
+      },
+      "roles": [
+        "bound",
+        "implement",
+        "method"
+      ],
+      "via": [
+        "mir",
+        "syntax"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::iter::IntoIterator",
+      "uses": 1,
+      "files": {
+        "lib.rs": 1
+      },
+      "roles": [
+        "method"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::iter::Iterator",
+      "uses": 7,
+      "files": {
+        "lib.rs": 7
+      },
+      "roles": [
+        "method"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::ops::Deref",
+      "uses": 25,
+      "files": {
+        "lib.rs": 25
+      },
+      "roles": [
+        "operator"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "macro",
+      "path": "std::assert_eq!",
+      "form": "bang",
+      "uses": 204,
+      "files": {
+        "lib.rs": 204
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "macro",
+      "path": "std::clone::Clone!",
+      "form": "derive",
+      "uses": 1,
+      "files": {
+        "lib.rs": 1
+      },
+      "roles": [
+        "derive"
+      ],
+      "via": [
+        "syntax"
+      ]
+    }
+  ]
+}

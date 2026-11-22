@@ -1,0 +1,1780 @@
+{
+  "repo": "strsim",
+  "range": "HEAD",
+  "commits": [
+    {
+      "commit": "fabad43d",
+      "subject": "Initial commit",
+      "status": "root commit"
+    },
+    {
+      "commit": "eef5867a",
+      "subject": "Add initial commit",
+      "rs_added": 2,
+      "rs_deleted": 0,
+      "status": "rs files added or deleted only"
+    },
+    {
+      "commit": "762dd05c",
+      "subject": "Remove keyword to stay within max of 5",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "b722e03d",
+      "subject": "Add Travis configuration",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "1a57f1a4",
+      "subject": "Add Travis badge",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "089f3cc0",
+      "subject": "Limit Jaro-Winkler to max of 1.0, and fix float comparisons in tests",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 2,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        },
+        {
+          "file": "tests/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "fc0c17bf",
+      "subject": "Add some rustdoc comments",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "ee4c07a1",
+      "subject": "Add doc-tests",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "c7eb862b",
+      "subject": "Add Damerau-Levenshtein implementation",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 2,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "signature-changing",
+          "weave": "refused",
+          "weave_reason": "new item (no entry in the old file)",
+          "weave_detail": "slot missing: no subject `strsim::damerau_levenshtein`"
+        },
+        {
+          "file": "tests/lib.rs",
+          "class": "signature-changing",
+          "weave": "refused",
+          "weave_reason": "new item (no entry in the old file)",
+          "weave_detail": "slot missing: no subject `strsim::damerau_levenshtein_works`"
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "799e7cfe",
+      "subject": "Update bit vector import",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "f55720ab",
+      "subject": "Bump patch version",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "25b56b67",
+      "subject": "Remove char_at calls (unstable library feature)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "e151b0f1",
+      "subject": "Remove import of float (no longer necessary)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 2,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        },
+        {
+          "file": "tests/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "8d98af10",
+      "subject": "Remove unused core feature",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "5beb968a",
+      "subject": "Remove unnecessary imports from doctests",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "1f755adf",
+      "subject": "Remove usage of unstable features",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "signature-changing",
+          "weave": "woven",
+          "unbound": {
+            "unbound subject": 5
+          },
+          "unbound_total": 5,
+          "unbound_entries": [
+            "unbound subject `strsim::tests::bench_hamming`",
+            "unbound subject `strsim::tests::bench_levenshtein`",
+            "unbound subject `strsim::tests::bench_damerau_levenshtein`",
+            "unbound subject `strsim::tests::bench_jaro`",
+            "unbound subject `strsim::tests::bench_jaro_winkler`"
+          ],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared",
+      "cargo": {
+        "baseline": "builds",
+        "files_woven": 1,
+        "a_ok": true,
+        "a_undetermined_holes": 0,
+        "a_errors": [],
+        "a_weave_errors": [],
+        "dropped_new_undetermined_holes": [],
+        "dropped_new_errors": [],
+        "dropped_baseline_undetermined": 2
+      }
+    },
+    {
+      "commit": "0125b88c",
+      "subject": "Remove commented out code",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "a0226ea9",
+      "subject": "Add distances calculus against vector of strings",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "signature-changing",
+          "weave": "refused",
+          "weave_reason": "new item (no entry in the old file)",
+          "weave_detail": "slot missing: no subject `strsim::jaro_against_vec`"
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "29176fa2",
+      "subject": "Add more tests for vector functions",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 2,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "signature-changing",
+          "weave": "refused",
+          "weave_reason": "new item (no entry in the old file)",
+          "weave_detail": "slot missing: no subject `strsim::tests::levenshtein_against_vec_empty`"
+        },
+        {
+          "file": "tests/lib.rs",
+          "class": "signature-changing",
+          "weave": "refused",
+          "weave_reason": "new item (no entry in the old file)",
+          "weave_detail": "slot missing: no subject `strsim::levenshtein_against_vec_works`"
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "8393ef44",
+      "subject": "Add crates.io badge",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "ddf08434",
+      "subject": "Update Travis to test Rust 1.0.0",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "f9a00290",
+      "subject": "Remove unnecessary returns",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "bd5769bb",
+      "subject": "Test against the full Rust suite",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "0574a8d2",
+      "subject": "Remove reference to Rust nightly/1.0",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "70b578ad",
+      "subject": "Add Vagrant for development",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "a5a70d95",
+      "subject": "Add configuration for AppVeyor",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "31a43628",
+      "subject": "Add an AppVeyor badge",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "14cf91e0",
+      "subject": "Fix comparing strings with multibyte chars (#3)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "signature-changing",
+          "weave": "refused",
+          "weave_reason": "new item (no entry in the old file)",
+          "weave_detail": "slot missing: no subject `strsim::tests::hamming_diff_multibyte`"
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "9f4ba4cb",
+      "subject": "Bump patch version",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "1063ca92",
+      "subject": "Add EditorConfig",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "181a23cc",
+      "subject": "Fix a multibyte test",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "1c374187",
+      "subject": "Improved `hamming` performance (#4)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "5fd89dac",
+      "subject": "Bump minor version",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "afc04f9d",
+      "subject": "Add generated documentation",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "488233b4",
+      "subject": "Add root redirect for documentation",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "9e4ca1f7",
+      "subject": "Add links to the license",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "819e3e2f",
+      "subject": "Add a link to the documentation",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "3dfff3d4",
+      "subject": "Fix Jaro and Jaro-Winkler panic (#6)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "signature-changing",
+          "weave": "refused",
+          "weave_reason": "new item (no entry in the old file)",
+          "weave_detail": "slot missing: no subject `strsim::tests::jaro_diff_one_character`"
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "8f923674",
+      "subject": "Bump patch version",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "eb1c5010",
+      "subject": "Add a change log",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "cb67c34a",
+      "subject": "Update the documentation link in the README",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "3ad9a262",
+      "subject": "Fix some clippy warnings (#7)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "signature-changing",
+          "weave": "woven",
+          "unbound": {
+            "unbound local": 4
+          },
+          "unbound_total": 4,
+          "unbound_entries": [
+            "unbound local `r` of `strsim::jaro_against_vec`",
+            "unbound local `r` of `strsim::jaro_winkler_against_vec`",
+            "unbound local `r` of `strsim::levenshtein_against_vec`",
+            "unbound local `r` of `strsim::damerau_levenshtein_against_vec`"
+          ],
+          "woven_equals_new": false,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared",
+      "cargo": {
+        "baseline": "builds",
+        "files_woven": 1,
+        "a_ok": true,
+        "a_undetermined_holes": 0,
+        "a_errors": [],
+        "a_weave_errors": [],
+        "dropped_new_undetermined_holes": [],
+        "dropped_new_errors": [],
+        "dropped_baseline_undetermined": 7
+      }
+    },
+    {
+      "commit": "a812b0ce",
+      "subject": "Let Git normalize line endings",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "065b0235",
+      "subject": "Add a link to the Rust homepage",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "c284c64a",
+      "subject": "Remove docs (#10)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "b2fc3385",
+      "subject": "Use Docker instead of Vagrant for development",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "f8d8c1ff",
+      "subject": "Fix Damerau-Levenshtein (#12)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 2,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "signature-changing",
+          "weave": "refused",
+          "weave_reason": "new item (no entry in the old file)",
+          "weave_detail": "slot missing: no subject `strsim::osa_distance`"
+        },
+        {
+          "file": "tests/lib.rs",
+          "class": "signature-changing",
+          "weave": "refused",
+          "weave_reason": "new item (no entry in the old file)",
+          "weave_detail": "slot missing: no subject `strsim::osa_distance_works`"
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "454834f3",
+      "subject": "Refactor Levenshtein implementation",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only, holes changed",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": false,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared",
+      "cargo": {
+        "baseline": "builds",
+        "files_woven": 1,
+        "a_ok": true,
+        "a_undetermined_holes": 0,
+        "a_errors": [],
+        "a_weave_errors": [],
+        "dropped_new_undetermined_holes": [],
+        "dropped_new_errors": [],
+        "dropped_baseline_undetermined": 9
+      }
+    },
+    {
+      "commit": "b6567a05",
+      "subject": "Update Cargo metadata",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "91240376",
+      "subject": "Add CI badges to crates.io (#14)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "e7010126",
+      "subject": "Use the official Docker image for Rust",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "f4fd98e2",
+      "subject": "Improve the dev CLI",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "22fbcfb9",
+      "subject": "Remove the against_vec functions",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 2,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "signature-changing",
+          "weave": "woven",
+          "unbound": {
+            "unbound subject": 21
+          },
+          "unbound_total": 21,
+          "unbound_entries": [
+            "unbound subject `strsim::jaro_against_vec`",
+            "unbound subject `strsim::jaro_winkler_against_vec`",
+            "unbound subject `strsim::levenshtein_against_vec`",
+            "unbound subject `strsim::osa_distance_against_vec`",
+            "unbound subject `strsim::damerau_levenshtein_against_vec`",
+            "unbound subject `strsim::tests::levenshtein_against_vec_empty`",
+            "unbound subject `strsim::tests::levenshtein_against_vec_one`",
+            "unbound subject `strsim::tests::levenshtein_against_vec_many`",
+            "unbound subject `strsim::tests::osa_distance_against_vec_empty`",
+            "unbound subject `strsim::tests::osa_distance_against_vec_one`",
+            "unbound subject `strsim::tests::osa_distance_against_vec_many`",
+            "unbound subject `strsim::tests::damerau_levenshtein_against_vec_empty`",
+            "unbound subject `strsim::tests::damerau_levenshtein_against_vec_one`",
+            "unbound subject `strsim::tests::damerau_levenshtein_against_vec_many`",
+            "unbound subject `strsim::tests::equal_float_vecs`",
+            "unbound subject `strsim::tests::jaro_against_vec_empty`",
+            "unbound subject `strsim::tests::jaro_against_vec_one`",
+            "unbound subject `strsim::tests::jaro_against_vec_many`",
+            "unbound subject `strsim::tests::jaro_winkler_against_vec_empty`",
+            "unbound subject `strsim::tests::jaro_winkler_against_vec_one`",
+            "unbound subject `strsim::tests::jaro_winkler_against_vec_many`"
+          ],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        },
+        {
+          "file": "tests/lib.rs",
+          "class": "signature-changing",
+          "weave": "woven",
+          "unbound": {
+            "unbound subject": 5
+          },
+          "unbound_total": 5,
+          "unbound_entries": [
+            "unbound subject `strsim::levenshtein_against_vec_works`",
+            "unbound subject `strsim::osa_distance_against_vec_works`",
+            "unbound subject `strsim::damerau_levenshtein_against_vec_works`",
+            "unbound subject `strsim::jaro_against_vec_works`",
+            "unbound subject `strsim::jaro_winkler_against_vec_works`"
+          ],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared",
+      "cargo": {
+        "baseline": "builds",
+        "files_woven": 2,
+        "a_ok": true,
+        "a_undetermined_holes": 0,
+        "a_errors": [],
+        "a_weave_errors": [],
+        "dropped_new_undetermined_holes": [],
+        "dropped_new_errors": [],
+        "dropped_baseline_undetermined": 3
+      }
+    },
+    {
+      "commit": "6ca79b06",
+      "subject": "Improve Levenshtein performance (#16)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only, holes changed",
+          "weave": "woven",
+          "unbound": {
+            "unbound local": 1
+          },
+          "unbound_total": 1,
+          "unbound_entries": [
+            "unbound local `prev_distances` of `strsim::levenshtein`"
+          ],
+          "woven_equals_new": false,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared",
+      "cargo": {
+        "baseline": "builds",
+        "files_woven": 1,
+        "a_ok": false,
+        "a_undetermined_holes": 1,
+        "a_errors": [],
+        "a_weave_errors": [],
+        "dropped_new_undetermined_holes": [],
+        "dropped_new_errors": [],
+        "dropped_baseline_undetermined": 4
+      }
+    },
+    {
+      "commit": "40c6c99d",
+      "subject": "Update the LICENSE",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "f317be9f",
+      "subject": "Bump the minor version",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "ce93ac16",
+      "subject": "Fix a typo in CHANGELOG.md",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "e178e699",
+      "subject": "Add some simple benchmarks.",
+      "rs_added": 1,
+      "rs_deleted": 0,
+      "status": "rs files added or deleted only"
+    },
+    {
+      "commit": "ab17c1e9",
+      "subject": "Add normalized Levenshtein and Damerau-Levenstein (#20)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 3,
+      "rs_not_in_crate": 1,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "signature-changing",
+          "weave": "refused",
+          "weave_reason": "new item (no entry in the old file)",
+          "weave_detail": "slot missing: no subject `strsim::normalized_levenshtein`"
+        },
+        {
+          "file": "tests/lib.rs",
+          "class": "signature-changing",
+          "weave": "refused",
+          "weave_reason": "new item (no entry in the old file)",
+          "weave_detail": "slot missing: no subject `strsim::normalized_levenshtein_works`"
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "e777b61b",
+      "subject": "Release 0.8.0",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "bc5a0a15",
+      "subject": "Clean up the README",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "5cd51ec8",
+      "subject": "Upgrade Rust to 1.30.0",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "a563473c",
+      "subject": "Fix the examples in the README",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "7947482e",
+      "subject": "Use Travis for Windows testing (#25)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "4ce73f42",
+      "subject": "Exclude unneeded files from crates.io (#22)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "860926ce",
+      "subject": "Implement `Error` for `StrSimError` (#23)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "signature-changing",
+          "weave": "refused",
+          "weave_reason": "new item (no entry in the old file)",
+          "weave_detail": "slot missing: no subject `strsim::StrSimError as Display::fmt`"
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "f89f2457",
+      "subject": "Add a pinned Rust version to the Travis config (#27)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "31cb4cb8",
+      "subject": "[feature] Implement generic distance functions (#30)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 2,
+      "rs_not_in_crate": 1,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "signature-changing",
+          "weave": "refused",
+          "weave_reason": "new item (no entry in the old file)",
+          "weave_detail": "slot missing: no subject `strsim::generic_hamming`"
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "59076651",
+      "subject": "Release v0.9.0",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "d6717dba",
+      "subject": "[performance] Improve the performance of damerau_levenshtein (#32)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only, holes changed",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": false,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared",
+      "cargo": {
+        "baseline": "builds",
+        "files_woven": 1,
+        "a_ok": true,
+        "a_undetermined_holes": 0,
+        "a_errors": [],
+        "a_weave_errors": [],
+        "dropped_new_undetermined_holes": [],
+        "dropped_new_errors": [],
+        "dropped_baseline_undetermined": 6
+      }
+    },
+    {
+      "commit": "1cc9a62b",
+      "subject": "Remove last traces of Appveyor",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "7aacbc57",
+      "subject": "Release v0.9.1",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "687dc6d9",
+      "subject": "Revert back to the standard library hashmap",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "dfba1315",
+      "subject": "Use a single vector instread of ndarray in Damerau-Levenshtein",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "signature-changing",
+          "weave": "refused",
+          "weave_reason": "new item (no entry in the old file)",
+          "weave_detail": "slot missing: no subject `strsim::flat_index`"
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "cc25041c",
+      "subject": "Release v0.9.2",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "858a35c5",
+      "subject": "Add funding info",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "6d01f952",
+      "subject": "Forbid unsafe code (#38)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "f3918bd7",
+      "subject": "Move badges out of the heading",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "c4cdd9c3",
+      "subject": "Switch to GitHub Actions for CI",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "605c81c9",
+      "subject": "Fix Jaro and Jaro-Winkler when the length is one",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "signature-changing",
+          "weave": "refused",
+          "weave_reason": "new item (no entry in the old file)",
+          "weave_detail": "slot missing: no subject `strsim::tests::jaro_same_one_character`"
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "74ab2929",
+      "subject": "Release v0.9.3",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "6f8a8cb4",
+      "subject": "add sorensen-dice distance function",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 2,
+      "rs_not_in_crate": 1,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "signature-changing",
+          "weave": "refused",
+          "weave_reason": "new item (no entry in the old file)",
+          "weave_detail": "slot missing: no subject `strsim::bigrams`"
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "72784f07",
+      "subject": "Release v0.10.0",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "7dfbb30a",
+      "subject": "Enable GitHub Sponsors",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "d2c2f783",
+      "subject": "Update lib.rs",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "86f54df1",
+      "subject": "remove unrequired comparisions",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "65eac453",
+      "subject": "Remove FUNDING.yml",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "409f4e37",
+      "subject": "format code base (#54)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 2,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "signature-changing",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        },
+        {
+          "file": "tests/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared",
+      "cargo": {
+        "baseline": "builds",
+        "files_woven": 1,
+        "a_ok": true,
+        "a_undetermined_holes": 0,
+        "a_errors": [],
+        "a_weave_errors": [],
+        "dropped_new_undetermined_holes": [],
+        "dropped_new_errors": [],
+        "dropped_baseline_undetermined": 7
+      }
+    },
+    {
+      "commit": "cd2e7b3b",
+      "subject": "Remove 1.31.0 from the CI matrix (#55)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "5b512dce",
+      "subject": "Fix transposition counting in Jaro / JaroWinkler (#56)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only, holes changed",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": false,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared",
+      "cargo": {
+        "baseline": "builds",
+        "files_woven": 1,
+        "a_ok": false,
+        "a_undetermined_holes": 1,
+        "a_errors": [],
+        "a_weave_errors": [],
+        "dropped_new_undetermined_holes": [],
+        "dropped_new_errors": [],
+        "dropped_baseline_undetermined": 8
+      }
+    },
+    {
+      "commit": "66822fe5",
+      "subject": "Improve Osa implementation (#62)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "f9eea82a",
+      "subject": "reduce binary size of levenshtein",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only, holes changed",
+          "weave": "woven",
+          "unbound": {
+            "unbound hint": 1
+          },
+          "unbound_total": 1,
+          "unbound_entries": [
+            "unbound hint `literal #5` of `strsim::generic_levenshtein`"
+          ],
+          "woven_equals_new": false,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared",
+      "cargo": {
+        "baseline": "builds",
+        "files_woven": 1,
+        "a_ok": true,
+        "a_undetermined_holes": 0,
+        "a_errors": [],
+        "a_weave_errors": [],
+        "dropped_new_undetermined_holes": [],
+        "dropped_new_errors": [],
+        "dropped_baseline_undetermined": 8
+      }
+    },
+    {
+      "commit": "9d0a9502",
+      "subject": "reimplement damerau levenshtein distance",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "signature-changing",
+          "weave": "refused",
+          "weave_reason": "new item (no entry in the old file)",
+          "weave_detail": "slot missing: no subject `strsim::RowId`"
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "59e7a055",
+      "subject": "make implementation private",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "signature-changing",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": false,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared",
+      "cargo": {
+        "baseline": "builds",
+        "files_woven": 1,
+        "a_ok": true,
+        "a_undetermined_holes": 0,
+        "a_errors": [],
+        "a_weave_errors": [],
+        "dropped_new_undetermined_holes": [],
+        "dropped_new_errors": [],
+        "dropped_baseline_undetermined": 9
+      }
+    },
+    {
+      "commit": "b287a695",
+      "subject": "fix formatting",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "f12662c4",
+      "subject": "Add a FUNDING file (#63)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "0a344fe0",
+      "subject": "Update the CI configuration (#65)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "7fe40986",
+      "subject": "add missing semicolon",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "1d92c1d5",
+      "subject": "fix or ignore all clippy warnings",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "signature-changing",
+          "weave": "refused",
+          "weave_reason": "new item (no entry in the old file)",
+          "weave_detail": "slot missing: no subject `strsim::HybridGrowingHashmapChar as Default::default`"
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "82d13e9f",
+      "subject": "remove superfluous module around benchmarks (#66)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 1,
+      "files": [],
+      "status": "compared"
+    },
+    {
+      "commit": "98fd0ecb",
+      "subject": "Update links to reference the rapidfuzz org",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "15e1a033",
+      "subject": "improve error message on test failure",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 2,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        },
+        {
+          "file": "tests/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "f6a75932",
+      "subject": "limit common prefix in jaro-winkler",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 2,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        },
+        {
+          "file": "tests/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "20e3bdd2",
+      "subject": "only boost similarity in Jaro-Winkler once the Jaro similarity exceeds 0.7",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "a5cc6152",
+      "subject": "add maintainer",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "d9f10d5c",
+      "subject": "release version 0.10.1",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "e7a3b55f",
+      "subject": "Update the installation instructions",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "09fd5d98",
+      "subject": "fix version number",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "f71334a0",
+      "subject": "Create SECURITY.md",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "7beabcbb",
+      "subject": "fix ci workflow warnings (#70)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "d84fd914",
+      "subject": "Drop MSRV down to 1.56 (#71)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "680fa506",
+      "subject": "Use rust-version field of Cargo.toml (#72)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "f72cd1cb",
+      "subject": "publish 0.11.1",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "76c5a900",
+      "subject": "update wording",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "43d44436",
+      "subject": "Bump edition to 2021 (#73)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "signature-changing",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": false,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared",
+      "cargo": {
+        "baseline": "builds",
+        "files_woven": 1,
+        "a_ok": true,
+        "a_undetermined_holes": 0,
+        "a_errors": [],
+        "a_weave_errors": [],
+        "dropped_new_undetermined_holes": [],
+        "dropped_new_errors": [],
+        "dropped_baseline_undetermined": 9
+      }
+    },
+    {
+      "commit": "dacc84c0",
+      "subject": "Fix clippy warnings",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "src/lib.rs",
+          "class": "signature-changing",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": false,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared",
+      "cargo": {
+        "baseline": "builds",
+        "files_woven": 1,
+        "a_ok": true,
+        "a_undetermined_holes": 0,
+        "a_errors": [],
+        "a_weave_errors": [],
+        "dropped_new_undetermined_holes": [],
+        "dropped_new_errors": [],
+        "dropped_baseline_undetermined": 9
+      }
+    }
+  ]
+}

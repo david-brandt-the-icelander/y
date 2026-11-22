@@ -1,0 +1,31 @@
+diff -ruN a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs	2026-10-09 08:06:03.624547897 +0000
++++ b/src/lib.rs	2026-10-09 08:13:06.141325067 +0000
+@@ -23,8 +23,6 @@
+ use std::cmp::{max, min};
+ use std::collections::HashMap;
+ use std::convert::TryFrom;
+-use std::error::Error;
+-use std::fmt::{self, Display, Formatter};
+ use std::hash::Hash;
+ use std::mem;
+ use std::str::Chars;
+@@ -34,18 +32,6 @@
+     DifferentLengthArgs,
+ }
+ 
+-impl Display for StrSimError {
+-    fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), fmt::Error> {
+-        let text = match self {
+-            StrSimError::DifferentLengthArgs => "Differing length arguments provided",
+-        };
+-
+-        write!(fmt, "{}", text)
+-    }
+-}
+-
+-impl Error for StrSimError {}
+-
+ pub type HammingResult = Result<usize, StrSimError>;
+ 
+ /// Calculates the number of positions in the two sequences where the elements

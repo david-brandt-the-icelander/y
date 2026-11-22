@@ -1,0 +1,1 @@
+`jaro("a", "a")` panics with an arithmetic overflow in debug builds. Strings of length one (on either side, against anything) must give ordinary results: 1.0 for equal one-character strings and 0.0 for different ones. `jaro_winkler` and the generic versions are affected too.

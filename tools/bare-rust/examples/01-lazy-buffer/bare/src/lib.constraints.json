@@ -1,0 +1,180 @@
+{
+  "format": "y-constraints/0",
+  "host": "rust",
+  "crate": "lazy-buffer 0.0.0",
+  "module": "src/lib.rs",
+  "status": "lifted",
+  "subjects": [
+    {
+      "kind": "type",
+      "name": "lazy_buffer::LazyBuffer",
+      "visible": "public",
+      "generics": [{ "name": "I", "bounds": ["Iterator"] }],
+      "fields": [
+        { "name": "it", "type": "Fuse<I>", "hold": { "kind": "owns" } },
+        { "name": "buffer", "type": "list<element_type=I::Item> as 'Vec'", "hold": { "kind": "owns" } }
+      ],
+      "implements": [
+        {
+          "trait": "Index<J>",
+          "assoc": { "Output": { "host": "<Vec<I::Item> as Index<J>>::Output", "form": "assoc" } },
+          "impl": "lazy_buffer::LazyBuffer as Index"
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "lazy_buffer::LazyBuffer::impl",
+      "generics": [{ "name": "I", "bounds": [], "where": ["Iterator"] }],
+      "self": "LazyBuffer<I>"
+    },
+    {
+      "kind": "function",
+      "name": "lazy_buffer::LazyBuffer::new",
+      "visible": "public",
+      "params": [{ "name": "it", "type": "I" }],
+      "result": { "type": "Self" }
+    },
+    {
+      "kind": "function",
+      "name": "lazy_buffer::LazyBuffer::len",
+      "visible": "public",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<target_type=LazyBuffer<I>>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "u64 as 'usize'" }
+    },
+    {
+      "kind": "function",
+      "name": "lazy_buffer::LazyBuffer::size_hint",
+      "visible": "public",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<target_type=LazyBuffer<I>>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "SizeHint" }
+    },
+    {
+      "kind": "function",
+      "name": "lazy_buffer::LazyBuffer::count",
+      "visible": "public",
+      "params": [{ "name": "self", "type": "LazyBuffer<I>" }],
+      "result": { "type": "u64 as 'usize'" }
+    },
+    {
+      "kind": "function",
+      "name": "lazy_buffer::LazyBuffer::get_next",
+      "visible": "public",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<target_type=LazyBuffer<I>>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "result": { "type": "bool" }
+    },
+    {
+      "kind": "function",
+      "name": "lazy_buffer::LazyBuffer::prefill",
+      "visible": "public",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<target_type=LazyBuffer<I>>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        { "name": "len", "type": "u64 as 'usize'" }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "lazy_buffer::LazyBuffer::impl#2",
+      "generics": [{ "name": "I", "bounds": [], "where": ["Iterator"] }],
+      "where": [{ "for": "I::Item", "bounds": ["Clone"] }],
+      "self": "LazyBuffer<I>"
+    },
+    {
+      "kind": "function",
+      "name": "lazy_buffer::LazyBuffer::get_at",
+      "visible": "public",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<target_type=LazyBuffer<I>>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        {
+          "name": "indices",
+          "type": "ref<target_type=list<element_type=u64 as 'usize'> as 'std::primitive::slice'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "list<element_type=I::Item> as 'Vec'" }
+    },
+    {
+      "kind": "function",
+      "name": "lazy_buffer::LazyBuffer::get_array",
+      "visible": "public",
+      "generics": [{ "name": "const K", "bounds": ["usize"] }],
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<target_type=LazyBuffer<I>>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        {
+          "name": "indices",
+          "type": "list<element_type=u64 as 'usize'> where count(value) == K as 'std::primitive::array'"
+        }
+      ],
+      "result": { "type": "list<element_type=I::Item> where count(value) == K as 'std::primitive::array'" }
+    },
+    {
+      "kind": "impl",
+      "name": "lazy_buffer::LazyBuffer as Index",
+      "generics": [{ "name": "I", "bounds": [], "where": ["Iterator"] }, { "name": "J", "bounds": [] }],
+      "where": [{ "for": "I::Item", "bounds": ["Sized"] }, { "for": "Vec<I::Item>", "bounds": ["Index<J>"] }],
+      "trait": "Index<J>",
+      "self": "LazyBuffer<I>"
+    },
+    {
+      "kind": "alias",
+      "name": "lazy_buffer::LazyBuffer as Index::Output",
+      "type": { "host": "<Vec<I::Item> as Index<J>>::Output", "form": "assoc" }
+    },
+    {
+      "kind": "function",
+      "name": "lazy_buffer::LazyBuffer as Index::index",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<target_type=LazyBuffer<I>>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "index", "type": "J" }
+      ],
+      "result": { "type": "ref<target_type=Self::Output>", "hold": { "kind": "borrows", "from": "self" } }
+    },
+    {
+      "kind": "alias",
+      "name": "lazy_buffer::size_hint::SizeHint",
+      "visible": "public",
+      "type": "(u64 as 'usize', u64 as 'usize'?)"
+    },
+    {
+      "kind": "function",
+      "name": "lazy_buffer::size_hint::add_scalar",
+      "visible": "public",
+      "params": [{ "name": "sh", "type": "SizeHint" }, { "name": "x", "type": "u64 as 'usize'" }],
+      "result": { "type": "SizeHint" }
+    }
+  ]
+}

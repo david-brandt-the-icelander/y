@@ -1,0 +1,1 @@
+Please add `sorensen_dice(a: &str, b: &str) -> f64`, the Sorensen-Dice similarity of two strings based on their bigrams (adjacent character pairs), between 0.0 and 1.0. Whitespace is ignored, equal strings score 1.0, a string with fewer than two characters scores 0.0 against anything different, and repeated bigrams are counted as a multiset.
