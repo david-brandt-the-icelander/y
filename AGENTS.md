@@ -1,6 +1,6 @@
 # Agent instructions
 
-This is the repository of the Y programming language. So far it holds only `README.md` and `LICENSE` (Mozilla Public License 2.0): there is no source code, build or test suite yet.
+This is the repository of the Y programming language. It holds the language design (`Y-current-language-design.md`, `documentation/`, `proposal/`), a prototype toolchain in `tools/` and worked programs in `examples/`; each Rust crate builds and tests with `cargo test` from its own folder (see `README.md`). The licence is Mozilla Public License 2.0.
 
 ## Architecture diagrams and knowledge files
 

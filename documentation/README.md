@@ -25,8 +25,13 @@ that a human will actually read the diff.
 
 ## Nothing here is built
 
-There is no compiler, no parser, no runtime, and no source file of any kind in this repository — only
-these documents. Every capability statement in this corpus is therefore a gap, and **no statement
+> **Note, added when this corpus moved into the Y repository:** the repository now also holds a prototype
+> toolchain in [`../tools/`](../tools/) and worked programs in [`../examples/`](../examples/). The paragraph below
+> was written before they existed and describes the corpus's own convention, not the repository. Reconciling the
+> two is the language owner's call.
+
+There was no compiler, no parser, no runtime, and no source file of any kind when this corpus was written — only
+these documents. Every capability statement in this corpus was therefore a gap, and **no statement
 anywhere in this corpus claims to be implemented and verified.** A reader who finds one has found a bug
 in the corpus, not a working feature.
 
