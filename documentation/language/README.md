@@ -6,7 +6,7 @@
 
 These nine documents describe what a Y program can say. Each one is written as Y ought to be, in the
 present tense, with every statement marked for whether it is true yet. None of them is true yet
-→ [`../README.md` § Nothing here is built](../README.md#nothing-here-is-built).
+→ [`../README.md` § What is built, and what the marks mean](../README.md#what-is-built-and-what-the-marks-mean).
 
 ## Syntax here is illustrative
 

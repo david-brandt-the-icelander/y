@@ -80,5 +80,6 @@ anything, each step needs something it can be checked against.
 - ⚠️ This journey is anchored to a reproducible toolchain invocation: a committed Y program, a
   sequence of compiler runs, and the expected diagnostic at each step. Every row in the steps table above
   is then a test rather than a claim, and the marks on it are computed rather than asserted.
-  ⛔ **Unblocked by** anything existing to run. Until then this document is the specification of that test
-  and the weakest-anchored page in the corpus.
+  ⛔ **Unblocked by** a committed Y program and a scripted sequence of `y-compile` runs that cover these
+  steps. The prototype compiler exists but covers a subset of the language, and no such script is committed. Until
+  then this document is the specification of that test and the weakest-anchored page in the corpus.

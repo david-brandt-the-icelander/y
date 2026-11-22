@@ -23,21 +23,23 @@ errors escape, which state transitions are legal — have to be facts the compil
 is to make those facts cheap to compute and expensive to violate, while keeping the source short enough
 that a human will actually read the diff.
 
-## Nothing here is built
+## What is built, and what the marks mean
 
-> **Note, added when this corpus moved into the Y repository:** the repository now also holds a prototype
-> toolchain in [`../tools/`](../tools/) and worked programs in [`../examples/`](../examples/). The paragraph below
-> was written before they existed and describes the corpus's own convention, not the repository. Reconciling the
-> two is the language owner's call.
+A prototype toolchain exists, and it is small next to the design. [`../tools/y-parse`](../tools/y-parse/) parses
+Y source. [`../tools/y-compile`](../tools/y-compile/) lowers the Y programs in [`../examples/`](../examples/) to
+Rust through [`../tools/bare-rust`](../tools/bare-rust/), and those programs build and pass their tests. It
+lowers to Rust only. There is no backend-neutral Core IR as a separate artifact, no Zig or C backend, no oracle
+projection, and none of the runtime-generation machinery. The syntax in every example is illustrative.
 
-There was no compiler, no parser, no runtime, and no source file of any kind when this corpus was written — only
-these documents. Every capability statement in this corpus was therefore a gap, and **no statement
-anywhere in this corpus claims to be implemented and verified.** A reader who finds one has found a bug
-in the corpus, not a working feature.
+This corpus is nevertheless written under the annotation convention, and the convention still applies to it: **no
+statement anywhere in this corpus claims to be implemented and verified.** What the prototype does is written
+up in the tools' own READMEs, not here, and a capability here stays a gap until a reader can check it against a
+running toolchain and the corpus marks it so. A reader who finds a statement of verified implementation in this
+corpus has found a bug in the corpus, not a working feature.
 
-That is worth stating plainly, because a page with no green on it normally means nobody adopted the
-convention, and here it means the opposite: the convention is adopted, and the honest answer is that
-none of it exists.
+That is worth stating plainly, because a page with almost no green on it normally means nobody adopted the
+convention, and here it means the opposite: the convention is adopted, and the prototype covers too little of
+the design to graduate a mark.
 
 It also means the gap marks carry the whole load, and a corpus where every line is a gap discriminates
 nothing. That is the graduation rule from the other end — ticks get deleted once they stop carrying
@@ -80,6 +82,19 @@ Two things about the transcript, because it is long and it is load-bearing:
   document at all. It is written up here in
   [`toolchain/runtime-generations.md`](toolchain/runtime-generations.md), which is consequently the
   least settled document in the corpus.
+
+## Suggested reading order
+
+1. [`../Y-current-language-design.md`](../Y-current-language-design.md) §§ 1–2: what Y is and what it optimises for.
+2. This page, to the end of "What is built, and what the marks mean".
+3. [`language/README.md`](language/README.md), then the capabilities in the order its index gives them. Start with
+   [types and typed failure](language/types-and-failures.md) and
+   [ownership and resources](language/ownership-and-resources.md), which the others assume.
+4. [`journeys/agent-writes-a-function.md`](journeys/agent-writes-a-function.md): the premise of the language, worked end to end.
+5. [`toolchain/compiler-pipeline.md`](toolchain/compiler-pipeline.md), then [`toolchain/core-ir.md`](toolchain/core-ir.md),
+   then [oracles](toolchain/oracles.md).
+6. Last, and as the least settled document, [`toolchain/runtime-generations.md`](toolchain/runtime-generations.md).
+7. To see something run, the [`../examples/`](../examples/) and their READMEs.
 
 ## The document kinds, for a language
 
@@ -143,9 +158,11 @@ There is no separate backlog for the documentation itself. These are it.
   declaring the corpus a derived view that gets regenerated. Until then, prefer the working design on
   any disagreement and fix this corpus.
 - ⚠️ **No enforcement exists.** The convention's one build gate, against `TODO`, needs a build to
-  fail, and there is no build in this repository. Every mark in this corpus is therefore unchecked by
-  anything but a reader, or an agent asked to check it.
+  fail, and nothing in this repository runs it over the corpus. The prototype's tests check the examples, not
+  these documents. Every mark in this corpus is therefore unchecked by anything but a reader, or an agent asked
+  to check it.
   → [06](https://github.com/david-brandt-the-icelander/knowledge-driven-development/blob/main/06-enforcement.md#the-deferred-work-gate)
-- ⚠️ **Journeys here are anchored to a toolchain invocation that cannot run yet**, which is a weaker
-  anchor than a running system and may turn out to be the wrong one.
+- ⚠️ **Journeys here are anchored to a toolchain invocation that is only partly runnable**, because the
+  prototype covers a subset of the language, which is a weaker anchor than a running system and may turn out to
+  be the wrong one.
   → [`journeys/agent-writes-a-function.md`](journeys/agent-writes-a-function.md#what-this-journey-is-anchored-to)
