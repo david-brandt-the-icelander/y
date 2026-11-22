@@ -150,7 +150,7 @@ use economy                   -- quantities: Isk, ItemQuantity
 | --- | --- | --- |
 | `procedure` | A stored procedure in the catalog, in Rust or T-SQL | `procedure space.ActivateModule(moduleID: u64, targetID: u64)` |
 | `method` | An RPC method, by service and method | `method inventory.MoveItems(itemIDs: list<element_type=u64>, toLocationID: u64)` |
-| `function` | A function or method in a host language | `function python 'eve.inventory.InventoryMgr.MoveItems'` |
+| `function` | A function or method in a host language | `function python 'game.inventory.InventoryMgr.MoveItems'` |
 | `type` | A type of a host language, or of the language itself | `type csharp 'Studio.Ui.InventoryWindow'` |
 | `table` | A table in the catalog | `table space.Ships` |
 | `resource` | A host type that holds something outside memory: a file, socket, lock, connection or GPU buffer | `resource java 'java.sql.Connection'` |
@@ -166,10 +166,10 @@ use economy                   -- quantities: Isk, ItemQuantity
 | `region` | A callable, or a named part of one, and how it may execute (§ 6.23) | `region 'shop.checkout.hold_and_charge#hold_one_unit'` |
 
 **Stable names.** A host subject binds by the stable name its code gives it, through the host's own attribute,
-annotation or decorator (`#[stable("eve.cache.get")]` in Rust, `[Stable("…")]` in C#, `@stable("…")` in Python), or,
+annotation or decorator (`#[stable("game.cache.get")]` in Rust, `[Stable("…")]` in C#, `@stable("…")` in Python), or,
 until it has one, by its path, with overloads told apart by their parameter types: `function csharp
 'Studio.Shop.Checkout.Pay(System.Int64)'`. A stable name belongs to no host, so a subject named without a host
-(`function 'eve.cache.get'`) binds whichever host implements it: one file constrains the Python method and the Rust
+(`function 'game.cache.get'`) binds whichever host implements it: one file constrains the Python method and the Rust
 procedure that replaces it. A renamed symbol keeps its constraints and their evidence through `was 'old.path'`, which
 the build checks against the history of the code. A lambda or closure has no name; it is constrained through the
 parameter that receives it (`callback`, § 6.2).
@@ -322,13 +322,13 @@ missing makes a build slower, never wrong.
 
 ```text
 profile 'tranquility-2026-10' from replay 'tq-2026-10-14' on platform 'x86_64-unknown-linux-gnu'
-    calls 'eve::dogma::Fitting::recalc_cpu'      per tick 1840
-    branch 'eve::dogma::Fitting::recalc_cpu' @ 3  taken 0.02          -- the third branch of the body, by its stable position
-    size 'eve::market::Book::orders'             p50 12, p99 210
+    calls 'game::dogma::Fitting::recalc_cpu'      per tick 1840
+    branch 'game::dogma::Fitting::recalc_cpu' @ 3  taken 0.02          -- the third branch of the body, by its stable position
+    size 'game::market::Book::orders'             p50 12, p99 210
     fails 'wallet.Credit' with InsufficientFunds 0.004
-    access 'eve::market::Book::orders'          by orderID 0.92, by range price 0.07, scan 0.01
-    index 'eve::dogma::Fitting::slots'          p50 3, p99 15, sequential 0.80
-    lookup 'eve::cache::TypeCache::get'         hit 0.97
+    access 'game::market::Book::orders'          by orderID 0.92, by range price 0.07, scan 0.01
+    index 'game::dogma::Fitting::slots'          p50 3, p99 15, sequential 0.80
+    lookup 'game::cache::TypeCache::get'         hit 0.97
 ```
 
 - **Access to collections** is measured as well: by which keys or fields each collection was looked up, how often by a
@@ -602,7 +602,7 @@ interface rust 'edb::Procedure'
     no randomness except rolls
     deterministic
 
-function 'eve.dogma.stacking.penalised'(values: list<element_type=f64>) -> f64
+function 'game.dogma.stacking.penalised'(values: list<element_type=f64>) -> f64
     effects none
     depends only on values
     terminates
@@ -614,12 +614,12 @@ procedure wallet.Credit(requestID: id<entity_type=Requests>, amount: decimal<pre
 interface rust 'eve_market::Procedure'
     writes only market.*, wallet.Escrow
 
-function rust 'eve::fitting::apply'(ship: ref<target_type=Ship>, fit: ref<target_type=Fit>)
+function rust 'game::fitting::apply'(ship: ref<target_type=Ship>, fit: ref<target_type=Fit>)
     reads only ship.modules, ship.cargo, fit
     mutates only ship.modules              when not docked(ship)
     mutates only ship.modules, ship.cargo  when docked(ship)    -- docked, the unfitted modules go to the cargo
 
-function rust 'eve::dogma::falloff'(range: f64, optimal: f64, falloff: f64) -> f64
+function rust 'game::dogma::falloff'(range: f64, optimal: f64, falloff: f64) -> f64
     pure
 ```
 
@@ -709,7 +709,7 @@ procedure bounty.Pay(characterID: u64, amount: decimal<precision=19, scale=2>)
 - `reference f -> T on end r` states what happens to this row when the row it names ends: `cascade` ends this row with
   it, `restrict` refuses to end the target while this row names it, `nullify` makes the reference absent, and `dangle`
   keeps an identity that may no longer resolve. `one of T1, T2, …` names a reference that may point into any of several
-  tables, as EVE's `locationID` does. These are the row model's ways of holding (§ 7.2), seen from the referring row.
+  tables, as a game's `locationID` does. These are the row model's ways of holding (§ 7.2), seen from the referring row.
 - `acyclic` is the containment rule harvested from backups: no item contains itself.
 - `conserve`, `faucet` and `sink` are as in the proposal (§ 6.9): in every transaction the deltas of a conserved
   quantity's columns, plus what transfers and requests carry, sum to zero, unless the procedure declares itself a faucet
@@ -835,7 +835,7 @@ type java 'studio.match.Lobby'
     no suspension while holding self.lock
     publishes ready                -- writes made before `ready` is set are visible to whoever reads it set
 
-function python 'eve.market.MarketMgr.PlaceOrder'
+function python 'game.market.MarketMgr.PlaceOrder'
     atomic                         -- no other request observes it half done
     no blocking in tasklet
     not reentrant
@@ -1581,11 +1581,11 @@ none; and when nothing orders them (a `protocol`, § 6.5; a lock order, § 6.8).
 in either order, and the outcome is the one of program order.
 
 ```text
-function rust 'eve::dogma::Fitting::recalc_cpu'(self: ref<target_type=Fitting>)
+function rust 'game::dogma::Fitting::recalc_cpu'(self: ref<target_type=Fitting>)
     reads only self.modules
     mutates only self.cpu
 
-function rust 'eve::dogma::Fitting::recalc_power'(self: ref<target_type=Fitting>)
+function rust 'game::dogma::Fitting::recalc_power'(self: ref<target_type=Fitting>)
     reads only self.modules
     mutates only self.power
     -- the two read the same field and write different ones: they may run at the same time
@@ -1619,13 +1619,13 @@ reassociated and vectorised, and a log that may be batched need not be written o
 function rust 'std::collections::HashMap::iter'(self: ref<target_type=map<key_type=K, value_type=V>>) -> some 'std::iter::Iterator' { Item = (ref<target_type=K>, ref<target_type=V>) }
     order unspecified yields(result)                -- the pairs, in an order that may differ between maps and runs
 
-function rust 'eve::dogma::sum_bonuses'(xs: list<element_type=f64>) -> f64
+function rust 'game::dogma::sum_bonuses'(xs: list<element_type=f64>) -> f64
     may reassociate within abs: 1e-9, rel: 1e-12    -- any order of the additions; the result within that of the written one
 
-procedure 'eve::market::FindSeller'(typeID: u64, qty: u64) -> u64?
+procedure 'game::market::FindSeller'(typeID: u64, qty: u64) -> u64?
     result any of select(o in market.Orders : o.typeID == typeID and o.qty >= qty).sellerID
 
-function rust 'eve::telemetry::record'(e: Event)
+function rust 'game::telemetry::record'(e: Event)
     may batch emits                                  -- the events go out later and together, in their order
     may reorder emits                                -- and in any order among themselves
 ```
@@ -1661,19 +1661,19 @@ and `equivalent to` lets a translator use another implementation and check it ag
 the meaning below, checked as a law is, and nothing more.
 
 ```text
-function rust 'eve::dogma::stack'(a: Modifier, b: Modifier) -> Modifier
+function rust 'game::dogma::stack'(a: Modifier, b: Modifier) -> Modifier
     associative
     commutative
     identity Modifier::NONE
 
-function rust 'eve::text::normalise'(s: string) -> string
+function rust 'game::text::normalise'(s: string) -> string
     idempotent
 
-function rust 'eve::market::price_after_tax'(p: decimal<precision=19, scale=2>, rate: decimal<precision=5, scale=4>) -> decimal<precision=19, scale=2>
+function rust 'game::market::price_after_tax'(p: decimal<precision=19, scale=2>, rate: decimal<precision=5, scale=4>) -> decimal<precision=19, scale=2>
     monotone increasing in p
 
-function rust 'eve::dogma::falloff_fast'(range: f64, optimal: f64, falloff: f64) -> f64
-    equivalent to 'eve::dogma::falloff' within rel: 1e-12
+function rust 'game::dogma::falloff_fast'(range: f64, optimal: f64, falloff: f64) -> f64
+    equivalent to 'game::dogma::falloff' within rel: 1e-12
 ```
 
 | Name | On | The law |
@@ -1708,11 +1708,11 @@ of a map. They are named predicates, defined once over the sequences of § 6.15,
 invariant of a type, a postcondition, a precondition. Tools recognise the names.
 
 ```text
-type rust 'eve::market::Book'
+type rust 'game::market::Book'
     invariant bids_sorted : sorted(self.bids, by: price, descending)
     invariant one_per_id  : distinct(self.bids, by: orderID)
 
-function rust 'eve::inventory::slots'(ship: ref<target_type=Ship>) -> list<element_type=u16>
+function rust 'game::inventory::slots'(ship: ref<target_type=Ship>) -> list<element_type=u16>
     ensure dense(result, 0 .. count(result))          -- the slots are 0, 1, 2, … with no gap, in some order
 ```
 
@@ -1741,18 +1741,18 @@ expectation is reported, as a budget is (§ 6.7). Where an expectation is a pers
 small by design), a profile (§ 3.7) is the measurement of a build, and the two are compared.
 
 ```text
-function rust 'eve::dogma::Fitting::modules_of'(self: ref<target_type=Fitting>, group: u32) -> list<element_type=ModuleID>
+function rust 'game::dogma::Fitting::modules_of'(self: ref<target_type=Fitting>, group: u32) -> list<element_type=ModuleID>
     expect count(result) <= 8  usually 0.99
     expect hot
 
 procedure 'wallet.Credit'(requestID: id<entity_type=Requests>, amount: decimal<precision=19, scale=2>)
     expect fails InsufficientFunds  rarely
 
-type rust 'eve::market::Book'
+type rust 'game::market::Book'
     expect access self.orders by orderID  usually 0.9
     expect scans self.orders  rarely
 
-function rust 'eve::admin::rebuild_index'()
+function rust 'game::admin::rebuild_index'()
     expect cold
 ```
 
@@ -1788,7 +1788,7 @@ may move across it, and what a caller may assume after it, depend on it.
 function rust 'eve_net::frame::encode'(f: Frame) -> bytes
     exits only return                              -- never fails, panics or suspends
 
-function rust 'eve::market::Book::place'(self: ref<target_type=Book>, o: Order) -> Result<OrderID, PlaceError>
+function rust 'game::market::Book::place'(self: ref<target_type=Book>, o: Order) -> Result<OrderID, PlaceError>
     exits only return, fails PlaceError
     on failure unchanged
 
@@ -2214,7 +2214,7 @@ an optimizer knows what it may assume of it.
 function c 'eve_native::name_of'(p: ptr<target_type=u8> where valid(value) and terminated(value, 0)) -> u64
     ensure len : result == position(value, 0)          -- the length, up to the terminator
 
-function rust 'eve::mesh::Vertices::iter_raw'(self: ref<target_type=Vertices>) -> (ptr<target_type=Vertex>, ptr<target_type=Vertex>)
+function rust 'game::mesh::Vertices::iter_raw'(self: ref<target_type=Vertices>) -> (ptr<target_type=Vertex>, ptr<target_type=Vertex>)
     ensure first : element(result.0, self.items) or count(self.items) == 0
     ensure end   : cursor(result.1, self.items) and result.1 == base(self.items) + count(self.items)
 
@@ -2320,7 +2320,7 @@ read-only interface in Java promise only that this path does not write, not that
 - **`shared readonly e`:** many paths, none writing; one way to be `shareable` (§ 6.8).
 
 ```text
-function python 'eve.fitting.FittingSvc.ApplyFit'(self, ship: ref<target_type=Ship>, fit: ref<target_type=Fit>)
+function python 'game.fitting.FittingSvc.ApplyFit'(self, ship: ref<target_type=Ship>, fit: ref<target_type=Fit>)
     readonly fit                   -- harvested: no recorded call changed it
     mutates only ship.modules, ship.cargo
     disjoint ship, fit
@@ -2733,7 +2733,7 @@ table maps the mechanisms in use onto the clauses here.
 | Complexity and performance budgets | Big-O annotations, frame budgets | `budget work O(…)`, `budget p99 …`, `budget allocates …` |
 | Uniqueness, foreign keys, `CHECK` | SQL | `unique … per shard | global`, `reference … on end`, `invariant` |
 | Deferred constraints | SQL `DEFERRABLE INITIALLY DEFERRED` | `invariant … holds at commit` |
-| Polymorphic references | EVE's `locationID`, polymorphic associations | `reference … -> one of …` |
+| Polymorphic references | a game's `locationID`, polymorphic associations | `reference … -> one of …` |
 | Containment without cycles | Databases, scene graphs | `acyclic … via` |
 | Conservation | Ledgers, double-entry bookkeeping | `conserve`, `faucet`, `sink` |
 | State machines, guarded transitions | Triggers, workflow engines, statecharts | `states … when` |
@@ -2821,14 +2821,14 @@ procedure space.ActivateModule(moduleID: u64, targetID: u64) -> { firstCycleEnds
 
 ```text
 -- inventory/python.constraints: harvested by tracing the hot stores on test clusters; watched
-type python 'eve.inventory.LocationCache'
+type python 'game.inventory.LocationCache'
     hold entries : owns
     hold manager : observes
     lifetime self within session
-    lifetime self reachable only from 'eve.inventory.InventoryMgr.caches'
+    lifetime self reachable only from 'game.inventory.InventoryMgr.caches'
     instances attributed to session are none within 5 s after end(session)
 
-function python 'eve.inventory.InventoryMgr.MoveItems'(self, itemIDs: list<element_type=u64>, toLocationID: u64)
+function python 'game.inventory.InventoryMgr.MoveItems'(self, itemIDs: list<element_type=u64>, toLocationID: u64)
     from Player
     readonly itemIDs
     hold itemIDs : borrows
