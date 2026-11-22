@@ -2204,7 +2204,7 @@ examples need, written by hand before the declarations existed.
 
 Not every backend can carry all of Y. SQL can say a calculation and cannot say a loop. A language without transactions
 cannot say `atomic`. Y therefore comes in levels, after the levels of common denominator of LCD
-([`../articles/lowest-common-denominator`](../articles/lowest-common-denominator/), part 2), each of which contains
+([*Levels of denominator*](https://icelander.net/v1/programming-languages/levels-of-denominator), part 2 of *The lowest common denominator*), each of which contains
 the levels below it:
 
 | Level | Adds | Carried by |

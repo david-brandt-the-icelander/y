@@ -62,7 +62,7 @@ of it.
 | --- | --- | --- |
 | This corpus | Y as a set of documents, each written for one reader, each statement marked | The convention applies here |
 | [`../Y-current-language-design.md`](../Y-current-language-design.md) | The working design, 2026-09-17: goals, settled decisions, open questions | Unmarked. Not under the convention |
-| [`../riff.md`](../riff.md) | The conversation the design came out of | A transcript. **Never annotated** — it is a record of a past state, like a changelog entry |
+| `riff.md` | The conversation the design came out of | A transcript, not part of this repository. **Never annotated** — it is a record of a past state, like a changelog entry |
 
 Two things about the transcript, because it is long and it is load-bearing:
 

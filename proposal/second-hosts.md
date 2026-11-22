@@ -23,7 +23,7 @@ what order to build them. Nothing here is built yet.
     table), so the weaving is the same but the evidence differs.
 - **Order: TypeScript first, then C#, then Python.** TypeScript is the cheapest: its compiler already defines what
   erases. C# is next, because it is the second-largest language of the studio's code (language
-  [`adaptations/stillfront.md`](adaptations/stillfront.md)) and its checker proves more than TypeScript's. Python comes
+  of the games the constraint language was first applied to) and its checker proves more than TypeScript's. Python comes
   last. It is closest to the game code the language exists for, but it has the least to check against, so its trial
   measures the least per dollar.
 - **Each host has three stages and runs E1 to E5 again.** No new experiments are needed. E3 and E4 compare across hosts:

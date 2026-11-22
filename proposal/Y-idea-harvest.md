@@ -16,7 +16,7 @@ from, or what was left behind and why.
 - Other folders under `~/dev` that turned out not to be language work are listed at the end.
 - One entry has no folder: LCD, around 2001, which was never written down. It is recorded from the author's
   recollection of its intent, given on 2026-11-03, in the article series
-  [*The lowest common denominator*](../articles/lowest-common-denominator/README.md), and marked as such below.
+  [*The lowest common denominator*](https://icelander.net/v1/programming-languages/one-language-transpiled-to-all-the-others), and marked as such below.
 
 Verdicts in the ledger:
 
@@ -35,7 +35,7 @@ document's own sections say "above" or "below".
 
 | When | Where (under `~/dev/`) | What it was |
 | --- | --- | --- |
-| ca. 2001 | Nowhere: never written down; conceived at OZ | **LCD**, *lowest common denominator*: business logic written once and transpiled into C, C++ under its frameworks, Java, PL/SQL and probably Pascal, through levels of common denominator rather than one. Imperative at heart, with managed memory. A dream only, dropped for its cost in time. Recollection from intent, not from documentation; see [*The lowest common denominator*](../articles/lowest-common-denominator/README.md) |
+| ca. 2001 | Nowhere: never written down; conceived at OZ | **LCD**, *lowest common denominator*: business logic written once and transpiled into C, C++ under its frameworks, Java, PL/SQL and probably Pascal, through levels of common denominator rather than one. Imperative at heart, with managed memory. A dream only, dropped for its cost in time. Recollection from intent, not from documentation; see [*The lowest common denominator*](https://icelander.net/v1/programming-languages/one-language-transpiled-to-all-the-others) |
 | 2019-09 → 2021-04 | `padresmurfa@gmail.com/y26/yapl` — README, aspirational chapters, `v0`, `v1` | *Yet Another Programming Language*: "a language that I have been dreaming of creating for quite some time". A transpiler to "all machines", written in Python |
 | 2021-04 → 2022-08 | `yapl` — `v2`, `v3`, `v4` | The "hungry rabbit" walkthrough; semantic comments; refinement types; indentation-only blocks; then colon blocks, `--` comments and named conditions |
 | 2022-08 | `yapl` — `v5` (Rust), `v6` (Python) | Parsers organised around modules, classes and facets; a "Why?" attached to every rule; effects declared in the signature |
@@ -139,7 +139,7 @@ data types and a standard library. The author did not expect one denominator to 
 special-purpose), and thought instead of *levels* of common denominator, and of whether the idea could spread beyond
 imperative languages. It never reached a grammar, and was dropped because it would have taken a massive amount of time.
 
-[*The lowest common denominator*](../articles/lowest-common-denominator/README.md), a series of four articles written
+[*The lowest common denominator*](https://icelander.net/v1/programming-languages/one-language-transpiled-to-all-the-others), a series of four articles written
 for publication, reconstructs what such a language would have had to be, and marks in each part what is memory and what
 is reconstruction. Its claims on this ledger are interpretive: YAPL's 2020 thesis of a transpiler to "all machines" (§
 3.1 below) is the second appearance of that purpose, not the first; transpiling, set aside in 2024 and back in the

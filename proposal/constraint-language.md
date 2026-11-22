@@ -5,11 +5,10 @@
 **Written for:** the team that owns the constraint language, and everyone who writes, harvests, reviews or enforces
 constraints: the engine, game-logic, networking and security teams, and studios applying the plan to games written in
 other languages.
-**Companion documents:** [`database-proposal.md`](database-proposal.md) introduces the language (§ 6.7), its
-conservation laws (§ 6.9), the harvesting that fills it (§ 6.13) and its first consumer, the RPC schema at the proxy
-(§ 12.2); this document designs the whole language those sections point at.
-[`adaptations/stillfront.md`](adaptations/stillfront.md) is why it must constrain C#, Java and PHP as well as Rust,
-Python and T-SQL.
+**Companion documents:** the database proposal that introduced the language (§ 6.7), its conservation laws
+(§ 6.9), the harvesting that fills it (§ 6.13) and its first consumer, the RPC schema at the proxy (§ 12.2), is not
+part of this repository; this document designs the whole language those sections pointed at. It must constrain C#,
+Java and PHP as well as Rust, Python and T-SQL, because the code it was first applied to is written in all of them.
 
 ---
 
@@ -3253,7 +3252,7 @@ handle_expr   = "current" "(" expr ")"                     (* the value at the p
 11. **Laws in the language, or in tests.** A `law` is checked only in CI, like a property test. Leaning: keep it here,
     because it binds every implementation of an interface across hosts, which a test in one host does not.
 12. **Profiles for other studios' hosts.** C#, Java, Kotlin and PHP profiles are needed before the language is useful to
-    the games in the Stillfront adaptation. Leaning: each profile is owned by the team that adopts the host, and is
+    the games the language was first applied to. Leaning: each profile is owned by the team that adopts the host, and is
     tested against the same edge cases as the first three.
 13. **Where the bare form lives.** Does a team keep bare source and constraint files in the repository and weave at
     build, or keep ordinary source and strip for review? Leaning: the bare form is the source of truth for code that

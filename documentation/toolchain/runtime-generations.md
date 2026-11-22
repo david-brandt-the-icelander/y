@@ -20,7 +20,7 @@ review. A bad candidate is slow, not wrong.
 
 - ⚠️⛔ **Whether Y includes any of this is undecided.** None of it appears in
   [`../../Y-current-language-design.md`](../../Y-current-language-design.md); all of it comes from the
-  second half of [`../../riff.md`](../../riff.md), which is a transcript rather than a design record. The
+  second half of `riff.md`, the conversation the design came out of, which is a transcript rather than a design record. The
   fifteen settled decisions do not mention replay, physical optimisation, hot swap or live migration, and
   the transcript itself describes the fully autonomous form as rocket science.
   ⛔ **Unblocked by** the language owner deciding which of three things this is: a v1 requirement, a
