@@ -1,0 +1,1 @@
+`FnvHasher` produces the wrong hash values: `hash(b"a")` should be 0xaf63dc4c8601ec8c (the published FNV-1a test vector) and `b"foobar"` 0x85944171f73967e8. Hashes agree with the reference implementation for the empty input only. Writing in several pieces must give the same result as writing the whole input at once.

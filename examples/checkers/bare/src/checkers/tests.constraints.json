@@ -1,0 +1,908 @@
+{
+  "format": "y-constraints/0",
+  "host": "rust",
+  "crate": "checkers-example 0.0.0",
+  "module": "src/checkers/tests.rs",
+  "status": {
+    "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
+  },
+  "subjects": [
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::arranged",
+      "params": [
+        {
+          "name": "pieces",
+          "type": "ref<target_type=list<element_type=Placed> as 'List'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "to_move", "type": "Side" }
+      ],
+      "result": { "type": "Game" }
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::man",
+      "params": [
+        { "name": "owner", "type": "Side" },
+        { "name": "row", "type": "i32" },
+        { "name": "column", "type": "i32" }
+      ],
+      "result": { "type": "Placed" }
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::king",
+      "params": [
+        { "name": "owner", "type": "Side" },
+        { "name": "row", "type": "i32" },
+        { "name": "column", "type": "i32" }
+      ],
+      "result": { "type": "Placed" }
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::trial",
+      "params": [{ "name": "checks", "type": "u32" }],
+      "result": { "type": "Level" }
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::clicking",
+      "params": [{ "name": "row", "type": "i32" }, { "name": "column", "type": "i32" }],
+      "result": { "type": "Frame" }
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_new_game_has_twelve_men_each",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_light_square_starts_empty",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_top_rows_start_with_white_men",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_first_of_the_bottom_rows_starts_with_a_red_man",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_bottom_row_starts_with_a_red_man",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_middle_rows_start_empty",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_capture_must_be_taken",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_first_moves_are_steps",
+      "params": []
+    },
+    { "kind": "function", "name": "checkers_example::checkers::tests::a_step_is_a_quiet_turn", "params": [] },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_white_man_stepping_onto_the_bottom_row_is_crowned",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_jump_takes_the_piece_jumped_over",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_man_crowned_by_a_jump",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_chain_of_jumps_takes_every_piece_jumped",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_person_wins_when_the_computer_cannot_move",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_person_loses_when_they_cannot_move",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::quiet_turns_draw_the_game",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::more_quiet_turns_still_draw_the_game",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_new_game_is_being_played",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_win_scores_by_level_and_moves",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_slow_win_scores_the_least_win",
+      "params": []
+    },
+    { "kind": "function", "name": "checkers_example::checkers::tests::a_loss_scores_nothing", "params": [] },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::red_has_made_every_odd_turn",
+      "params": []
+    },
+    { "kind": "function", "name": "checkers_example::checkers::tests::white_moves_after_red", "params": [] },
+    { "kind": "function", "name": "checkers_example::checkers::tests::red_moves_after_white", "params": [] },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_player_with_no_pieces_has_no_steps",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_lone_man_steps_both_ways_ahead",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_man_on_the_edge_steps_only_inward",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_man_with_both_squares_ahead_taken_has_no_step",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::each_of_several_men_steps",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::men_on_the_edge_step_only_inward",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::men_behind_the_front_row_are_blocked_at_the_start",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_player_with_no_pieces_has_no_jumps",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_lone_man_jumps_the_piece_ahead",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::only_the_men_that_can_jump_have_jumps",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_jump_with_none_after_it_ends_the_chain",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_chain_of_jumps_is_one_move",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_man_with_nothing_to_jump_has_no_chain",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_piece_is_not_jumped_twice",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_man_crowned_by_a_jump_stops",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_king_on_the_far_row_jumps_on",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_white_man_short_of_the_bottom_row_jumps_on",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_red_man_short_of_the_top_row_jumps_on",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_piece_may_jump_onto_an_empty_square",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_piece_may_not_jump_off_the_board",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::an_empty_square_belongs_to_no_one",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_square_belongs_to_the_owner_of_its_piece",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::every_piece_is_found_with_its_square",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::an_empty_board_has_no_pieces",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_player_on_an_empty_board_has_no_pieces",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_lone_piece_is_its_players_own",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_lone_piece_of_the_other_player_is_not_own",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::several_pieces_of_the_player_are_own",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_other_players_pieces_are_left_out",
+      "params": []
+    },
+    { "kind": "function", "name": "checkers_example::checkers::tests::a_king_moves_every_way", "params": [] },
+    { "kind": "function", "name": "checkers_example::checkers::tests::a_red_man_moves_up", "params": [] },
+    { "kind": "function", "name": "checkers_example::checkers::tests::a_white_man_moves_down", "params": [] },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::red_is_crowned_on_the_top_row",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::white_is_crowned_on_the_bottom_row",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_piece_on_a_square_is_found",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::squares_are_numbered_row_by_row",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_corner_is_on_the_board",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::with_one_move_and_no_checks_the_search_runs_out_at_once",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::with_two_moves_and_no_checks_the_search_runs_out_at_once",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::with_one_move_and_two_checks_the_search_finishes_a_depth",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::with_one_move_and_a_few_checks_the_search_runs_out_partway",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::with_two_moves_and_a_few_checks_the_search_finishes_some_depths",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::with_one_move_and_enough_checks_the_search_finishes_its_deepest",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::with_one_move_the_search_runs_out_at_its_deepest",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::with_two_moves_and_enough_checks_the_search_finishes_its_deepest",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::with_two_moves_the_search_runs_out_at_its_deepest",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_computer_keeps_its_man_out_of_reach",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::looking_no_moves_ahead_a_position_is_worth_its_pieces",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_position_with_no_moves_is_worth_its_end",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_search_stops_at_a_draw",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_search_stops_past_a_draw",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_search_gives_up_with_exactly_the_checks_the_moves_need",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_search_gives_up_with_fewer_checks_than_moves",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_only_move_of_the_owner_is_weighed",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_only_move_of_the_other_player_is_weighed",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_owner_takes_the_best_of_its_moves",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_other_player_takes_the_worst_of_its_moves",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::one_option_is_chosen_unweighed",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_first_of_two_weighed_best_is_chosen",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::tied_moves_are_weighed_by_games_played_out",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_second_of_two_weighed_best_is_chosen",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::moves_weighed_lower_are_left_out_of_the_games",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::without_checks_the_pieces_decide",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::one_check_plays_one_game_of_no_moves",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::games_are_played_until_the_checks_run_out",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_game_played_out_for_no_moves_ends_at_once",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_game_with_no_moves_ends_at_once",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_drawn_game_ends_at_once",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_game_past_the_draw_ends_at_once",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_game_played_out_for_one_move",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_game_played_out_for_two_moves",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_lost_game_is_worth_less_the_win_value",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_won_game_is_worth_the_win_value",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_drawn_game_is_worth_nothing",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_game_past_the_draw_is_worth_nothing",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::pieces_are_worth_their_rank",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::an_empty_board_is_worth_nothing",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_lone_king_is_worth_a_kings_value",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_lone_man_is_worth_a_mans_value",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_lone_piece_is_worth_nothing_to_the_other_player",
+      "params": []
+    },
+    { "kind": "function", "name": "checkers_example::checkers::tests::kings_add_up", "params": [] },
+    { "kind": "function", "name": "checkers_example::checkers::tests::men_add_up", "params": [] },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_other_players_pieces_add_nothing",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_banner_asks_for_the_persons_move",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_banner_says_the_computer_is_thinking",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_banner_gives_the_score_of_a_win",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_banner_says_the_computer_won",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_banner_says_the_game_is_drawn",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_banner_is_written_beneath_the_board",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_levels_are_drawn_with_the_best_score",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_click_on_the_board_finds_its_square",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_click_left_of_the_board_finds_no_square",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_click_below_the_board_finds_no_square",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_click_on_the_first_button_finds_the_easiest_level",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_click_on_the_second_button_finds_its_level",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_click_beside_the_buttons_finds_no_level",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_click_above_the_buttons_finds_no_level",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_square_has_its_corner_inside_the_gap",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_square_has_its_centre_half_a_side_in",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_light_square_is_light",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_selected_square_is_marked",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_last_move_is_marked",
+      "params": []
+    },
+    { "kind": "function", "name": "checkers_example::checkers::tests::a_dark_square_is_dark", "params": [] },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::before_any_move_no_square_is_part_of_the_last",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_square_landed_on_is_part_of_the_last_move",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_player_with_no_moves_has_nowhere_to_go",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_only_move_shows_where_it_goes",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::another_piece_shows_nowhere_to_go",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_selected_piece_shows_where_it_may_go",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::with_none_selected_nothing_is_shown",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_board_is_drawn_in_squares",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::an_empty_board_has_no_pieces_to_draw",
+      "params": []
+    },
+    { "kind": "function", "name": "checkers_example::checkers::tests::a_lone_piece_is_drawn", "params": [] },
+    { "kind": "function", "name": "checkers_example::checkers::tests::every_piece_is_drawn", "params": [] },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::with_none_selected_no_square_is_marked",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_one_square_of_the_only_move_is_marked",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::each_square_the_selected_piece_may_go_to_is_marked",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_piece_is_drawn_as_discs",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_red_king_is_red_with_a_crown",
+      "params": []
+    },
+    { "kind": "function", "name": "checkers_example::checkers::tests::a_red_man_is_red", "params": [] },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_white_king_is_white_with_a_crown",
+      "params": []
+    },
+    { "kind": "function", "name": "checkers_example::checkers::tests::a_white_man_is_white", "params": [] },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::escape_at_the_levels_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_level_is_chosen_and_a_move_made",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_window_closed_as_a_game_starts_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_game_is_played_at_the_level_chosen",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_window_closed_at_once_chooses_no_level",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_click_on_a_button_chooses_its_level",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_levels_are_shown_until_one_is_clicked",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_window_closed_at_once_still_scores_the_game",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::space_after_a_game_chooses_another",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_computer_moves_in_a_frame",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_player_has_a_frame_to_act_in",
+      "params": []
+    },
+    { "kind": "function", "name": "checkers_example::checkers::tests::escape_ends_a_game", "params": [] },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::an_ended_game_waits_for_space",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_game_goes_on_after_the_computer_moves",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_player_selects_and_moves_over_two_frames",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_click_where_the_selected_piece_may_go_moves_it",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_click_on_a_piece_that_may_move_selects_it",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_click_elsewhere_selects_nothing",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_click_on_a_button_picks_its_level",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_first_click_on_a_button_counts",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::no_clicks_pick_no_level",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_click_off_the_buttons_picks_no_level",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::clicks_that_all_miss_pick_no_level",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::no_clicks_change_nothing",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::one_click_selects_a_man",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::two_clicks_in_a_frame_make_a_move",
+      "params": []
+    },
+    { "kind": "function", "name": "checkers_example::checkers::tests::the_only_move_is_found", "params": [] },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_move_among_many_is_found",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::with_no_moves_none_is_found",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_only_move_is_not_found_from_another_square",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_only_move_is_not_found_to_another_square",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::no_move_is_found_from_a_blocked_man",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::no_move_is_found_two_squares_away",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::the_piece_of_the_only_move_may_move",
+      "params": []
+    },
+    { "kind": "function", "name": "checkers_example::checkers::tests::a_front_man_may_move", "params": [] },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::with_no_moves_nothing_may_move",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::another_square_may_not_move",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "checkers_example::checkers::tests::a_blocked_man_may_not_move",
+      "params": []
+    }
+  ]
+}

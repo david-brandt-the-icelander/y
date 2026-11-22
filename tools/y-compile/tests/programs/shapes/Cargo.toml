@@ -1,0 +1,12 @@
+[package]
+name = "shapes-program"
+version = "0.0.0"
+edition = "2021"
+description = "A Y test program: traits and their implementations, lambdas and nested functions, units, and a kind of collection."
+
+[dependencies]
+y-runtime = { path = "../y-runtime" }
+y-string = { path = "../y-string" }
+y-collections = { path = "../y-collections" }
+
+[workspace]

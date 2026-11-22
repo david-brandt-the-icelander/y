@@ -1,0 +1,3 @@
+//! Lowered from the Y package in `y/`: its one library module, `hangman`. The entry point is `src/main.rs`.
+
+pub mod hangman;

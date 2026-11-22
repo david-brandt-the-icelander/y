@@ -1,0 +1,466 @@
+# The bare format on one page
+
+A Rust file becomes two files. `bare-rust strip` writes `x.brs`, the **bare body**: names, control flow and
+expressions, and no types, lifetimes, `&`, `mut`, visibility, generics or `where`. It writes `x.constraints.json`
+beside it, the **constraint file**: one *subject* per item, holding everything the bare body left out. `bare-rust
+weave` puts them together again. Edit either file; the weave refuses a body and a constraint file that disagree.
+
+Rules that cover most edits:
+
+- A subject is named by its path: `crate::module::Type::method`; a trait impl's methods are
+  `crate::Type as Trait::method`; a second item of the same name gets `#2`.
+- `self` stays in the bare parameter list; whether it is `&self`, `&mut self` or `self` is in the subject's first
+  parameter (`access` read or write, or none for an owned `self`).
+- Types are written in the constraint type syntax (`string`, `list<element_type=T> as 'Vec'`, `map<key_type=K, value_type=V> as 'HashMap'`, `ref<target_type=T>`,
+  `ptr<target_type=T>` for a raw pointer, `T?` for `Option<T>`, `u32`, a plain name for any other type); `{ "host": "..." }` is
+  Rust text for a type that has no such form.
+- `mut` is not written: the weave derives it through rustc, in every build the crate is checked in. Besides the
+  default build, `strip` chooses a few others (another target, a feature, a `--cfg`, a release build, listed in
+  `builds.json`) so that each piece of code a `#[cfg(..)]` guards is compiled in one of them, where the original crate
+  compiles on stable Rust. The exception is code that no such build compiles (a feature that needs nightly Rust, a
+  target that is not installed); there the bare body keeps its `mut`. A `let` has no type in
+  the bare body; where rustc cannot infer it, it goes under `"holes"` (a local, a cast local; see the last example), and
+  a realization of a generic goes in the crate's table, `"realizations"`, in the crate root's file.
+- A field or parameter whose type is a `ref<target_type=...>` needs an `access`; a result that borrows says `"hold": {"kind":
+  "borrows", "from": "self"}`. A `ptr<target_type=...>` has `"access": {"rights": "read"}` for `*const` and no `access` for `*mut`:
+  a pointer has no guarantee and no lifetime.
+- A union is a `type` subject with `fields`, as a struct is; the bare body keeps the keyword `union`. A generic
+  parameter's default is `"default"` on it: a type (`{"name": "E", "bounds": [], "default": "Error"}`), or host text for
+  a const parameter's value.
+- The examples below come from `docs/bare-format-src/lib.rs`, stripped as crate `format_demo 0.1.0`; the test
+  `tests/docs.rs` re-strips it and fails if a block here has drifted.
+
+## One example per subject kind
+
+### Free function
+
+A `function` subject: `params` in order, each with a `type`; `result` if it returns something; `visible` for `pub`.
+
+Rust:
+
+```rust
+pub fn double(x: u32) -> u32 {
+    x * 2
+}
+```
+
+Bare (`.brs`):
+
+```brs
+fn double(x) {
+    x * 2
+}
+```
+
+Constraint file (`.constraints.json`, under `"subjects"`):
+
+```json
+{
+  "kind": "function",
+  "name": "format_demo::double",
+  "visible": "public",
+  "params": [{"name": "x", "type": "u32"}],
+  "result": {"type": "u32"}
+}
+```
+
+### Methods: `&self` and `&mut self`
+
+`self` is a parameter. `&self` is `access` read/readers; `&mut self` is write/exclusive; a result that points into `self` says what it borrows from.
+
+Rust:
+
+```rust
+impl Counter {
+    pub fn get(&self, word: &str) -> Option<&u32> {
+        self.counts.get(word)
+    }
+
+    pub fn bump(&mut self, word: String) {
+        *self.counts.entry(word).or_insert(0) += 1;
+    }
+}
+```
+
+Bare (`.brs`):
+
+```brs
+impl Counter {
+    fn get(self, word) {
+        self.counts.get(word)
+    }
+
+    fn bump(self, word) {
+        *self.counts.entry(word).or_insert(0) += 1;
+    }
+}
+```
+
+Constraint file (`.constraints.json`, under `"subjects"`):
+
+```json
+{
+  "kind": "function",
+  "name": "format_demo::Counter::get",
+  "visible": "public",
+  "params": [{"name": "self", "type": "ref<target_type=Counter>", "access": {"rights": "read", "guarantee": "readers"}}, {"name": "word", "type": "ref<target_type=string>", "access": {"rights": "read", "guarantee": "readers"}}],
+  "result": {"type": "ref<target_type=u32>?", "hold": {"kind": "borrows", "from": "self"}}
+}
+{
+  "kind": "function",
+  "name": "format_demo::Counter::bump",
+  "visible": "public",
+  "params": [{"name": "self", "type": "ref<target_type=Counter>", "access": {"rights": "write", "guarantee": "exclusive"}}, {"name": "word", "type": "string"}]
+}
+```
+
+### Generic function with bounds
+
+`generics` lists the type parameters; bounds written inline are `bounds`, bounds from a `where` clause are `where`.
+
+Rust:
+
+```rust
+pub fn largest<T: PartialOrd + Copy>(items: &[T]) -> T {
+    let mut best = items[0];
+    for &x in items {
+        if x > best {
+            best = x;
+        }
+    }
+    best
+}
+```
+
+Bare (`.brs`):
+
+```brs
+fn largest(items) {
+    let best = items[0];
+    for &x in items {
+        if x > best {
+            best = x;
+        }
+    }
+    best
+}
+```
+
+Constraint file (`.constraints.json`, under `"subjects"`):
+
+```json
+{
+  "kind": "function",
+  "name": "format_demo::largest",
+  "visible": "public",
+  "generics": [{"name": "T", "bounds": ["PartialOrd", "Copy"]}],
+  "params": [{"name": "items", "type": "ref<target_type=list<element_type=T> as 'std::primitive::slice'>", "access": {"rights": "read", "guarantee": "readers"}}],
+  "result": {"type": "T"}
+}
+```
+
+### Impl of a trait
+
+An `impl` subject (named `Type as Trait`) carries the impl's own generics; each method is a `function` subject named under it. The type's subject lists the trait under `implements`.
+
+Rust:
+
+```rust
+impl Describe for Counter {
+    fn describe(&self) -> String {
+        format!("{} words", self.counts.len())
+    }
+}
+```
+
+Bare (`.brs`):
+
+```brs
+impl Describe for Counter {
+    fn describe(self) {
+        format!("{} words", self.counts.len())
+    }
+}
+```
+
+Constraint file (`.constraints.json`, under `"subjects"`):
+
+```json
+{
+  "kind": "impl",
+  "name": "format_demo::Counter as Describe"
+}
+{
+  "kind": "function",
+  "name": "format_demo::Counter as Describe::describe",
+  "params": [{"name": "self", "type": "ref<target_type=Counter>", "access": {"rights": "read", "guarantee": "readers"}}],
+  "result": {"type": "string"}
+}
+```
+
+### Type alias
+
+The bare body says `type Table;` and the subject (kind `alias`) holds the right-hand side in `type`.
+
+Rust:
+
+```rust
+pub type Table = HashMap<String, u32>;
+```
+
+Bare (`.brs`):
+
+```brs
+type Table;
+```
+
+Constraint file (`.constraints.json`, under `"subjects"`):
+
+```json
+{
+  "kind": "alias",
+  "name": "format_demo::Table",
+  "visible": "public",
+  "type": "map<key_type=string, value_type=u32> as 'HashMap'"
+}
+```
+
+### Struct, named fields
+
+A `type` subject; `fields` in order, each with `type`, `hold` (`owns` unless it borrows) and `visible` if `pub`.
+
+Rust:
+
+```rust
+pub struct Point {
+    pub x: f64,
+    y: f64,
+}
+```
+
+Bare (`.brs`):
+
+```brs
+struct Point {
+    x,
+    y,
+}
+```
+
+Constraint file (`.constraints.json`, under `"subjects"`):
+
+```json
+{
+  "kind": "type",
+  "name": "format_demo::Point",
+  "visible": "public",
+  "fields": [{"name": "x", "visible": "public", "type": "f64", "hold": {"kind": "owns"}}, {"name": "y", "type": "f64", "hold": {"kind": "owns"}}]
+}
+```
+
+### Struct, tuple fields
+
+A tuple struct is `struct Meters(_, _);` in the bare body; its fields have no `name`.
+
+Rust:
+
+```rust
+pub struct Meters(pub f64, f64);
+```
+
+Bare (`.brs`):
+
+```brs
+struct Meters(_, _);
+```
+
+Constraint file (`.constraints.json`, under `"subjects"`):
+
+```json
+{
+  "kind": "type",
+  "name": "format_demo::Meters",
+  "visible": "public",
+  "fields": [{"visible": "public", "type": "f64", "hold": {"kind": "owns"}}, {"type": "f64", "hold": {"kind": "owns"}}]
+}
+```
+
+### Enum
+
+`variants` in order; a variant with fields has `fields`, named for a struct variant and unnamed for a tuple variant.
+
+Rust:
+
+```rust
+pub enum Shape {
+    Dot,
+    Circle(f64),
+    Rect { w: f64, h: f64 },
+}
+```
+
+Bare (`.brs`):
+
+```brs
+enum Shape {
+    Dot,
+    Circle(_),
+    Rect { w, h },
+}
+```
+
+Constraint file (`.constraints.json`, under `"subjects"`):
+
+```json
+{
+  "kind": "type",
+  "name": "format_demo::Shape",
+  "visible": "public",
+  "variants": [{"name": "Dot"}, {"name": "Circle", "fields": [{"type": "f64", "hold": {"kind": "owns"}}]}, {"name": "Rect", "fields": [{"name": "w", "type": "f64", "hold": {"kind": "owns"}}, {"name": "h", "type": "f64", "hold": {"kind": "owns"}}]}]
+}
+```
+
+### Locals, casts and hints
+
+What rustc cannot infer from the bare body goes in `holes`, keyed by the subject: a `locals` entry per `let` (keyed by the pattern; the second `let x` is `x#2`), and per typed parameter of a closure that a `let` names (keyed `<closure>.<parameter>`: `let by_len = |a, b| ...` with `"by_len.a": "<T>"`). A closure's return type is carried by a local in its body: `|s| { let out = { ... }; out }` with `"out": "<T>"`. A turbofish is a *realization* of a template (a generic function or type with its type arguments), and the body names it: the name takes the place of the template's last segment and its arguments, and a path before it stays. `s.parse::<u16>()` is `s.parse_u16()` in the body, `Vec::<u8>::new()` is `VecU8::new()`, and `std::mem::size_of::<u64>()` is `std::mem::size_of_u64()`. The realizations are one table for the crate, at the top of its root's constraint file (`src/lib.constraints.json`; `src/main.constraints.json` for a binary), under `realizations`: `"parse_u16": {"template": "<_>::parse", "args": ["u16"]}`. The template is its full path (`std::mem::size_of`, `std::vec::Vec`), or `<_>::name` for a method, whose type is the receiver's. One name serves every use in the crate with the same template and arguments, and an argument can be `_` for the host to infer (`"collect_vec": {"template": "<_>::collect", "args": ["list<element_type=_> as 'Vec'"]}`). A new use of a realization the table has needs nothing more; a new one needs its entry. Rename the mechanical names like the others (every use and the key together).
+
+**Every cast and suffixed literal has a name.** A conversion between built-in types (`as u64`, `as f64`, ...) and a literal's type (`1u8`) are not written in the body. The value initialises a `let`, and the local's entry carries the type: `{"type": "<T>", "cast": true}` for a cast, so that `let n = e;` weaves to `let n: T = e as T;` (with brackets around `e` when it needs them), and `"<T>"` for a literal, so that `let one = 1;` weaves to `let one: u8 = 1;`. A cast to a pointer carries its access too: `{"type": "ptr<target_type=u8>", "access": {"rights": "read"}, "cast": true}` weaves to `let p: *const u8 = e as *const u8;`. Any other target is carried the same way: a type alias (`{"type": "Word", "cast": true}`), a reference (`{"type": "ref<target_type=any Display>", "cast": true}` for `&x as &dyn Display`), a `fn` pointer (as host text). A `const` or `static` whose whole value is a cast carries it on its subject, `"cast": true`, as a cast local does: `const W = N;` weaves to `const W: usize = N as usize;`. Write a `let` where the Rust would cast in the middle of an expression too: `1.0 - d / m`, with `d` and `m` cast locals, rather than `1.0 - (d as f64) / (m as f64)`.
+
+`strip` does this to the Rust it reads (`bare-rust bind <file.rs>` shows the result), and gives a closure with typed parameters a name the same way (`v.retain(|s: &String| ...)` becomes `let retain_fn = |s: &String| ...;` and `v.retain(retain_fn)`): `(h as u64).wrapping_mul(P)` becomes `let h_u64: u64 = h as u64;` before the statement and `h_u64.wrapping_mul(P)` in it. Where the statement would compute the value when the Rust might not (the right of `&&` or `||`, a match arm or guard, an `else if`, a `while` condition, a closure body), the `let` goes into a new block in that place: `c && { let h_u8 = h; h_u8 > 3 }`. A constant context (an array's length, the value of a `const` or `static`), a `while let` value and a part of a let chain get a block in their place the same way: `[0; { let n_usize = N; n_usize }]`, `if let Some(y) = a && { let n_u8 = n; y > n_u8 }`. What runs earlier in the statement and has an effect is named first, so the order stays the Rust's: a method receiver that is a value is named whole (`let largest = v.iter().max().copied().unwrap_or(0);` and `largest.max(a_u8)`), a place stays where it is and what it computes on the way is named (`let row = next_row();` and `self.rows[row].push(n_u32)`), and the right of an assignment is named before its left. Which side of `+=` runs first depends on the types, so where the other side has an effect the `let` goes into a block in place of the part it is in: `v[{ let i_usize = i; i_usize }] += next()`. Names such as `h_u64` and `k1_u8` are mechanical; rename them (the `.brs` and the `holes` key together) to say what the value is.
+
+The arguments of the standard macros (`format!`, `println!`, `write!`, `writeln!`, `panic!`, `assert!`, `assert_eq!`, `vec!`, `dbg!`, `json!` and the like) are bound like a call's: `println!("{}", x as u8)` is `let x_u8 = x;` (a cast local) and `println!("{}", x_u8)`, and an argument with a turbofish is named before the macro (`let total = v.iter().sum_u64();` and `format!("{}", total)`). A binding never goes inside a macro's arguments. A macro whose syntax the tool does not know, or an argument that runs only sometimes (an assertion's message, `debug_assert!`), is kept as Rust text when it states a type: `rust! { assert!(ok, "{}", n as u8) }`, which weaves to the call. Write new code the way `strip` writes it: name the value before the macro.
+
+Rust:
+
+```rust
+pub fn mean(values: &[f64]) -> f64 {
+    let total: f64 = values.iter().sum();
+    let n: f64 = values.len() as f64;
+    total / n
+}
+```
+
+Bare (`.brs`):
+
+```brs
+fn mean(values) {
+    let total = values.iter().sum();
+    let n = values.len();
+    total / n
+}
+```
+
+Constraint file (`.constraints.json`, under `"subjects"` and `"holes"`):
+
+```json
+{
+  "kind": "function",
+  "name": "format_demo::mean",
+  "visible": "public",
+  "params": [{"name": "values", "type": "ref<target_type=list<element_type=f64> as 'std::primitive::slice'>", "access": {"rights": "read", "guarantee": "readers"}}],
+  "result": {"type": "f64"}
+}
+{
+  "holes": {
+    "format_demo::mean": {
+      "locals": {
+        "total": "f64",
+        "n": {"type": "f64", "cast": true}
+      }
+    }
+  }
+}
+```
+
+A suffixed literal in a pattern (`1u8 => ...`) has no `let` to carry its type. Where what is matched is a name declared with that type (a parameter `x: u8`, a typed `let`; through `&` and a tuple's elements, `match (x, y) { (1, _) => ... }`), the declaration already says it, and the literal has no suffix. Otherwise the literal gets a name over it, which carries its type keyed by the name's pattern: `_k1_u8 @ 1` with `"_k1_u8 @ 1": {"literal": "u8"}` weaves to `_k1_u8 @ 1u8`. The `_` says that nothing uses the name; a name already there (`n @ 4..=6`) carries the type the same way, for every literal under it.
+
+Two kinds of site cannot be bound and stay `e as _` with a hint `{"kind": "cast", "n": <ordinal of the cast in the body>, "type": "<T>"}`: a cast in a macro argument that runs only sometimes (an assertion's message, `debug_assert!`), and one holding a value that releases something at its end (a lock guard) where the statement might not run. Do not write new ones; use a cast local.
+
+### Regions and module levels
+
+Two kinds of entry have no Rust item of their own. A **region** (constraint language § 6.23) is how a function, or a
+named part of one, may execute: a subject of kind `region`, named `<function>#<region>`, with one clause of kind
+`region` for each constraint (`atomic`, `may run again`, `within 50ms`, `waits until enough : p`, `forever because
+"…"`, `supervise(…)`, …). The function's body marks where the region starts with a comment, `// y: region filing is
+uncancellable, within 50ms` or, for an alternative of an `orelse`, `// y: #name`; weave binds the region to that
+marker, and refuses a region its function does not mark, whose marker states other constraints than its clauses, or
+whose code does not keep them. That code is what follows the marker in its block, up to `// y: end region name` or the
+block's end, or the statement the marker ends; a region that more of the function's statements follow in its block
+must say where it ends. Weave reads that code's calls, names and waits, and an atomic region may call nothing that
+needs `effects`, nor a function passed in unless rustc's reading of the crate says what it may be. A **level** (§ 6.22) is a field of a module's subject, `"level":
+"structured"`: nothing in the module, its inner modules or its files (its `tests` aside) may use more, the functions
+it calls (method calls among them) and the modules it imports counted, and a library's calls at the level
+`libraries/levels.json` gives its module; a library it does not list counts as `effects`. A parameter the Y lowering
+injects is marked `"injected": true`, which is how a capability is known. Weave refuses a body above its module's
+level, naming the construct; `bare-rust levels <bare-dir>` prints what each module needs and why.
+
+Which function a call calls, for both checks, is read one of two ways, and weave prints which (`weave: levels and
+regions checked from …`, and `checks_via` in `--json`):
+
+- **From rustc.** A weave with cargo checks levels and regions after the build, when the crate has either. Where the
+  woven crate builds, it reads the crate's MIR (`cargo rustc -- -Zunpretty=mir`, as `bare-rust externals` does), maps
+  each call back to the bare file through the span map, and takes the item rustc resolved: a method is its receiver's
+  type's whatever names the receiver (`|t| t.count()` is `Tally`'s `count` when `t` is a `Tally`), and a library's
+  function is found where it is defined, so a re-export, a renamed import or a local that holds the function (`let
+  run = atomic; run(…)`) is that function. A trait's method called on a type parameter may be any impl of the trait in
+  the crate. A call through a function pointer, a `dyn Fn` or an `Fn` bound may be any function the crate names as a
+  value, or any closure it writes, whose signature fits (the same argument types, and the same result where both
+  state it); it needs the most of them. A value the body got from a library's function (`Option::unwrap`) needs that
+  function's level too, and a call nothing in the crate fits, of a value from no library, counts as `effects`. Weave reads the MIR of every target (library, binaries, integration tests), of the library and binaries
+  with their unit tests, and of every build in `builds.json` whose check passed, each with its target, features,
+  `--cfg` and profile; it names what it read, and any build or target whose MIR it could not read, with why.
+- **From the syntax**, when there is no build: a weave without cargo, a crate that does not compile, a file weave
+  refused, a function no build compiles (rustc said nothing of it), or a call rustc said nothing of. A name is resolved through the file's `use` declarations; a method's
+  receiver type comes from the constraint data when the receiver is a parameter or a typed local, and is otherwise
+  unknown, so the call counts as the most demanding method of that name in the crate.
+
+A macro is read from its invocation either way, because rustc places the calls of its expansion in the library's
+source, not at the invocation. `println!` needs the level `libraries/levels.json` gives `std::println` (`effects`); a
+macro named alone is the prelude's unless the file imports it (`use y_collections::list;`), and one the table cannot
+place counts as `effects`. The calls in a macro's arguments are the body's, from rustc or, without a build, by reading
+the arguments as a call's. A macro the crate defines (`macro_rules! name`) is read as one of its functions, whose body
+is what its rules expand to: the calls rustc places in its definition, or, without a build, each rule's right side
+read as code (`$x` as `x`, a repetition as a block of what it repeats). An invocation of it is a call of it and needs
+what it needs, and a macro that expands to itself is not recursion. A macro a dependency exports (`#[macro_export]`)
+is read the same way, from the dependency's source as cargo has it, when weave runs cargo: its rules with `$crate` as
+the library's name, their calls at the levels the table gives. The standard library's macros are read the same way
+from the toolchain's source (`rustup component add rust-src`), except a compiler built-in, which calls nothing, and
+the few `macros_from_table` names (`thread_local!`). Without its source, the table's level for its path is used. A
+procedural macro's expansion is what rustc resolved at its invocation; without a build, the table's.
+
+`bare-rust levels <bare-dir> --crate <crate-dir> --out <dir>` weaves with cargo and prints the levels from rustc's
+calls (`--show-calls` lists them). `bare-rust levels --libraries <crate>…` checks `libraries/levels.json` against what a
+library crate calls, from its MIR: a public function that reaches a library module above the level the table gives
+the function, or a library the table does not list, fails. The table's `trusted` lets a function make the calls it
+lists there, with why (`"y_runtime::shared::wait": {"calls": ["y_runtime::Deadline::remaining"], "why": "…"}`), and no others: any other
+call it makes counts, and an entry whose calls the function no longer makes fails as stale.
+
+```text
+{ "kind": "region", "name": "shop::checkout::hold#hold_one", "clauses": [ { "kind": "region", "text": "atomic", "source": "y/src/checkout.y:12" } ] }
+{ "kind": "module", "name": "shop::pricing", "visible": "public", "level": "calculations" }
+```
+
+## When something is wrong, the message names the fix
+
+- `let x: T = ...` in a `.brs`: `src/lib.brs:12:9: a local's type does not go in the bare body; ...` prints the
+  `"holes": {"<fn path>": {"locals": {"x": "<T>"}}}` entry to add (`<T>` converted to the constraint syntax, or host
+  text). (`let mut x` is accepted and `mut` is derived, so it is not
+  an error.)
+- `type X = ...;` in a `.brs`: the message says to write `type X;` and prints the `alias` subject to add.
+- `slot missing: no subject ...` from a weave: the message ends with a ready-to-paste subject entry for the item,
+  with `TODO` where a type goes. Fill each `TODO`; the weave refuses a leftover `TODO` and names where it is.
+
+The same messages appear in the text output of `bare-rust weave` and in the `errors` of `weave --json`.
+
+## Adding an item
+
+`bare-rust scaffold <fn|impl|alias|struct> <path> [options]` prints a bare stub and its subject entries, or with
+`--write <dir>` appends the stub to the module's `.brs` and the entries to its `.constraints.json` (canonical form).
+Types default to `TODO`. See `bare-rust` with no arguments for the options.
+
+```
+bare-rust scaffold fn util::Counter::peek --self ref --params key --param-types 'ref<target_type=string>' --result 'u32?'
+bare-rust scaffold impl Counter --trait Describe --methods describe,reset:mut
+bare-rust scaffold alias Table --type "map<key_type=string, value_type=u32> as 'HashMap'"
+bare-rust scaffold struct Point --fields x,y --field-types f64,f64 --write .
+```

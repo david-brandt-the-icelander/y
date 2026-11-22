@@ -1,0 +1,1 @@
+We have `normalized_levenshtein` but no normalized version of the Damerau-Levenshtein distance. Please add `normalized_damerau_levenshtein(a: &str, b: &str) -> f64`: 1.0 for identical strings (including two empty ones), 0.0 when one is empty and the other not, otherwise 1 minus the distance over the length in characters of the longer string.

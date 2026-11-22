@@ -1,0 +1,12 @@
+[package]
+name = "warehouse-example"
+version = "0.0.0"
+edition = "2021"
+description = "A warehouse's day, written in Y and lowered through bare Rust and its constraint files to Rust."
+
+[dependencies]
+y-runtime = { path = "../y-runtime" }
+y-string = { path = "../y-string" }
+y-collections = { path = "../y-collections" }
+
+[workspace]

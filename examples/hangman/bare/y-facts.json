@@ -1,0 +1,1017 @@
+{
+  "format": "y-facts/0",
+  "about": "What the Y source says that neither the bare bodies nor the constraint files can hold. Nothing in bare-rust reads this file; it is for the Y toolchain (y explain, y review, coverage), and tools/bare-rust/tests/y_examples.rs checks it against the Y source and the bare bodies.",
+  "modules": [
+    {
+      "y": "y/src/hangman.y",
+      "module": "hangman",
+      "bare": "bare/src/hangman.brs",
+      "rust": "src/hangman.rs"
+    },
+    {
+      "y": "y/src/hangman.test.y",
+      "module": "hangman",
+      "bare": "bare/src/hangman/tests.brs",
+      "rust": "src/hangman/tests.rs"
+    },
+    {
+      "y": "y/src/main.y",
+      "module": "main",
+      "bare": "bare/src/main.brs",
+      "rust": "src/main.rs"
+    }
+  ],
+  "facets": [
+    {
+      "module": "hangman",
+      "facet": "setup",
+      "path": "hangman.setup",
+      "visible": "public",
+      "y": "y/src/hangman.y:9",
+      "rust": "hangman_example::hangman::setup",
+      "members": [
+        "game_rules",
+        "word",
+        "word_list_error",
+        "parse_word_list"
+      ]
+    },
+    {
+      "module": "hangman",
+      "facet": "rounds",
+      "path": "hangman.rounds",
+      "visible": "public",
+      "y": "y/src/hangman.y:66",
+      "rust": "hangman_example::hangman::rounds",
+      "members": [
+        "game",
+        "outcome",
+        "verdict",
+        "guess_error",
+        "new_game",
+        "outcome_of",
+        "guess"
+      ]
+    },
+    {
+      "module": "hangman",
+      "facet": "display",
+      "path": "hangman.display",
+      "visible": "public",
+      "y": "y/src/hangman.y:180",
+      "rust": "hangman_example::hangman::display",
+      "members": [
+        "masked",
+        "gallows"
+      ]
+    },
+    {
+      "module": "hangman",
+      "facet": "console_play",
+      "path": "hangman.console_play",
+      "visible": "public",
+      "y": "y/src/hangman.y:255",
+      "rust": "hangman_example::hangman::console_play",
+      "members": [
+        "play_error",
+        "play"
+      ]
+    }
+  ],
+  "units": [
+    {
+      "subject": "hangman_example::hangman::setup::game_rules::ALLOWED_MISSES",
+      "unit": "count<unit_type=rune>",
+      "y": "y/src/hangman.y:16"
+    },
+    {
+      "subject": "hangman_example::hangman::display::gallows",
+      "param": "misses",
+      "unit": "count<unit_type=rune>",
+      "y": "y/src/hangman.y:203"
+    },
+    {
+      "subject": "hangman_example::hangman::setup::Word",
+      "constraint": "long_enough",
+      "unit": "count<unit_type=rune>",
+      "y": "y/src/hangman.y:26"
+    }
+  ],
+  "capabilities": [
+    {
+      "subject": "hangman_example::hangman::console_play::play",
+      "injected": [
+        "console as console",
+        "random as random",
+        "forever as forever"
+      ],
+      "lowered": "as the last three parameters, in order",
+      "y": "y/src/hangman.y:274"
+    },
+    {
+      "subject": "hangman_example::hangman::show_turn",
+      "injected": [
+        "console as console"
+      ],
+      "lowered": "as the last parameter",
+      "y": "y/src/hangman.y:303"
+    },
+    {
+      "subject": "hangman_example::hangman::show_end",
+      "injected": [
+        "console as console"
+      ],
+      "lowered": "as the last parameter",
+      "y": "y/src/hangman.y:344"
+    },
+    {
+      "subject": "hangman_example::main",
+      "injected": [
+        "system as system"
+      ],
+      "lowered": "System::root(), made by the entry point",
+      "y": "y/src/main.y:14"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "forever",
+      "because": "a player may think for as long as they like",
+      "requires": "Forever",
+      "y": "y/src/hangman.y:282",
+      "bare": "bare/src/hangman.brs:307"
+    }
+  ],
+  "suspensions": [],
+  "compiled": [
+    {
+      "call": "parse_word_list(game_rules.word_list)",
+      "value": "hangman_example::COMPILED_WORD_LIST",
+      "check": "hangman_example::tests::compiled_word_list_matches_run_time",
+      "y": "y/src/main.y:15",
+      "bare": "bare/src/main.brs:12"
+    }
+  ],
+  "copies": [
+    {
+      "what": "words[chosen]",
+      "why": "new_game keeps its word, and words is still read",
+      "y": "y/src/hangman.y:277",
+      "bare": "bare/src/hangman.brs:301"
+    }
+  ],
+  "decisions": {
+    "hangman.parse_word_list": [
+      {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "piece",
+            "y": "y/src/hangman.y:49",
+            "bare": "bare/src/hangman.brs:74"
+          }
+        ]
+      },
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "blank",
+            "y": "y/src/hangman.y:50",
+            "bare": "bare/src/hangman.brs:75"
+          },
+          {
+            "name": "has_text",
+            "y": "y/src/hangman.y:52",
+            "bare": "bare/src/hangman.brs:75"
+          }
+        ]
+      },
+      {
+        "kind": "conditional",
+        "label": "checked",
+        "y": "y/src/hangman.y:53",
+        "branches": [
+          {
+            "name": "checked.valid",
+            "y": "y/src/hangman.y:54",
+            "bare": "bare/src/hangman.brs:79"
+          },
+          {
+            "name": "checked.invalid",
+            "y": "y/src/hangman.y:56",
+            "bare": "bare/src/hangman.brs:80"
+          }
+        ]
+      },
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "empty",
+            "y": "y/src/hangman.y:59",
+            "bare": "bare/src/hangman.brs:83"
+          },
+          {
+            "name": "has_words",
+            "y": "y/src/hangman.y:61",
+            "bare": "bare/src/hangman.brs:83"
+          }
+        ]
+      }
+    ],
+    "hangman.outcome_of": [
+      {
+        "kind": "conditional",
+        "label": "judged",
+        "y": "y/src/hangman.y:134",
+        "branches": [
+          {
+            "name": "judged.hanged",
+            "y": "y/src/hangman.y:135",
+            "bare": "bare/src/hangman.brs:160"
+          },
+          {
+            "name": "judged.solved",
+            "y": "y/src/hangman.y:137",
+            "bare": "bare/src/hangman.brs:162"
+          },
+          {
+            "name": "judged.undecided",
+            "y": "y/src/hangman.y:139",
+            "bare": "bare/src/hangman.brs:164"
+          }
+        ]
+      }
+    ],
+    "hangman.guess": [
+      {
+        "kind": "conditional",
+        "label": "judged",
+        "y": "y/src/hangman.y:160",
+        "branches": [
+          {
+            "name": "judged.nothing_typed",
+            "y": "y/src/hangman.y:161",
+            "bare": "bare/src/hangman.brs:182"
+          },
+          {
+            "name": "judged.not_one_rune",
+            "y": "y/src/hangman.y:163",
+            "bare": "bare/src/hangman.brs:185"
+          },
+          {
+            "name": "judged.not_a_letter",
+            "y": "y/src/hangman.y:167",
+            "bare": "bare/src/hangman.brs:188"
+          },
+          {
+            "name": "judged.repeated",
+            "y": "y/src/hangman.y:169",
+            "bare": "bare/src/hangman.brs:190"
+          },
+          {
+            "name": "judged.in_word",
+            "y": "y/src/hangman.y:171",
+            "bare": "bare/src/hangman.brs:192"
+          },
+          {
+            "name": "judged.not_in_word",
+            "y": "y/src/hangman.y:174",
+            "bare": "bare/src/hangman.brs:195"
+          }
+        ]
+      }
+    ],
+    "hangman.masked": [
+      {
+        "kind": "for",
+        "branches": [
+          {
+            "name": "letter",
+            "y": "y/src/hangman.y:191",
+            "bare": "bare/src/hangman.brs:213"
+          }
+        ]
+      }
+    ],
+    "hangman.shown_rune": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "known",
+            "y": "y/src/hangman.y:232",
+            "bare": "bare/src/hangman.brs:252"
+          },
+          {
+            "name": "unknown",
+            "y": "y/src/hangman.y:234",
+            "bare": "bare/src/hangman.brs:254"
+          }
+        ]
+      }
+    ],
+    "hangman.part": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "reached",
+            "y": "y/src/hangman.y:248",
+            "bare": "bare/src/hangman.brs:266"
+          },
+          {
+            "name": "not_yet",
+            "y": "y/src/hangman.y:250",
+            "bare": "bare/src/hangman.brs:268"
+          }
+        ]
+      }
+    ],
+    "hangman.play": [
+      {
+        "kind": "while",
+        "branches": [
+          {
+            "name": "playing",
+            "y": "y/src/hangman.y:280",
+            "bare": "bare/src/hangman.brs:304"
+          },
+          {
+            "name": "over_at_once",
+            "y": "y/src/hangman.y:289",
+            "bare": "bare/src/hangman.brs:315"
+          }
+        ]
+      },
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "closed",
+            "y": "y/src/hangman.y:284",
+            "bare": "bare/src/hangman.brs:308"
+          },
+          {
+            "name": "line_read",
+            "y": "y/src/hangman.y:286",
+            "bare": "bare/src/hangman.brs:308"
+          }
+        ]
+      }
+    ],
+    "hangman.reply": [
+      {
+        "kind": "conditional",
+        "label": "said",
+        "y": "y/src/hangman.y:322",
+        "branches": [
+          {
+            "name": "said.hit",
+            "y": "y/src/hangman.y:323",
+            "bare": "bare/src/hangman.brs:346"
+          },
+          {
+            "name": "said.miss",
+            "y": "y/src/hangman.y:325",
+            "bare": "bare/src/hangman.brs:347"
+          },
+          {
+            "name": "said.typed_nothing",
+            "y": "y/src/hangman.y:327",
+            "bare": "bare/src/hangman.brs:348"
+          },
+          {
+            "name": "said.typed_other",
+            "y": "y/src/hangman.y:329",
+            "bare": "bare/src/hangman.brs:349"
+          },
+          {
+            "name": "said.typed_again",
+            "y": "y/src/hangman.y:331",
+            "bare": "bare/src/hangman.brs:350"
+          }
+        ]
+      }
+    ],
+    "hangman.show_end": [
+      {
+        "kind": "if",
+        "branches": [
+          {
+            "name": "won",
+            "y": "y/src/hangman.y:348",
+            "bare": "bare/src/hangman.brs:362"
+          },
+          {
+            "name": "hanged",
+            "y": "y/src/hangman.y:350",
+            "bare": "bare/src/hangman.brs:364"
+          }
+        ]
+      }
+    ]
+  },
+  "paths": [
+    {
+      "path": "parse_word_list > piece > has_text > checked.invalid",
+      "ends": "fails"
+    },
+    {
+      "path": "parse_word_list > piece'many > has_text > checked.invalid",
+      "ends": "fails"
+    },
+    {
+      "path": "parse_word_list > piece > has_text > checked.valid > has_words",
+      "ends": "returns"
+    },
+    {
+      "path": "parse_word_list > piece > blank > empty",
+      "ends": "fails"
+    },
+    {
+      "path": "parse_word_list > piece'many > has_text > checked.valid > has_words",
+      "ends": "returns"
+    },
+    {
+      "path": "parse_word_list > piece'many > blank > empty",
+      "ends": "fails"
+    },
+    {
+      "path": "parse_word_list > piece'many > blank > has_words",
+      "ends": "returns"
+    },
+    {
+      "path": "new_game",
+      "ends": "returns"
+    },
+    {
+      "path": "outcome_of > judged.hanged",
+      "ends": "returns"
+    },
+    {
+      "path": "outcome_of > judged.solved",
+      "ends": "returns"
+    },
+    {
+      "path": "outcome_of > judged.undecided",
+      "ends": "returns"
+    },
+    {
+      "path": "guess > judged.nothing_typed",
+      "ends": "fails"
+    },
+    {
+      "path": "guess > judged.not_one_rune",
+      "ends": "fails"
+    },
+    {
+      "path": "guess > judged.not_a_letter",
+      "ends": "fails"
+    },
+    {
+      "path": "guess > judged.repeated'1",
+      "ends": "fails"
+    },
+    {
+      "path": "guess > judged.repeated'2",
+      "ends": "fails"
+    },
+    {
+      "path": "guess > judged.in_word",
+      "ends": "returns"
+    },
+    {
+      "path": "guess > judged.not_in_word",
+      "ends": "returns"
+    },
+    {
+      "path": "masked > letter'many",
+      "ends": "returns"
+    },
+    {
+      "path": "gallows",
+      "ends": "returns"
+    },
+    {
+      "path": "shown_rune > known",
+      "ends": "returns"
+    },
+    {
+      "path": "shown_rune > unknown",
+      "ends": "returns"
+    },
+    {
+      "path": "part > reached",
+      "ends": "returns"
+    },
+    {
+      "path": "part > not_yet",
+      "ends": "returns"
+    },
+    {
+      "path": "play > playing > line_read",
+      "ends": "returns"
+    },
+    {
+      "path": "play > playing'many > line_read",
+      "ends": "returns"
+    },
+    {
+      "path": "play > write_line'1'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "play > over_at_once",
+      "ends": "not_reachable"
+    },
+    {
+      "path": "play > playing > show_turn'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "play > playing > typed'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "play > playing > closed",
+      "ends": "fails"
+    },
+    {
+      "path": "play > playing > line_read > write_line'2'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "play > playing'many > show_turn'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "play > playing'many > typed'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "play > playing'many > closed",
+      "ends": "fails"
+    },
+    {
+      "path": "play > playing'many > line_read > write_line'2'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "play > playing > line_read > show_end'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "play > playing'many > line_read > show_end'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "show_turn",
+      "ends": "returns"
+    },
+    {
+      "path": "show_turn > write_line'1'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "show_turn > write_line'2'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "show_turn > write_line'3'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "show_turn > write'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "reply > said.hit",
+      "ends": "returns"
+    },
+    {
+      "path": "reply > said.miss",
+      "ends": "returns"
+    },
+    {
+      "path": "reply > said.typed_nothing",
+      "ends": "returns"
+    },
+    {
+      "path": "reply > said.typed_other",
+      "ends": "returns"
+    },
+    {
+      "path": "reply > said.typed_again",
+      "ends": "returns"
+    },
+    {
+      "path": "show_end > won",
+      "ends": "returns"
+    },
+    {
+      "path": "show_end > hanged",
+      "ends": "returns"
+    },
+    {
+      "path": "show_end > write_line'1'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "show_end > won > write_line'2'fails",
+      "ends": "fails"
+    },
+    {
+      "path": "show_end > hanged > write_line'3'fails",
+      "ends": "fails"
+    }
+  ],
+  "tests": {
+    "a_letter_in_the_word_is_a_hit": {
+      "y": "y/src/hangman.test.y:2",
+      "rust": "hangman_example::hangman::tests::a_letter_in_the_word_is_a_hit",
+      "covers": [
+        "guess > judged.in_word"
+      ]
+    },
+    "a_letter_not_in_the_word_is_a_miss": {
+      "y": "y/src/hangman.test.y:14",
+      "rust": "hangman_example::hangman::tests::a_letter_not_in_the_word_is_a_miss",
+      "covers": [
+        "guess > judged.not_in_word"
+      ]
+    },
+    "a_letter_already_found_is_refused": {
+      "y": "y/src/hangman.test.y:26",
+      "rust": "hangman_example::hangman::tests::a_letter_already_found_is_refused",
+      "covers": [
+        "guess > judged.repeated'1"
+      ]
+    },
+    "a_repeated_letter_is_refused": {
+      "y": "y/src/hangman.test.y:39",
+      "rust": "hangman_example::hangman::tests::a_repeated_letter_is_refused",
+      "covers": [
+        "guess > judged.repeated'2"
+      ]
+    },
+    "typing_nothing_is_not_a_guess": {
+      "y": "y/src/hangman.test.y:51",
+      "rust": "hangman_example::hangman::tests::typing_nothing_is_not_a_guess",
+      "covers": [
+        "guess > judged.nothing_typed"
+      ]
+    },
+    "two_letters_are_not_a_guess": {
+      "y": "y/src/hangman.test.y:62",
+      "rust": "hangman_example::hangman::tests::two_letters_are_not_a_guess",
+      "covers": [
+        "guess > judged.not_one_rune"
+      ]
+    },
+    "a_digit_is_not_a_guess": {
+      "y": "y/src/hangman.test.y:73",
+      "rust": "hangman_example::hangman::tests::a_digit_is_not_a_guess",
+      "covers": [
+        "guess > judged.not_a_letter"
+      ]
+    },
+    "six_misses_hang_the_man": {
+      "y": "y/src/hangman.test.y:84",
+      "rust": "hangman_example::hangman::tests::six_misses_hang_the_man",
+      "covers": [
+        "outcome_of > judged.hanged"
+      ]
+    },
+    "finding_every_letter_wins": {
+      "y": "y/src/hangman.test.y:95",
+      "rust": "hangman_example::hangman::tests::finding_every_letter_wins",
+      "covers": [
+        "outcome_of > judged.solved"
+      ]
+    },
+    "a_new_game_is_being_played": {
+      "y": "y/src/hangman.test.y:106",
+      "rust": "hangman_example::hangman::tests::a_new_game_is_being_played",
+      "covers": [
+        "outcome_of > judged.undecided"
+      ]
+    },
+    "a_new_game_has_nothing_guessed": {
+      "y": "y/src/hangman.test.y:117",
+      "rust": "hangman_example::hangman::tests::a_new_game_has_nothing_guessed",
+      "covers": [
+        "new_game"
+      ]
+    },
+    "a_found_letter_shows_wherever_it_occurs": {
+      "y": "y/src/hangman.test.y:129",
+      "rust": "hangman_example::hangman::tests::a_found_letter_shows_wherever_it_occurs",
+      "covers": [
+        "masked > letter'many"
+      ]
+    },
+    "a_found_letter_is_shown": {
+      "y": "y/src/hangman.test.y:140",
+      "rust": "hangman_example::hangman::tests::a_found_letter_is_shown",
+      "covers": [
+        "shown_rune > known"
+      ]
+    },
+    "a_letter_not_found_is_hidden": {
+      "y": "y/src/hangman.test.y:149",
+      "rust": "hangman_example::hangman::tests::a_letter_not_found_is_hidden",
+      "covers": [
+        "shown_rune > unknown"
+      ]
+    },
+    "the_empty_gallows": {
+      "y": "y/src/hangman.test.y:158",
+      "rust": "hangman_example::hangman::tests::the_empty_gallows",
+      "covers": [
+        "gallows"
+      ]
+    },
+    "the_full_gallows": {
+      "y": "y/src/hangman.test.y:177",
+      "rust": "hangman_example::hangman::tests::the_full_gallows",
+      "covers": [
+        "gallows"
+      ]
+    },
+    "a_part_is_drawn_once_enough_misses_are_made": {
+      "y": "y/src/hangman.test.y:196",
+      "rust": "hangman_example::hangman::tests::a_part_is_drawn_once_enough_misses_are_made",
+      "covers": [
+        "part > reached"
+      ]
+    },
+    "a_part_is_blank_until_enough_misses_are_made": {
+      "y": "y/src/hangman.test.y:205",
+      "rust": "hangman_example::hangman::tests::a_part_is_blank_until_enough_misses_are_made",
+      "covers": [
+        "part > not_yet"
+      ]
+    },
+    "a_word_list_is_read_in_order": {
+      "y": "y/src/hangman.test.y:214",
+      "rust": "hangman_example::hangman::tests::a_word_list_is_read_in_order",
+      "covers": [
+        "parse_word_list > piece'many > has_text > checked.valid > has_words"
+      ]
+    },
+    "spaces_after_the_last_word_are_allowed": {
+      "y": "y/src/hangman.test.y:223",
+      "rust": "hangman_example::hangman::tests::spaces_after_the_last_word_are_allowed",
+      "covers": [
+        "parse_word_list > piece'many > blank > has_words"
+      ]
+    },
+    "a_list_of_one_word_is_read": {
+      "y": "y/src/hangman.test.y:232",
+      "rust": "hangman_example::hangman::tests::a_list_of_one_word_is_read",
+      "covers": [
+        "parse_word_list > piece > has_text > checked.valid > has_words"
+      ]
+    },
+    "an_empty_word_list_is_refused": {
+      "y": "y/src/hangman.test.y:241",
+      "rust": "hangman_example::hangman::tests::an_empty_word_list_is_refused",
+      "covers": [
+        "parse_word_list > piece'many > blank > empty"
+      ]
+    },
+    "an_empty_text_is_refused": {
+      "y": "y/src/hangman.test.y:250",
+      "rust": "hangman_example::hangman::tests::an_empty_text_is_refused",
+      "covers": [
+        "parse_word_list > piece > blank > empty"
+      ]
+    },
+    "a_short_word_is_refused": {
+      "y": "y/src/hangman.test.y:259",
+      "rust": "hangman_example::hangman::tests::a_short_word_is_refused",
+      "covers": [
+        "parse_word_list > piece'many > has_text > checked.invalid"
+      ]
+    },
+    "a_list_of_one_short_word_is_refused": {
+      "y": "y/src/hangman.test.y:268",
+      "rust": "hangman_example::hangman::tests::a_list_of_one_short_word_is_refused",
+      "covers": [
+        "parse_word_list > piece > has_text > checked.invalid"
+      ]
+    },
+    "a_turn_shows_the_game_and_asks_for_a_guess": {
+      "y": "y/src/hangman.test.y:277",
+      "rust": "hangman_example::hangman::tests::a_turn_shows_the_game_and_asks_for_a_guess",
+      "covers": [
+        "show_turn"
+      ]
+    },
+    "a_turn_cannot_be_shown_after_no_lines": {
+      "y": "y/src/hangman.test.y:292",
+      "rust": "hangman_example::hangman::tests::a_turn_cannot_be_shown_after_no_lines",
+      "covers": [
+        "show_turn > write_line'1'fails"
+      ]
+    },
+    "a_turn_cannot_be_shown_after_one_lines": {
+      "y": "y/src/hangman.test.y:305",
+      "rust": "hangman_example::hangman::tests::a_turn_cannot_be_shown_after_one_lines",
+      "covers": [
+        "show_turn > write_line'2'fails"
+      ]
+    },
+    "a_turn_cannot_be_shown_after_two_lines": {
+      "y": "y/src/hangman.test.y:318",
+      "rust": "hangman_example::hangman::tests::a_turn_cannot_be_shown_after_two_lines",
+      "covers": [
+        "show_turn > write_line'3'fails"
+      ]
+    },
+    "a_turn_cannot_be_shown_after_three_lines": {
+      "y": "y/src/hangman.test.y:331",
+      "rust": "hangman_example::hangman::tests::a_turn_cannot_be_shown_after_three_lines",
+      "covers": [
+        "show_turn > write'fails"
+      ]
+    },
+    "a_hit_is_answered_yes": {
+      "y": "y/src/hangman.test.y:344",
+      "rust": "hangman_example::hangman::tests::a_hit_is_answered_yes",
+      "covers": [
+        "reply > said.hit"
+      ]
+    },
+    "a_miss_is_answered_no": {
+      "y": "y/src/hangman.test.y:353",
+      "rust": "hangman_example::hangman::tests::a_miss_is_answered_no",
+      "covers": [
+        "reply > said.miss"
+      ]
+    },
+    "typing_nothing_is_answered_with_a_request": {
+      "y": "y/src/hangman.test.y:362",
+      "rust": "hangman_example::hangman::tests::typing_nothing_is_answered_with_a_request",
+      "covers": [
+        "reply > said.typed_nothing"
+      ]
+    },
+    "typing_other_than_a_letter_is_answered_with_what_was_typed": {
+      "y": "y/src/hangman.test.y:371",
+      "rust": "hangman_example::hangman::tests::typing_other_than_a_letter_is_answered_with_what_was_typed",
+      "covers": [
+        "reply > said.typed_other"
+      ]
+    },
+    "a_repeated_letter_is_answered_with_the_letter": {
+      "y": "y/src/hangman.test.y:380",
+      "rust": "hangman_example::hangman::tests::a_repeated_letter_is_answered_with_the_letter",
+      "covers": [
+        "reply > said.typed_again"
+      ]
+    },
+    "a_win_is_announced": {
+      "y": "y/src/hangman.test.y:389",
+      "rust": "hangman_example::hangman::tests::a_win_is_announced",
+      "covers": [
+        "show_end > won"
+      ]
+    },
+    "a_hanging_is_announced": {
+      "y": "y/src/hangman.test.y:402",
+      "rust": "hangman_example::hangman::tests::a_hanging_is_announced",
+      "covers": [
+        "show_end > hanged"
+      ]
+    },
+    "an_end_cannot_be_shown_without_the_gallows": {
+      "y": "y/src/hangman.test.y:415",
+      "rust": "hangman_example::hangman::tests::an_end_cannot_be_shown_without_the_gallows",
+      "covers": [
+        "show_end > write_line'1'fails"
+      ]
+    },
+    "a_win_cannot_be_announced": {
+      "y": "y/src/hangman.test.y:432",
+      "rust": "hangman_example::hangman::tests::a_win_cannot_be_announced",
+      "covers": [
+        "show_end > won > write_line'2'fails"
+      ]
+    },
+    "a_hanging_cannot_be_announced": {
+      "y": "y/src/hangman.test.y:449",
+      "rust": "hangman_example::hangman::tests::a_hanging_cannot_be_announced",
+      "covers": [
+        "show_end > hanged > write_line'3'fails"
+      ]
+    },
+    "a_word_of_one_letter_is_found_with_one_guess": {
+      "y": "y/src/hangman.test.y:468",
+      "rust": "hangman_example::hangman::tests::a_word_of_one_letter_is_found_with_one_guess",
+      "covers": [
+        "play > playing > line_read"
+      ]
+    },
+    "a_player_who_finds_every_letter_wins": {
+      "y": "y/src/hangman.test.y:483",
+      "rust": "hangman_example::hangman::tests::a_player_who_finds_every_letter_wins",
+      "covers": [
+        "play > playing'many > line_read"
+      ]
+    },
+    "a_player_who_misses_six_times_is_hanged": {
+      "y": "y/src/hangman.test.y:498",
+      "rust": "hangman_example::hangman::tests::a_player_who_misses_six_times_is_hanged",
+      "covers": [
+        "play > playing'many > line_read"
+      ]
+    },
+    "a_player_is_told_what_was_wrong": {
+      "y": "y/src/hangman.test.y:513",
+      "rust": "hangman_example::hangman::tests::a_player_is_told_what_was_wrong",
+      "covers": [
+        "play > playing'many > line_read"
+      ]
+    },
+    "a_console_that_cannot_greet_ends_play": {
+      "y": "y/src/hangman.test.y:532",
+      "rust": "hangman_example::hangman::tests::a_console_that_cannot_greet_ends_play",
+      "covers": [
+        "play > write_line'1'fails"
+      ]
+    },
+    "a_console_that_cannot_show_the_first_turn_ends_play": {
+      "y": "y/src/hangman.test.y:547",
+      "rust": "hangman_example::hangman::tests::a_console_that_cannot_show_the_first_turn_ends_play",
+      "covers": [
+        "play > playing > show_turn'fails"
+      ]
+    },
+    "a_failing_console_ends_the_game": {
+      "y": "y/src/hangman.test.y:562",
+      "rust": "hangman_example::hangman::tests::a_failing_console_ends_the_game",
+      "covers": [
+        "play > playing > typed'fails"
+      ]
+    },
+    "a_console_closed_at_once_ends_play": {
+      "y": "y/src/hangman.test.y:577",
+      "rust": "hangman_example::hangman::tests::a_console_closed_at_once_ends_play",
+      "covers": [
+        "play > playing > closed"
+      ]
+    },
+    "a_console_that_cannot_reply_to_the_first_guess_ends_play": {
+      "y": "y/src/hangman.test.y:592",
+      "rust": "hangman_example::hangman::tests::a_console_that_cannot_reply_to_the_first_guess_ends_play",
+      "covers": [
+        "play > playing > line_read > write_line'2'fails"
+      ]
+    },
+    "a_console_that_cannot_show_a_quick_end_ends_play": {
+      "y": "y/src/hangman.test.y:607",
+      "rust": "hangman_example::hangman::tests::a_console_that_cannot_show_a_quick_end_ends_play",
+      "covers": [
+        "play > playing > line_read > show_end'fails"
+      ]
+    },
+    "a_console_that_cannot_show_a_later_turn_ends_play": {
+      "y": "y/src/hangman.test.y:623",
+      "rust": "hangman_example::hangman::tests::a_console_that_cannot_show_a_later_turn_ends_play",
+      "covers": [
+        "play > playing'many > show_turn'fails"
+      ]
+    },
+    "a_console_that_cannot_read_a_later_guess_ends_play": {
+      "y": "y/src/hangman.test.y:638",
+      "rust": "hangman_example::hangman::tests::a_console_that_cannot_read_a_later_guess_ends_play",
+      "covers": [
+        "play > playing'many > typed'fails"
+      ]
+    },
+    "a_closed_console_ends_the_game": {
+      "y": "y/src/hangman.test.y:653",
+      "rust": "hangman_example::hangman::tests::a_closed_console_ends_the_game",
+      "covers": [
+        "play > playing'many > closed"
+      ]
+    },
+    "a_console_that_cannot_reply_to_a_later_guess_ends_play": {
+      "y": "y/src/hangman.test.y:668",
+      "rust": "hangman_example::hangman::tests::a_console_that_cannot_reply_to_a_later_guess_ends_play",
+      "covers": [
+        "play > playing'many > line_read > write_line'2'fails"
+      ]
+    },
+    "a_console_that_cannot_show_the_end_ends_play": {
+      "y": "y/src/hangman.test.y:683",
+      "rust": "hangman_example::hangman::tests::a_console_that_cannot_show_the_end_ends_play",
+      "covers": [
+        "play > playing'many > line_read > show_end'fails"
+      ]
+    }
+  }
+}

@@ -1,0 +1,216 @@
+{
+  "format": "y-constraints/0",
+  "host": "rust",
+  "crate": "snake-example 0.0.0",
+  "module": "src/snake/tests.rs",
+  "status": {
+    "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
+  },
+  "subjects": [
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::moving",
+      "params": [{ "name": "heading", "type": "Direction" }],
+      "result": { "type": "Game" }
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::a_new_game_puts_the_food_in_a_free_cell",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::the_up_arrow_turns_the_snake_up",
+      "params": []
+    },
+    { "kind": "function", "name": "snake_example::snake::tests::w_turns_the_snake_up", "params": [] },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::the_down_arrow_turns_the_snake_down",
+      "params": []
+    },
+    { "kind": "function", "name": "snake_example::snake::tests::s_turns_the_snake_down", "params": [] },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::the_left_arrow_turns_the_snake_left",
+      "params": []
+    },
+    { "kind": "function", "name": "snake_example::snake::tests::a_turns_the_snake_left", "params": [] },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::the_right_arrow_turns_the_snake_right",
+      "params": []
+    },
+    { "kind": "function", "name": "snake_example::snake::tests::d_turns_the_snake_right", "params": [] },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::a_key_that_is_not_an_arrow_does_not_turn_the_snake",
+      "params": []
+    },
+    { "kind": "function", "name": "snake_example::snake::tests::the_tail_follows_the_head", "params": [] },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::the_snake_may_follow_its_own_tail",
+      "params": []
+    },
+    { "kind": "function", "name": "snake_example::snake::tests::the_wall_ends_the_game", "params": [] },
+    { "kind": "function", "name": "snake_example::snake::tests::the_snake_cannot_bite_itself", "params": [] },
+    { "kind": "function", "name": "snake_example::snake::tests::eating_grows_the_snake", "params": [] },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::eating_the_last_food_fills_the_board",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::steering_back_the_way_the_snake_moved_keeps_the_way_wanted",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::steering_another_way_turns_the_snake",
+      "params": []
+    },
+    { "kind": "function", "name": "snake_example::snake::tests::the_opposite_of_up_is_down", "params": [] },
+    { "kind": "function", "name": "snake_example::snake::tests::the_opposite_of_down_is_up", "params": [] },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::the_opposite_of_left_is_right",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::the_opposite_of_right_is_left",
+      "params": []
+    },
+    { "kind": "function", "name": "snake_example::snake::tests::the_cell_ahead_going_up", "params": [] },
+    { "kind": "function", "name": "snake_example::snake::tests::the_cell_ahead_going_down", "params": [] },
+    { "kind": "function", "name": "snake_example::snake::tests::the_cell_ahead_going_left", "params": [] },
+    { "kind": "function", "name": "snake_example::snake::tests::the_cell_ahead_going_right", "params": [] },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::the_far_corner_is_on_the_board",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::a_cell_past_the_edge_is_off_the_board",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::cells_the_snake_is_not_in_are_free",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::the_cell_of_the_head_is_not_free",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::the_cells_of_the_tail_are_not_free",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::food_with_no_free_cell_fills_the_board",
+      "params": []
+    },
+    { "kind": "function", "name": "snake_example::snake::tests::food_goes_in_a_free_cell", "params": [] },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::the_banner_of_a_game_in_play_shows_the_score_and_the_best",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::the_banner_tells_of_a_crash_into_the_wall",
+      "params": []
+    },
+    { "kind": "function", "name": "snake_example::snake::tests::the_banner_tells_of_a_bite", "params": [] },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::the_banner_tells_of_a_filled_board",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::a_snake_with_no_tail_is_drawn",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::a_snake_with_a_tail_of_one_cell_is_drawn",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::a_snake_with_a_longer_tail_is_drawn",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::filling_a_cell_fills_one_square",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::a_window_closed_at_once_ends_play",
+      "params": []
+    },
+    { "kind": "function", "name": "snake_example::snake::tests::escape_quits", "params": [] },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::the_game_plays_until_the_window_closes",
+      "params": []
+    },
+    { "kind": "function", "name": "snake_example::snake::tests::space_starts_the_next_game", "params": [] },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::a_finished_game_waits_for_space",
+      "params": []
+    },
+    { "kind": "function", "name": "snake_example::snake::tests::no_key_leaves_the_way_wanted", "params": [] },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::a_key_pressed_steers_the_snake",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::two_keys_in_a_frame_steer_in_turn",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::a_game_that_is_over_does_not_step",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::the_snake_waits_for_a_whole_step_time",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::the_snake_steps_once_a_step_time_exactly_after",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::the_snake_steps_once_between_one_and_two_step_times",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::the_snake_steps_twice_two_step_times_exactly_after",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "snake_example::snake::tests::the_snake_steps_twice_between_two_and_three_step_times",
+      "params": []
+    }
+  ]
+}

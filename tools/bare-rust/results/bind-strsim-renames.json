@@ -1,0 +1,9 @@
+{
+"generic_jaro::matches_f64":"a_matches","generic_jaro::a_len_f64":"a_total","generic_jaro::matches_f64_2":"b_matches","generic_jaro::b_len_f64":"b_total","generic_jaro::value_f64":"true_matches","generic_jaro::matches_f64_3":"all_matches",
+"generic_jaro_winkler::prefix_length_f64":"prefix_len",
+"normalized_levenshtein::levenshtein_f64":"distance","normalized_levenshtein::max_f64":"max_len",
+"lookup::hash_usize":"hash_bits","lookup::mask_usize":"mask","lookup::perturb_usize":"perturb_bits","lookup::mask_usize_2":"loop_mask",
+"damerau_levenshtein_impl::max_isize":"max_len","damerau_levenshtein_impl::value_isize":"r_end","damerau_levenshtein_impl::i_isize":"row_first","damerau_levenshtein_impl::j_isize":"match_col","damerau_levenshtein_impl::j_isize_2":"col_swap","damerau_levenshtein_impl::fr_item_v":"fr_val","damerau_levenshtein_impl::i_isize_2":"row_swap","damerau_levenshtein_impl::i_isize_3":"row_cur","damerau_levenshtein_impl::j_isize_3":"col_cur","damerau_levenshtein_impl::i_isize_4":"last_row","damerau_levenshtein_impl::r_item_usize":"result",
+"normalized_damerau_levenshtein::dist_f64":"distance","normalized_damerau_levenshtein::max_f64":"max_len",
+"sorensen_dice::value_f64":"twice_common","sorensen_dice::value_f64_2":"total_bigrams"
+}

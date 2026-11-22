@@ -1,0 +1,119 @@
+{
+  "format": "y-constraints/0",
+  "host": "rust",
+  "crate": "human-size 0.0.0",
+  "module": "src/lib.rs",
+  "status": "lifted",
+  "subjects": [
+    {
+      "kind": "type",
+      "name": "human_size::ParseSizeError",
+      "visible": "public",
+      "fields": [
+        { "name": "original", "type": "string", "hold": { "kind": "owns" } },
+        { "name": "kind", "type": "ParseSizeErrorKind", "hold": { "kind": "owns" } }
+      ],
+      "implements": [
+        { "trait": "std::error::Error", "impl": "human_size::ParseSizeError as std::error::Error" },
+        { "trait": "std::fmt::Display", "impl": "human_size::ParseSizeError as std::fmt::Display" }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "human_size::ParseSizeErrorKind",
+      "variants": [
+        { "name": "InvalidFormat" },
+        {
+          "name": "InvalidInt",
+          "fields": [{ "type": "std::num::ParseIntError", "hold": { "kind": "owns" } }]
+        },
+        { "name": "Overflow" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "human_size::ParseSizeError::format",
+      "params": [
+        {
+          "name": "original",
+          "type": "ref<target_type=string>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "ParseSizeError" }
+    },
+    {
+      "kind": "function",
+      "name": "human_size::ParseSizeError::int",
+      "params": [
+        {
+          "name": "original",
+          "type": "ref<target_type=string>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "err", "type": "std::num::ParseIntError" }
+      ],
+      "result": { "type": "ParseSizeError" }
+    },
+    {
+      "kind": "function",
+      "name": "human_size::ParseSizeError::overflow",
+      "params": [
+        {
+          "name": "original",
+          "type": "ref<target_type=string>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "ParseSizeError" }
+    },
+    { "kind": "impl", "name": "human_size::ParseSizeError as std::error::Error" },
+    { "kind": "impl", "name": "human_size::ParseSizeError as std::fmt::Display" },
+    {
+      "kind": "function",
+      "name": "human_size::ParseSizeError as std::fmt::Display::fmt",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<target_type=ParseSizeError>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        {
+          "name": "f",
+          "type": "ref<target_type=std::fmt::Formatter<'_>>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "result": { "type": "std::fmt::Result" }
+    },
+    { "kind": "impl", "name": "human_size::std::io::Error as From", "trait": "From<ParseSizeError>" },
+    {
+      "kind": "function",
+      "name": "human_size::std::io::Error as From::from",
+      "params": [{ "name": "size_err", "type": "ParseSizeError" }],
+      "result": { "type": "std::io::Error" }
+    },
+    {
+      "kind": "function",
+      "name": "human_size::parse_human_readable_size",
+      "visible": "public",
+      "params": [
+        {
+          "name": "size",
+          "type": "ref<target_type=string>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "u64", "fails": "ParseSizeError" }
+    },
+    { "kind": "function", "name": "human_size::tests::suffix_none", "params": [] },
+    { "kind": "function", "name": "human_size::tests::suffix_k", "params": [] },
+    { "kind": "function", "name": "human_size::tests::suffix_m", "params": [] },
+    { "kind": "function", "name": "human_size::tests::suffix_g", "params": [] },
+    { "kind": "function", "name": "human_size::tests::invalid_empty", "params": [] },
+    { "kind": "function", "name": "human_size::tests::invalid_non_digit", "params": [] },
+    { "kind": "function", "name": "human_size::tests::invalid_overflow", "params": [] },
+    { "kind": "function", "name": "human_size::tests::invalid_suffix", "params": [] }
+  ],
+  "realizations": { "parse_u64": { "template": "<_>::parse", "args": ["u64"] } }
+}

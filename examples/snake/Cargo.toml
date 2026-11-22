@@ -1,0 +1,13 @@
+[package]
+name = "snake-example"
+version = "0.0.0"
+edition = "2021"
+description = "Snake, written in Y and lowered through bare Rust and its constraint files to Rust, drawn with Macroquad."
+
+[dependencies]
+y-runtime = { path = "../y-runtime" }
+y-window = { path = "../y-window" }
+y-string = { path = "../y-string" }
+y-collections = { path = "../y-collections" }
+
+[workspace]

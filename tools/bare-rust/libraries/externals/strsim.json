@@ -1,0 +1,1546 @@
+{
+  "format": "y-externals/0",
+  "crate": "strsim 0.11.1",
+  "rustc": "1.97.0",
+  "all_targets": true,
+  "targets": [
+    "lib strsim (with unit tests)",
+    "test lib"
+  ],
+  "counts": {
+    "function": 44,
+    "type": 21,
+    "trait": 18,
+    "const": 1,
+    "macro": 10,
+    "total": 94
+  },
+  "skipped": {
+    "std::fmt::rt::Argument::new_debug": 1,
+    "std::fmt::rt::Argument::new_display": 157
+  },
+  "items": [
+    {
+      "kind": "function",
+      "path": "std::clone::Clone::clone",
+      "trait": "std::clone::Clone",
+      "impls": [
+        "impl std::clone::Clone for Elem",
+        "impl std::clone::Clone for Iter2"
+      ],
+      "uses": 2,
+      "files": {
+        "src/lib.rs": 2
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::cmp::Ord::max",
+      "trait": "std::cmp::Ord",
+      "impls": [
+        "impl std::cmp::Ord for usize"
+      ],
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::cmp::max",
+      "uses": 3,
+      "files": {
+        "src/lib.rs": 3
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::cmp::min",
+      "uses": 13,
+      "files": {
+        "src/lib.rs": 13
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::collections::HashMap::entry",
+      "impls": [
+        "impl std::collections::HashMap"
+      ],
+      "uses": 2,
+      "files": {
+        "src/lib.rs": 2
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::collections::HashMap::get",
+      "impls": [
+        "impl std::collections::HashMap"
+      ],
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::collections::HashMap::insert",
+      "impls": [
+        "impl std::collections::HashMap"
+      ],
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::collections::HashMap::new",
+      "impls": [
+        "impl std::collections::HashMap"
+      ],
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::collections::HashMap::with_capacity",
+      "impls": [
+        "impl std::collections::HashMap"
+      ],
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::collections::hash_map::Entry::and_modify",
+      "impls": [
+        "impl std::collections::hash_map::Entry"
+      ],
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::collections::hash_map::Entry::or_insert",
+      "impls": [
+        "impl std::collections::hash_map::Entry"
+      ],
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::convert::From::from",
+      "trait": "std::convert::From",
+      "impls": [
+        "impl std::convert::From<bool> for isize",
+        "impl std::convert::From<bool> for usize",
+        "impl std::convert::From<u8> for usize"
+      ],
+      "uses": 5,
+      "files": {
+        "src/lib.rs": 5
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::convert::TryFrom::try_from",
+      "trait": "std::convert::TryFrom",
+      "impls": [
+        "impl std::convert::TryFrom<u32> for u8"
+      ],
+      "uses": 2,
+      "files": {
+        "src/lib.rs": 2
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::default::Default::default",
+      "trait": "std::default::Default",
+      "impls": [
+        "impl std::default::Default for GrowingHashmapChar",
+        "impl std::default::Default for GrowingHashmapMapElemChar",
+        "impl std::default::Default for HybridGrowingHashmapChar",
+        "impl std::default::Default for ValueType"
+      ],
+      "uses": 13,
+      "files": {
+        "src/lib.rs": 13
+      },
+      "roles": [
+        "call",
+        "implement"
+      ],
+      "via": [
+        "mir",
+        "syntax"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::fmt::Display::fmt",
+      "trait": "std::fmt::Display",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "implement"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::iter::IntoIterator::into_iter",
+      "trait": "std::iter::IntoIterator",
+      "impls": [
+        "impl std::iter::IntoIterator for &Iter1",
+        "impl std::iter::IntoIterator for &Iter2",
+        "impl std::iter::IntoIterator for Iter1",
+        "impl std::iter::IntoIterator for Iter2",
+        "impl std::iter::IntoIterator for std::iter::Enumerate",
+        "impl std::iter::IntoIterator for std::iter::Map",
+        "impl std::iter::IntoIterator for std::iter::Take",
+        "impl std::iter::IntoIterator for std::iter::Zip",
+        "impl std::iter::IntoIterator for std::ops::Range",
+        "impl std::iter::IntoIterator for std::vec::Vec"
+      ],
+      "uses": 27,
+      "files": {
+        "src/lib.rs": 27
+      },
+      "roles": [
+        "call",
+        "implement"
+      ],
+      "via": [
+        "mir",
+        "syntax"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::iter::Iterator::chain",
+      "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for std::ops::Range"
+      ],
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::iter::Iterator::collect",
+      "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for std::iter::Chain",
+        "impl std::iter::Iterator for std::iter::Filter",
+        "impl std::iter::Iterator for std::ops::Range"
+      ],
+      "uses": 6,
+      "files": {
+        "src/lib.rs": 6
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::iter::Iterator::count",
+      "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for <&Iter1 as std::iter::IntoIterator>::IntoIter",
+        "impl std::iter::Iterator for <&Iter2 as std::iter::IntoIterator>::IntoIter",
+        "impl std::iter::Iterator for std::iter::TakeWhile",
+        "impl std::iter::Iterator for std::str::Chars"
+      ],
+      "uses": 11,
+      "files": {
+        "src/lib.rs": 11
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::iter::Iterator::enumerate",
+      "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for <&Iter1 as std::iter::IntoIterator>::IntoIter",
+        "impl std::iter::Iterator for <&Iter2 as std::iter::IntoIterator>::IntoIter",
+        "impl std::iter::Iterator for Iter1",
+        "impl std::iter::Iterator for Iter2",
+        "impl std::iter::Iterator for std::str::Chars"
+      ],
+      "uses": 8,
+      "files": {
+        "src/lib.rs": 8
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::iter::Iterator::filter",
+      "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for std::str::Chars"
+      ],
+      "uses": 2,
+      "files": {
+        "src/lib.rs": 2
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::iter::Iterator::map",
+      "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for std::iter::Enumerate"
+      ],
+      "uses": 2,
+      "files": {
+        "src/lib.rs": 2
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::iter::Iterator::next",
+      "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for <Iter1 as std::iter::IntoIterator>::IntoIter",
+        "impl std::iter::Iterator for <Iter2 as std::iter::IntoIterator>::IntoIter",
+        "impl std::iter::Iterator for std::iter::Enumerate",
+        "impl std::iter::Iterator for std::iter::Map",
+        "impl std::iter::Iterator for std::iter::Take",
+        "impl std::iter::Iterator for std::iter::Zip",
+        "impl std::iter::Iterator for std::ops::Range",
+        "impl std::iter::Iterator for std::vec::IntoIter"
+      ],
+      "uses": 24,
+      "files": {
+        "src/lib.rs": 24
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::iter::Iterator::skip",
+      "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for std::str::Chars"
+      ],
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::iter::Iterator::take",
+      "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for <&Iter1 as std::iter::IntoIterator>::IntoIter",
+        "impl std::iter::Iterator for std::iter::Enumerate"
+      ],
+      "uses": 2,
+      "files": {
+        "src/lib.rs": 2
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::iter::Iterator::take_while",
+      "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for std::iter::Zip"
+      ],
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::iter::Iterator::zip",
+      "trait": "std::iter::Iterator",
+      "impls": [
+        "impl std::iter::Iterator for std::iter::Take",
+        "impl std::iter::Iterator for std::slice::Iter",
+        "impl std::iter::Iterator for std::str::Chars"
+      ],
+      "uses": 4,
+      "files": {
+        "src/lib.rs": 4
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::mem::replace",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::mem::swap",
+      "uses": 3,
+      "files": {
+        "src/lib.rs": 3
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::option::Option::as_mut",
+      "impls": [
+        "impl std::option::Option"
+      ],
+      "uses": 3,
+      "files": {
+        "src/lib.rs": 3
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::option::Option::as_ref",
+      "impls": [
+        "impl std::option::Option"
+      ],
+      "uses": 3,
+      "files": {
+        "src/lib.rs": 3
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::option::Option::expect",
+      "impls": [
+        "impl std::option::Option"
+      ],
+      "uses": 5,
+      "files": {
+        "src/lib.rs": 5
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::option::Option::is_none",
+      "impls": [
+        "impl std::option::Option"
+      ],
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::option::Option::map_or_else",
+      "impls": [
+        "impl std::option::Option"
+      ],
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::primitive::char::is_whitespace",
+      "impls": [
+        "impl char"
+      ],
+      "uses": 2,
+      "files": {
+        "src/lib.rs": 2
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::primitive::f64::abs",
+      "impls": [
+        "impl f64"
+      ],
+      "uses": 2,
+      "files": {
+        "src/lib.rs": 1,
+        "tests/lib.rs": 1
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::primitive::slice::iter",
+      "impls": [
+        "impl [bool]"
+      ],
+      "uses": 2,
+      "files": {
+        "src/lib.rs": 2
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::primitive::slice::len",
+      "impls": [
+        "impl [Elem]"
+      ],
+      "uses": 2,
+      "files": {
+        "src/lib.rs": 2
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::primitive::slice::split_at_mut",
+      "impls": [
+        "impl [bool]"
+      ],
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::primitive::str::chars",
+      "impls": [
+        "impl str"
+      ],
+      "uses": 22,
+      "files": {
+        "src/lib.rs": 22
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::primitive::str::is_empty",
+      "impls": [
+        "impl str"
+      ],
+      "uses": 4,
+      "files": {
+        "src/lib.rs": 4
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::primitive::usize::saturating_sub",
+      "impls": [
+        "impl usize"
+      ],
+      "uses": 2,
+      "files": {
+        "src/lib.rs": 2
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::result::Result::expect",
+      "impls": [
+        "impl std::result::Result"
+      ],
+      "uses": 2,
+      "files": {
+        "src/lib.rs": 2
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "function",
+      "path": "std::string::String::len",
+      "impls": [
+        "impl std::string::String"
+      ],
+      "uses": 4,
+      "files": {
+        "src/lib.rs": 4
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::collections::HashMap",
+      "uses": 4,
+      "files": {
+        "src/lib.rs": 4
+      },
+      "roles": [
+        "named"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::collections::hash_map::Entry",
+      "uses": 2,
+      "files": {
+        "src/lib.rs": 2
+      },
+      "roles": [
+        "inferred"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::fmt::Error",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "named"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::fmt::Formatter",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "named"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::iter::Chain",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "inferred"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::iter::Enumerate",
+      "uses": 8,
+      "files": {
+        "src/lib.rs": 8
+      },
+      "roles": [
+        "inferred"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::iter::Filter",
+      "uses": 2,
+      "files": {
+        "src/lib.rs": 2
+      },
+      "roles": [
+        "inferred"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::iter::Map",
+      "uses": 2,
+      "files": {
+        "src/lib.rs": 2
+      },
+      "roles": [
+        "inferred"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::iter::Skip",
+      "uses": 10,
+      "files": {
+        "src/lib.rs": 10
+      },
+      "roles": [
+        "inferred"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::iter::Take",
+      "uses": 2,
+      "files": {
+        "src/lib.rs": 2
+      },
+      "roles": [
+        "inferred"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::iter::TakeWhile",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "inferred"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::iter::Zip",
+      "uses": 13,
+      "files": {
+        "src/lib.rs": 13
+      },
+      "roles": [
+        "inferred"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::num::TryFromIntError",
+      "uses": 2,
+      "files": {
+        "src/lib.rs": 2
+      },
+      "roles": [
+        "inferred"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::ops::Range",
+      "uses": 7,
+      "files": {
+        "src/lib.rs": 7
+      },
+      "roles": [
+        "inferred"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::option::Option",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "named"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::result::Result",
+      "uses": 2,
+      "files": {
+        "src/lib.rs": 2
+      },
+      "roles": [
+        "named"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::slice::Iter",
+      "uses": 4,
+      "files": {
+        "src/lib.rs": 4
+      },
+      "roles": [
+        "inferred"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::str::Chars",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "named"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::string::String",
+      "uses": 2,
+      "files": {
+        "src/lib.rs": 2
+      },
+      "roles": [
+        "named"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::vec::IntoIter",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "inferred"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "type",
+      "path": "std::vec::Vec",
+      "uses": 6,
+      "files": {
+        "src/lib.rs": 6
+      },
+      "roles": [
+        "named"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::clone::Clone",
+      "uses": 11,
+      "files": {
+        "src/lib.rs": 11
+      },
+      "roles": [
+        "bound",
+        "derive",
+        "method"
+      ],
+      "via": [
+        "mir",
+        "syntax"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::cmp::Eq",
+      "uses": 6,
+      "files": {
+        "src/lib.rs": 6
+      },
+      "roles": [
+        "bound",
+        "derive"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::cmp::Ord",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "method"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::cmp::PartialEq",
+      "uses": 17,
+      "files": {
+        "src/lib.rs": 17
+      },
+      "roles": [
+        "bound",
+        "derive",
+        "operator"
+      ],
+      "via": [
+        "mir",
+        "syntax"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::convert::From",
+      "uses": 5,
+      "files": {
+        "src/lib.rs": 5
+      },
+      "roles": [
+        "method"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::convert::TryFrom",
+      "uses": 2,
+      "files": {
+        "src/lib.rs": 2
+      },
+      "roles": [
+        "method"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::default::Default",
+      "uses": 18,
+      "files": {
+        "src/lib.rs": 18
+      },
+      "roles": [
+        "bound",
+        "derive",
+        "implement",
+        "method",
+        "named"
+      ],
+      "via": [
+        "mir",
+        "syntax"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::error::Error",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "bound",
+        "implement"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::fmt::Debug",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "derive"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::fmt::Display",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "bound",
+        "implement"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::hash::Hash",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "bound"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::iter::IntoIterator",
+      "uses": 48,
+      "files": {
+        "src/lib.rs": 48
+      },
+      "roles": [
+        "bound",
+        "implement",
+        "inferred",
+        "method"
+      ],
+      "via": [
+        "mir",
+        "syntax"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::iter::Iterator",
+      "uses": 65,
+      "files": {
+        "src/lib.rs": 65
+      },
+      "roles": [
+        "bound",
+        "method"
+      ],
+      "via": [
+        "mir",
+        "syntax"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::marker::Copy",
+      "uses": 4,
+      "files": {
+        "src/lib.rs": 4
+      },
+      "roles": [
+        "bound",
+        "derive"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::ops::Deref",
+      "uses": 2,
+      "files": {
+        "src/lib.rs": 2
+      },
+      "roles": [
+        "operator"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::ops::DerefMut",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "operator"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::ops::Index",
+      "uses": 26,
+      "files": {
+        "src/lib.rs": 26
+      },
+      "roles": [
+        "operator"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "trait",
+      "path": "std::ops::IndexMut",
+      "uses": 15,
+      "files": {
+        "src/lib.rs": 15
+      },
+      "roles": [
+        "operator"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "const",
+      "path": "std::primitive::char::MAX",
+      "uses": 2,
+      "files": {
+        "src/lib.rs": 2
+      },
+      "roles": [
+        "named"
+      ],
+      "via": [
+        "mir"
+      ]
+    },
+    {
+      "kind": "macro",
+      "path": "std::assert_eq!",
+      "form": "bang",
+      "uses": 68,
+      "files": {
+        "src/lib.rs": 64,
+        "tests/lib.rs": 4
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "macro",
+      "path": "std::clone::Clone!",
+      "form": "derive",
+      "uses": 2,
+      "files": {
+        "src/lib.rs": 2
+      },
+      "roles": [
+        "derive"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "macro",
+      "path": "std::cmp::Eq!",
+      "form": "derive",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "derive"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "macro",
+      "path": "std::cmp::PartialEq!",
+      "form": "derive",
+      "uses": 2,
+      "files": {
+        "src/lib.rs": 2
+      },
+      "roles": [
+        "derive"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "macro",
+      "path": "std::default::Default!",
+      "form": "derive",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "derive"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "macro",
+      "path": "std::fmt::Debug!",
+      "form": "derive",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "derive"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "macro",
+      "path": "std::marker::Copy!",
+      "form": "derive",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "derive"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "macro",
+      "path": "std::panic!",
+      "form": "bang",
+      "uses": 1,
+      "files": {
+        "tests/lib.rs": 1
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "macro",
+      "path": "std::vec!",
+      "form": "bang",
+      "uses": 7,
+      "files": {
+        "src/lib.rs": 7
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "syntax"
+      ]
+    },
+    {
+      "kind": "macro",
+      "path": "std::write!",
+      "form": "bang",
+      "uses": 1,
+      "files": {
+        "src/lib.rs": 1
+      },
+      "roles": [
+        "call"
+      ],
+      "via": [
+        "syntax"
+      ]
+    }
+  ]
+}

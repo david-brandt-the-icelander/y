@@ -1,0 +1,494 @@
+{
+  "repo": "fnv",
+  "range": "HEAD",
+  "commits": [
+    {
+      "commit": "be2d7124",
+      "subject": "Import from https://github.com/servo/rust-selectors/blob/1fda09bf0c59acfcb697f71b38dad22108b3d27a/src/fnv.rs",
+      "status": "root commit"
+    },
+    {
+      "commit": "3fdc8b45",
+      "subject": "Import tests from http://www.isthe.com/chongo/tech/comp/fnv/index.html#FNV-reference-source",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "lib.rs",
+          "class": "signature-changing",
+          "weave": "refused",
+          "weave_reason": "new item (no entry in the old file)",
+          "weave_detail": "slot missing: no subject `fnv::it_works`"
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "cc4ffc32",
+      "subject": "Test on Travis-CI",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "2e30e738",
+      "subject": "Link to Wikipedia in the README",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "dbb92635",
+      "subject": "v1.0.0",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "53ca46fe",
+      "subject": "Test on whatever is the latest beta.",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "ccb5b5b2",
+      "subject": "Also test on Rust stable.",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "0b1d5b66",
+      "subject": "Link to documentation",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "28b26176",
+      "subject": "Remove unused Rust source file",
+      "rs_added": 0,
+      "rs_deleted": 1,
+      "status": "rs files added or deleted only"
+    },
+    {
+      "commit": "ba908f52",
+      "subject": "More documentation",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "lib.rs",
+          "class": "signature-changing",
+          "weave": "refused",
+          "weave_reason": "new item (no entry in the old file)",
+          "weave_detail": "slot missing: no subject `fnv::test::fnv1a`"
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "c3f4166a",
+      "subject": "sudo=false is now default on travis",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "3eadde61",
+      "subject": "Bump version to 1.0.1",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "b5c09615",
+      "subject": "Fix improperly formatted named links",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "c48478a4",
+      "subject": "Prefer HTTPS over HTTP",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "b2a27c02",
+      "subject": "Bump version to 1.0.2",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "eb586fdb",
+      "subject": "Notify homu.",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "cce30450",
+      "subject": "Update readme to Rust 1.7 hasher API",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "0d4d3931",
+      "subject": "Update doctests.",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "8c107812",
+      "subject": "Enable doctests.",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "bee21c4c",
+      "subject": "Bump to 1.0.3.",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "0e5c114f",
+      "subject": "Add FnvHasher::with_key()",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "lib.rs",
+          "class": "signature-changing",
+          "weave": "refused",
+          "weave_reason": "new item (no entry in the old file)",
+          "weave_detail": "slot missing: no subject `fnv::FnvHasher::with_key`"
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "cfd612c3",
+      "subject": "Bump to 1.0.4",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "c8759c9d",
+      "subject": "Add FnvHashMap and FnvHashSet type aliases",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "lib.rs",
+          "class": "signature-changing",
+          "weave": "refused",
+          "weave_reason": "new item (no entry in the old file)",
+          "weave_detail": "slot missing: no subject `fnv::FnvBuildHasher`"
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "fd287549",
+      "subject": "Bump to 1.0.5",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "91617357",
+      "subject": "Create MIT license",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "3c7fb8e7",
+      "subject": "Create Apache license",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "5edfdb30",
+      "subject": "fix link",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "2066f2ad",
+      "subject": "Version 1.0.6",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "dcd652c9",
+      "subject": "Remove unneeded webhook notification",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "3ea9395d",
+      "subject": "Replace http with https",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "b18ce367",
+      "subject": "Add support for no_std compilation through an \"std\" feature",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "bfc842cc",
+      "subject": "Run tests with std feature disabled in CI",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "4b4784eb",
+      "subject": "Bump to 1.0.7",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "f21a8591",
+      "subject": "Replace dead link",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "15856ddf",
+      "subject": "Add global const fnv_hash function",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "lib.rs",
+          "class": "signature-changing",
+          "weave": "refused",
+          "weave_reason": "new item (no entry in the old file)",
+          "weave_detail": "slot missing: no subject `fnv::INITIAL_STATE`"
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "d908ffa4",
+      "subject": "Fix license tag (#31)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "0d89a693",
+      "subject": "Impl `Clone` for `FnvHasher` (#33)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "fdd8d5a4",
+      "subject": "Rustfmt",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "lib.rs",
+          "class": "body-only",
+          "weave": "woven",
+          "unbound": {},
+          "unbound_total": 0,
+          "unbound_entries": [],
+          "woven_equals_new": true,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared"
+    },
+    {
+      "commit": "e2347198",
+      "subject": "Add CI",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "c7a0509e",
+      "subject": "Make Clippy happier (#34)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "rs_modified": 1,
+      "rs_not_in_crate": 0,
+      "files": [
+        {
+          "file": "lib.rs",
+          "class": "signature-changing",
+          "weave": "woven",
+          "unbound": {
+            "unbound hint": 1
+          },
+          "unbound_total": 1,
+          "unbound_entries": [
+            "unbound hint `cast #0` of `fnv::FnvHasher as Hasher::write`"
+          ],
+          "woven_equals_new": false,
+          "differs_only_in_slots": true
+        }
+      ],
+      "status": "compared",
+      "cargo": {
+        "baseline": "builds",
+        "files_woven": 1,
+        "a_ok": true,
+        "a_undetermined_holes": 0,
+        "a_errors": [],
+        "a_weave_errors": [],
+        "dropped_new_undetermined_holes": [],
+        "dropped_new_errors": [],
+        "dropped_baseline_undetermined": 1
+      }
+    },
+    {
+      "commit": "a62b4a70",
+      "subject": "Upgrade edition, set categories, MSRV (#37)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    },
+    {
+      "commit": "4e55052a",
+      "subject": "Rename `master` to `main` (#38)",
+      "rs_added": 0,
+      "rs_deleted": 0,
+      "status": "no .rs change"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+diff -ruN a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs	2026-10-09 08:06:03.624547897 +0000
++++ b/src/lib.rs	2026-10-09 08:13:05.997018782 +0000
+@@ -718,8 +718,8 @@
+     // implementation guided by
+     // https://github.com/aceakash/string-similarity/blob/f83ba3cd7bae874c20c429774e911ae8cff8bced/src/index.js#L6
+ 
+-    let a: String = a.chars().filter(|&x| !char::is_whitespace(x)).collect();
+-    let b: String = b.chars().filter(|&x| !char::is_whitespace(x)).collect();
++    let a: String = a.to_string();
++    let b: String = b.to_string();
+ 
+     if a == b {
+         return 1.0;

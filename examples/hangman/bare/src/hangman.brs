@@ -1,0 +1,368 @@
+//! Lowered from `y/src/hangman.y`, the Y module `hangman`.
+//! Each Y facet is a Rust module of the same name, so a member's path keeps the facet: `hangman::setup::parse_word_list`.
+//! Each named decision of the Y source is marked `// y: #name` where its condition is tested, and each named `condition`
+//! of a `conditional` on its `match` arm.
+
+use std::fmt;
+use y_collections::{List, Set};
+use y_runtime::{invariant, not_reachable, require, ConsoleError, ConstraintViolation, Console, Forever, Random};
+use y_string::{Rune, YString};
+use self::{display::*, rounds::*, setup::*};
+
+#[cfg(test)]
+mod tests;
+
+/// The Y facet `setup`: the words a game can be played with, and the rules it is played by.
+mod setup {
+    use super::*;
+
+    /// The rules every game is played by: the Y constant group `game_rules`.
+    mod game_rules {
+        /// The words a game chooses from, separated by spaces.
+        const WORD_LIST = "gallows noose scaffold hangman trapdoor verdict alphabet puzzle riddle lantern";
+
+        /// How many wrong guesses a player may make. The last of them hangs the man.
+        const ALLOWED_MISSES = 6;
+    }
+
+    /// A word a game can be played with.
+    ///
+    /// Why: a player must be able to type and see every letter, and a short word is too easy to guess.
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct Word(_);
+
+    impl Word {
+        /// Checks both constraints of `Word`, in the order the Y source names them.
+        fn new(value) {
+            if !value.runes().all(|letter| letter.is_ascii_lowercase()) { // y: Word#letters_only
+                return Err(ConstraintViolation { constraint: "hangman::Word#letters_only" });
+            }
+            if !(value.count() >= 4) { // y: Word#long_enough
+                return Err(ConstraintViolation { constraint: "hangman::Word#long_enough" });
+            }
+            Ok(Word(value))
+        }
+
+        /// The word as text.
+        fn as_text(self) {
+            &self.0
+        }
+    }
+
+    impl fmt::Display for Word {
+        fn fmt(self, f) {
+            f.write_str(self.0.as_str())
+        }
+    }
+
+    /// Why a word list cannot be played with.
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    enum WordListError {
+        Empty,
+        NotAWord,
+    }
+
+    /// Reads a word list.
+    ///
+    /// - `text`: the words, separated by spaces.
+    /// - Returns every word of the list, in order.
+    /// - Fails `Empty`: the list has no words.
+    /// - Fails `NotAWord`: a piece of the list is not a `Word`: it has a character other than `a` to `z`, or fewer than four.
+    fn parse_word_list(text) {
+        let found = List::new();
+        // y_string offers no split by a separator, so the pieces are split as host text and made strings again
+        for piece in text.as_str().split(" ").map(YString::new) { // y: #piece
+            if piece.is_empty() { // y: #blank, else #has_text
+                continue;
+            }
+            match Word::new(piece) {
+                Ok(parsed) => found.push(parsed), // y: #checked.valid
+                Err(_) => return Err(WordListError::NotAWord), // y: #checked.invalid
+            }
+        }
+        if found.is_empty() { // y: #empty, else #has_words
+            return Err(WordListError::Empty);
+        }
+        Ok(found)
+    }
+}
+
+/// The Y facet `rounds`: one game, and what a guess does to it.
+mod rounds {
+    use super::*;
+
+    /// One game: the secret word, and every letter guessed so far.
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct Game {
+        word,
+        hits,
+        misses,
+    }
+
+    impl Game {
+        /// How many wrong guesses the player has made: the derived value `miss_count`, recomputed on every read.
+        fn miss_count(self) {
+            self.misses.count()
+        }
+    }
+
+    /// Where a game stands.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum Outcome {
+        Playing,
+        Won,
+        Lost,
+    }
+
+    /// What a guess did.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum Verdict {
+        Hit,
+        Miss,
+    }
+
+    /// Why what the player typed is not a guess.
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    enum GuessError {
+        Empty,
+        NotOneLetter,
+        AlreadyGuessed,
+    }
+
+    /// Starts a game.
+    ///
+    /// - `word`: the word the player must find.
+    /// - Returns a game with nothing guessed.
+    fn new_game(word) {
+        Game { word, hits: Set::new(), misses: List::new() }
+    }
+
+    /// The player has used up the misses allowed: the rule `hanged`.
+    ///
+    /// - `game`: the game to judge.
+    fn hanged(game) {
+        game.miss_count() == game_rules::ALLOWED_MISSES
+    }
+
+    /// Every letter of the word has been found: the rule `solved`.
+    ///
+    /// - `game`: the game to judge.
+    fn solved(game) {
+        game.word.as_text().runes().all(|letter| game.hits.contains(&letter))
+    }
+
+    /// Says whether a game is won, lost or still going.
+    ///
+    /// - `game`: the game to judge.
+    /// - Returns `Lost` once the player has used up the misses allowed, `Won` once every letter of the word is found, and
+    ///   `Playing` otherwise.
+    fn outcome_of(game) {
+        if hanged(game) { // y: #judged.hanged
+            Outcome::Lost
+        } else if solved(game) { // y: #judged.solved
+            Outcome::Won
+        } else { // y: #judged.undecided
+            Outcome::Playing
+        }
+    }
+
+    /// Takes one letter from what the player typed, and records it as a hit or a miss.
+    ///
+    /// - `game`: the game, which gains the letter.
+    /// - `line`: what the player typed, without its line ending.
+    /// - Returns whether the letter is in the word.
+    /// - Fails `Empty`: the player typed nothing but spaces.
+    /// - Fails `NotOneLetter`: the player typed more than one character, or one that is not a letter.
+    /// - Fails `AlreadyGuessed`: the letter was guessed before. The game is unchanged.
+    fn guess(game, line) {
+        require(outcome_of(game) == Outcome::Playing, "hangman::guess#still_playing");
+        let trimmed = line.trimmed();
+        let letter = Rune::single(&YString::from(trimmed.as_str().to_lowercase()));
+        // y: the Y source's `conditional judged`; its first two conditions fail, so the narrowing of `letter` is a let-else here
+        if trimmed.is_empty() { // y: #judged.nothing_typed
+            return Err(GuessError::Empty);
+        }
+        let Some(letter) = letter else { // y: #judged.not_one_rune, which narrows `letter` to a `rune`
+            return Err(GuessError::NotOneLetter);
+        };
+        if !letter.is_ascii_lowercase() { // y: #judged.not_a_letter
+            Err(GuessError::NotOneLetter)
+        } else if game.hits.contains(&letter) || game.misses.contains(&letter) { // y: #judged.repeated
+            Err(GuessError::AlreadyGuessed)
+        } else if game.word.as_text().contains(&letter) { // y: #judged.in_word
+            game.hits.add(letter);
+            Ok(Verdict::Hit)
+        } else { // y: #judged.not_in_word
+            game.misses.push(letter);
+            invariant(game.misses.count() <= game_rules::ALLOWED_MISSES, "hangman::Game#within_allowance");
+            Ok(Verdict::Miss)
+        }
+    }
+}
+
+/// The Y facet `display`: what the player sees of a game.
+mod display {
+    use super::*;
+
+    /// Shows the word as the player sees it.
+    ///
+    /// - `game`: the game.
+    /// - Returns each letter of the word, found or not, separated by spaces: `_ o _ e`.
+    fn masked(game) {
+        let letters = List::new();
+        for letter in game.word.as_text().runes() { // y: #letter
+            letters.push(shown_rune(letter, &game.hits));
+        }
+        YString::from_runes(&letters, " ")
+    }
+
+    /// Draws the gallows, with one more part of the man for each miss.
+    ///
+    /// - `misses`: how many wrong guesses the player has made.
+    /// - Returns the picture, seven lines high.
+    fn gallows(misses) {
+        require(misses <= game_rules::ALLOWED_MISSES, "hangman::gallows#within_allowance");
+        let head = part(misses, 1, &YString::new("O"));
+        let body = part(misses, 2, &YString::new("|"));
+        let left_arm = part(misses, 3, &YString::new("/"));
+        let right_arm = part(misses, 4, &YString::new("\\"));
+        let left_leg = part(misses, 5, &YString::new("/"));
+        let right_leg = part(misses, 6, &YString::new("\\"));
+        let rows = List::from([
+            YString::new("  +---+"),
+            YString::new("  |   |"),
+            YString::from(format!("  {head}   |")),
+            YString::from(format!(" {left_arm}{body}{right_arm}  |")),
+            YString::from(format!(" {left_leg} {right_leg}  |")),
+            YString::new("      |"),
+            YString::new("========="),
+        ]);
+        // y_string offers no join of a list of strings, so the rows are joined as host text
+        let texts = rows.iter().map(YString::as_str).collect();
+        YString::from(texts.join("\n"))
+    }
+}
+
+/// Shows one letter of the word: the letter once it is found, and an underscore until then.
+///
+/// - `letter`: the letter of the word.
+/// - `hits`: the letters found so far.
+/// - Returns what the player sees in its place.
+fn shown_rune(letter, hits) {
+    if hits.contains(&letter) { // y: #known
+        letter
+    } else { // y: #unknown
+        Rune::from_scalar('_')
+    }
+}
+
+/// One part of the man, drawn once the player has missed often enough.
+///
+/// - `misses`: how many wrong guesses the player has made.
+/// - `needed`: how many misses draw this part.
+/// - `mark`: the character that draws it.
+/// - Returns the mark, or a space while the part is not drawn yet.
+fn part(misses, needed, mark) {
+    if misses >= needed { // y: #reached
+        mark.clone()
+    } else { // y: #not_yet
+        YString::new(" ")
+    }
+}
+
+/// The Y facet `console_play`: playing a whole game at the console.
+mod console_play {
+    use super::*;
+
+    /// Why a game could not be played to its end.
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    enum PlayError {
+        InputClosed,
+        Console { error },
+    }
+
+    /// Y's `or fail` on a `ConsoleError` converts through `PlayError`'s one case that carries it (Y § 3.4).
+    impl From for PlayError {
+        fn from(error) {
+            PlayError::Console { error }
+        }
+    }
+
+    /// Plays one game at the console, with a word chosen at random, until it is won or lost.
+    ///
+    /// - `words`: the words to choose from.
+    /// - `console`, `random`, `forever`: the Y `injected` parameters.
+    /// - Returns nothing. The console shows the player how the game ended.
+    /// - Fails `InputClosed`: the console closed before the game ended.
+    /// - Fails `Console`: the console could not be read or written.
+    fn play(words, console, random, forever) {
+        require(!words.is_empty(), "hangman::play#has_words");
+        let chosen = random.index_below(words.count());
+        let game = new_game(words[chosen].clone()); // y: a copy, because new_game keeps its word and `words` is still read
+        console.write_line("Hangman: find the word, one letter at a time.")?;
+        let ran = false;
+        while outcome_of(&game) == Outcome::Playing { // y: #playing
+            ran = true;
+            show_turn(&game, console)?;
+            let typed = console.read_line(forever)?; // y: forever because "a player may think for as long as they like"
+            let Some(typed) = typed else { // y: #closed, else #line_read, which narrows `typed` to a `string`
+                return Err(PlayError::InputClosed);
+            };
+            let typed = YString::from(typed);
+            let guessed = guess(&mut game, &typed);
+            console.write_line(reply(&guessed, &typed).as_str())?;
+        }
+        if !ran { // y: #over_at_once
+            not_reachable("hangman::play#over_at_once");
+        }
+        show_end(&game, console)?;
+        Ok(())
+    }
+}
+
+/// Shows the gallows, the word as the player sees it and the letters missed, and asks for a guess.
+///
+/// - `game`: the game.
+/// - `console`: the Y `injected` parameter.
+/// - Fails with a `ConsoleError`: the console could not be written.
+fn show_turn(game, console) {
+    let picture = gallows(game.miss_count());
+    let shown = masked(game);
+    let missed = YString::from_runes(&game.misses, " ");
+    console.write_line(picture.as_str())?;
+    console.write_line(&format!("Word:   {shown}"))?;
+    console.write_line(&format!("Missed: {missed}"))?;
+    console.write("Guess:  ")?;
+    Ok(())
+}
+
+/// What the game says to a guess.
+///
+/// - `guessed`: what the guess did.
+/// - `typed`: what the player typed.
+/// - Returns the line to write.
+fn reply(guessed, typed) {
+    match guessed {
+        Ok(Verdict::Hit) => YString::new("Yes."), // y: #said.hit
+        Ok(Verdict::Miss) => YString::new("No."), // y: #said.miss
+        Err(GuessError::Empty) => YString::new("Type a letter."), // y: #said.typed_nothing
+        Err(GuessError::NotOneLetter) => format!("\"{typed}\" is not one letter.").into(), // y: #said.typed_other
+        Err(GuessError::AlreadyGuessed) => format!("You have already guessed {typed}.").into(), // y: #said.typed_again
+    }
+}
+
+/// Shows how a game ended: the gallows, and whether the player won or was hanged.
+///
+/// - `game`: the game.
+/// - `console`: the Y `injected` parameter.
+/// - Fails with a `ConsoleError`: the console could not be written.
+fn show_end(game, console) {
+    let final_picture = gallows(game.miss_count());
+    console.write_line(final_picture.as_str())?;
+    if outcome_of(game) == Outcome::Won { // y: #won
+        console.write_line(&format!("You win! The word was {}.", game.word))?;
+    } else { // y: #hanged
+        console.write_line(&format!("Hanged! The word was {}.", game.word))?;
+    }
+    Ok(())
+}

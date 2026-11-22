@@ -1,0 +1,1 @@
+I need to snapshot a `FnvHasher` part-way through a stream, keep feeding the original, and later continue from the snapshot, but `FnvHasher` is not `Clone`. Please make it cloneable (the clone must be independent of the original).

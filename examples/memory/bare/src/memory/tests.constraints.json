@@ -1,0 +1,301 @@
+{
+  "format": "y-constraints/0",
+  "host": "rust",
+  "crate": "memory-example 0.0.0",
+  "module": "src/memory/tests.rs",
+  "status": {
+    "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
+  },
+  "subjects": [
+    {
+      "kind": "const",
+      "name": "memory_example::memory::tests::stand_in::DRAWING",
+      "visible": "public",
+      "type": "ref<target_type=string>",
+      "access": { "rights": "read", "guarantee": "readers" }
+    },
+    {
+      "kind": "const",
+      "name": "memory_example::memory::tests::stand_in::SIDE_BY_SIDE",
+      "visible": "public",
+      "type": "list<element_type=u32> where count(value) == 20 as 'std::primitive::array'"
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::dealt",
+      "params": [
+        {
+          "name": "pairs",
+          "type": "ref<target_type=list<element_type=u32> as 'List'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "at", "type": "Instant" }
+      ],
+      "result": { "type": "Game" }
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::clicking",
+      "params": [{ "name": "row", "type": "i32" }, { "name": "column", "type": "i32" }],
+      "result": { "type": "Frame" }
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::every_pair_clicked",
+      "params": [],
+      "result": { "type": "list<element_type=Frame> as 'List'" }
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_click_between_the_cards_chooses_nothing",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::no_third_card_can_be_chosen_while_two_show",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_face_up_card_cannot_be_chosen_again",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_click_on_a_card_chooses_it",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::the_first_card_of_a_turn_turns_face_up",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_matching_pair_stays_face_up",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_pair_that_does_not_match_costs_a_life",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::two_cards_that_do_not_match_turn_back",
+      "params": []
+    },
+    { "kind": "function", "name": "memory_example::memory::tests::finding_every_pair_wins", "params": [] },
+    { "kind": "function", "name": "memory_example::memory::tests::losing_every_life_loses", "params": [] },
+    { "kind": "function", "name": "memory_example::memory::tests::a_new_game_is_being_played", "params": [] },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_won_game_scores_lives_and_seconds",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::an_unfinished_game_scores_its_pairs",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_game_under_par_scores_its_seconds",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_game_exactly_on_par_scores_no_seconds",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_game_over_par_scores_no_seconds",
+      "params": []
+    },
+    { "kind": "function", "name": "memory_example::memory::tests::the_first_card_is_found", "params": [] },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_card_along_the_top_row_is_found",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_card_down_the_first_column_is_found",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_card_down_and_along_is_found",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_click_between_two_columns_finds_nothing",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_click_between_two_rows_finds_nothing",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_card_corner_is_a_step_per_row_and_column",
+      "params": []
+    },
+    { "kind": "function", "name": "memory_example::memory::tests::no_clicks_turn_nothing", "params": [] },
+    { "kind": "function", "name": "memory_example::memory::tests::a_click_on_a_card_turns_it", "params": [] },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_click_between_the_cards_is_ignored",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::two_clicks_in_a_frame_turn_two_cards",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::two_clicks_between_the_cards_are_ignored",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::the_banner_says_how_a_game_is_going",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::the_banner_says_a_game_is_won",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::the_banner_says_a_game_is_lost",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_game_is_drawn_with_its_banner_and_credit",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_face_down_card_shows_no_picture",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_face_up_card_shows_its_picture",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_matched_card_shows_its_picture",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::filling_a_card_fills_one_square",
+      "params": []
+    },
+    { "kind": "function", "name": "memory_example::memory::tests::a_card_picture_is_drawn", "params": [] },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::fetching_is_shown_in_a_frame",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_new_game_deals_two_cards_of_each_picture",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_site_that_fails_fails_the_setup",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_site_too_slow_fails_the_setup",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::what_is_not_a_drawing_fails_the_setup",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_site_that_fails_partway_fails_the_setup",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_site_that_gives_a_bad_picture_partway_fails_the_setup",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_site_that_fails_ends_play",
+      "params": []
+    },
+    { "kind": "function", "name": "memory_example::memory::tests::a_site_too_slow_ends_play", "params": [] },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::what_is_not_a_drawing_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_window_closed_while_fetching_ends_play",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_window_closed_after_one_frame_ends_play",
+      "params": []
+    },
+    { "kind": "function", "name": "memory_example::memory::tests::a_game_waits_for_clicks", "params": [] },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_pair_that_does_not_match_is_shown_then_turned_back",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_pair_shown_past_its_second_turns_back",
+      "params": []
+    },
+    { "kind": "function", "name": "memory_example::memory::tests::a_won_game_keeps_its_score", "params": [] },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_whole_game_is_won_and_another_begun",
+      "params": []
+    },
+    {
+      "kind": "function",
+      "name": "memory_example::memory::tests::a_site_that_fails_for_the_next_game_ends_play",
+      "params": []
+    }
+  ],
+  "holes": {
+    "memory_example::memory::tests::a_game_is_drawn_with_its_banner_and_credit": {
+      "locals": { "written": "list<element_type=string as 'YString'> as 'List'" }
+    },
+    "memory_example::memory::tests::a_window_closed_after_one_frame_ends_play": {
+      "locals": { "written": "list<element_type=string as 'YString'> as 'List'" }
+    },
+    "memory_example::memory::tests::a_pair_that_does_not_match_is_shown_then_turned_back": {
+      "locals": { "written": "list<element_type=string as 'YString'> as 'List'" }
+    },
+    "memory_example::memory::tests::a_won_game_keeps_its_score": {
+      "locals": { "written": "list<element_type=string as 'YString'> as 'List'" }
+    },
+    "memory_example::memory::tests::a_whole_game_is_won_and_another_begun": {
+      "locals": { "written": "list<element_type=string as 'YString'> as 'List'" }
+    }
+  }
+}

@@ -1,0 +1,125 @@
+{
+  "format": "y-constraints/0",
+  "host": "rust",
+  "crate": "interpolate 0.0.0",
+  "module": "src/lib.rs",
+  "status": "lifted",
+  "subjects": [
+    {
+      "kind": "function",
+      "name": "interpolate::interpolate",
+      "visible": "public",
+      "generics": [
+        { "name": "A", "bounds": [], "where": ["FnMut(usize, &mut Vec<u8>)"] },
+        { "name": "N", "bounds": [], "where": ["FnMut(&str) -> Option<usize>"] }
+      ],
+      "params": [
+        {
+          "name": "replacement",
+          "type": "ref<target_type=list<element_type=u8> as 'std::primitive::slice'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "append", "type": "A" },
+        { "name": "name_to_index", "type": "N" },
+        {
+          "name": "dst",
+          "type": "ref<target_type=list<element_type=u8> as 'Vec'>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ]
+    },
+    {
+      "kind": "type",
+      "name": "interpolate::CaptureRef",
+      "generics": [{ "name": "'a", "bounds": [] }],
+      "fields": [
+        { "name": "cap", "type": "Ref<'a>", "hold": { "kind": "owns" } },
+        { "name": "end", "type": "u64 as 'usize'", "hold": { "kind": "owns" } }
+      ],
+      "hold": { "kind": "borrows", "for": ["'a"] }
+    },
+    {
+      "kind": "type",
+      "name": "interpolate::Ref",
+      "generics": [{ "name": "'a", "bounds": [] }],
+      "variants": [
+        {
+          "name": "Named",
+          "fields": [
+            {
+              "type": "ref<target_type=string>",
+              "access": { "rights": "read", "guarantee": "readers" },
+              "hold": { "kind": "borrows", "lifetime": "'a" }
+            }
+          ]
+        },
+        { "name": "Number", "fields": [{ "type": "u64 as 'usize'", "hold": { "kind": "owns" } }] }
+      ],
+      "implements": [
+        { "trait": { "host": "From<&'a str>", "form": "ref_trait" }, "impl": "interpolate::Ref as From" },
+        { "trait": "From<u64 as 'usize'>", "impl": "interpolate::Ref as From#2" }
+      ],
+      "hold": { "kind": "borrows", "for": ["'a"] }
+    },
+    {
+      "kind": "impl",
+      "name": "interpolate::Ref as From",
+      "generics": [{ "name": "'a", "bounds": [] }],
+      "trait": { "host": "From<&'a str>", "form": "ref_trait" },
+      "self": "Ref<'a>"
+    },
+    {
+      "kind": "function",
+      "name": "interpolate::Ref as From::from",
+      "params": [
+        {
+          "name": "x",
+          "type": "ref<target_type=string>",
+          "access": { "rights": "read", "guarantee": "readers" },
+          "hold": { "kind": "borrows", "lifetime": "'a" }
+        }
+      ],
+      "result": { "type": "Ref<'a>" }
+    },
+    {
+      "kind": "impl",
+      "name": "interpolate::Ref as From#2",
+      "trait": "From<u64 as 'usize'>",
+      "self": "Ref<'static>"
+    },
+    {
+      "kind": "function",
+      "name": "interpolate::Ref as From#2::from",
+      "params": [{ "name": "x", "type": "u64 as 'usize'" }],
+      "result": { "type": "Ref<'static>" }
+    },
+    {
+      "kind": "function",
+      "name": "interpolate::find_cap_ref",
+      "params": [
+        {
+          "name": "replacement",
+          "type": "ref<target_type=list<element_type=u8> as 'std::primitive::slice'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "CaptureRef<'_>?" }
+    },
+    {
+      "kind": "function",
+      "name": "interpolate::is_valid_cap_letter",
+      "params": [
+        {
+          "name": "b",
+          "type": "ref<target_type=u8>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "bool" }
+    }
+  ],
+  "holes": {
+    "interpolate::find_cap_ref": { "locals": { "i_usize": { "type": "u64 as 'usize'", "cast": true } } }
+  },
+  "realizations": { "parse_u32": { "template": "<_>::parse", "args": ["u32"] } }
+}

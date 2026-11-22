@@ -1,0 +1,29 @@
+diff -ruN a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs	2026-10-09 08:06:03.624547897 +0000
++++ b/src/lib.rs	2026-10-09 08:13:05.876740000 +0000
+@@ -192,18 +192,14 @@
+ {
+     let sim = generic_jaro(a, b);
+ 
+-    if sim > 0.7 {
+-        let prefix_length = a
+-            .into_iter()
+-            .take(4)
+-            .zip(b)
+-            .take_while(|(a_elem, b_elem)| a_elem == b_elem)
+-            .count();
++    let prefix_length = a
++        .into_iter()
++        .take(4)
++        .zip(b)
++        .take_while(|(a_elem, b_elem)| a_elem == b_elem)
++        .count();
+ 
+-        sim + 0.1 * prefix_length as f64 * (1.0 - sim)
+-    } else {
+-        sim
+-    }
++    sim + 0.1 * prefix_length as f64 * (1.0 - sim)
+ }
+ 
+ /// Like Jaro but gives a boost to strings that have a common prefix.

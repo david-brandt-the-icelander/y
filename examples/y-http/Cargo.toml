@@ -1,0 +1,11 @@
+[package]
+name = "y-http"
+version = "0.0.0"
+edition = "2021"
+description = "A small stand-in for Y's standard.http: the http capability the Y examples lower to, over ureq."
+
+[dependencies]
+ureq = { version = "2.12", default-features = false, features = ["tls", "native-certs"] }
+y-runtime = { path = "../y-runtime" }
+
+[workspace]

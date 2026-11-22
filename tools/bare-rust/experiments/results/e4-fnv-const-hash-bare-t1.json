@@ -1,0 +1,37 @@
+{
+ "run_id": "e4-fnv-const-hash-bare-t1",
+ "experiment": "e4",
+ "task": "fnv-const-hash",
+ "arm": "bare",
+ "trial": 1,
+ "kind": "signature",
+ "e5": false,
+ "workspace": "/tmp/claude-0/-home-user-y/9673def1-2027-5ffe-9d6e-8413dc645c64/scratchpad/runs/e4-fnv-const-hash-bare-t1",
+ "rs_files_in_bare": [],
+ "weaves": true,
+ "weave_summary": "weave: 1 files woven, 0 not woven, 0 weave errors; 0 unbound entries (locals 0, hints 0, subjects 0); cargo check after 2 runs: 1 mut inserted, 0 holes undetermined, 0 other errors, 0 warnings",
+ "compiles": true,
+ "hidden_compiled": true,
+ "tests_passed": 2,
+ "tests_failed": 0,
+ "tests_total": 2,
+ "pass": true,
+ "json_entries_changed": 1,
+ "json_leaf_edits": 8,
+ "json_files_changed": 1,
+ "lines_changed": 12,
+ "agent": {
+  "done": true,
+  "attempts": 2,
+  "json_edits": 1,
+  "library_promises_relied_on": [],
+  "notes": "Added const fn fnv_hash with a while loop in lib.brs plus one subject in the JSON; the weaver inserted the mut for me. An extra test confirms it matches FnvHasher."
+ },
+ "tokens": {
+  "input": 293117,
+  "output": 110,
+  "total": 293227
+ },
+ "duration_s": null,
+ "model": "sonnet"
+}

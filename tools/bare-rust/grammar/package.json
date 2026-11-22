@@ -1,0 +1,7 @@
+{
+  "name": "tree-sitter-bare-rust",
+  "version": "0.0.0",
+  "private": true,
+  "dependencies": { "tree-sitter-rust": "0.24.0" },
+  "devDependencies": { "tree-sitter-cli": "0.27.0" }
+}

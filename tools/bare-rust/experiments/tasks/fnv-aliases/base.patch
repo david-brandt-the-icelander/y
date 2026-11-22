@@ -1,0 +1,30 @@
+diff -ruN a/lib.rs b/lib.rs
+--- a/lib.rs	2026-10-09 08:06:03.625050443 +0000
++++ b/lib.rs	2026-10-09 08:13:06.094385747 +0000
+@@ -79,8 +79,6 @@
+ #[cfg(not(feature = "std"))]
+ use core::hash::{BuildHasherDefault, Hasher};
+ #[cfg(feature = "std")]
+-use std::collections::{HashMap, HashSet};
+-#[cfg(feature = "std")]
+ use std::default::Default;
+ #[cfg(feature = "std")]
+ use std::hash::{BuildHasherDefault, Hasher};
+@@ -131,17 +129,6 @@
+     }
+ }
+ 
+-/// A builder for default FNV hashers.
+-pub type FnvBuildHasher = BuildHasherDefault<FnvHasher>;
+-
+-/// A `HashMap` using a default FNV hasher.
+-#[cfg(feature = "std")]
+-pub type FnvHashMap<K, V> = HashMap<K, V, FnvBuildHasher>;
+-
+-/// A `HashSet` using a default FNV hasher.
+-#[cfg(feature = "std")]
+-pub type FnvHashSet<T> = HashSet<T, FnvBuildHasher>;
+-
+ /// Const version of FNV hash.
+ #[inline]
+ #[must_use]

@@ -1,0 +1,12 @@
+[package]
+name = "tic-tac-toe-example"
+version = "0.0.0"
+edition = "2021"
+description = "Tic-tac-toe, written in Y and lowered through bare Rust and its constraint files to Rust."
+
+[dependencies]
+y-collections = { path = "../y-collections" }
+y-runtime = { path = "../y-runtime" }
+y-string = { path = "../y-string" }
+
+[workspace]

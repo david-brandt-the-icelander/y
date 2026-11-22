@@ -1,0 +1,123 @@
+{
+  "format": "y-host/0",
+  "host": "rust",
+  "version": "1.97.0",
+  "panic": {
+    "hook": "the default hook prints the message payload with the file, line and column to stderr, then the panic unwinds or aborts by the strategy; set_hook replaces it",
+    "location": { "attribute": "#[track_caller]", "reports": "caller" },
+    "source": "1.97.0 core/src/macros/panic.md:15-18, doc: \"The behavior of the default `std` hook, i.e. the code that runs directly after the panic is invoked, is to print the message payload to `stderr` along with the file/line/column information of the `panic!()` call.\"; 1.97.0 core/src/option.rs:960, attribute #[track_caller]",
+    "strategy": "unwind"
+  },
+  "macros": {
+    "std::assert_eq!": {
+      "arms": [
+        {
+          "pattern": "assert_eq!(left, right)",
+          "params": [
+            { "name": "left", "type": "ref<target_type=T>" },
+            { "name": "right", "type": "ref<target_type=U>" }
+          ],
+          "result": "()",
+          "source": "1.97.0 core/src/macros/mod.rs:23-24, doc: \"On panic, this macro will print the values of the expressions with their debug representations.\""
+        },
+        {
+          "pattern": "assert_eq!(left, right, msg, args...)",
+          "params": [
+            { "name": "left", "type": "ref<target_type=T>" },
+            { "name": "right", "type": "ref<target_type=U>" },
+            { "name": "msg", "type": "ref<target_type=string>" }
+          ],
+          "result": "()",
+          "source": "1.97.0 core/src/macros/mod.rs:26-27, doc: \"Like [`assert!`], this macro has a second form, where a custom panic message can be provided.\""
+        }
+      ]
+    },
+    "std::panic!": {
+      "arms": [
+        {
+          "pattern": "panic!()",
+          "params": [],
+          "result": "never",
+          "source": "1.97.0 core/src/macros/panic.md:1, doc: \"Panics the current thread.\""
+        },
+        {
+          "pattern": "panic!(msg)",
+          "params": [{ "name": "msg", "type": "ref<target_type=string>" }],
+          "result": "never",
+          "source": "1.97.0 core/src/macros/panic.md:11-12, doc: \"When using `panic!()` you can specify a string payload that is built using [formatting syntax].\""
+        },
+        {
+          "pattern": "panic!(fmt, args...)",
+          "params": [{ "name": "fmt", "type": "ref<target_type=string>" }],
+          "result": "never",
+          "source": "1.97.0 core/src/macros/panic.md:11-12, doc: \"When using `panic!()` you can specify a string payload that is built using [formatting syntax].\""
+        }
+      ]
+    },
+    "std::vec!": {
+      "arms": [
+        {
+          "pattern": "vec![]",
+          "params": [],
+          "result": "list<element_type=T> as 'std::vec::Vec'",
+          "source": "1.97.0 alloc/src/macros.rs:4, doc: \"There are two forms of this macro:\""
+        },
+        {
+          "pattern": "vec![a, b, c]",
+          "params": [{ "name": "a", "type": "T" }],
+          "result": "list<element_type=T> as 'std::vec::Vec'",
+          "source": "1.97.0 alloc/src/macros.rs:4, doc: \"There are two forms of this macro:\""
+        },
+        {
+          "pattern": "vec![elem; n]",
+          "when": "T: std::clone::Clone",
+          "params": [{ "name": "elem", "type": "T" }, { "name": "n", "type": "u64 as 'usize'" }],
+          "result": "list<element_type=T> as 'std::vec::Vec'",
+          "source": "1.97.0 alloc/src/macros.rs:4, doc: \"There are two forms of this macro:\""
+        }
+      ]
+    },
+    "std::write!": {
+      "arms": [
+        {
+          "pattern": "write!(dst, args...)",
+          "when": "dst: std::fmt::Write",
+          "params": [{ "name": "dst", "type": "ref<target_type=Self>" }],
+          "result": "()",
+          "fails": "std::fmt::Error",
+          "source": "1.97.0 core/src/macros/mod.rs:519-521, doc: \"The macro returns whatever the `write_fmt` method returns; commonly a [`fmt::Result`], or an [`io::Result`].\""
+        },
+        {
+          "pattern": "write!(dst, args...)",
+          "when": "dst: std::io::Write",
+          "params": [{ "name": "dst", "type": "ref<target_type=Self>" }],
+          "result": "()",
+          "fails": "std::io::Error",
+          "source": "1.97.0 core/src/macros/mod.rs:519-521, doc: \"The macro returns whatever the `write_fmt` method returns; commonly a [`fmt::Result`], or an [`io::Result`].\""
+        }
+      ]
+    }
+  },
+  "build": [
+    {
+      "default": "on in a debug build, off in a release build; arithmetic that overflows panics when on and wraps when off",
+      "setting": "overflow_checks",
+      "source": "1.97.0 std/src/primitive_docs.rs and core/src/num/mod.rs, doc: \"overflow-checks\" of the Rust reference (`-C overflow-checks`, default is the value of debug-assertions)"
+    },
+    {
+      "default": "on in a debug build, off in a release build; `debug_assert!` and `cfg(debug_assertions)` are active when on",
+      "setting": "debug_assertions",
+      "source": "1.97.0 core/src/macros/mod.rs, doc: \"Unlike [`assert!`], `debug_assert!` statements are only enabled in non optimized builds by default.\""
+    },
+    {
+      "default": "the default strategy: a panic unwinds the stack and runs destructors",
+      "setting": "panic=unwind",
+      "source": "1.97.0 core/src/macros/panic.md:15-18, doc: the panic strategy `-C panic=unwind`"
+    },
+    {
+      "default": "not the default: a panic aborts the process and runs no destructors",
+      "setting": "panic=abort",
+      "source": "1.97.0 core/src/macros/panic.md:15-18, doc: the panic strategy `-C panic=abort`"
+    }
+  ]
+}

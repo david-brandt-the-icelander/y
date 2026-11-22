@@ -1,0 +1,395 @@
+{
+  "format": "y-constraints/0",
+  "host": "rust",
+  "crate": "tic-tac-toe-example 0.0.0",
+  "module": "src/tic_tac_toe.rs",
+  "status": {
+    "assumed": "lowered by hand from y/src, as the Y compiler would lower it; no Y compiler exists yet"
+  },
+  "subjects": [
+    {
+      "kind": "module",
+      "name": "tic_tac_toe_example::tic_tac_toe::setup",
+      "visible": "public",
+      "level": "calculations"
+    },
+    {
+      "kind": "module",
+      "name": "tic_tac_toe_example::tic_tac_toe::setup::board",
+      "visible": "public",
+      "level": "data"
+    },
+    {
+      "kind": "const",
+      "name": "tic_tac_toe_example::tic_tac_toe::setup::board::SQUARES",
+      "visible": "public",
+      "type": "u32"
+    },
+    {
+      "kind": "const",
+      "name": "tic_tac_toe_example::tic_tac_toe::setup::board::LINES",
+      "visible": "public",
+      "type": "list<element_type=list<element_type=u32> where count(value) == 3 as 'std::primitive::array'> where count(value) == 8 as 'std::primitive::array'"
+    },
+    {
+      "kind": "type",
+      "name": "tic_tac_toe_example::tic_tac_toe::setup::Mark",
+      "visible": "public",
+      "variants": [{ "name": "Cross" }, { "name": "Nought" }],
+      "implements": [
+        {
+          "trait": "std::fmt::Display",
+          "impl": "tic_tac_toe_example::tic_tac_toe::setup::Mark as std::fmt::Display"
+        }
+      ]
+    },
+    { "kind": "impl", "name": "tic_tac_toe_example::tic_tac_toe::setup::Mark as std::fmt::Display" },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::setup::Mark as std::fmt::Display::fmt",
+      "params": [
+        {
+          "name": "self",
+          "type": "ref<target_type=Mark>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        {
+          "name": "f",
+          "type": "ref<target_type=std::fmt::Formatter<'_>>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        }
+      ],
+      "result": { "type": "std::fmt::Result" }
+    },
+    {
+      "kind": "type",
+      "name": "tic_tac_toe_example::tic_tac_toe::setup::Game",
+      "visible": "public",
+      "fields": [
+        {
+          "name": "squares",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "list<element_type=Mark?> as 'List'",
+          "hold": { "kind": "owns" }
+        },
+        {
+          "name": "to_move",
+          "visible": "path",
+          "visible_path": "super",
+          "type": "Mark",
+          "hold": { "kind": "owns" }
+        }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::setup::new_game",
+      "visible": "public",
+      "params": [],
+      "result": { "type": "Game" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:38" }]
+    },
+    {
+      "kind": "module",
+      "name": "tic_tac_toe_example::tic_tac_toe::moves",
+      "visible": "public",
+      "level": "structured"
+    },
+    {
+      "kind": "type",
+      "name": "tic_tac_toe_example::tic_tac_toe::moves::MoveError",
+      "visible": "public",
+      "variants": [{ "name": "NotANumber" }, { "name": "NoSuchSquare" }, { "name": "Taken" }]
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::moves::read_move",
+      "visible": "public",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        {
+          "name": "line",
+          "type": "ref<target_type=string as 'YString'>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "u32", "fails": "MoveError" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:63" }]
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::moves::place",
+      "visible": "public",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        { "name": "square", "type": "u32" }
+      ],
+      "clauses": [
+        {
+          "kind": "require",
+          "text": "require unmarked : game.squares[square - 1] is None",
+          "source": "y/src/tic_tac_toe.y:85",
+          "status": { "lifted": "src/tic_tac_toe.rs: y_runtime::require" }
+        },
+        { "kind": "effects", "text": "no io", "source": "y/src/tic_tac_toe.y:84" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/tic_tac_toe.y:84" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/tic_tac_toe.y:84" },
+        { "kind": "access", "text": "mutates only game", "source": "y/src/tic_tac_toe.y:84" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::moves::computer_move",
+      "visible": "public",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "u32" },
+      "clauses": [
+        {
+          "kind": "require",
+          "text": "require still_playing : not over(game)",
+          "source": "y/src/tic_tac_toe.y:99",
+          "status": { "lifted": "src/tic_tac_toe.rs: y_runtime::require" }
+        },
+        { "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:98" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::over",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "bool" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:129" }]
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::winner",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "Mark?" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:140" }]
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::other",
+      "params": [{ "name": "player", "type": "Mark" }],
+      "result": { "type": "Mark" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:160" }]
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::open_squares",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "list<element_type=u32> as 'List'" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:175" }]
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::value_of",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "i32" },
+      "clauses": [
+        {
+          "kind": "ensure",
+          "text": "ensure bounded : result >= -10 and result <= 10",
+          "source": "y/src/tic_tac_toe.y:195",
+          "status": { "lifted": "src/tic_tac_toe.rs: y_runtime::ensure" }
+        },
+        { "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:194" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::shown",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        }
+      ],
+      "result": { "type": "string as 'YString'" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:221" }]
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::square_shown",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        { "name": "number", "type": "u32" }
+      ],
+      "result": { "type": "string as 'YString'" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:242" }]
+    },
+    {
+      "kind": "module",
+      "name": "tic_tac_toe_example::tic_tac_toe::console_play",
+      "visible": "public",
+      "level": "effects"
+    },
+    {
+      "kind": "type",
+      "name": "tic_tac_toe_example::tic_tac_toe::console_play::PlayError",
+      "visible": "public",
+      "variants": [
+        { "name": "InputClosed" },
+        {
+          "name": "Console",
+          "fields": [{ "name": "error", "type": "ConsoleError", "hold": { "kind": "owns" } }]
+        }
+      ],
+      "implements": [
+        {
+          "trait": "From<ConsoleError>",
+          "impl": "tic_tac_toe_example::tic_tac_toe::console_play::PlayError as From"
+        }
+      ]
+    },
+    {
+      "kind": "impl",
+      "name": "tic_tac_toe_example::tic_tac_toe::console_play::PlayError as From",
+      "trait": "From<ConsoleError>"
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::console_play::PlayError as From::from",
+      "params": [{ "name": "error", "type": "ConsoleError" }],
+      "result": { "type": "PlayError" }
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::console_play::play",
+      "visible": "public",
+      "params": [
+        { "name": "started", "type": "Game" },
+        {
+          "name": "console",
+          "type": "ref<target_type=Console>",
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
+        },
+        {
+          "name": "forever",
+          "type": "ref<target_type=Forever>",
+          "access": { "rights": "read", "guarantee": "readers" },
+          "injected": true
+        }
+      ],
+      "result": { "type": "()", "fails": "PlayError" },
+      "clauses": [
+        { "kind": "effects", "text": "effects only console", "source": "y/src/tic_tac_toe.y:270" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/tic_tac_toe.y:270" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/tic_tac_toe.y:270" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::persons_move",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "write", "guarantee": "exclusive" }
+        },
+        {
+          "name": "console",
+          "type": "ref<target_type=Console>",
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
+        },
+        {
+          "name": "forever",
+          "type": "ref<target_type=Forever>",
+          "access": { "rights": "read", "guarantee": "readers" },
+          "injected": true
+        }
+      ],
+      "result": { "type": "()", "fails": "PlayError" },
+      "clauses": [
+        { "kind": "effects", "text": "effects only console", "source": "y/src/tic_tac_toe.y:296" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/tic_tac_toe.y:296" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/tic_tac_toe.y:296" }
+      ]
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::complaint",
+      "params": [{ "name": "error", "type": "MoveError" }],
+      "result": { "type": "string as 'YString'" },
+      "clauses": [{ "kind": "effects", "text": "pure", "source": "y/src/tic_tac_toe.y:319" }]
+    },
+    {
+      "kind": "function",
+      "name": "tic_tac_toe_example::tic_tac_toe::announce",
+      "params": [
+        {
+          "name": "game",
+          "type": "ref<target_type=Game>",
+          "access": { "rights": "read", "guarantee": "readers" }
+        },
+        {
+          "name": "console",
+          "type": "ref<target_type=Console>",
+          "access": { "rights": "write", "guarantee": "exclusive" },
+          "injected": true
+        }
+      ],
+      "result": { "type": "()", "fails": "ConsoleError" },
+      "clauses": [
+        { "kind": "effects", "text": "effects only console", "source": "y/src/tic_tac_toe.y:338" },
+        { "kind": "effects", "text": "no clock", "source": "y/src/tic_tac_toe.y:338" },
+        { "kind": "effects", "text": "no randomness", "source": "y/src/tic_tac_toe.y:338" }
+      ]
+    }
+  ],
+  "holes": {
+    "tic_tac_toe_example::tic_tac_toe::moves::read_move": { "locals": { "number": "u32?" } },
+    "tic_tac_toe_example::tic_tac_toe::shown": {
+      "locals": {
+        "rows": "list<element_type=string as 'YString'> as 'List'",
+        "row": "list<element_type=string as 'YString'> as 'List'"
+      }
+    }
+  }
+}

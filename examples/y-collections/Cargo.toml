@@ -1,0 +1,10 @@
+[package]
+name = "y-collections"
+version = "0.0.0"
+edition = "2021"
+description = "The standard library's collections and mappings (Y § 3.13), each offering only what its constraints allow."
+
+[dependencies]
+y-runtime = { path = "../y-runtime" }
+
+[workspace]
