@@ -11,7 +11,7 @@ from, or what was left behind and why.
   they are design documents, and sampled where they are implementation.
 - Chronology comes from git commit timestamps. Where history was lost in a move (the 2024 YAPL design discussions),
   file dates and dates inside the text were used instead.
-- The May 2026 salvage in `~/dev/padresmurfa@gmail.com/y26/y/` served as an index to the y26 material, but every date
+- The May 2026 salvage in `~/dev/account-1/y26/y/` served as an index to the y26 material, but every date
   below comes from the original repository.
 - Other folders under `~/dev` that turned out not to be language work are listed at the end.
 - One entry has no folder: LCD, around 2001, which was never written down. It is recorded from the author's
@@ -36,7 +36,7 @@ document's own sections say "above" or "below".
 | When | Where (under `~/dev/`) | What it was |
 | --- | --- | --- |
 | ca. 2001 | Nowhere: never written down; conceived at OZ | **LCD**, *lowest common denominator*: business logic written once and transpiled into C, C++ under its frameworks, Java, PL/SQL and probably Pascal, through levels of common denominator rather than one. Imperative at heart, with managed memory. A dream only, dropped for its cost in time. Recollection from intent, not from documentation; see [*The lowest common denominator*](https://icelander.net/v1/programming-languages/one-language-transpiled-to-all-the-others) |
-| 2019-09 → 2021-04 | `padresmurfa@gmail.com/y26/yapl` — README, aspirational chapters, `v0`, `v1` | *Yet Another Programming Language*: "a language that I have been dreaming of creating for quite some time". A transpiler to "all machines", written in Python |
+| 2019-09 → 2021-04 | `account-1/y26/yapl` — README, aspirational chapters, `v0`, `v1` | *Yet Another Programming Language*: "a language that I have been dreaming of creating for quite some time". A transpiler to "all machines", written in Python |
 | 2021-04 → 2022-08 | `yapl` — `v2`, `v3`, `v4` | The "hungry rabbit" walkthrough; semantic comments; refinement types; indentation-only blocks; then colon blocks, `--` comments and named conditions |
 | 2022-08 | `yapl` — `v5` (Rust), `v6` (Python) | Parsers organised around modules, classes and facets; a "Why?" attached to every rule; effects declared in the signature |
 | 2023-11 → 2023-12 | `yapl` — `v7` (JavaScript), `v8` (C++) | A grammar in a day, then a C++ lexer and parser with call-site error handling |
@@ -44,15 +44,15 @@ document's own sections say "above" or "below".
 | 2024-10 → 2024-11 | `yapl` — `lexical_analyzer` (v9) | C++20 lexer in namespace `y::`, the first code to use the name; its reserved-word list is the consolidated 2024 vocabulary. `v10` is empty |
 | 2024-11 → 2025-03 | `y26/string`, `y26/older_string_versions` | A C++ Unicode string library, `ystring`/`yrune`/…: the would-be runtime of Y |
 | 2025-10 → 2025-12 | `y26/y-language-toolchain` (1,502 commits, about half merged from Codex) | The YAPL reference imported, split into chapters and hardened in October. November and December went into runtime platform work: MVCC, determinism, observability, security, builds |
-| 2025-10 | `padresmurfa@gmail.com/style_guides/language_reference.md` | A fragment: variables carry affinity and placement |
+| 2025-10 | `account-1/style_guides/language_reference.md` | A fragment: variables carry affinity and placement |
 | 2025-10 → 2026-03 | `y26/string` ("v1", then "v2") | C and C++ runtime foundations, a lexer built through test-driven agent prompts, coreutils-style tools. Both versions were abandoned (January, March) and deleted in April |
 | 2026-01 | `y26/ypm` | A package-manager repository with agent rules and empty vision documents. No language content |
-| 2026-03-05 → 03-10 | `padresmurfa@gmail.com/ai.lang` | An AI-native *specification* language: a five-layer organisational graph carried in Markdown, plus a deterministic plugin pipeline |
+| 2026-03-05 → 03-10 | `account-1/ai.lang` | An AI-native *specification* language: a five-layer organisational graph carried in Markdown, plus a deterministic plugin pipeline |
 | 2026-03-21 → 03-24 | `y26/yx/y-string` | A C++ core library (text, memory, context, collections) whose agent directives reversed several spec positions |
 | 2026-04-21 → 04-26 | `y26/string/claude.ai` | The language reference, lifted out of v2 and reworked "for first-class AI participation": spec blocks, contracts, a Go lexer after a five-language bake-off |
 | 2026-05 | `y26/y` | A salvage: dated snapshots of all y26 language material, deliberately not reconciled |
-| 2026-07-05 → 07-13 | `kisi@zazzcat.com/yet-another-programming-language-2026.07.05` | A C spike: MVCC transactional memory, and a transactional blob, packed array and string built on it |
-| 2026-09-17 → 09-18 | `kisi@zazzcat.com/y` | The current design: a working design document, the conversation it came from (`riff.md`), and a documentation corpus under the knowledge-driven-development convention |
+| 2026-07-05 → 07-13 | `account-2/yet-another-programming-language-2026.07.05` | A C spike: MVCC transactional memory, and a transactional blob, packed array and string built on it |
+| 2026-09-17 → 09-18 | `account-2/y` | The current design: a working design document, the conversation it came from (`riff.md`), and a documentation corpus under the knowledge-driven-development convention |
 
 ## 2. What every iteration believed
 
@@ -402,7 +402,7 @@ defaults filled in by the compiler. Dropped with affinities (§ 7).
 
 ### 3.8 The September design (17–18 September 2026)
 
-`kisi@zazzcat.com/y` has three records:
+`account-2/y` has three records:
 
 - the working design, `Y-current-language-design.md`;
 - the conversation it grew from, `riff.md`, which calls the language "Rill" and has it transpile to Rust;
